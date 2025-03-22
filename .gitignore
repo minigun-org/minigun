@@ -48,6 +48,7 @@ pickle-email-*.html
 .env.local
 .envrc
 .ruby-gemset
+.rspec_status
 
 # Redis DB
 dump.rdb
