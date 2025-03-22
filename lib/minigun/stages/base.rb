@@ -63,12 +63,10 @@ module Minigun
 
         # Execute before hooks
         hook_name = :"before_#{name}"
-        if @task.class.respond_to?(:_minigun_hooks) && @task.class._minigun_hooks[hook_name].is_a?(Array)
-          @task.class._minigun_hooks[hook_name].each do |hook|
-            if hook_should_run?(hook)
-              @task.instance_exec(&hook[:block]) if hook[:block]
-            end
-          end
+        return unless @task.class.respond_to?(:_minigun_hooks) && @task.class._minigun_hooks[hook_name].is_a?(Array)
+
+        @task.class._minigun_hooks[hook_name].each do |hook|
+          @task.instance_exec(&hook[:block]) if hook_should_run?(hook) && hook[:block]
         end
       end
 
@@ -78,12 +76,10 @@ module Minigun
 
         # Execute after hooks
         hook_name = :"after_#{name}"
-        if @task.class.respond_to?(:_minigun_hooks) && @task.class._minigun_hooks[hook_name].is_a?(Array)
-          @task.class._minigun_hooks[hook_name].each do |hook|
-            if hook_should_run?(hook)
-              @task.instance_exec(&hook[:block]) if hook[:block]
-            end
-          end
+        return unless @task.class.respond_to?(:_minigun_hooks) && @task.class._minigun_hooks[hook_name].is_a?(Array)
+
+        @task.class._minigun_hooks[hook_name].each do |hook|
+          @task.instance_exec(&hook[:block]) if hook_should_run?(hook) && hook[:block]
         end
       end
 
@@ -94,12 +90,10 @@ module Minigun
 
         # Execute error hooks
         hook_name = :"on_error_#{name}"
-        if @task.class.respond_to?(:_minigun_hooks) && @task.class._minigun_hooks[hook_name].is_a?(Array)
-          @task.class._minigun_hooks[hook_name].each do |hook|
-            if hook_should_run?(hook)
-              @task.instance_exec(error, &hook[:block]) if hook[:block]
-            end
-          end
+        return unless @task.class.respond_to?(:_minigun_hooks) && @task.class._minigun_hooks[hook_name].is_a?(Array)
+
+        @task.class._minigun_hooks[hook_name].each do |hook|
+          @task.instance_exec(error, &hook[:block]) if hook_should_run?(hook) && hook[:block]
         end
       end
 
