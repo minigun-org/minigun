@@ -387,7 +387,7 @@ module Minigun
         run_simple_pipeline
       end
     end
-    alias go_brrr! run
+    alias_method :go_brrr!, :run
 
     # Add an item to be processed
     def produce(item)
@@ -409,7 +409,7 @@ module Minigun
     end
 
     # Alias for emit_to_queue
-    alias enqueue emit_to_queue
+    alias_method :enqueue, :emit_to_queue
 
     # Accumulate an item in the current accumulator
     def accumulate(item, options = {})

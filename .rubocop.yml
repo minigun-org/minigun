@@ -43,6 +43,9 @@ RSpec/MultipleMemoizedHelpers:
 RSpec/NestedGroups:
   Enabled: false
 
+Style/Alias:
+  EnforcedStyle: prefer_alias_method
+
 Style/Documentation:
   Exclude:
     - 'spec/**/*'
