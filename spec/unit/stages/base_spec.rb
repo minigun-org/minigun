@@ -83,7 +83,7 @@ RSpec.describe Minigun::Stages::Base do
     context 'when task has hooks defined' do
       before do
         allow(context).to receive(:instance_exec) do |*args, &block|
-          block.call(*args) if block
+          block&.call(*args)
         end
       end
 

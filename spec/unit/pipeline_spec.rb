@@ -7,43 +7,60 @@ RSpec.describe Minigun::Pipeline do
   describe 'Pipeline without mocks' do
     let(:real_task) do
       task = Minigun::Task.new
-      
+
       # Add instance variables for tracking
       task.instance_variable_set(:@producer_output, [])
       task.instance_variable_set(:@processor_output, [])
       task.instance_variable_set(:@consumer_input, [])
-      
+
       # Add accessor methods
-      def task.producer_output; @producer_output; end
-      def task.processor_output; @processor_output; end
-      def task.consumer_input; @consumer_input; end
-      def task.producer_output=(value); @producer_output = value; end
-      def task.processor_output=(value); @processor_output = value; end
-      def task.consumer_input=(value); @consumer_input = value; end
-      
+      def task.producer_output
+        @producer_output
+      end
+
+      def task.processor_output
+        @processor_output
+      end
+
+      def task.consumer_input
+        @consumer_input
+      end
+
+      def task.producer_output=(value)
+        @producer_output = value
+      end
+
+      def task.processor_output=(value)
+        @processor_output = value
+      end
+
+      def task.consumer_input=(value)
+        @consumer_input = value
+      end
+
       # Add stages
       task.add_producer(:test_producer, {}) do
         items = [1, 2, 3]
         @producer_output = items.dup
         produce(items)
       end
-      
+
       task.add_processor(:test_processor, {}) do |num|
         result = num * 2
         @processor_output << result
         emit(result)
       end
-      
+
       task.add_consumer(:test_consumer, {}) do |batch|
         @consumer_input.concat(batch)
       end
-      
+
       # Configure for testing
       task.config[:consumer_type] = :ipc
-      
+
       task
     end
-    
+
     let(:test_config) { { max_threads: 1, max_processes: 1, batch_size: 2 } }
 
     it 'builds a functional pipeline with real stages' do
@@ -51,15 +68,15 @@ RSpec.describe Minigun::Pipeline do
       pipeline = described_class.new(real_task, test_config)
 
       # Add the real stages
-      producer = pipeline.add_stage(:processor, :test_producer, test_config.merge(stage_role: :producer))
-      processor = pipeline.add_stage(:processor, :test_processor, test_config)
-      consumer = pipeline.add_stage(:processor, :test_consumer, test_config.merge(stage_role: :consumer))
-      
+      pipeline.add_stage(:processor, :test_producer, test_config.merge(stage_role: :producer))
+      pipeline.add_stage(:processor, :test_processor, test_config)
+      pipeline.add_stage(:processor, :test_consumer, test_config.merge(stage_role: :consumer))
+
       # Connect stages
       pipeline.instance_variable_set(:@stage_connections, {
-        test_producer: [:test_processor],
-        test_processor: [:test_consumer]
-      })
+                                       test_producer: [:test_processor],
+                                       test_processor: [:test_consumer]
+                                     })
 
       # We won't actually run the pipeline, but let's verify the structure
       expect(pipeline.stages.size).to eq(3)
@@ -69,13 +86,13 @@ RSpec.describe Minigun::Pipeline do
 
       # Manually test the output we expect
       real_task.instance_variable_set(:@producer_output, [1, 2, 3])
-      
+
       # Simulate processing
       real_task.producer_output.each do |item|
         result = item * 2
         real_task.processor_output << result
       end
-      
+
       # Simulate consumer
       real_task.consumer_input.concat(real_task.processor_output)
 
@@ -87,42 +104,59 @@ RSpec.describe Minigun::Pipeline do
     it 'connects custom stages correctly without mocks' do
       # Create a branching task
       branching_task = Minigun::Task.new
-      
+
       # Add instance variables for tracking
       branching_task.instance_variable_set(:@producer_output, [])
       branching_task.instance_variable_set(:@processor1_output, [])
       branching_task.instance_variable_set(:@processor2_output, [])
-      
+
       # Add accessor methods
-      def branching_task.producer_output; @producer_output; end
-      def branching_task.processor1_output; @processor1_output; end
-      def branching_task.processor2_output; @processor2_output; end
-      def branching_task.producer_output=(value); @producer_output = value; end
-      def branching_task.processor1_output=(value); @processor1_output = value; end
-      def branching_task.processor2_output=(value); @processor2_output = value; end
-      
+      def branching_task.producer_output
+        @producer_output
+      end
+
+      def branching_task.processor1_output
+        @processor1_output
+      end
+
+      def branching_task.processor2_output
+        @processor2_output
+      end
+
+      def branching_task.producer_output=(value)
+        @producer_output = value
+      end
+
+      def branching_task.processor1_output=(value)
+        @processor1_output = value
+      end
+
+      def branching_task.processor2_output=(value)
+        @processor2_output = value
+      end
+
       # Add stages
       branching_task.add_producer(:source, {}) do
         items = [1, 2, 3]
         @producer_output = items.dup
         produce(items)
       end
-      
+
       branching_task.add_processor(:double, {}) do |num|
         result = num * 2
         @processor1_output << result
         emit(result)
       end
-      
+
       branching_task.add_processor(:triple, {}) do |num|
         result = num * 3
         @processor2_output << result
         emit(result)
       end
-      
+
       # Set up custom connections
-      branching_task.connections[:source] = [:double, :triple]
-      
+      branching_task.connections[:source] = %i[double triple]
+
       # Configure for testing
       branching_task.config[:consumer_type] = :ipc
 
@@ -130,19 +164,19 @@ RSpec.describe Minigun::Pipeline do
       pipeline = described_class.new(branching_task, test_config)
 
       # Add the stages
-      source = pipeline.add_stage(:processor, :source, test_config.merge(stage_role: :producer))
-      double_proc = pipeline.add_stage(:processor, :double, test_config)
-      triple_proc = pipeline.add_stage(:processor, :triple, test_config)
+      pipeline.add_stage(:processor, :source, test_config.merge(stage_role: :producer))
+      pipeline.add_stage(:processor, :double, test_config)
+      pipeline.add_stage(:processor, :triple, test_config)
 
       # Set up connections
       pipeline.instance_variable_set(:@stage_connections, {
-        source: [:double, :triple]
-      })
+                                       source: %i[double triple]
+                                     })
 
       # Verify connections
-      expect(pipeline.stage_connections[:source]).to eq([:double, :triple])
+      expect(pipeline.stage_connections[:source]).to eq(%i[double triple])
       expect(pipeline.stages.size).to eq(3)
-      
+
       # Verify downstream stages
       downstream = pipeline.downstream_stages(:source)
       expect(downstream.map(&:name)).to contain_exactly(:double, :triple)
@@ -151,14 +185,12 @@ RSpec.describe Minigun::Pipeline do
       # 1. Producer output
       branching_task.instance_variable_set(:@producer_output, [1, 2, 3])
 
-      # 2. Process with double processor 
+      # 2. Process with double processor
       branching_task.producer_output.each do |item|
         result = item * 2
         branching_task.processor1_output << result
-      end
 
-      # 3. Process with triple processor
-      branching_task.producer_output.each do |item|
+        # 3. Process with triple processor
         result = item * 3
         branching_task.processor2_output << result
       end

@@ -89,13 +89,13 @@ module Minigun
 
         begin
           # Call the processor block
-          result = if @block
-                     # Execute in the context using instance_exec
-                     @context.instance_exec(&@block)
-                   else
-                     # Default implementation just returns nil
-                     nil
-                   end
+          if @block
+            # Execute in the context using instance_exec
+            @context.instance_exec(&@block)
+          else
+            # Default implementation just returns nil
+            nil
+          end
 
           # Get the produced items
           items = Thread.current[:minigun_queue]
@@ -117,66 +117,62 @@ module Minigun
 
       # Process item as a processor (transform input to output)
       def process_as_processor(item)
-        begin
-          # Call the processor block with the item
-          result = if @block
-                     if @block.arity == 0
-                       # If block takes no arguments, use instance_eval
-                       @context.instance_exec do
-                         # Make the item available as an instance variable
-                         @item = item
-                         instance_eval(&@block)
-                       end
-                     else
-                       # Otherwise call with the item as argument
-                       @context.instance_exec(item, &@block)
+        # Call the processor block with the item
+        result = if @block
+                   if @block.arity == 0
+                     # If block takes no arguments, use instance_eval
+                     @context.instance_exec do
+                       # Make the item available as an instance variable
+                       @item = item
+                       instance_eval(&@block)
                      end
                    else
-                     # Default implementation just passes the item through
-                     item
+                     # Otherwise call with the item as argument
+                     @context.instance_exec(item, &@block)
                    end
+                 else
+                   # Default implementation just passes the item through
+                   item
+                 end
 
-          # Track processing
-          @processed_count.increment
+        # Track processing
+        @processed_count.increment
 
-          # If result is not explicitly nil, emit it
-          # This allows processors to filter by returning nil
-          emit(result) unless result.nil?
+        # If result is not explicitly nil, emit it
+        # This allows processors to filter by returning nil
+        emit(result) unless result.nil?
 
-          # Return the result
-          result
-        rescue StandardError => e
-          @failed_count.increment
-          error("[Minigun:#{@job_id}][Processor:#{@name}] Error processing item: #{e.class}: #{e.message}\n#{e.backtrace.join("\n")}")
-          raise e
-        end
+        # Return the result
+        result
+      rescue StandardError => e
+        @failed_count.increment
+        error("[Minigun:#{@job_id}][Processor:#{@name}] Error processing item: #{e.class}: #{e.message}\n#{e.backtrace.join("\n")}")
+        raise e
       end
 
       # Process item as a consumer (take input, produce no output)
       def process_as_consumer(item)
-        begin
-          # Call the consumer block with the item
-          if @block
-            if @block.arity == 0
-              # If block takes no arguments, use instance_eval
-              @context.instance_exec do
-                # Make the item available as an instance variable
-                @item = item
-                instance_eval(&@block)
-              end
-            else
-              # Otherwise call with the item as argument
-              @context.instance_exec(item, &@block)
+        # Call the consumer block with the item
+        if @block
+          if @block.arity == 0
+            # If block takes no arguments, use instance_eval
+            @context.instance_exec do
+              # Make the item available as an instance variable
+              @item = item
+              instance_eval(&@block)
             end
+          else
+            # Otherwise call with the item as argument
+            @context.instance_exec(item, &@block)
           end
-
-          @processed_count.increment
-          nil # Consumers don't return a value
-        rescue StandardError => e
-          @failed_count.increment
-          error("[Minigun:#{@job_id}][Consumer:#{@name}] Error consuming item: #{e.class}: #{e.message}\n#{e.backtrace.join("\n")}")
-          raise e
         end
+
+        @processed_count.increment
+        nil # Consumers don't return a value
+      rescue StandardError => e
+        @failed_count.increment
+        error("[Minigun:#{@job_id}][Consumer:#{@name}] Error consuming item: #{e.class}: #{e.message}\n#{e.backtrace.join("\n")}")
+        raise e
       end
 
       # Initialize appropriate fork implementation based on type

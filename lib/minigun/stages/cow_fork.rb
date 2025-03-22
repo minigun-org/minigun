@@ -22,32 +22,26 @@ module Minigun
         @max_processes = options[:max_processes] || options[:processes] || 2
         @batch_size = options[:batch_size] || 100
         @accumulator_max_queue = options[:accumulator_max_queue] || (@batch_size * 10)
-        
+
         # Initialize child process tracking
         @child_processes = []
         @process_mutex = Mutex.new
 
         # Initialize accumulator
         @accumulator = Hash.new { |h, k| h[k] = [] }
-        
+
         # Get the consumer block from the task
         @consumer_block = nil
-        
+
         # Check processor blocks first (for backward compatibility)
-        if @task.respond_to?(:processor_blocks) && @task.processor_blocks && @task.processor_blocks[name.to_sym]
-          @consumer_block = @task.processor_blocks[name.to_sym]
-        end
-        
+        @consumer_block = @task.processor_blocks[name.to_sym] if @task.respond_to?(:processor_blocks) && @task.processor_blocks && @task.processor_blocks[name.to_sym]
+
         # Check consumer blocks if available and no processor block found
-        if @consumer_block.nil? && @task.respond_to?(:consumer_blocks) && @task.consumer_blocks && @task.consumer_blocks[name.to_sym]
-          @consumer_block = @task.consumer_blocks[name.to_sym]
-        end
-        
+        @consumer_block = @task.consumer_blocks[name.to_sym] if @consumer_block.nil? && @task.respond_to?(:consumer_blocks) && @task.consumer_blocks && @task.consumer_blocks[name.to_sym]
+
         # If task class responds to _minigun_consumer_blocks, check there
-        if @consumer_block.nil? && @task.class.respond_to?(:_minigun_consumer_blocks)
-          @consumer_block = @task.class._minigun_consumer_blocks[name.to_sym]
-        end
-        
+        @consumer_block = @task.class._minigun_consumer_blocks[name.to_sym] if @consumer_block.nil? && @task.class.respond_to?(:_minigun_consumer_blocks)
+
         # Fallback to a default implementation
         @consumer_block ||= proc { |items| items }
       end
@@ -60,27 +54,23 @@ module Minigun
         # Get the type of the item
         type = item.class.name
         items = @accumulator[type]
-        
+
         # Add to the accumulator
         items << item
-        
+
         # If we've reached the batch size, process the batch
-        if items.size >= @batch_size
-          process_batch(type)
-        end
-        
+        process_batch(type) if items.size >= @batch_size
+
         # If the total accumulator size is too large, process the largest batch
-        if accumulator_size >= @accumulator_max_queue
-          process_largest_batch
-        end
-        
+        process_largest_batch if accumulator_size >= @accumulator_max_queue
+
         # Don't return anything to avoid chaining
         nil
       end
 
       def shutdown
         # Process all remaining items in accumulator
-        @accumulator.keys.each do |type|
+        @accumulator.each_key do |type|
           process_batch(type) unless @accumulator[type].empty?
         end
 
@@ -170,99 +160,92 @@ module Minigun
 
       def process_items_in_child(items)
         # Execute the fork block with the items
-        success_count = 0
-        failed_count = 0
 
-        begin
-          # Store fork context for emit tracking
-          Thread.current[:minigun_fork_context] = {
-            emit_count: 0,
-            success_count: 0,
-            failed_count: 0
-          }
 
-          # Execute the fork block, which should call emit
-          if @block
-            @context.instance_exec(items, &@block)
-          else
-            # Default behavior if no block given - emit each item
-            items.each do |item|
-              emit(item)
-            end
+        # Store fork context for emit tracking
+        Thread.current[:minigun_fork_context] = {
+          emit_count: 0,
+          success_count: 0,
+          failed_count: 0
+        }
+
+        # Execute the fork block, which should call emit
+        if @block
+          @context.instance_exec(items, &@block)
+        else
+          # Default behavior if no block given - emit each item
+          items.each do |item|
+            emit(item)
           end
-
-          # Get counts from context
-          context = Thread.current[:minigun_fork_context]
-          success_count = context[:success_count]
-          failed_count = context[:failed_count]
-          emit_count = context[:emit_count]
-
-          # Return results
-          {
-            success: success_count || items.size,
-            failed: failed_count || 0,
-            emitted: emit_count || 0
-          }
-        rescue StandardError => e
-          @logger.error("[Minigun:#{@job_id}][#{@name}] Error in child process: #{e.message}")
-          @logger.error("[Minigun:#{@job_id}][#{@name}] #{e.backtrace.join("\n")}") if e.backtrace
-          {
-            success: 0,
-            failed: items.size,
-            error: e.message,
-            backtrace: e.backtrace
-          }
         end
+
+        # Get counts from context
+        context = Thread.current[:minigun_fork_context]
+        success_count = context[:success_count]
+        failed_count = context[:failed_count]
+        emit_count = context[:emit_count]
+
+        # Return results
+        {
+          success: success_count || items.size,
+          failed: failed_count || 0,
+          emitted: emit_count || 0
+        }
+      rescue StandardError => e
+        @logger.error("[Minigun:#{@job_id}][#{@name}] Error in child process: #{e.message}")
+        @logger.error("[Minigun:#{@job_id}][#{@name}] #{e.backtrace.join("\n")}") if e.backtrace
+        {
+          success: 0,
+          failed: items.size,
+          error: e.message,
+          backtrace: e.backtrace
+        }
       end
 
       def process_items_directly(items)
         # Track stats locally
-        success_count = 0
-        failed_count = 0
-        emitted_count = 0
-        
+
         # Set up context for tracking emits
 
-        begin
-          # Store fork context for emit tracking
-          Thread.current[:minigun_fork_context] = {
-            emit_count: 0,
-            success_count: 0,
-            failed_count: 0
-          }
 
-          # Execute the fork block, which should call emit
-          if @block
-            @context.instance_exec(items, &@block)
-          else
-            # Default behavior if no block given - emit each item
-            items.each do |item|
-              emit(item)
-            end
+        # Store fork context for emit tracking
+        Thread.current[:minigun_fork_context] = {
+          emit_count: 0,
+          success_count: 0,
+          failed_count: 0
+        }
+
+        # Execute the fork block, which should call emit
+        if @block
+          @context.instance_exec(items, &@block)
+        else
+          # Default behavior if no block given - emit each item
+          items.each do |item|
+            emit(item)
           end
-
-          # Get counts from context
-          context = Thread.current[:minigun_fork_context]
-          success_count = context[:success_count] || items.size
-          failed_count = context[:failed_count] || 0
-          emit_count = context[:emit_count] || 0
-
-          # Return results
-          {
-            success: success_count,
-            failed: failed_count,
-            emitted: emit_count
-          }
-        rescue StandardError => e
-          @logger.error("[Minigun:#{@job_id}][#{@name}] Error in direct processing: #{e.message}")
-          @logger.error("[Minigun:#{@job_id}][#{@name}] #{e.backtrace.join("\n")}") if e.backtrace
-          {
-            success: 0,
-            failed: items.size,
-            error: e.message,
-            backtrace: e.backtrace
-          }
         end
+
+        # Get counts from context
+        context = Thread.current[:minigun_fork_context]
+        success_count = context[:success_count] || items.size
+        failed_count = context[:failed_count] || 0
+        emit_count = context[:emit_count] || 0
+
+        # Return results
+        {
+          success: success_count,
+          failed: failed_count,
+          emitted: emit_count
+        }
+      rescue StandardError => e
+        @logger.error("[Minigun:#{@job_id}][#{@name}] Error in direct processing: #{e.message}")
+        @logger.error("[Minigun:#{@job_id}][#{@name}] #{e.backtrace.join("\n")}") if e.backtrace
+        {
+          success: 0,
+          failed: items.size,
+          error: e.message,
+          backtrace: e.backtrace
+        }
       end
 
       def wait_for_available_process_slot
@@ -283,10 +266,10 @@ module Minigun
           @child_processes.reject! do |child|
             # Check if the process has finished
             status = begin
-                      Process.waitpid(child[:pid], Process::WNOHANG)
-                     rescue Errno::ECHILD
-                       child[:pid] # Process doesn't exist anymore
-                     end
+              Process.waitpid(child[:pid], Process::WNOHANG)
+            rescue Errno::ECHILD
+              child[:pid] # Process doesn't exist anymore
+            end
 
             if status
               # Process has finished, read the results
@@ -350,7 +333,7 @@ module Minigun
       # Process the largest batch in the accumulator
       def process_largest_batch
         return if @accumulator.empty?
-        
+
         # Find the type with the most items
         type = @accumulator.max_by { |_, items| items.size }.first
         process_batch(type)
@@ -361,10 +344,10 @@ module Minigun
         # Get the items to process
         items = @accumulator[type]
         return if items.empty?
-        
+
         # Clear the batch
         @accumulator[type] = []
-        
+
         # If forking is available, use it
         if Process.respond_to?(:fork)
           process_batch_with_fork(items)
@@ -378,33 +361,33 @@ module Minigun
       def process_batch_with_fork(items)
         # Create a pipe for results
         rd, wr = IO.pipe
-        
+
         # Fork a new process
         pid = Process.fork do
           # Close read end in child
           rd.close
-          
+
           # Process the items
           result = process_items_directly(items)
-          
+
           # Send results back to parent
           Marshal.dump(result, wr)
           wr.close
-          
+
           # Exit the forked process
           exit!(0)
         end
-        
+
         # Close write end in parent
         wr.close
-        
+
         # Wait for the child process
         Process.wait(pid)
-        
+
         # Read results from pipe
         result = Marshal.load(rd)
         rd.close
-        
+
         # Update stats based on child process results
         @processed_count.increment(result[:success] || 0)
         @failed_count.increment(result[:failed] || 0)

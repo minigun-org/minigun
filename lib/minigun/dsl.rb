@@ -10,7 +10,7 @@ module Minigun
       base.class_eval do
         # Initialize the task object to be referenced by all DSL methods
         class_variable_set(:@@_minigun_task, Minigun::Task.new) unless class_variable_defined?(:@@_minigun_task)
-        
+
         # Define class accessor method for minigun task
         class << self
           def _minigun_task
@@ -20,35 +20,35 @@ module Minigun
           def _minigun_config
             _minigun_task.config
           end
-          
+
           def _minigun_processor_blocks
             _minigun_task.processor_blocks
           end
-          
+
           def _minigun_accumulator_blocks
             _minigun_task.accumulator_blocks
           end
-          
+
           def _minigun_hooks
             _minigun_task.hooks
           end
-          
+
           def _minigun_pipeline
             _minigun_task.pipeline
           end
-          
+
           def _minigun_pipeline_definition
             _minigun_task.pipeline_definition
           end
-          
+
           def _minigun_connections
             _minigun_task.connections
           end
-          
+
           def _minigun_queue_subscriptions
             _minigun_task.queue_subscriptions
           end
-          
+
           # For backward compatibility with code that expects separate block collections
           def _minigun_producer_blocks
             _minigun_processor_blocks
@@ -63,7 +63,7 @@ module Minigun
           def _minigun_consumer_blocks
             _minigun_processor_blocks
           end
-          
+
           # Class method to start the job
           def run(context = nil)
             _minigun_task.run(context || self)
@@ -214,7 +214,7 @@ module Minigun
         _minigun_task.add_hook(stage_name, options, &block)
       end
     end
-    
+
     # Instance method to start the job with the current context
     def run
       self.class._minigun_task.run(self)
@@ -254,4 +254,4 @@ module Minigun
       self.class.class_variable_get(:@@_minigun_task).run_hooks(type, self, *args)
     end
   end
-end 
+end

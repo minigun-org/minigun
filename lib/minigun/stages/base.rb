@@ -18,7 +18,7 @@ module Minigun
         @config = config
         @logger = config[:logger] || Logger.new($stdout)
         @context = pipeline.context
-        
+
         # Get the task from the pipeline or context
         @task = if pipeline.respond_to?(:task)
                   pipeline.task
@@ -30,7 +30,7 @@ module Minigun
                   # Fallback to a new task
                   Minigun::Task.new
                 end
-                
+
         @job_id = pipeline.job_id
 
         # Register hooks if provided
@@ -121,29 +121,29 @@ module Minigun
       end
 
       private
-      
+
       # Send an item to the next stage(s) based on the pipeline connections
       def send_to_next_stage(item, queue = :default)
         # Find downstream stages connected to this stage
         downstream = @pipeline.downstream_stages(@name)
-        
+
         # If no downstream stages, do nothing
         return if downstream.empty?
-        
+
         # Get queue subscriptions for each stage
         downstream.each do |stage|
           # Check if this stage is subscribed to the emitted queue
           subscriptions = @pipeline.queue_subscriptions(stage.name)
-          
+
           # If stage subscribed to default queue or specifically to this queue, forward the item
-          if subscriptions.include?(:default) || subscriptions.include?(queue)
-            begin
-              stage.process(item)
-            rescue => e
-              @logger.error "[Minigun:#{@job_id}][#{@name}] Error sending to #{stage.name}: #{e.message}"
-              @logger.error e.backtrace.join("\n") if e.backtrace
-              stage.on_error(e) if stage.respond_to?(:on_error)
-            end
+          next unless subscriptions.include?(:default) || subscriptions.include?(queue)
+
+          begin
+            stage.process(item)
+          rescue StandardError => e
+            @logger.error "[Minigun:#{@job_id}][#{@name}] Error sending to #{stage.name}: #{e.message}"
+            @logger.error e.backtrace.join("\n") if e.backtrace
+            stage.on_error(e) if stage.respond_to?(:on_error)
           end
         end
       end

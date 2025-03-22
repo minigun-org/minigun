@@ -5,7 +5,7 @@ require 'spec_helper'
 RSpec.describe Minigun::Runner do
   let(:task) do
     task = Minigun::Task.new
-    
+
     # Add instance variables for tracking
     task.instance_variable_set(:@producer_called, 0)
     task.instance_variable_set(:@processor_called, 0)
@@ -15,13 +15,30 @@ RSpec.describe Minigun::Runner do
     task.instance_variable_set(:@consumer_batches, [])
 
     # Add methods for testing
-    def task.producer_called; @producer_called; end
-    def task.processor_called; @processor_called; end
-    def task.consumer_called; @consumer_called; end
-    def task.producer_items; @producer_items; end
-    def task.processor_items; @processor_items; end
-    def task.consumer_batches; @consumer_batches; end
-    
+    def task.producer_called
+      @producer_called
+    end
+
+    def task.processor_called
+      @processor_called
+    end
+
+    def task.consumer_called
+      @consumer_called
+    end
+
+    def task.producer_items
+      @producer_items
+    end
+
+    def task.processor_items
+      @processor_items
+    end
+
+    def task.consumer_batches
+      @consumer_batches
+    end
+
     # Add processor and consumer stages
     task.add_producer(:test_producer, {}) do
       @producer_called += 1
@@ -46,7 +63,7 @@ RSpec.describe Minigun::Runner do
     task.config[:max_threads] = 1
     task.config[:max_processes] = 1
     task.config[:fork_mode] = :never
-    
+
     task
   end
 

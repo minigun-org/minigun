@@ -38,7 +38,7 @@ RSpec.describe Minigun::Stages::Accumulator do
       timer = Concurrent::TimerTask.new(execution_interval: 0.1) {}
       allow(Concurrent::TimerTask).to receive(:new).and_return(timer)
       expect(timer).to receive(:execute)
-      
+
       subject.run
     end
   end
@@ -47,25 +47,25 @@ RSpec.describe Minigun::Stages::Accumulator do
     it 'accumulates items by their type' do
       # Disable the flush batch to focus on just the accumulation
       allow(subject).to receive(:flush_batch_if_needed)
-      
+
       subject.process('item1')
       subject.process('item2')
 
       # Initialize batches with the items
-      subject.instance_variable_set(:@batches, { 'String' => ['item1', 'item2'] })
+      subject.instance_variable_set(:@batches, { 'String' => %w[item1 item2] })
 
       batches = subject.instance_variable_get(:@batches)
-      expect(batches['String']).to eq(['item1', 'item2'])
+      expect(batches['String']).to eq(%w[item1 item2])
       expect(subject.instance_variable_get(:@accumulated_count).value).to eq(2)
     end
 
     it 'flushes when a batch reaches max batch size' do
       # Test flush_batch_if_needed directly instead of through process
-      batch = ['item1', 'item2', 'item3', 'item4', 'item5']
+      batch = %w[item1 item2 item3 item4 item5]
       subject.instance_variable_set(:@batches, { 'String' => batch })
-      
+
       expect(subject).to receive(:flush_batch_items).with('String', batch)
-      
+
       # Call the method directly
       subject.send(:flush_batch_if_needed, 'String')
     end
@@ -81,7 +81,7 @@ RSpec.describe Minigun::Stages::Accumulator do
       expect(subject).to receive(:on_finish)
 
       # Add some items to the batches directly
-      subject.instance_variable_set(:@batches, { 'String' => ['item1', 'item2'] })
+      subject.instance_variable_set(:@batches, { 'String' => %w[item1 item2] })
       subject.instance_variable_set(:@accumulated_count, Concurrent::AtomicFixnum.new(2))
 
       result = subject.shutdown
@@ -93,10 +93,10 @@ RSpec.describe Minigun::Stages::Accumulator do
     it 'flushes all non-empty batches' do
       # Set up batches with different item types
       subject.instance_variable_set(:@batches, {
-        'String' => ['string_item'],
-        'Integer' => [123],
-        'Array' => [[1, 2, 3]]
-      })
+                                      'String' => ['string_item'],
+                                      'Integer' => [123],
+                                      'Array' => [[1, 2, 3]]
+                                    })
 
       # We expect flush_batch_items to be called for each batch
       expect(subject).to receive(:flush_batch_items).with('String', ['string_item'])

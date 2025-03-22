@@ -15,7 +15,7 @@ module Minigun
 
     def initialize(context)
       @context = context
-      
+
       # Get the task - either directly passed, from context if it's a Task, or from context's class
       @task = if context.is_a?(Minigun::Task)
                 context
@@ -25,7 +25,7 @@ module Minigun
                 # Default to a new task
                 Minigun::Task.new
               end
-              
+
       @config = @task.config
       @producer_block = @task.processor_blocks&.[](:default)
       @consumer_block = @task.processor_blocks&.[](:default)

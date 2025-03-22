@@ -11,44 +11,44 @@ RSpec.describe 'README Examples Integration' do
       # Create a test module with DSL directly in the test
       test_module = Module.new do
         include Minigun::DSL
-        
+
         # Define a simplified pipeline
         producer do
           (1..5).each { |i| produce(i) }
         end
-        
+
         processor do |item|
           emit(item * 2)
         end
-        
+
         consumer do |batch|
           # In our test this won't actually be called
         end
-        
+
         # Configuration for testing
         max_threads 1
         max_processes 1
         fork_mode :never
       end
-      
+
       # Get the task object
       task = test_module._minigun_task
-      
+
       # Verify that the processor blocks are defined
       expect(task.processor_blocks.keys).not_to be_empty
       expect(task.processor_blocks[:default]).to be_a(Proc)
-      
+
       # Verify that the pipeline stages are defined
       expect(task.pipeline.size).to eq(3)
-      
+
       # First stage should be a producer
       expect(task.pipeline[0][:type]).to eq(:processor)
       expect(task.pipeline[0][:options][:stage_role]).to eq(:producer)
-      
+
       # Second stage should be a processor
       expect(task.pipeline[1][:type]).to eq(:processor)
       expect(task.pipeline[1][:options][:stage_role]).to eq(:processor)
-      
+
       # Last stage should be a consumer
       expect(task.pipeline[2][:type]).to eq(:processor)
       expect(task.pipeline[2][:options][:stage_role]).to eq(:consumer)
@@ -105,30 +105,30 @@ RSpec.describe 'README Examples Integration' do
       end
 
       # Create a task instance
-      task = task_class.new
-      
+      task_class.new
+
       # Get the task object directly
       task_obj = task_class._minigun_task
-      
+
       # Verify that the processor blocks are defined
       expect(task_obj.processor_blocks.keys).to include(:extract, :transform, :load)
       expect(task_obj.processor_blocks[:extract]).to be_a(Proc)
       expect(task_obj.processor_blocks[:transform]).to be_a(Proc)
       expect(task_obj.processor_blocks[:load]).to be_a(Proc)
-      
+
       # Verify that the pipeline stages are defined
       expect(task_obj.pipeline.size).to eq(3)
-      
+
       # First stage should be a producer
       expect(task_obj.pipeline[0][:type]).to eq(:processor)
       expect(task_obj.pipeline[0][:options][:stage_role]).to eq(:producer)
       expect(task_obj.pipeline[0][:name]).to eq(:extract)
-      
+
       # Second stage should be a processor
       expect(task_obj.pipeline[1][:type]).to eq(:processor)
       expect(task_obj.pipeline[1][:options][:stage_role]).to eq(:processor)
       expect(task_obj.pipeline[1][:name]).to eq(:transform)
-      
+
       # Last stage should be a consumer
       expect(task_obj.pipeline[2][:type]).to eq(:processor)
       expect(task_obj.pipeline[2][:options][:stage_role]).to eq(:consumer)
@@ -207,24 +207,24 @@ RSpec.describe 'README Examples Integration' do
 
       # Get the task object directly
       task_obj = crawler_class._minigun_task
-      
+
       # Verify that the processor blocks are defined
       expect(task_obj.processor_blocks.keys).to include(:seed_urls, :fetch_pages, :extract_links, :process_pages)
       expect(task_obj.accumulator_blocks.keys).to include(:batch_pages)
-      
+
       # Verify that the pipeline stages are defined
       expect(task_obj.pipeline.size).to eq(5)
-      
+
       # First stage should be a producer
       expect(task_obj.pipeline[0][:type]).to eq(:processor)
       expect(task_obj.pipeline[0][:options][:stage_role]).to eq(:producer)
       expect(task_obj.pipeline[0][:name]).to eq(:seed_urls)
-      
+
       # Check the accumulator stage
       accumulator_stage = task_obj.pipeline.find { |stage| stage[:type] == :accumulator }
       expect(accumulator_stage).not_to be_nil
       expect(accumulator_stage[:name]).to eq(:batch_pages)
-      
+
       # Last stage should be a consumer
       expect(task_obj.pipeline[4][:type]).to eq(:processor)
       expect(task_obj.pipeline[4][:options][:stage_role]).to eq(:consumer)
@@ -295,30 +295,30 @@ RSpec.describe 'README Examples Integration' do
 
       # Get the task object directly
       task_obj = diamond_class._minigun_task
-      
+
       # Verify that the processor blocks are defined
       expect(task_obj.processor_blocks.keys).to include(
         :data_source, :validate, :transform_a, :transform_b, :combine, :store_results
       )
-      
+
       # Verify that the pipeline stages are defined
       expect(task_obj.pipeline.size).to eq(6)
-      
+
       # First stage should be a producer
       expect(task_obj.pipeline[0][:type]).to eq(:processor)
       expect(task_obj.pipeline[0][:options][:stage_role]).to eq(:producer)
       expect(task_obj.pipeline[0][:name]).to eq(:data_source)
-      
+
       # Validate stage should be a processor
       validate_stage = task_obj.pipeline.find { |stage| stage[:name] == :validate }
       expect(validate_stage[:type]).to eq(:processor)
       expect(validate_stage[:options][:stage_role]).to eq(:processor)
-      
+
       # Last stage should be a consumer
       expect(task_obj.pipeline[5][:type]).to eq(:processor)
       expect(task_obj.pipeline[5][:options][:stage_role]).to eq(:consumer)
       expect(task_obj.pipeline[5][:name]).to eq(:store_results)
-      
+
       # Verify the connections
       expect(task_obj.connections[:data_source]).to include(:validate)
       expect(task_obj.connections[:validate]).to include(:transform_a, :transform_b)
@@ -348,14 +348,12 @@ RSpec.describe 'README Examples Integration' do
             { id: 3, name: 'Regular User 2', vip: false, email_type: 'transaction' },
             { id: 4, name: 'VIP User 2', vip: true, email_type: 'newsletter' }
           ]
-          
+
           all_users.each do |user|
             emit(user)
 
             # Route VIP users to a high priority queue
-            if user[:vip]
-              emit_to_queue(:high_priority, user)
-            end
+            emit_to_queue(:high_priority, user) if user[:vip]
           end
         end
 
@@ -392,33 +390,33 @@ RSpec.describe 'README Examples Integration' do
 
       # Get the task object directly
       task_obj = priority_class._minigun_task
-      
+
       # Verify that the processor blocks are defined
       expect(task_obj.processor_blocks.keys).to include(:user_producer, :email_processor, :consumer)
       expect(task_obj.accumulator_blocks.keys).to include(:email_accumulator)
-      
+
       # Verify that the pipeline stages are defined
       expect(task_obj.pipeline.size).to eq(4)
-      
+
       # First stage should be a producer
       expect(task_obj.pipeline[0][:type]).to eq(:processor)
       expect(task_obj.pipeline[0][:options][:stage_role]).to eq(:producer)
       expect(task_obj.pipeline[0][:name]).to eq(:user_producer)
-      
+
       # Verify processor stage has queue subscription
-      expect(task_obj.queue_subscriptions[:email_processor]).to eq([:default, :high_priority])
-      
+      expect(task_obj.queue_subscriptions[:email_processor]).to eq(%i[default high_priority])
+
       # Verify accumulator is present
       accumulator_stage = task_obj.pipeline.find { |stage| stage[:type] == :accumulator }
       expect(accumulator_stage).not_to be_nil
       expect(accumulator_stage[:name]).to eq(:email_accumulator)
       expect(task_obj.connections[:email_processor]).to include(:email_accumulator)
-      
+
       # Last stage should be a consumer
       expect(task_obj.pipeline[3][:type]).to eq(:processor)
       expect(task_obj.pipeline[3][:options][:stage_role]).to eq(:consumer)
       expect(task_obj.pipeline[3][:name]).to eq(:consumer)
-      expect(task_obj.queue_subscriptions[:consumer]).to eq([:default, :high_priority])
+      expect(task_obj.queue_subscriptions[:consumer]).to eq(%i[default high_priority])
     end
   end
 
@@ -478,29 +476,29 @@ RSpec.describe 'README Examples Integration' do
 
       # Get the task object directly
       task_obj = load_balancer_class._minigun_task
-      
+
       # Verify that the processor blocks are defined
       expect(task_obj.processor_blocks.keys).to include(:data_source, :worker_1, :worker_2, :worker_3)
       expect(task_obj.accumulator_blocks.keys).to include(:result_collector)
-      
+
       # Verify that the pipeline stages are defined
       expect(task_obj.pipeline.size).to eq(5)
-      
+
       # First stage should be a producer
       expect(task_obj.pipeline[0][:type]).to eq(:processor)
       expect(task_obj.pipeline[0][:options][:stage_role]).to eq(:producer)
       expect(task_obj.pipeline[0][:name]).to eq(:data_source)
-      
+
       # Verify worker queues
       expect(task_obj.queue_subscriptions[:worker_1]).to eq([:queue_1])
       expect(task_obj.queue_subscriptions[:worker_2]).to eq([:queue_2])
       expect(task_obj.queue_subscriptions[:worker_3]).to eq([:queue_3])
-      
+
       # Verify accumulator stage
       accumulator_stage = task_obj.pipeline.find { |stage| stage[:type] == :accumulator }
       expect(accumulator_stage).not_to be_nil
       expect(accumulator_stage[:name]).to eq(:result_collector)
-      
+
       # Verify connections
       expect(task_obj.connections[:worker_1]).to include(:result_collector)
       expect(task_obj.connections[:worker_2]).to include(:result_collector)

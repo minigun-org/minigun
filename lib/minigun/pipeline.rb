@@ -15,35 +15,35 @@ module Minigun
 
     def initialize(context, options = {})
       @context = context
-      
+
       # Get the task from the context - more flexible approach
       @task = if options[:task]
-        options[:task]
-      elsif context.is_a?(Minigun::Task)
-        context
-      elsif context.class.respond_to?(:_minigun_task)
-        context.class._minigun_task
-      elsif context.is_a?(Module) && context.respond_to?(:_minigun_task)
-        context._minigun_task
-      else
-        # For custom contexts that are not tasks or modules with DSL
-        # we'll use the task from options or create a simple one
-        options[:task] || Minigun::Task.new
-      end
-      
+                options[:task]
+              elsif context.is_a?(Minigun::Task)
+                context
+              elsif context.class.respond_to?(:_minigun_task)
+                context.class._minigun_task
+              elsif context.is_a?(Module) && context.respond_to?(:_minigun_task)
+                context._minigun_task
+              else
+                # For custom contexts that are not tasks or modules with DSL
+                # we'll use the task from options or create a simple one
+                options[:task] || Minigun::Task.new
+              end
+
       # Generate a unique ID for this pipeline
       @job_id = options[:job_id] || SecureRandom.hex(4)
-      
+
       # Get pipeline configuration
       @is_custom = options[:custom] || false
-      
+
       # Initialize task execution options
       @max_threads = options[:max_threads] || @task.config[:max_threads]
       @max_processes = options[:max_processes] || @task.config[:max_processes]
       @max_retries = options[:max_retries] || @task.config[:max_retries]
       @logger = options[:logger] || @task.config[:logger]
       @debug = options[:debug] || false
-      
+
       # Initialize pipeline components
       @stages = []
       @stage_connections = {}
@@ -59,16 +59,16 @@ module Minigun
     def add_stage(type, name, options = {})
       # Create the appropriate stage class
       klass = case type
-        when :processor
-          Minigun::Stages::Processor
-        when :accumulator
-          Minigun::Stages::Accumulator
-        when Minigun::Stages::Processor, Minigun::Stages::Accumulator
-          type
-        else
-          raise "Unknown stage type: #{type}"
-      end
-      
+              when :processor
+                Minigun::Stages::Processor
+              when :accumulator
+                Minigun::Stages::Accumulator
+              when Minigun::Stages::Processor, Minigun::Stages::Accumulator
+                type
+              else
+                raise "Unknown stage type: #{type}"
+              end
+
       stage = klass.new(name, self, options)
       @stages << stage
       stage
@@ -85,14 +85,14 @@ module Minigun
         # If no connections provided, create default linear pipeline
         # where each stage connects to the next one
         @stages.each_with_index do |stage, i|
-          if i < @stages.size - 1
-            next_stage = @stages[i + 1]
-            @stage_connections[stage.name] ||= []
-            @stage_connections[stage.name] << next_stage.name
-          end
+          next unless i < @stages.size - 1
+
+          next_stage = @stages[i + 1]
+          @stage_connections[stage.name] ||= []
+          @stage_connections[stage.name] << next_stage.name
         end
       end
-      
+
       self
     end
 
@@ -102,35 +102,31 @@ module Minigun
       @task.pipeline.each do |stage_config|
         add_stage(stage_config[:type], stage_config[:name], stage_config[:options])
       end
-      
+
       # Connect stages
       connect_stages
-      
+
       self
     end
 
     # Run the built pipeline
     def run
       # Run before_run hooks if task has hooks defined
-      if @task.respond_to?(:run_hooks)
-        @task.run_hooks(:before_run, @context)
-      end
-      
+      @task.run_hooks(:before_run, @context) if @task.respond_to?(:run_hooks)
+
       # Log pipeline startup
       @logger.info("[Minigun:#{@job_id}] Starting pipeline execution")
-      
+
       # Create and initialize the executor
       @executor = PipelineExecutor.new(self)
       @executor.run
-      
+
       # Run after_run hooks if task has hooks defined
-      if @task.respond_to?(:run_hooks)
-        @task.run_hooks(:after_run, @context)
-      end
-      
+      @task.run_hooks(:after_run, @context) if @task.respond_to?(:run_hooks)
+
       # Log pipeline completion
       @logger.info("[Minigun:#{@job_id}] Pipeline execution completed")
-      
+
       self
     end
 
@@ -142,19 +138,19 @@ module Minigun
     # Get the queue subscriptions for a stage
     def queue_subscriptions(stage_name)
       return [:default] unless @task.queue_subscriptions && @task.queue_subscriptions[stage_name.to_sym]
-      
+
       @task.queue_subscriptions[stage_name.to_sym]
     end
 
     # Find downstream stages connected to a given stage
     def downstream_stages(stage_name)
       return [] unless @stage_connections && @stage_connections[stage_name]
-      
+
       # Get connected stage names
       stage_names = @stage_connections[stage_name]
-      
+
       # Find stage objects by name
-      stage_names.map { |name| @stages.find { |s| s.name == name } }.compact
+      stage_names.filter_map { |name| @stages.find { |s| s.name == name } }
     end
 
     private
@@ -177,14 +173,14 @@ module Minigun
       # For each stage in the pipeline, add it to the pipeline
       @task.pipeline.each do |stage_def|
         # Determine the appropriate stage class
-        stage_class = case stage_def[:type]
-                      when :processor
-                        Minigun::Stages::Processor
-                      when :accumulator
-                        Minigun::Stages::Accumulator
-                      else
-                        raise "Unknown stage type: #{stage_def[:type]}"
-                      end
+        case stage_def[:type]
+        when :processor
+          Minigun::Stages::Processor
+        when :accumulator
+          Minigun::Stages::Accumulator
+        else
+          raise "Unknown stage type: #{stage_def[:type]}"
+        end
 
         # Add the stage
         add_stage(stage_def[:type], stage_def[:name], stage_def[:options])
@@ -251,10 +247,10 @@ module Minigun
     # Define a producer stage
     def producer(name = :default, options = {}, &block)
       task = @pipeline.task
-      
+
       # Add the stage to the task
       task.add_producer(name, options, &block)
-      
+
       # Add to pipeline
       @pipeline.add_stage(Minigun::Stages::Processor, name, options.merge(stage_role: :producer))
     end
@@ -262,10 +258,10 @@ module Minigun
     # Define a processor stage
     def processor(name = :default, options = {}, &block)
       task = @pipeline.task
-      
+
       # Add the stage to the task
       task.add_processor(name, options, &block)
-      
+
       # Add to pipeline
       @pipeline.add_stage(Minigun::Stages::Processor, name, options)
     end
@@ -273,10 +269,10 @@ module Minigun
     # Define an accumulator stage
     def accumulator(name = :default, options = {}, &block)
       task = @pipeline.task
-      
+
       # Add the stage to the task
       task.add_accumulator(name, options, &block)
-      
+
       # Add to pipeline
       @pipeline.add_stage(Minigun::Stages::Accumulator, name, options)
     end
@@ -284,10 +280,10 @@ module Minigun
     # Define a consumer stage
     def consumer(name = :default, options = {}, &block)
       task = @pipeline.task
-      
+
       # Add the stage to the task
       task.add_consumer(name, options, &block)
-      
+
       # Add to pipeline
       @pipeline.add_stage(Minigun::Stages::Processor, name, options.merge(stage_role: :consumer))
     end
@@ -314,7 +310,7 @@ module Minigun
     def run_pipeline_with_input(input_item)
       # Track the first stage in the pipeline
       first_stage = @pipeline.stages.first
-      
+
       # The first stage processes the input item
       first_stage&.process(input_item)
     end

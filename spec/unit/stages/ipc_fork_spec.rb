@@ -28,8 +28,7 @@ RSpec.describe Minigun::Stages::IpcFork do
       block.call(item)
     end
     allow(task).to receive(:run_hooks)
-    allow(task).to receive(:hooks).and_return({})
-    allow(task).to receive(:processor_blocks).and_return({})
+    allow(task).to receive_messages(hooks: {}, processor_blocks: {})
     task
   end
 

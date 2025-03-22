@@ -235,4 +235,4 @@ RSpec.describe Minigun::DSL do
       end
     end
   end
-end 
+end

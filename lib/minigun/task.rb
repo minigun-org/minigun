@@ -78,7 +78,7 @@ module Minigun
       # Return the processed options
       options
     end
-    
+
     # Define the producer block that generates items
     def add_producer(name = :default, options = {}, &block)
       # Process connection options

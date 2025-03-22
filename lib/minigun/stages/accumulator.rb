@@ -51,7 +51,7 @@ module Minigun
       # Shutdown the stage and flush any remaining batches
       def shutdown
         # Shutdown the timer if we have one
-        @flush_timer.shutdown if @flush_timer
+        @flush_timer&.shutdown
 
         # Flush all batches
         flush_all_batches

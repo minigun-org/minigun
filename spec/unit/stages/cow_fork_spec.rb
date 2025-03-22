@@ -28,8 +28,7 @@ RSpec.describe Minigun::Stages::CowFork do
       block.call(item)
     end
     allow(task).to receive(:run_hooks)
-    allow(task).to receive(:hooks).and_return({})
-    allow(task).to receive(:accumulator_blocks).and_return({})
+    allow(task).to receive_messages(hooks: {}, accumulator_blocks: {})
     task
   end
 
@@ -98,7 +97,7 @@ RSpec.describe Minigun::Stages::CowFork do
     context 'when processing items directly' do
       it 'processes items and updates statistics' do
         # Create a test subject that uses CowFork
-        allow(subject).to receive(:process_items_directly).and_wrap_original do |original_method, items|
+        allow(subject).to receive(:process_items_directly).and_wrap_original do |_original_method, items|
           # Simulate successful processing
           {
             success: items.size,
@@ -106,15 +105,15 @@ RSpec.describe Minigun::Stages::CowFork do
             emitted: 0
           }
         end
-        
+
         # Expose private method for testing
         def subject.process_directly(items)
           process_items_directly(items)
         end
-        
+
         # Get result from the processing
         result = subject.process_directly(['item1', 'item2', 1, 2, 3])
-        
+
         # Verify the results
         expect(result[:success]).to eq(5) # Total of 5 items processed
       end
@@ -125,30 +124,30 @@ RSpec.describe Minigun::Stages::CowFork do
     it 'processes any remaining items and returns statistics' do
       # Create an accessible counter to verify calls
       called_types = []
-      
+
       # Add items to the accumulator for shutdown to process
-      subject.instance_variable_get(:@accumulator)['String'] = ['item1', 'item2']
+      subject.instance_variable_get(:@accumulator)['String'] = %w[item1 item2]
       subject.instance_variable_get(:@accumulator)['Integer'] = [1, 2, 3]
-      
+
       # Mock the process_batch method to track calls and update counts
       allow(subject).to receive(:process_batch) do |type|
         called_types << type
         # Get the items to process from the accumulator
         items = subject.instance_variable_get(:@accumulator)[type]
-        
+
         # Update the processed count directly - this is what the real method would do
         subject.instance_variable_get(:@processed_count).increment(items.size)
-        
+
         # Clear the batch
         subject.instance_variable_get(:@accumulator)[type] = []
       end
-      
+
       # Call shutdown to process accumulated items
       result = subject.shutdown
-      
+
       # Verify that process_batch was called for both types
       expect(called_types).to include('String', 'Integer')
-      
+
       # Verify results - we should have processed 5 items
       expect(result[:processed]).to eq(5)
     end
