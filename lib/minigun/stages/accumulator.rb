@@ -4,110 +4,120 @@ require 'concurrent'
 
 module Minigun
   module Stages
-    # Accumulator stage that batches items before sending them to the next stage
+    # Accumulator stage that collects items and batches them
     class Accumulator < Base
-      def initialize(name, pipeline, config = {})
+      def initialize(name, pipeline, options = {})
         super
-        @accumulated_count = 0
+        @batch_size = options[:batch_size] || 100
+        @flush_interval = options[:flush_interval] || 5
+        @max_batch_size = options[:max_batch_size] || 500
+        @processed_count = Concurrent::AtomicFixnum.new(0)
+        @emitted_count = Concurrent::AtomicFixnum.new(0)
+        @accumulated_count = Concurrent::AtomicFixnum.new(0)
+        @batches = {}
+        @flush_timer = nil
 
-        # Configuration
-        @batch_size = config[:batch_size] || 100
-        @flush_interval = config[:flush_interval] || 5 # seconds
-        @max_batch_size = config[:max_batch_size] || 1000
-
-        # Get custom accumulator block if defined
-        @accumulator_block = @task.class._minigun_accumulator_blocks&.dig(name.to_sym)
-
-        # Batching data structures
-        @batches = Concurrent::Hash.new { |h, k| h[k] = [] }
-        @batch_mutex = Mutex.new
-
-        # Setup flush timer
-        @flush_timer = Concurrent::TimerTask.new(
-          execution_interval: @flush_interval,
-          timeout_interval: @flush_interval * 2
-        ) do
-          flush_all_batches
-        end
+        # Get the accumulator block
+        @block = nil
+        @block = @task.accumulator_blocks[name.to_sym] if @task.accumulator_blocks && @task.accumulator_blocks[name.to_sym]
       end
 
+      # Run method starts the flush timer
       def run
         on_start
+        @flush_timer = Concurrent::TimerTask.new(execution_interval: @flush_interval) do
+          flush_all_batches
+        end
         @flush_timer.execute
       end
 
+      # Process a single item
       def process(item)
-        item_type = determine_batch_key(item)
+        # We track processed count
+        @processed_count.increment
+        @accumulated_count.increment
 
-        @batch_mutex.synchronize do
-          @batches[item_type] << item
-          @accumulated_count += 1
-
-          # If we've reached max batch size for this type, flush it
-          if @batches[item_type].size >= @max_batch_size
-            # Get items to flush
-            items = @batches[item_type]
-            @batches[item_type] = []
-            # Flush outside the mutex to avoid deadlock
-            flush_batch_items(item_type, items)
-          end
+        # Call the block if provided, otherwise use default accumulation
+        if @block
+          # User-defined accumulation logic
+          @context.instance_exec(item, &@block)
+        else
+          # Default accumulation by type
+          key = determine_batch_key(item)
+          add_to_batch(key, item)
         end
       end
 
+      # Shutdown the stage and flush any remaining batches
       def shutdown
-        @flush_timer.shutdown
+        # Shutdown the timer if we have one
+        @flush_timer.shutdown if @flush_timer
+
+        # Flush all batches
         flush_all_batches
 
+        # Call on_finish hook
         on_finish
-        { accumulated: @accumulated_count }
+
+        # Return stats
+        {
+          processed: @processed_count.value,
+          emitted: @emitted_count.value,
+          accumulated: @accumulated_count.value
+        }
+      end
+
+      # Force emission of all batches
+      def flush
+        flush_all_batches
       end
 
       private
 
+      # Determine the batch key for an item (defaults to its class name)
       def determine_batch_key(item)
-        # By default, batch by item class
         item.class.name
       end
 
-      def flush_all_batches
-        items_by_key = {}
+      # Add an item to a batch
+      def add_to_batch(key, item)
+        # Initialize the batch if needed
+        @batches[key] ||= []
+        @batches[key] << item
 
-        # Get all batches first
-        @batch_mutex.synchronize do
-          @batches.each do |key, items|
-            if items.any?
-              items_by_key[key] = items.dup
-              @batches[key] = []
-            end
-          end
-        end
-
-        # Then flush them outside the mutex
-        items_by_key.each do |key, items|
-          flush_batch_items(key, items)
-        end
+        # Check if we should flush this batch
+        flush_batch_if_needed(key)
       end
 
-      def flush_batch(key)
-        # Get items to flush
-        items = nil
-        @batch_mutex.synchronize do
-          items = @batches[key]
+      # Check if a batch should be flushed
+      def flush_batch_if_needed(key)
+        # Flush if the batch has reached max batch size
+        return unless @batches[key] && @batches[key].size >= @max_batch_size
+
+        debug("Flushing batch of #{@batches[key].size} items of type #{key}")
+        flush_batch_items(key, @batches[key])
+        @batches[key] = []
+      end
+
+      # Flush all batches that have items
+      def flush_all_batches
+        @batches.each do |key, items|
+          next if items.empty?
+
+          # Flush the batch
+          flush_batch_items(key, items)
           @batches[key] = []
         end
-
-        # Flush outside the mutex
-        flush_batch_items(key, items)
       end
 
+      # Flush items from a specific batch
       def flush_batch_items(key, items)
         return if items.empty?
 
-        info("[Minigun:#{@job_id}][#{@name}] Flushing batch of #{items.size} #{key} items")
-
-        # Send the batch to the next stage
-        items.each_slice(@batch_size) do |slice|
-          emit(slice)
+        # Split into chunks of batch_size and emit each
+        items.each_slice(@batch_size) do |batch_items|
+          emit(batch_items, key.to_sym)
+          @emitted_count.increment
         end
       end
     end

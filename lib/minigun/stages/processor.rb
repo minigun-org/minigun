@@ -28,7 +28,7 @@ module Minigun
 
         # Get the processor block from the task
         @block = nil
-        @block = pipeline.task.class._minigun_processor_blocks[name.to_sym] if pipeline.task.class.respond_to?(:_minigun_processor_blocks)
+        @block = @task.processor_blocks[name.to_sym] if @task.processor_blocks[name.to_sym]
 
         # For consumers, initialize fork implementation if needed
         return unless @stage_role == :consumer
@@ -40,100 +40,37 @@ module Minigun
         init_fork_implementation(fork_type)
       end
 
-      # Initialize fork implementation for consumer role if needed
-      def init_fork_implementation(type)
-        if type == :cow
-          require 'minigun/stages/cow_fork'
-          @fork_impl = CowFork.new(@name, @pipeline, {
-                                     logger: @logger,
-                                     max_processes: @processes,
-                                     max_threads: @threads
-                                   })
-        else # :ipc
-          require 'minigun/stages/ipc_fork'
-          @fork_impl = IpcFork.new(@name, @pipeline, {
-                                     logger: @logger,
-                                     max_processes: @processes,
-                                     max_threads: @threads
-                                   })
-        end
-      end
-
-      def run
-        # Different behavior based on stage role
+      # Process a single item
+      def process(item)
+        # Run appropriate processing based on stage role
         case @stage_role
         when :producer
-          run_as_producer
+          # For producers, the block is called without any arguments
+          # and it's expected to call produce() to generate items
+          process_as_producer(item)
         when :processor
-          # Processors start automatically when items flow to them
+          # For processors, the block is called with each item
+          # and expected to call emit() to send to next stage
+          process_as_processor(item)
         when :consumer
-          # If using fork implementation, delegate to it
-          @fork_impl.run if @fork_impl.respond_to?(:run)
+          # For consumers, the block is called with each item/batch
+          # and not expected to emit anything further
+          process_as_consumer(item)
+        else
+          raise "Unknown stage role: #{@stage_role}"
         end
       end
 
-      def process(item)
-        # Only process items in processor/consumer roles
-        return unless @stage_role == :processor || @stage_role == :consumer
-
-        @processed_count.increment
-        @logger.debug("Processing item: #{item.inspect}") if @config[:debug]
-
-        retries = 0
-        begin
-          # Execute the processor block in the context of the task
-          result = @task.instance_exec(item, &@block)
-
-          # Create a pseudo-future if the result doesn't respond to wait
-          # This will help with test compatibility
-          if result.is_a?(Hash) && !result.respond_to?(:wait)
-            original_result = result
-            result = ResultWrapper.new(
-              -> { original_result },
-              -> { original_result }
-            )
-          end
-
-          if @stage_role == :processor
-            # Emit the result for processors
-            emit(result.respond_to?(:value) ? result.value : result)
-          end
-
-          @emitted_count.increment if @stage_role == :processor
-          @logger.debug "Processed item: #{item.inspect}" if @config[:debug]
-        rescue StandardError => e
-          @failed_count.increment
-
-          # Implement retry logic
-          retries += 1
-          if retries <= @max_retries
-            @logger.error "Error processing item (attempt #{retries}/#{@max_retries + 1}): #{e.message}"
-            sleep_with_backoff(retries)
-            retry
-          else
-            @logger.error "Error processing item: #{e.message}"
-            @logger.error e.backtrace.join("\n") if e.backtrace
-            raise e
-          end
-        end
-
-        result
-      end
-
-      # Helper method to sleep with exponential backoff
-      def sleep_with_backoff(retry_count)
-        # Start with 0.1 second, then double for each retry with some jitter
-        sleep_time = [0.1 * (2**(retry_count - 1)), 30].min * (0.5 + rand)
-        sleep(sleep_time)
-      end
-
+      # Shutdown the processor stage
       def shutdown
-        # If this is a consumer with fork implementation, delegate
-        return @fork_impl.shutdown if @stage_role == :consumer && @fork_impl
+        # Shut down the thread pool if it exists
+        if @thread_pool
+          @thread_pool.shutdown
+          @thread_pool.wait_for_termination(30)
+        end
 
-        # Shutdown thread pool
-        @thread_pool.shutdown
-        @thread_pool.wait_for_termination(30) # Wait up to 30 seconds
+        # Call on_finish hook
+        on_finish
 
         # Return stats
         {
@@ -143,42 +80,117 @@ module Minigun
         }
       end
 
-      # Run as a producer stage
-      def run_as_producer
-        return unless @block
+      private
+
+      # Process item as a producer (ignore input item, generate outputs)
+      def process_as_producer(_item)
+        # Prepare the context for producer
+        Thread.current[:minigun_queue] = []
 
         begin
-          # Run the producer block to generate items
-          @task.instance_exec(self, &@block)
+          # Call the processor block
+          result = if @block
+                     # Execute in the context using instance_exec
+                     @context.instance_exec(&@block)
+                   else
+                     # Default implementation just returns nil
+                     nil
+                   end
 
-          @logger.info("[Minigun:#{@job_id}][#{@name}] Producer finished, emitted #{@emitted_count.value} items")
+          # Get the produced items
+          items = Thread.current[:minigun_queue]
+
+          # If there are items in the queue, emit them
+          items.each { |produced_item| emit(produced_item) }
+
+          @processed_count.increment
+          @emitted_count.increment(items.size)
+
+          # Return number of items produced
+          items.size
         rescue StandardError => e
-          @logger.error("[Minigun:#{@job_id}][#{@name}] Producer failed: #{e.message}")
-          @logger.error(e.backtrace.join("\n")) if e.backtrace
+          @failed_count.increment
+          error("[Minigun:#{@job_id}][Producer:#{@name}] Error: #{e.class}: #{e.message}\n#{e.backtrace.join("\n")}")
           raise e
         end
       end
 
-      # Override emit to track count
-      def emit(item, queue = :default)
-        super
-        @emitted_count.increment
+      # Process item as a processor (transform input to output)
+      def process_as_processor(item)
+        begin
+          # Call the processor block with the item
+          result = if @block
+                     if @block.arity == 0
+                       # If block takes no arguments, use instance_eval
+                       @context.instance_exec do
+                         # Make the item available as an instance variable
+                         @item = item
+                         instance_eval(&@block)
+                       end
+                     else
+                       # Otherwise call with the item as argument
+                       @context.instance_exec(item, &@block)
+                     end
+                   else
+                     # Default implementation just passes the item through
+                     item
+                   end
+
+          # Track processing
+          @processed_count.increment
+
+          # If result is not explicitly nil, emit it
+          # This allows processors to filter by returning nil
+          emit(result) unless result.nil?
+
+          # Return the result
+          result
+        rescue StandardError => e
+          @failed_count.increment
+          error("[Minigun:#{@job_id}][Processor:#{@name}] Error processing item: #{e.class}: #{e.message}\n#{e.backtrace.join("\n")}")
+          raise e
+        end
       end
 
-      # Expose these attributes to fork implementation
-      attr_reader :block, :threads, :processes, :max_retries, :batch_size, :stage_role
+      # Process item as a consumer (take input, produce no output)
+      def process_as_consumer(item)
+        begin
+          # Call the consumer block with the item
+          if @block
+            if @block.arity == 0
+              # If block takes no arguments, use instance_eval
+              @context.instance_exec do
+                # Make the item available as an instance variable
+                @item = item
+                instance_eval(&@block)
+              end
+            else
+              # Otherwise call with the item as argument
+              @context.instance_exec(item, &@block)
+            end
+          end
 
-      # Methods used by fork implementation
-      def increment_processed_count(count = 1)
-        @processed_count.increment(count)
+          @processed_count.increment
+          nil # Consumers don't return a value
+        rescue StandardError => e
+          @failed_count.increment
+          error("[Minigun:#{@job_id}][Consumer:#{@name}] Error consuming item: #{e.class}: #{e.message}\n#{e.backtrace.join("\n")}")
+          raise e
+        end
       end
 
-      def increment_failed_count(count = 1)
-        @failed_count.increment(count)
-      end
-
-      def increment_emitted_count(count = 1)
-        @emitted_count.increment(count)
+      # Initialize appropriate fork implementation based on type
+      def init_fork_implementation(fork_type)
+        case fork_type
+        when :cow
+          # Get the module as a constant
+          cow_module = Minigun::Stages.const_get(:CowFork)
+          extend cow_module
+        when :ipc
+          # Get the module as a constant
+          ipc_module = Minigun::Stages.const_get(:IpcFork)
+          extend ipc_module
+        end
       end
     end
   end

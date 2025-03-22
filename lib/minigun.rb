@@ -3,6 +3,7 @@
 require 'minigun/version'
 require 'minigun/error'
 require 'minigun/task'
+require 'minigun/dsl'
 require 'minigun/runner'
 require 'minigun/pipeline'
 require 'minigun/stages/base'

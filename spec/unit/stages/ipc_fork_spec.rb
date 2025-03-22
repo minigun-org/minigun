@@ -27,10 +27,13 @@ RSpec.describe Minigun::Stages::IpcFork do
 
       block.call(item)
     end
+    allow(task).to receive(:run_hooks)
+    allow(task).to receive(:hooks).and_return({})
+    allow(task).to receive(:processor_blocks).and_return({})
     task
   end
 
-  let(:pipeline) { double('Pipeline', task: task, job_id: 'test_job') }
+  let(:pipeline) { double('Pipeline', task: task, job_id: 'test_job', context: task) }
   let(:logger) { instance_double(Logger, info: nil, warn: nil, error: nil, debug: nil) }
   let(:config) do
     {
@@ -44,6 +47,7 @@ RSpec.describe Minigun::Stages::IpcFork do
 
   before do
     allow(task_class).to receive(:_minigun_consumer_blocks).and_return({ test_consumer: consumer_block })
+    allow(pipeline).to receive(:downstream_stages).and_return([])
   end
 
 

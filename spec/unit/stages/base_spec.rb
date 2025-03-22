@@ -5,12 +5,22 @@ require 'spec_helper'
 RSpec.describe Minigun::Stages::Base do
   subject { described_class.new(stage_name, pipeline, config) }
 
-  let(:task) { double('Task', _minigun_hooks: {}) }
-  let(:pipeline) { double('Pipeline', task: task, job_id: 'test_job', send_to_next_stage: nil) }
+  let(:task) { double('Task', hooks: hooks) }
+  let(:hooks) do
+    {
+      before_test_stage: [{ if: nil, unless: nil, block: before_hook }],
+      after_test_stage: [{ if: nil, unless: nil, block: after_hook }],
+      on_error_test_stage: [{ if: nil, unless: nil, block: error_hook }]
+    }
+  end
+  let(:before_hook) { proc { @called = true } }
+  let(:after_hook) { proc { @finished = true } }
+  let(:error_hook) { proc { |err| @error = err } }
+  let(:context) { double('Context') }
+  let(:pipeline) { double('Pipeline', task: task, job_id: 'test_job', send_to_next_stage: nil, context: context) }
   let(:logger) { instance_double(Logger, info: nil, warn: nil, error: nil, debug: nil) }
   let(:config) { { logger: logger } }
   let(:stage_name) { 'test_stage' }
-
 
   describe '#initialize' do
     it 'sets up the stage with the correct attributes' do
@@ -70,39 +80,26 @@ RSpec.describe Minigun::Stages::Base do
   end
 
   describe 'hooks' do
-    let(:before_hook) { proc { @called = true } }
-    let(:after_hook) { proc { @finished = true } }
-    let(:error_hook) { proc { |err| @error = err } }
-
     context 'when task has hooks defined' do
-      let(:task) do
-        task = double('Task')
-        allow(task).to receive(:class).and_return(
-          double('TaskClass',
-                 _minigun_hooks: {
-                   before_test_stage: [{ if: nil, unless: nil, block: before_hook }],
-                   after_test_stage: [{ if: nil, unless: nil, block: after_hook }],
-                   on_error_test_stage: [{ if: nil, unless: nil, block: error_hook }]
-                 },
-                 respond_to?: true)
-        )
-        allow(task).to receive(:instance_exec) { |*args, &block| block.call(*args) }
-        task
+      before do
+        allow(context).to receive(:instance_exec) do |*args, &block|
+          block.call(*args) if block
+        end
       end
 
       it 'calls before stage hooks on start' do
-        expect(task).to receive(:instance_exec).at_least(:once)
+        expect(context).to receive(:instance_exec)
         subject.on_start
       end
 
       it 'calls after stage hooks on finish' do
-        expect(task).to receive(:instance_exec).at_least(:once)
+        expect(context).to receive(:instance_exec)
         subject.on_finish
       end
 
       it 'calls error hooks on error' do
         error = StandardError.new('Test error')
-        expect(task).to receive(:instance_exec).with(error)
+        expect(context).to receive(:instance_exec).with(error)
         subject.on_error(error)
       end
     end

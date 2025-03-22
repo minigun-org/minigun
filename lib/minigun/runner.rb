@@ -11,13 +11,24 @@ module Minigun
     extend Forwardable
     def_delegators :@logger, :info, :warn, :error, :debug
 
-    attr_reader :job_id
+    attr_reader :job_id, :task
 
-    def initialize(task)
-      @task = task
-      @config = task.class._minigun_config
-      @producer_block = task.class._minigun_processor_blocks&.[](:default)
-      @consumer_block = task.class._minigun_processor_blocks&.[](:default)
+    def initialize(context)
+      @context = context
+      
+      # Get the task - either directly passed, from context if it's a Task, or from context's class
+      @task = if context.is_a?(Minigun::Task)
+                context
+              elsif context.class.respond_to?(:_minigun_task)
+                context.class._minigun_task
+              else
+                # Default to a new task
+                Minigun::Task.new
+              end
+              
+      @config = @task.config
+      @producer_block = @task.processor_blocks&.[](:default)
+      @consumer_block = @task.processor_blocks&.[](:default)
 
       # Load configuration
       @logger = @config[:logger]
@@ -44,7 +55,7 @@ module Minigun
 
     def run
       log_job_started
-      @task.run_hooks(:before_run)
+      @task.run_hooks(:before_run, @context)
 
       # Create the thread pool for producer
       producer_pool = Concurrent::FixedThreadPool.new(1)
@@ -68,7 +79,7 @@ module Minigun
       # Complete the job
       @job_end_at = Time.now
       log_job_finished
-      @task.run_hooks(:after_run)
+      @task.run_hooks(:after_run, @context)
 
       @accumulated_count
     ensure
@@ -83,7 +94,7 @@ module Minigun
       Thread.current[:minigun_queue] = []
 
       begin
-        @task.instance_eval(&@producer_block)
+        @context.instance_eval(&@producer_block)
         items = Thread.current[:minigun_queue]
 
         info("[Minigun:#{@job_id}][Producer] Enqueuing #{items.size} items...")
@@ -93,7 +104,7 @@ module Minigun
         error("[Minigun:#{@job_id}][Producer] Error in producer: #{e.class}: #{e.message}\n#{e.backtrace.join("\n")}")
         raise e
       ensure
-        @task.run_hooks(:after_producer_finished)
+        @task.run_hooks(:after_producer_finished, @context)
         info("[Minigun:#{@job_id}][Producer] Done. #{@produced_count} items produced")
       end
     end

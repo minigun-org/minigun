@@ -3,49 +3,53 @@
 require 'spec_helper'
 
 RSpec.describe Minigun::Runner do
-  let(:task_class) do
-    Class.new do
-      include Minigun::Task
+  let(:task) do
+    task = Minigun::Task.new
+    
+    # Add instance variables for tracking
+    task.instance_variable_set(:@producer_called, 0)
+    task.instance_variable_set(:@processor_called, 0)
+    task.instance_variable_set(:@consumer_called, 0)
+    task.instance_variable_set(:@producer_items, [])
+    task.instance_variable_set(:@processor_items, [])
+    task.instance_variable_set(:@consumer_batches, [])
 
-      attr_reader :producer_called, :processor_called, :consumer_called
-      attr_reader :producer_items, :processor_items, :consumer_batches
-
-      def initialize
-        @producer_called = 0
-        @processor_called = 0
-        @consumer_called = 0
-        @producer_items = []
-        @processor_items = []
-        @consumer_batches = []
-      end
-
-      producer do
-        @producer_called += 1
-        items = [1, 2, 3]
-        @producer_items = items.dup
-        produce(items)
-      end
-
-      processor do |item|
-        @processor_called += 1
-        @processor_items << item
-        emit(item * 2)
-      end
-
-      consumer do |batch|
-        @consumer_called += 1
-        @consumer_batches << batch
-      end
-
-      # Configure task for testing
-      batch_size 2
-      max_threads 1
-      max_processes 1
-      fork_mode :never
+    # Add methods for testing
+    def task.producer_called; @producer_called; end
+    def task.processor_called; @processor_called; end
+    def task.consumer_called; @consumer_called; end
+    def task.producer_items; @producer_items; end
+    def task.processor_items; @processor_items; end
+    def task.consumer_batches; @consumer_batches; end
+    
+    # Add processor and consumer stages
+    task.add_producer(:test_producer, {}) do
+      @producer_called += 1
+      items = [1, 2, 3]
+      @producer_items = items.dup
+      produce(items)
     end
+
+    task.add_processor(:test_processor, {}) do |item|
+      @processor_called += 1
+      @processor_items << item
+      emit(item * 2)
+    end
+
+    task.add_consumer(:test_consumer, {}) do |batch|
+      @consumer_called += 1
+      @consumer_batches << batch
+    end
+
+    # Configure task for testing
+    task.config[:batch_size] = 2
+    task.config[:max_threads] = 1
+    task.config[:max_processes] = 1
+    task.config[:fork_mode] = :never
+    
+    task
   end
 
-  let(:task) { task_class.new }
   let(:runner) { described_class.new(task) }
 
   describe '#initialize' do
@@ -76,8 +80,8 @@ RSpec.describe Minigun::Runner do
       allow(Concurrent::Future).to receive(:execute).and_return(producer_future, accumulator_future)
 
       # Expect the hooks to be called
-      expect(task).to receive(:run_hooks).with(:before_run)
-      expect(task).to receive(:run_hooks).with(:after_run)
+      expect(task).to receive(:run_hooks).with(:before_run, task)
+      expect(task).to receive(:run_hooks).with(:after_run, task)
 
       runner.run
     end

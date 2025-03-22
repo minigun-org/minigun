@@ -17,6 +17,19 @@ Minigun is a high-performance data processing pipeline framework for Ruby.
 In many use cases, Minigun can replace queue systems like Resque, Solid Queue, or Sidekiq.
 Minigun itself is run entire in Ruby's memory, and is database and application agnostic.
 
+## TODOs
+
+- [ ] Remove all references to producer/consumer except aliases
+- [ ] Merge processor / accumulator stages in code to just have "stages", then those stage can be any class with custom args.
+- [ ] Extract examples to examples folder
+- [ ] Add more examples based on real-world use cases
+- [ ] Add support for named queues and queue-based routing (already there?)
+- [ ] Add `parallel` and `sequential` blocks for defining parallel and sequential stages
+- [ ] Add support for custom error handling and retry strategies
+- [ ] Add support for custom logging and monitoring
+- [ ] Add support for custom thread and process management (?)
+
+
 ## Installation
 
 Add this line to your application's Gemfile:
@@ -31,7 +44,7 @@ gem 'minigun'
 require 'minigun'
 
 class MyTask
-  include Minigun::Task
+  include Minigun::DSL
   
   pipeline do
     producer :generate do
@@ -39,7 +52,7 @@ class MyTask
     end
     
     processor :transform do |number|
-      number * 2
+      emit(number * 2)
     end
     
     accumulator :batch do |item|

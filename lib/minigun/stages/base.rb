@@ -17,7 +17,20 @@ module Minigun
         @pipeline = pipeline
         @config = config
         @logger = config[:logger] || Logger.new($stdout)
-        @task = pipeline.task
+        @context = pipeline.context
+        
+        # Get the task from the pipeline or context
+        @task = if pipeline.respond_to?(:task)
+                  pipeline.task
+                elsif @context.is_a?(Minigun::Task)
+                  @context
+                elsif @context.class.respond_to?(:_minigun_task)
+                  @context.class._minigun_task
+                else
+                  # Fallback to a new task
+                  Minigun::Task.new
+                end
+                
         @job_id = pipeline.job_id
 
         # Register hooks if provided
@@ -31,12 +44,17 @@ module Minigun
 
       # Send an item to the next stage(s) in the pipeline
       def emit(item, queue = :default)
-        # Check the arity of send_to_next_stage to support both old and new interfaces
-        send_method = @pipeline.method(:send_to_next_stage)
-        if send_method.arity == 2
-          @pipeline.send_to_next_stage(self, item)
+        # Check if pipeline has the new method
+        if @pipeline.respond_to?(:downstream_stages)
+          send_to_next_stage(item, queue)
         else
-          @pipeline.send_to_next_stage(self, item, queue)
+          # Fall back to older interface
+          send_method = @pipeline.method(:send_to_next_stage)
+          if send_method.arity == 2
+            @pipeline.send_to_next_stage(self, item)
+          else
+            @pipeline.send_to_next_stage(self, item, queue)
+          end
         end
       end
 
@@ -50,8 +68,13 @@ module Minigun
           Thread.current[:minigun_fork_context][:success_count] += 1
         end
 
-        # Send to specified queue
-        @pipeline.send_to_next_stage(self, item, queue.to_sym)
+        # Send to specified queue using the new method if available
+        if @pipeline.respond_to?(:downstream_stages)
+          send_to_next_stage(item, queue.to_sym)
+        else
+          # Fall back to old method
+          @pipeline.send_to_next_stage(self, item, queue.to_sym)
+        end
       end
 
       # Alias for emit_to_queue
@@ -63,10 +86,10 @@ module Minigun
 
         # Execute before hooks
         hook_name = :"before_#{name}"
-        return unless @task.class.respond_to?(:_minigun_hooks) && @task.class._minigun_hooks[hook_name].is_a?(Array)
+        return unless @task.hooks && @task.hooks[hook_name].is_a?(Array)
 
-        @task.class._minigun_hooks[hook_name].each do |hook|
-          @task.instance_exec(&hook[:block]) if hook_should_run?(hook) && hook[:block]
+        @task.hooks[hook_name].each do |hook|
+          @context.instance_exec(&hook[:block]) if hook_should_run?(hook) && hook[:block]
         end
       end
 
@@ -76,10 +99,10 @@ module Minigun
 
         # Execute after hooks
         hook_name = :"after_#{name}"
-        return unless @task.class.respond_to?(:_minigun_hooks) && @task.class._minigun_hooks[hook_name].is_a?(Array)
+        return unless @task.hooks && @task.hooks[hook_name].is_a?(Array)
 
-        @task.class._minigun_hooks[hook_name].each do |hook|
-          @task.instance_exec(&hook[:block]) if hook_should_run?(hook) && hook[:block]
+        @task.hooks[hook_name].each do |hook|
+          @context.instance_exec(&hook[:block]) if hook_should_run?(hook) && hook[:block]
         end
       end
 
@@ -90,24 +113,49 @@ module Minigun
 
         # Execute error hooks
         hook_name = :"on_error_#{name}"
-        return unless @task.class.respond_to?(:_minigun_hooks) && @task.class._minigun_hooks[hook_name].is_a?(Array)
+        return unless @task.hooks && @task.hooks[hook_name].is_a?(Array)
 
-        @task.class._minigun_hooks[hook_name].each do |hook|
-          @task.instance_exec(error, &hook[:block]) if hook_should_run?(hook) && hook[:block]
+        @task.hooks[hook_name].each do |hook|
+          @context.instance_exec(error, &hook[:block]) if hook_should_run?(hook) && hook[:block]
         end
       end
 
       private
+      
+      # Send an item to the next stage(s) based on the pipeline connections
+      def send_to_next_stage(item, queue = :default)
+        # Find downstream stages connected to this stage
+        downstream = @pipeline.downstream_stages(@name)
+        
+        # If no downstream stages, do nothing
+        return if downstream.empty?
+        
+        # Get queue subscriptions for each stage
+        downstream.each do |stage|
+          # Check if this stage is subscribed to the emitted queue
+          subscriptions = @pipeline.queue_subscriptions(stage.name)
+          
+          # If stage subscribed to default queue or specifically to this queue, forward the item
+          if subscriptions.include?(:default) || subscriptions.include?(queue)
+            begin
+              stage.process(item)
+            rescue => e
+              @logger.error "[Minigun:#{@job_id}][#{@name}] Error sending to #{stage.name}: #{e.message}"
+              @logger.error e.backtrace.join("\n") if e.backtrace
+              stage.on_error(e) if stage.respond_to?(:on_error)
+            end
+          end
+        end
+      end
 
+      # Register hooks for this stage
       def register_hooks
-        return unless @task.respond_to?(:_minigun_hooks)
-
         # Register stage-specific hooks if task has them
         %i[before_stage after_stage on_stage_error].each do |hook_type|
           stage_hook = :"#{hook_type}_#{@name.to_s.gsub(/\s+/, '_').downcase}"
-          if @task._minigun_hooks[stage_hook]
+          if @task.hooks[stage_hook]
             @hooks ||= {}
-            @hooks[hook_type] = @task._minigun_hooks[stage_hook]
+            @hooks[hook_type] = @task.hooks[stage_hook]
           end
         end
       end
@@ -118,7 +166,7 @@ module Minigun
         @hooks[hook_type].each do |hook_config|
           next unless hook_should_run?(hook_config)
 
-          @task.instance_exec(*args, &hook_config[:block]) if hook_config[:block]
+          @context.instance_exec(*args, &hook_config[:block]) if hook_config[:block]
         end
       end
 
@@ -133,7 +181,7 @@ module Minigun
           if_conditions = [hook[:if]].flatten
           if_result = if_conditions.all? do |condition|
             if condition.is_a?(Proc)
-              @task.instance_exec(&condition)
+              @context.instance_exec(&condition)
             else
               condition
             end
@@ -146,7 +194,7 @@ module Minigun
           unless_conditions = [hook[:unless]].flatten
           unless_result = unless_conditions.none? do |condition|
             if condition.is_a?(Proc)
-              @task.instance_exec(&condition)
+              @context.instance_exec(&condition)
             else
               condition
             end
