@@ -71,7 +71,7 @@ module Minigun
 
       def flush_all_batches
         items_by_key = {}
-        
+
         # Get all batches first
         @batch_mutex.synchronize do
           @batches.each do |key, items|
@@ -81,7 +81,7 @@ module Minigun
             end
           end
         end
-        
+
         # Then flush them outside the mutex
         items_by_key.each do |key, items|
           flush_batch_items(key, items)
@@ -95,11 +95,11 @@ module Minigun
           items = @batches[key]
           @batches[key] = []
         end
-        
+
         # Flush outside the mutex
         flush_batch_items(key, items)
       end
-      
+
       def flush_batch_items(key, items)
         return if items.empty?
 

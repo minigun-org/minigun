@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 
 RSpec.describe 'Processor Integration' do
@@ -48,12 +50,12 @@ RSpec.describe 'Processor Integration' do
       # Process items [1, 2, 3]
       items = [1, 2, 3]
       items.each do |item|
-        result = processor_block.call(item)
+        processor_block.call(item)
       end
 
       # Verify the items were processed
-      expect(test_task_context.processed_items).to match_array([1, 2, 3])
-      expect(test_task_context.emitted_items).to match_array([2, 4, 6])
+      expect(test_task_context.processed_items).to contain_exactly(1, 2, 3)
+      expect(test_task_context.emitted_items).to contain_exactly(2, 4, 6)
     end
 
     it 'retries failed items before succeeding' do
@@ -75,25 +77,21 @@ RSpec.describe 'Processor Integration' do
 
       # Process items [1, 2, 3]
       items = [1, 2, 3]
-      
+
       items.each do |item|
-        begin
-          result = processor_block.call(item)
-        rescue => e
-          # Simulate retry logic
-          if e.message.include?("Test error for retry") && test_task_context.retry_count_for(item) <= 3
-            # Try again
-            result = processor_block.call(item)
-          else
-            raise e
-          end
-        end
+        processor_block.call(item)
+      rescue StandardError => e
+        # Simulate retry logic
+        raise e unless e.message.include?('Test error for retry') && test_task_context.retry_count_for(item) <= 3
+
+        # Try again
+        processor_block.call(item)
       end
 
       # Verify all items were processed successfully after retry
-      expect(test_task_context.processed_items).to match_array([1, 2, 3])
-      expect(test_task_context.emitted_items).to match_array([2, 4, 6])
+      expect(test_task_context.processed_items).to contain_exactly(1, 2, 3)
+      expect(test_task_context.emitted_items).to contain_exactly(2, 4, 6)
       expect(test_task_context.retry_count_for(3)).to eq(1)
     end
   end
-end 
+end

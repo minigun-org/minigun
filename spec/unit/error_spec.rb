@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 
 RSpec.describe Minigun::Error do
@@ -7,6 +9,6 @@ RSpec.describe Minigun::Error do
 
   it 'can be raised with a message' do
     error_message = 'This is a test error'
-    expect { raise Minigun::Error, error_message }.to raise_error(Minigun::Error, error_message)
+    expect { raise described_class, error_message }.to raise_error(described_class, error_message)
   end
-end 
+end

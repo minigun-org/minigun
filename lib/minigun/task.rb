@@ -17,7 +17,7 @@ module Minigun
           accumulator_max_all: 4000,
           accumulator_check_interval: 100,
           logger: Logger.new($stdout),
-          fork_mode: :auto,  # :auto, :always, :never
+          fork_mode: :auto, # :auto, :always, :never
           consumer_type: :ipc # :ipc or :cow
         }
 
@@ -34,22 +34,22 @@ module Minigun
         # Initialize stage block maps - all processor variants share a common block structure
         @_minigun_processor_blocks = {}
         @_minigun_accumulator_blocks = {}
-        
+
         # Initialize pipeline
         @_minigun_pipeline = []
-        
+
         # Initialize pipeline definition
         @_minigun_pipeline_definition = nil
 
         # Initialize stage connections
         @_minigun_connections = {}
-        
+
         # Initialize queue subscriptions
         @_minigun_queue_subscriptions = {}
-        
+
         # Define class accessor methods for these instance variables
         class << self
-          attr_reader :_minigun_config, 
+          attr_reader :_minigun_config,
                       :_minigun_processor_blocks,
                       :_minigun_accumulator_blocks,
                       :_minigun_hooks,
@@ -57,17 +57,17 @@ module Minigun
                       :_minigun_pipeline_definition,
                       :_minigun_connections,
                       :_minigun_queue_subscriptions
-                      
+
           # For backward compatibility with code that expects separate block collections
           def _minigun_producer_blocks
             _minigun_processor_blocks
           end
-          
+
           # For compatibility with older code
           def _minigun_producer_block
             _minigun_processor_blocks[:default]
           end
-          
+
           # For backward compatibility with code that expects separate block collections
           def _minigun_consumer_blocks
             _minigun_processor_blocks
@@ -119,23 +119,20 @@ module Minigun
 
       # Set forking mode (:auto, :always, :never)
       def fork_mode(mode)
-        unless [:auto, :always, :never].include?(mode)
-          raise Minigun::Error, "Fork mode must be :auto, :always, or :never"
-        end
+        raise Minigun::Error, 'Fork mode must be :auto, :always, or :never' unless %i[auto always never].include?(mode)
+
         @_minigun_config[:fork_mode] = mode
       end
 
       # Set consumer type (:ipc, :cow)
       def consumer_type(type)
-        unless [:ipc, :cow].include?(type)
-          raise Minigun::Error, "Consumer type must be :ipc or :cow"
-        end
-        
+        raise Minigun::Error, 'Consumer type must be :ipc or :cow' unless %i[ipc cow].include?(type)
+
         if type == :cow
           # When setting to :cow, warn about accumulator requirement
-          warn "WARNING: Setting consumer type to :cow. Remember that COW consumers must follow an accumulator stage."
+          warn 'WARNING: Setting consumer type to :cow. Remember that COW consumers must follow an accumulator stage.'
         end
-        
+
         @_minigun_config[:consumer_type] = type
       end
 
@@ -148,17 +145,17 @@ module Minigun
       def pipeline(&block)
         @_minigun_pipeline_definition = block
       end
-      
+
       # Process a connection option to determine where to send output
       def process_connection_options(name, options)
         # Extract connection options
         from = options.delete(:from)
         to = options.delete(:to)
         queues = options.delete(:queues) || [:default]
-        
+
         # Record connections
         @_minigun_connections ||= {}
-        
+
         # Record "from" connection if specified
         if from
           source_names = from.is_a?(Array) ? from : [from]
@@ -167,17 +164,17 @@ module Minigun
             @_minigun_connections[source_name] << name unless @_minigun_connections[source_name].include?(name)
           end
         end
-        
+
         # Record "to" connection if specified
         if to
           target_names = to.is_a?(Array) ? to : [to]
           @_minigun_connections[name] = target_names
         end
-        
+
         # Record queue subscriptions
         @_minigun_queue_subscriptions ||= {}
         @_minigun_queue_subscriptions[name] = queues.map(&:to_sym)
-        
+
         # Return the processed options
         options
       end
@@ -187,10 +184,10 @@ module Minigun
         # Process connection options
         options = process_connection_options(name, options)
         options[:stage_role] = :producer
-        
+
         # Store the block
         @_minigun_processor_blocks[name] = block if block_given?
-        
+
         # Record stage in pipeline
         @_minigun_pipeline ||= []
         @_minigun_pipeline << {
@@ -205,10 +202,10 @@ module Minigun
         # Process connection options
         options = process_connection_options(name, options)
         options[:stage_role] = :processor
-        
+
         # Store the processor block
         @_minigun_processor_blocks[name] = block if block_given?
-        
+
         # Record stage in pipeline
         @_minigun_pipeline ||= []
         @_minigun_pipeline << {
@@ -222,7 +219,7 @@ module Minigun
       def accumulator(name = :default, options = {}, &block)
         # Process connection options
         options = process_connection_options(name, options)
-        
+
         # Extract accumulator-specific options with appropriate defaults
         options[:max_queue] = options.delete(:max_queue) || @_minigun_config[:accumulator_max_queue]
         options[:max_all] = options.delete(:max_all) || @_minigun_config[:accumulator_max_all]
@@ -238,27 +235,27 @@ module Minigun
           options: options
         }
       end
-      
+
       # Define a cow_fork stage (alias for consumer with cow type)
       def cow_fork(name = :default, options = {}, &block)
         # Alias for consumer with cow type
         options = options.merge(fork: :cow)
         consumer(name, options, &block)
       end
-      
+
       # Define an ipc_fork stage (alias for consumer with ipc type)
       def ipc_fork(name = :default, options = {}, &block)
         # Alias for consumer with ipc type
         options = options.merge(fork: :ipc)
         consumer(name, options, &block)
       end
-      
+
       # Define a consumer stage
       def consumer(name = :default, options = {}, &block)
         # Process connection options
         options = process_connection_options(name, options)
         options[:stage_role] = :consumer
-        
+
         # Extract consumer-specific options with appropriate defaults
         # Support fork: as an alternative to type:
         fork_type = options.delete(:fork)
@@ -280,7 +277,7 @@ module Minigun
           name: name,
           options: options
         }
-        
+
         # If this is a COW consumer type, validate placement
         validate_consumer_placement(:cow, name) if options[:type] == :cow
       end
@@ -289,47 +286,45 @@ module Minigun
       def validate_consumer_placement(consumer_type, name)
         # Only validate cow consumers currently
         return unless consumer_type == :cow
-        
+
         # Find this stage's index
         consumer_index = @_minigun_pipeline.find_index { |s| s[:name] == name && s[:type] == :consumer }
         return unless consumer_index
-        
+
         # Check if there's an explicit "from" connection to an accumulator
         if @_minigun_connections.any?
           # Look for sources that point to this consumer
           has_accumulator_source = false
           @_minigun_connections.each do |source_name, targets|
-            if targets.is_a?(Array) ? targets.include?(name) : targets == name
-              # Check if source is an accumulator
-              source_index = @_minigun_pipeline.find_index { |s| s[:name] == source_name }
-              if source_index && @_minigun_pipeline[source_index][:type] == :accumulator
-                has_accumulator_source = true
-                break
-              end
+            next unless targets.is_a?(Array) ? targets.include?(name) : targets == name
+
+            # Check if source is an accumulator
+            source_index = @_minigun_pipeline.find_index { |s| s[:name] == source_name }
+            if source_index && @_minigun_pipeline[source_index][:type] == :accumulator
+              has_accumulator_source = true
+              break
             end
           end
-          
+
           unless has_accumulator_source
             # For implicit connections, check previous stage
-            if consumer_index > 0
-              prev_stage = @_minigun_pipeline[consumer_index - 1]
-              unless prev_stage[:type] == :accumulator
-                raise Minigun::Error, "Cow consumer/fork stage '#{name}' must follow an accumulator stage"
-              end
-            else
-              raise Minigun::Error, "Cow consumer/fork stage '#{name}' must follow an accumulator stage"
-            end
+            raise Minigun::Error, "Cow consumer/fork stage '#{name}' must follow an accumulator stage" unless consumer_index > 0
+
+            prev_stage = @_minigun_pipeline[consumer_index - 1]
+            raise Minigun::Error, "Cow consumer/fork stage '#{name}' must follow an accumulator stage" unless prev_stage[:type] == :accumulator
+
+
+
           end
         else
           # For sequential pipelines, check previous stage
-          if consumer_index > 0
-            prev_stage = @_minigun_pipeline[consumer_index - 1]
-            unless prev_stage[:type] == :accumulator
-              raise Minigun::Error, "Cow consumer/fork stage '#{name}' must follow an accumulator stage"
-            end
-          else
-            raise Minigun::Error, "Cow consumer/fork stage '#{name}' must be preceded by an accumulator stage"
-          end
+          raise Minigun::Error, "Cow consumer/fork stage '#{name}' must be preceded by an accumulator stage" unless consumer_index > 0
+
+          prev_stage = @_minigun_pipeline[consumer_index - 1]
+          raise Minigun::Error, "Cow consumer/fork stage '#{name}' must follow an accumulator stage" unless prev_stage[:type] == :accumulator
+
+
+
         end
       end
 
@@ -365,17 +360,17 @@ module Minigun
 
       # Define stage-specific hooks
       def before_stage(name, options = {}, &block)
-        stage_name = "before_stage_#{name.to_s.gsub(/\s+/, '_').downcase}".to_sym
+        stage_name = :"before_stage_#{name.to_s.gsub(/\s+/, '_').downcase}"
         define_hook(stage_name, options, &block)
       end
 
       def after_stage(name, options = {}, &block)
-        stage_name = "after_stage_#{name.to_s.gsub(/\s+/, '_').downcase}".to_sym
+        stage_name = :"after_stage_#{name.to_s.gsub(/\s+/, '_').downcase}"
         define_hook(stage_name, options, &block)
       end
 
       def on_stage_error(name, options = {}, &block)
-        stage_name = "on_stage_error_#{name.to_s.gsub(/\s+/, '_').downcase}".to_sym
+        stage_name = :"on_stage_error_#{name.to_s.gsub(/\s+/, '_').downcase}"
         define_hook(stage_name, options, &block)
       end
     end
@@ -392,7 +387,7 @@ module Minigun
         run_simple_pipeline
       end
     end
-    alias_method :go_brrr!, :run
+    alias go_brrr! run
 
     # Add an item to be processed
     def produce(item)
@@ -406,15 +401,15 @@ module Minigun
       # This is implemented by the Pipeline class when running
       # Here we just provide it for the DSL
     end
-    
+
     # Emit an item to a specific queue
     def emit_to_queue(queue, item)
       # Queue routing is handled by the Pipeline class at runtime
       # Here we just provide the method for the DSL
     end
-    
+
     # Alias for emit_to_queue
-    alias_method :enqueue, :emit_to_queue
+    alias enqueue emit_to_queue
 
     # Accumulate an item in the current accumulator
     def accumulate(item, options = {})
@@ -425,16 +420,16 @@ module Minigun
     # Run all hooks of a specific type
     def run_hooks(type, *args)
       return unless self.class._minigun_hooks[type]
-      
+
       self.class._minigun_hooks[type].each do |hook|
         # Check conditions for running the hook
         next if hook[:only].is_a?(Array) && hook[:only].any? && !hook[:only].include?(self.class.name)
         next if hook[:except].is_a?(Array) && hook[:except].any? && hook[:except].include?(self.class.name)
-        
+
         # No conditions means always run
         if_conditions = hook[:if]
         unless_conditions = hook[:unless]
-        
+
         # If conditions must all pass
         if if_conditions
           if_conditions = [if_conditions].flatten
@@ -446,7 +441,7 @@ module Minigun
             end
           end
         end
-        
+
         # Unless conditions must all fail
         if unless_conditions
           unless_conditions = [unless_conditions].flatten
@@ -458,7 +453,7 @@ module Minigun
             end
           end
         end
-        
+
         # Execute the hook block
         instance_exec(*args, &hook[:block]) if hook[:block]
       end
@@ -469,11 +464,11 @@ module Minigun
     def validate_configuration!
       # Basic validation logic
       # For COW consumer, ensure there's an accumulator before it
-      if self.class._minigun_config[:consumer_type] == :cow && 
+      if self.class._minigun_config[:consumer_type] == :cow &&
          self.class._minigun_pipeline.any? { |s| s[:type] == :consumer } &&
-         !self.class._minigun_pipeline.any? { |s| s[:type] == :accumulator }
-        
-        raise Minigun::Error, "COW consumer requires an accumulator stage before it"
+         self.class._minigun_pipeline.none? { |s| s[:type] == :accumulator }
+
+        raise Minigun::Error, 'COW consumer requires an accumulator stage before it'
       end
     end
 

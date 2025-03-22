@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require 'thread'
 require 'securerandom'
 require 'concurrent'
 require 'forwardable'
@@ -89,7 +88,7 @@ module Minigun
         info("[Minigun:#{@job_id}][Producer] Enqueuing #{items.size} items...")
         items.each { |item| @queue << item }
         @produced_count = items.size
-      rescue => e
+      rescue StandardError => e
         error("[Minigun:#{@job_id}][Producer] Error in producer: #{e.class}: #{e.message}\n#{e.backtrace.join("\n")}")
         raise e
       ensure
@@ -109,9 +108,7 @@ module Minigun
         accumulator_map[item_type] << item
 
         i += 1
-        if i % @accumulator_check_interval == 0
-          check_and_fork_consumers(accumulator_map)
-        end
+        check_and_fork_consumers(accumulator_map) if i % @accumulator_check_interval == 0
       end
 
       # Process any remaining items
@@ -124,19 +121,19 @@ module Minigun
     def check_and_fork_consumers(accumulator_map)
       # Fork if any queue contains more than the max threshold
       accumulator_map.each do |type, items|
-        if items.size >= @accumulator_max_queue
-          type_items = { type => items }
-          process_batch(type_items)
-          accumulator_map[type] = []
-        end
+        next unless items.size >= @accumulator_max_queue
+
+        type_items = { type => items }
+        process_batch(type_items)
+        accumulator_map[type] = []
       end
 
       # Fork if all queues together contain more than the max threshold
       total_items = accumulator_map.values.sum(&:size)
-      if total_items >= @accumulator_max_all
-        process_batch(accumulator_map)
-        accumulator_map.clear
-      end
+      return unless total_items >= @accumulator_max_all
+
+      process_batch(accumulator_map)
+      accumulator_map.clear
     end
 
     def process_batch(items_map)
@@ -172,51 +169,49 @@ module Minigun
       read_pipe, write_pipe = IO.pipe
 
       pid = Process.fork do
-        begin
-          # In child process
-          @pid = Process.pid
+        # In child process
+        @pid = Process.pid
 
-          # Close unused pipe end
-          read_pipe.close
+        # Close unused pipe end
+        read_pipe.close
 
-          # Trap signals
-          trap_child_signals
+        # Trap signals
+        trap_child_signals
 
-          info("[Minigun:#{@job_id}][Consumer][PID #{@pid}] Started")
-          @task.run_hooks(:after_fork)
+        info("[Minigun:#{@job_id}][Consumer][PID #{@pid}] Started")
+        @task.run_hooks(:after_fork)
 
-          # Process items
-          result = consume_items(items_map.values.flatten)
+        # Process items
+        result = consume_items(items_map.values.flatten)
 
-          # Send result back to parent
-          write_pipe.write(Marshal.dump(result))
+        # Send result back to parent
+        write_pipe.write(Marshal.dump(result))
 
-          # Run after consumer hook
-          @task.run_hooks(:after_consumer_finished)
+        # Run after consumer hook
+        @task.run_hooks(:after_consumer_finished)
 
-          # Exit cleanly
-          write_pipe.close
-          exit!(0)
-        rescue => e
-          # Handle errors in child process
-          error("[Minigun:#{@job_id}][Consumer][PID #{@pid}] Error: #{e.class}: #{e.message}\n#{e.backtrace.join("\n")}")
-          write_pipe.write(Marshal.dump({ error: e.message }))
-          write_pipe.close
-          exit!(1)
-        end
+        # Exit cleanly
+        write_pipe.close
+        exit!(0)
+      rescue StandardError => e
+        # Handle errors in child process
+        error("[Minigun:#{@job_id}][Consumer][PID #{@pid}] Error: #{e.class}: #{e.message}\n#{e.backtrace.join("\n")}")
+        write_pipe.write(Marshal.dump({ error: e.message }))
+        write_pipe.close
+        exit!(1)
       end
 
       # Close unused pipe end in parent
       write_pipe.close
 
-      if pid
-        @consumer_pids << {
-          pid: pid,
-          pipe: read_pipe,
-          start_time: Time.now,
-          items_count: total_items
-        }
-      end
+      return unless pid
+
+      @consumer_pids << {
+        pid: pid,
+        pipe: read_pipe,
+        start_time: Time.now,
+        items_count: total_items
+      }
     end
 
     def consume_items_in_current_process(items)
@@ -269,7 +264,7 @@ module Minigun
       begin
         attempts += 1
         result = @consumer_block ? @task.instance_exec(item, &@consumer_block) : { success: true, result: nil }
-        
+
         # For backward compatibility with tests that expect a Concurrent::Future-like interface
         if !result.respond_to?(:wait) && result.is_a?(Hash)
           # Create a pseudo-future
@@ -279,10 +274,10 @@ module Minigun
           end
           result = pseudo_future
         end
-        
+
         info("[Minigun:#{@job_id}][Consumer] Successfully processed item")
-        return result
-      rescue => e
+        result
+      rescue StandardError => e
         error("[Minigun:#{@job_id}][Consumer] Attempt #{attempts} failed: #{e.message}")
         if attempts < max_attempts
           sleep_with_backoff(attempts)
@@ -290,13 +285,13 @@ module Minigun
         else
           error("[Minigun:#{@job_id}][Consumer] Failed to process item after #{max_attempts} attempts: #{e.message}")
           error(e.backtrace.join("\n")) if e.backtrace
-          return { success: false, error: e }
+          { success: false, error: e }
         end
       end
     end
 
     def sleep_with_backoff(attempts)
-      sleep((5**attempts) / 100.0 + rand(0.05..1))
+      sleep(((5**attempts) / 100.0) + rand(0.05..1))
     end
 
     def wait_max_consumer_processes
@@ -306,9 +301,9 @@ module Minigun
       check_finished_children(non_blocking: true)
 
       # If still at max, wait for one to finish
-      if @consumer_pids.size >= @max_processes
-        check_finished_children(non_blocking: false)
-      end
+      return unless @consumer_pids.size >= @max_processes
+
+      check_finished_children(non_blocking: false)
     end
 
     def check_finished_children(non_blocking: false)
@@ -316,7 +311,7 @@ module Minigun
 
       # Try to reap any finished children
       begin
-        pid, status = Process.waitpid2(-1, options)
+        pid, = Process.waitpid2(-1, options)
         return if pid.nil? # No child exited yet
 
         # Find this child in our tracking array
@@ -332,7 +327,7 @@ module Minigun
               info("[Minigun:#{@job_id}][Consumer][PID #{pid}] Finished in #{runtime.round(2)}s. "\
                    "Success: #{result[:success]}, Failed: #{result[:failed]}")
             end
-          rescue => e
+          rescue StandardError => e
             error("[Minigun:#{@job_id}][Consumer][PID #{pid}] Error reading result: #{e.message}")
           ensure
             child_info[:pipe].close
@@ -367,7 +362,7 @@ module Minigun
               info("[Minigun:#{@job_id}][Consumer][PID #{pid}] Finished in #{runtime.round(2)}s. "\
                    "Success: #{result[:success]}, Failed: #{result[:failed]}")
             end
-          rescue => e
+          rescue StandardError => e
             error("[Minigun:#{@job_id}][Consumer][PID #{pid}] Error reading result: #{e.message}")
           ensure
             child_info[:pipe].close
@@ -386,10 +381,10 @@ module Minigun
       return if @pid
 
       @original_handlers = {}
-      
+
       # Use OS-agnostic signal handling
-      signals = RUBY_PLATFORM =~ /win32|mingw/ ? [:INT, :TERM] : [:INT, :TERM, :QUIT]
-      
+      signals = RUBY_PLATFORM.match?(/win32|mingw/) ? %i[INT TERM] : %i[INT TERM QUIT]
+
       signals.each do |signal|
         @original_handlers[signal] = Signal.trap(signal) do
           shutdown_gracefully(signal)
@@ -399,7 +394,7 @@ module Minigun
 
     def trap_child_signals
       # Set up signal handlers for child processes
-      [:INT, :TERM, :QUIT].each do |signal|
+      %i[INT TERM QUIT].each do |signal|
         Signal.trap(signal) do
           info("[Minigun:#{@job_id}][Consumer][PID #{@pid}] Received #{signal} signal, exiting...")
           exit!(0)
@@ -412,11 +407,9 @@ module Minigun
 
       # Send signal to all child processes
       @consumer_pids.each do |child_info|
-        begin
-          Process.kill(signal, child_info[:pid])
-        rescue Errno::ESRCH
-          # Process already exited
-        end
+        Process.kill(signal, child_info[:pid])
+      rescue Errno::ESRCH
+        # Process already exited
       end
 
       # Wait a bit for children to exit
@@ -424,11 +417,9 @@ module Minigun
 
       # Force kill any remaining children
       @consumer_pids.each do |child_info|
-        begin
-          Process.kill(:KILL, child_info[:pid])
-        rescue Errno::ESRCH
-          # Process already exited
-        end
+        Process.kill(:KILL, child_info[:pid])
+      rescue Errno::ESRCH
+        # Process already exited
       end
 
       # Restore original signal handlers and re-raise signal
