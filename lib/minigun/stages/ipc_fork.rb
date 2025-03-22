@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require 'concurrent'
+require 'securerandom'
+require 'yaml'
 
 module Minigun
   module Stages
@@ -263,7 +265,8 @@ module Minigun
             if child_info
               # Read result from pipe
               begin
-                result = Marshal.load(child_info[:pipe].read)
+                data = child_info[:pipe].read
+                result = YAML.safe_load(data, permitted_classes: [Symbol, Time], aliases: true)
                 child_info[:pipe].close
 
                 if result.is_a?(Hash) && result[:error]

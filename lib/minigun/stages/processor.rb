@@ -8,6 +8,9 @@ module Minigun
     # Unified processor stage that can function as producer, processor, or consumer
     # based on configuration
     class Processor < Base
+      # ResultWrapper class provides a simple wrapper for results that don't respond to wait
+      ResultWrapper = Struct.new(:wait, :value)
+
       def initialize(name, pipeline, options = {})
         super
         @processed_count = Concurrent::AtomicFixnum.new(0)
@@ -74,9 +77,9 @@ module Minigun
         return unless @stage_role == :processor || @stage_role == :consumer
 
         @processed_count.increment
-        result = nil
-        retries = 0
+        @logger.debug("Processing item: #{item.inspect}") if @config[:debug]
 
+        retries = 0
         begin
           # Execute the processor block in the context of the task
           result = @task.instance_exec(item, &@block)
@@ -85,9 +88,9 @@ module Minigun
           # This will help with test compatibility
           if result.is_a?(Hash) && !result.respond_to?(:wait)
             original_result = result
-            result = OpenStruct.new(
-              wait: -> { original_result },
-              value: -> { original_result }
+            result = ResultWrapper.new(
+              -> { original_result },
+              -> { original_result }
             )
           end
 

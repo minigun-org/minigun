@@ -103,6 +103,22 @@ RSpec.describe Minigun::Stages::Processor do
       expect(result[:processed]).to eq(2)
       expect(result[:failed]).to eq(0)
     end
+
+    # Test thread pool shutdown behavior
+    it 'shuts down cleanly' do
+      thread_pool = subject.instance_variable_get(:@thread_pool)
+
+      allow(thread_pool).to receive(:wait_for_termination).with(30).and_return(true)
+
+      # Mock the thread pool to avoid actual shutdown
+      processed_count = subject.instance_variable_get(:@processed_count)
+
+      # Call shutdown
+      result = subject.shutdown
+
+      # Should return stats with values from our mocks
+      expect(result[:processed]).to eq(processed_count.value)
+    end
   end
 
   # Tests without mocks

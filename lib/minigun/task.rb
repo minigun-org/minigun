@@ -76,6 +76,8 @@ module Minigun
       end
     end
 
+    # ClassMethods module provides the DSL methods available at the class level
+    # for configuring pipelines, stages, hooks, and processing options
     module ClassMethods
       # Set maximum number of threads per consumer process
       def max_threads(value)
@@ -312,9 +314,6 @@ module Minigun
 
             prev_stage = @_minigun_pipeline[consumer_index - 1]
             raise Minigun::Error, "Cow consumer/fork stage '#{name}' must follow an accumulator stage" unless prev_stage[:type] == :accumulator
-
-
-
           end
         else
           # For sequential pipelines, check previous stage
@@ -322,9 +321,6 @@ module Minigun
 
           prev_stage = @_minigun_pipeline[consumer_index - 1]
           raise Minigun::Error, "Cow consumer/fork stage '#{name}' must follow an accumulator stage" unless prev_stage[:type] == :accumulator
-
-
-
         end
       end
 

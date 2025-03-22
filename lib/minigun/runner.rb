@@ -3,6 +3,7 @@
 require 'securerandom'
 require 'concurrent'
 require 'forwardable'
+require 'yaml'
 
 module Minigun
   # The Runner class handles the execution of a Minigun job
@@ -319,7 +320,8 @@ module Minigun
         if child_info
           # Read result from pipe
           begin
-            result = Marshal.load(child_info[:pipe].read)
+            data = child_info[:pipe].read
+            result = YAML.safe_load(data, permitted_classes: [Symbol, Time], aliases: true)
             if result.is_a?(Hash) && result[:error]
               error("[Minigun:#{@job_id}][Consumer][PID #{pid}] Failed with error: #{result[:error]}")
             else
@@ -354,7 +356,8 @@ module Minigun
 
           # Read result from pipe
           begin
-            result = Marshal.load(child_info[:pipe].read)
+            data = child_info[:pipe].read
+            result = YAML.safe_load(data, permitted_classes: [Symbol, Time], aliases: true)
             if result.is_a?(Hash) && result[:error]
               error("[Minigun:#{@job_id}][Consumer][PID #{pid}] Failed with error: #{result[:error]}")
             else
@@ -368,6 +371,7 @@ module Minigun
             child_info[:pipe].close
           end
 
+          # Remove from tracking
           @consumer_pids.delete(child_info)
         rescue Errno::ECHILD
           # Child already exited

@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require 'concurrent'
+require 'securerandom'
+require 'yaml'
 
 module Minigun
   module Stages
@@ -231,6 +233,7 @@ module Minigun
       def check_finished_processes(non_blocking: false)
         options = non_blocking ? Process::WNOHANG : 0
 
+        # Try to reap any finished children
         begin
           pid, = Process.waitpid2(-1, options)
           return if pid.nil? # No child exited yet
@@ -241,7 +244,8 @@ module Minigun
             if child_info
               # Read result from pipe
               begin
-                result = Marshal.load(child_info[:pipe].read)
+                data = child_info[:pipe].read
+                result = YAML.safe_load(data, permitted_classes: [Symbol, Time], aliases: true)
                 child_info[:pipe].close
 
                 if result.is_a?(Hash) && result[:error]

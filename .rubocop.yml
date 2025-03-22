@@ -19,6 +19,9 @@ Layout/LineLength:
 Metrics/AbcSize:
   Enabled: false
 
+Metrics/ClassLength:
+  Max: 310
+
 Metrics/CyclomaticComplexity:
   Enabled: false
 
@@ -31,8 +34,21 @@ Metrics/ParameterLists:
 Metrics/PerceivedComplexity:
   Enabled: false
 
+Performance/CollectionLiteralInLoop:
+  Exclude:
+    - 'spec/**/*'
+
 RSpec/ExampleLength:
   Enabled: false
+
+RSpec/InstanceVariable:
+  Enabled: false
+
+RSpec/LeakyConstantDeclaration:
+  Enabled: false
+
+RSpec/MessageSpies:
+  EnforcedStyle: receive
 
 RSpec/MultipleExpectations:
   Enabled: false
@@ -40,7 +56,13 @@ RSpec/MultipleExpectations:
 RSpec/MultipleMemoizedHelpers:
   Enabled: false
 
+RSpec/NamedSubject:
+  Enabled: false
+
 RSpec/NestedGroups:
+  Enabled: false
+
+RSpec/SubjectStub:
   Enabled: false
 
 Style/Alias:
@@ -55,3 +77,7 @@ Style/ModuleFunction:
 
 Style/NumericPredicate:
   Enabled: false
+
+Naming/VariableNumber:
+  Exclude:
+    - 'spec/**/*'

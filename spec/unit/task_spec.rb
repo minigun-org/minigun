@@ -121,7 +121,8 @@ RSpec.describe Minigun::Task do
   describe 'instance methods' do
     describe '#run' do
       it 'creates and runs a pipeline' do
-        allow_any_instance_of(Minigun::Runner).to receive(:run)
+        expect_any_instance_of(Minigun::Pipeline).to receive(:run) # rubocop:disable RSpec/AnyInstance
+
         subject.run
       end
     end
