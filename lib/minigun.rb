@@ -6,6 +6,7 @@ require 'forwardable'
 require 'yaml'
 require 'logger'
 require 'ostruct'
+require 'zlib'
 
 require 'minigun/version'
 require 'minigun/error'

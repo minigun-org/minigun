@@ -1,13 +1,5 @@
 # frozen_string_literal: true
 
-require 'zlib'
-begin
-  require 'msgpack'
-  MSGPACK_AVAILABLE = true
-rescue LoadError
-  MSGPACK_AVAILABLE = false
-end
-
 module Minigun
   module Stages
     # Implementation of IPC-style fork behavior
@@ -291,7 +283,7 @@ module Minigun
 
       def send_results_to_parent(pipe, results)
         # Serialize results
-        if MSGPACK_AVAILABLE
+        if defined?(MessagePack)
           # Use MessagePack if available (more efficient)
           serialized = results.to_msgpack
           format = :msgpack
@@ -300,7 +292,7 @@ module Minigun
           serialized = Marshal.dump(results)
           format = :marshal
         end
-        
+
         # Compress if needed
         if @use_compression && serialized.bytesize > 1024
           compressed = Zlib::Deflate.deflate(serialized)
@@ -385,12 +377,12 @@ module Minigun
           # Process based on format
           case format_byte
           when 1 # msgpack
-            MSGPACK_AVAILABLE ? MessagePack.unpack(data) : Marshal.load(data)
+            defined?(MessagePack) ? MessagePack.unpack(data) : Marshal.load(data)
           when 2 # marshal
             Marshal.load(data)
           when 3 # msgpack_compressed
             decompressed = Zlib::Inflate.inflate(data)
-            MSGPACK_AVAILABLE ? MessagePack.unpack(decompressed) : Marshal.load(decompressed)
+            defined?(MessagePack) ? MessagePack.unpack(decompressed) : Marshal.load(decompressed)
           when 4 # marshal_compressed
             Marshal.load(Zlib::Inflate.inflate(data))
           else

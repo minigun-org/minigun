@@ -4,6 +4,10 @@ source 'https://rubygems.org'
 
 gemspec
 
+# Development dependencies
+gem 'msgpack'
+
+# Test dependencies
 gem 'rake'
 gem 'rspec'
 gem 'rubocop'
