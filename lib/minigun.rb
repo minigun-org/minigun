@@ -23,15 +23,7 @@ require_relative 'minigun/stages/ipc_fork'
 require_relative 'minigun/stages/cow_fork'
 require_relative 'minigun/runner'
 require_relative 'minigun/dsl'
-require_relative 'minigun/init_pipeline'
 
 # Minigun is a high-performance parallel data processing framework.
 module Minigun
-  # Convenience method for accessing the current version
-  def self.version
-    Minigun::VERSION
-  end
 end
-
-# Call the init pipeline to ensure all examples work properly
-Minigun::InitPipeline.setup
