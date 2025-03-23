@@ -17,12 +17,8 @@ RSpec.describe Minigun::Task do
       expect(task.config[:consumer_type]).to eq(:ipc)
     end
 
-    it 'initializes with empty processor blocks' do
-      expect(task.processor_blocks).to be_empty
-    end
-
-    it 'initializes with empty accumulator blocks' do
-      expect(task.accumulator_blocks).to be_empty
+    it 'initializes with empty stage blocks' do
+      expect(task.stage_blocks).to be_empty
     end
 
     it 'initializes with empty pipeline' do
@@ -47,7 +43,7 @@ RSpec.describe Minigun::Task do
       producer_block = proc { puts 'producing' }
       task.add_producer(:test_producer, {}, &producer_block)
 
-      expect(task.processor_blocks[:test_producer]).to eq(producer_block)
+      expect(task.stage_blocks[:test_producer]).to eq(producer_block)
       expect(task.pipeline.size).to eq(1)
       expect(task.pipeline.first[:type]).to eq(:processor)
       expect(task.pipeline.first[:name]).to eq(:test_producer)
@@ -58,7 +54,7 @@ RSpec.describe Minigun::Task do
       processor_block = proc { |item| puts "processing #{item}" }
       task.add_processor(:test_processor, {}, &processor_block)
 
-      expect(task.processor_blocks[:test_processor]).to eq(processor_block)
+      expect(task.stage_blocks[:test_processor]).to eq(processor_block)
       expect(task.pipeline.size).to eq(1)
       expect(task.pipeline.first[:type]).to eq(:processor)
       expect(task.pipeline.first[:name]).to eq(:test_processor)
@@ -69,7 +65,7 @@ RSpec.describe Minigun::Task do
       accumulator_block = proc { |item| puts "accumulating #{item}" }
       task.add_accumulator(:test_accumulator, {}, &accumulator_block)
 
-      expect(task.accumulator_blocks[:test_accumulator]).to eq(accumulator_block)
+      expect(task.stage_blocks[:test_accumulator]).to eq(accumulator_block)
       expect(task.pipeline.size).to eq(1)
       expect(task.pipeline.first[:type]).to eq(:accumulator)
       expect(task.pipeline.first[:name]).to eq(:test_accumulator)
@@ -79,7 +75,7 @@ RSpec.describe Minigun::Task do
       consumer_block = proc { |batch| puts "consuming #{batch}" }
       task.add_consumer(:test_consumer, {}, &consumer_block)
 
-      expect(task.processor_blocks[:test_consumer]).to eq(consumer_block)
+      expect(task.stage_blocks[:test_consumer]).to eq(consumer_block)
       expect(task.pipeline.size).to eq(1)
       expect(task.pipeline.first[:type]).to eq(:processor)
       expect(task.pipeline.first[:name]).to eq(:test_consumer)

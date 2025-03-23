@@ -7,7 +7,7 @@ module Minigun
   # The Task class manages the configuration and execution of Minigun tasks
   class Task
     attr_reader :hooks, :pipeline, :connections, :queue_subscriptions
-    attr_accessor :config, :processor_blocks, :accumulator_blocks, :pipeline_definition
+    attr_accessor :config, :stage_blocks, :pipeline_definition
 
     def initialize
       @config = {
@@ -33,9 +33,8 @@ module Minigun
         after_consumer_finished: []
       }
 
-      # Initialize stage block maps - all processor variants share a common block structure
-      @processor_blocks = {}
-      @accumulator_blocks = {}
+      # Initialize stage block maps - all stage variants share a common block structure
+      @stage_blocks = {}
 
       # Initialize pipeline
       @pipeline = []
@@ -86,7 +85,7 @@ module Minigun
       options[:stage_role] = :producer
 
       # Store the block
-      @processor_blocks[name] = block if block_given?
+      @stage_blocks[name] = block if block_given?
 
       # Record stage in pipeline
       @pipeline << {
@@ -103,7 +102,7 @@ module Minigun
       options[:stage_role] = :processor
 
       # Store the processor block
-      @processor_blocks[name] = block if block_given?
+      @stage_blocks[name] = block if block_given?
 
       # Record stage in pipeline
       @pipeline << {
@@ -123,7 +122,7 @@ module Minigun
       options[:max_all] = options.delete(:max_all) || @config[:accumulator_max_all]
       options[:check_interval] = options.delete(:check_interval) || @config[:accumulator_check_interval]
 
-      @accumulator_blocks[name] = block if block_given?
+      @stage_blocks[name] = block if block_given?
 
       # Record stage in pipeline
       @pipeline << {
@@ -150,8 +149,8 @@ module Minigun
       options[:threads] = options.delete(:threads) || options[:max_threads]
       options[:processes] = options.delete(:processes) || options[:max_processes]
 
-      # Store the block
-      @processor_blocks[name] = block if block_given?
+      # Store the consumer block
+      @stage_blocks[name] = block if block_given?
 
       # Record stage in pipeline
       @pipeline << {

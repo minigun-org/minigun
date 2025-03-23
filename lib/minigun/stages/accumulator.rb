@@ -17,9 +17,16 @@ module Minigun
         @batches = {}
         @flush_timer = nil
 
-        # Get the accumulator block
+        # Get the stage block
         @block = nil
-        @block = @task.accumulator_blocks[name.to_sym] if @task.accumulator_blocks && @task.accumulator_blocks[name.to_sym]
+        
+        # Check stage blocks directly
+        @block = @task.stage_blocks[name.to_sym] if @task.respond_to?(:stage_blocks) && @task.stage_blocks[name.to_sym]
+        
+        # For backward compatibility
+        if @block.nil? && @task.respond_to?(:accumulator_blocks) && @task.accumulator_blocks
+          @block = @task.accumulator_blocks[name.to_sym]
+        end
       end
 
       # Run method starts the flush timer

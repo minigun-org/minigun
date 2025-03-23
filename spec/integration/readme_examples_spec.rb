@@ -35,8 +35,8 @@ RSpec.describe 'README Examples Integration' do
       task = test_module._minigun_task
 
       # Verify that the processor blocks are defined
-      expect(task.processor_blocks.keys).not_to be_empty
-      expect(task.processor_blocks[:default]).to be_a(Proc)
+      expect(task.stage_blocks.keys).not_to be_empty
+      expect(task.stage_blocks[:default]).to be_a(Proc)
 
       # Verify that the pipeline stages are defined
       expect(task.pipeline.size).to eq(3)
@@ -111,10 +111,10 @@ RSpec.describe 'README Examples Integration' do
       task_obj = task_class._minigun_task
 
       # Verify that the processor blocks are defined
-      expect(task_obj.processor_blocks.keys).to include(:extract, :transform, :load)
-      expect(task_obj.processor_blocks[:extract]).to be_a(Proc)
-      expect(task_obj.processor_blocks[:transform]).to be_a(Proc)
-      expect(task_obj.processor_blocks[:load]).to be_a(Proc)
+      expect(task_obj.stage_blocks.keys).to include(:extract, :transform, :load)
+      expect(task_obj.stage_blocks[:extract]).to be_a(Proc)
+      expect(task_obj.stage_blocks[:transform]).to be_a(Proc)
+      expect(task_obj.stage_blocks[:load]).to be_a(Proc)
 
       # Verify that the pipeline stages are defined
       expect(task_obj.pipeline.size).to eq(3)
@@ -209,8 +209,10 @@ RSpec.describe 'README Examples Integration' do
       task_obj = crawler_class._minigun_task
 
       # Verify that the processor blocks are defined
-      expect(task_obj.processor_blocks.keys).to include(:seed_urls, :fetch_pages, :extract_links, :process_pages)
-      expect(task_obj.accumulator_blocks.keys).to include(:batch_pages)
+      expect(task_obj.stage_blocks.keys).to include(:seed_urls, :fetch_pages, :extract_links, :process_pages)
+      
+      # Verify the pipeline includes an accumulator
+      expect(task_obj.pipeline.any? { |s| s[:type] == :accumulator && s[:name] == :batch_pages }).to be true
 
       # Verify that the pipeline stages are defined
       expect(task_obj.pipeline.size).to eq(5)
@@ -297,7 +299,7 @@ RSpec.describe 'README Examples Integration' do
       task_obj = diamond_class._minigun_task
 
       # Verify that the processor blocks are defined
-      expect(task_obj.processor_blocks.keys).to include(
+      expect(task_obj.stage_blocks.keys).to include(
         :data_source, :validate, :transform_a, :transform_b, :combine, :store_results
       )
 
@@ -392,8 +394,10 @@ RSpec.describe 'README Examples Integration' do
       task_obj = priority_class._minigun_task
 
       # Verify that the processor blocks are defined
-      expect(task_obj.processor_blocks.keys).to include(:user_producer, :email_processor, :consumer)
-      expect(task_obj.accumulator_blocks.keys).to include(:email_accumulator)
+      expect(task_obj.stage_blocks.keys).to include(:user_producer, :email_processor, :consumer)
+      
+      # Verify the pipeline includes an accumulator
+      expect(task_obj.pipeline.any? { |s| s[:type] == :accumulator && s[:name] == :email_accumulator }).to be true
 
       # Verify that the pipeline stages are defined
       expect(task_obj.pipeline.size).to eq(4)
@@ -478,8 +482,10 @@ RSpec.describe 'README Examples Integration' do
       task_obj = load_balancer_class._minigun_task
 
       # Verify that the processor blocks are defined
-      expect(task_obj.processor_blocks.keys).to include(:data_source, :worker_1, :worker_2, :worker_3)
-      expect(task_obj.accumulator_blocks.keys).to include(:result_collector)
+      expect(task_obj.stage_blocks.keys).to include(:data_source, :worker_1, :worker_2, :worker_3)
+      
+      # Verify the pipeline includes an accumulator
+      expect(task_obj.pipeline.any? { |s| s[:type] == :accumulator && s[:name] == :result_collector }).to be true
 
       # Verify that the pipeline stages are defined
       expect(task_obj.pipeline.size).to eq(5)

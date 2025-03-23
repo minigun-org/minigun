@@ -95,7 +95,7 @@ RSpec.describe 'DSL and Task Integration' do
       expect(stages).to eq(expected_stages)
 
       # Verify producer block exists
-      expect(task.processor_blocks[:source]).to be_a(Proc)
+      expect(task.stage_blocks[:source]).to be_a(Proc)
 
       # Verify hooks are defined
       expect(task.hooks[:before_run]).not_to be_empty
@@ -183,9 +183,9 @@ RSpec.describe 'DSL and Task Integration' do
       expect(stage_types).to eq(%i[processor processor processor])
 
       # Verify blocks exist
-      expect(task.processor_blocks[task.pipeline[0][:name]]).to be_a(Proc)
-      expect(task.processor_blocks[task.pipeline[1][:name]]).to be_a(Proc)
-      expect(task.processor_blocks[task.pipeline[2][:name]]).to be_a(Proc)
+      expect(task.stage_blocks[task.pipeline[0][:name]]).to be_a(Proc)
+      expect(task.stage_blocks[task.pipeline[1][:name]]).to be_a(Proc)
+      expect(task.stage_blocks[task.pipeline[2][:name]]).to be_a(Proc)
     end
   end
 end

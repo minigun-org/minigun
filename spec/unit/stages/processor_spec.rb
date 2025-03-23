@@ -8,7 +8,7 @@ RSpec.describe Minigun::Stages::Processor do
   let(:processor_block) { proc { |item| emit(item * 2) } }
   let(:task) do
     task = Minigun::Task.new
-    task.processor_blocks = { test_processor: processor_block }
+    task.stage_blocks = { test_processor: processor_block }
 
     # Don't mock instance_exec, so we use the real implementation
     task
@@ -50,7 +50,7 @@ RSpec.describe Minigun::Stages::Processor do
     context 'when processing fails' do
       let(:failing_processor) do
         failing_block = proc { |_item| raise 'Processing error' }
-        task.processor_blocks = { test_processor: failing_block }
+        task.stage_blocks = { test_processor: failing_block }
 
         # Create a new processor instance with the failing block
         processor = described_class.new(stage_name, pipeline, config)

@@ -28,7 +28,7 @@ RSpec.describe Minigun::Stages::CowFork do
       block.call(item)
     end
     allow(task).to receive(:run_hooks)
-    allow(task).to receive_messages(hooks: {}, accumulator_blocks: {})
+    allow(task).to receive_messages(hooks: {}, stage_blocks: { test_consumer: consumer_block })
     task
   end
 
@@ -55,7 +55,7 @@ RSpec.describe Minigun::Stages::CowFork do
 
   describe '#initialize' do
     it 'sets up the consumer with the correct configuration' do
-      expect(subject.instance_variable_get(:@consumer_block)).to eq(consumer_block)
+      expect(subject.instance_variable_get(:@stage_block)).to eq(consumer_block)
       expect(subject.instance_variable_get(:@max_threads)).to eq(2)
       expect(subject.instance_variable_get(:@max_retries)).to eq(2)
       expect(subject.instance_variable_get(:@max_processes)).to eq(1)

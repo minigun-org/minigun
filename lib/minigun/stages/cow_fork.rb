@@ -30,20 +30,19 @@ module Minigun
         # Initialize accumulator
         @accumulator = Hash.new { |h, k| h[k] = [] }
 
-        # Get the consumer block from the task
-        @consumer_block = nil
+        # Get the block for this stage from the task
+        @stage_block = nil
 
-        # Check processor blocks first (for backward compatibility)
-        @consumer_block = @task.processor_blocks[name.to_sym] if @task.respond_to?(:processor_blocks) && @task.processor_blocks && @task.processor_blocks[name.to_sym]
+        # Check stage blocks directly 
+        @stage_block = @task.stage_blocks[name.to_sym] if @task.respond_to?(:stage_blocks) && @task.stage_blocks[name.to_sym]
 
-        # Check consumer blocks if available and no processor block found
-        @consumer_block = @task.consumer_blocks[name.to_sym] if @consumer_block.nil? && @task.respond_to?(:consumer_blocks) && @task.consumer_blocks && @task.consumer_blocks[name.to_sym]
-
-        # If task class responds to _minigun_consumer_blocks, check there
-        @consumer_block = @task.class._minigun_consumer_blocks[name.to_sym] if @consumer_block.nil? && @task.class.respond_to?(:_minigun_consumer_blocks)
+        # For backward compatibility
+        if @stage_block.nil? && @task.class.respond_to?(:_minigun_consumer_block)
+          @stage_block = @task.class._minigun_consumer_block
+        end
 
         # Fallback to a default implementation
-        @consumer_block ||= proc { |items| items }
+        @stage_block ||= proc { |items| items }
       end
 
       def run
@@ -170,8 +169,8 @@ module Minigun
         }
 
         # Execute the fork block, which should call emit
-        if @block
-          @context.instance_exec(items, &@block)
+        if @stage_block
+          @context.instance_exec(items, &@stage_block)
         else
           # Default behavior if no block given - emit each item
           items.each do |item|
@@ -216,8 +215,8 @@ module Minigun
         }
 
         # Execute the fork block, which should call emit
-        if @block
-          @context.instance_exec(items, &@block)
+        if @stage_block
+          @context.instance_exec(items, &@stage_block)
         else
           # Default behavior if no block given - emit each item
           items.each do |item|

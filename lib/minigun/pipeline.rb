@@ -189,7 +189,7 @@ module Minigun
 
     # Validate the pipeline configuration
     def validate_pipeline
-      # Collect all COW consumers
+      # Collect all COW fork stages
       @stages.each do |stage_name, stage_info|
         next unless stage_info[:instance].respond_to?(:stage_type) && stage_info[:instance].stage_type == :cow
 
@@ -209,7 +209,7 @@ module Minigun
 
         # Warn and fall back to IPC if no accumulator
         unless has_accumulator
-          warn "[Minigun:#{@job_id}] COW fork consumer #{stage_name} must follow an accumulator - falling back to IPC"
+          warn "[Minigun:#{@job_id}] COW fork stage #{stage_name} must follow an accumulator stage - falling back to IPC"
           stage_info[:instance].stage_type = :ipc if stage_info[:instance].respond_to?(:stage_type=)
         end
       end
