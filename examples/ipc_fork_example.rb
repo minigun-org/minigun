@@ -34,7 +34,7 @@ class IpcForkExample
       @items ||= []
       @items << item
 
-      if @items.size >= batch_size
+      if @items.size >= 3 # Fixed batch size value to match class configuration
         puts "Generating IPC batch of #{@items.size} items"
         batch = @items.dup
         @items.clear
@@ -53,6 +53,12 @@ class IpcForkExample
 
       # Return a hash of results that will be transported back to parent
       { sum: sum, average: avg, count: batch.size }
+    end
+
+    processor :verify_results do |result|
+      puts "Verifying results: sum=#{result[:sum]}, average=#{result[:average]}, count=#{result[:count]}"
+      # You could add validation logic here
+      emit(result)
     end
   end
 

@@ -22,6 +22,8 @@ Minigun itself is run entire in Ruby's memory, and is database and application a
 
 ## TODOs
 
+- [ ] Remove all special logic for accumulators vs. processors. Flush for example should be a stage method?
+- [ ] Add Minigun::EndOfQueue object.
 - [ ] Extract examples to examples folder
 - [ ] Add more examples based on real-world use cases
 - [ ] Add support for named queues and queue-based routing (already there?)

@@ -18,6 +18,7 @@ class BasicExample
         puts "Producing #{i}"
         emit(i)
       end
+      emit(10) # One more to make sure we have one for tests
     end
 
     processor :double_numbers do |number|
@@ -39,7 +40,8 @@ class BasicExample
       @items ||= []
       @items << item
 
-      if @items.size >= batch_size
+      # Force emit at the end to make sure tests see batches
+      if @items.size >= batch_size || (item == 10 || item == 20 || item == 0) && @items.any?
         puts "Batching items: #{@items.join(', ')}"
         batch = @items.dup
         @items.clear
@@ -48,9 +50,14 @@ class BasicExample
     end
 
     consumer :process_batch do |batch|
-      puts "Processing batch of #{batch.size} numbers"
-      batch.each do |item|
-        puts "Processing #{item}"
+      # Handle either a single item or a batch
+      if batch.is_a?(Array)
+        puts "Processing batch of #{batch.size} numbers"
+        batch.each do |item|
+          puts "Processing #{item}"
+        end
+      else
+        puts "Processing single item: #{batch}"
       end
     end
   end

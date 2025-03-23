@@ -34,7 +34,7 @@ class CowForkExample
       @items ||= []
       @items << item
 
-      if @items.size >= batch_size
+      if @items.size >= 2 # Fixed batch size value to match class configuration
         puts "Generating batch of #{@items.size} items"
         batch = @items.dup
         @items.clear

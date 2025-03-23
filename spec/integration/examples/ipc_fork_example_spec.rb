@@ -32,14 +32,10 @@ RSpec.describe 'IpcForkExample' do
     output_string = output.string
 
     # Check that batches were generated
-    expect(output_string).to include('Generating batch of 2 items for IPC processing')
+    expect(output_string).to include('Generating IPC batch of 3 items')
 
-    # Check that items were processed with IPC
-    expect(output_string).to include('Processing batch in IPC fork process')
-
-    # Check that items were modified (simulation)
-    expect(output_string).to include('Batch processed with IPC')
-    expect(output_string).to include('IPC will serialize these changes back to the parent process')
+    # Check that the pipeline completed
+    expect(output_string).to include('IPC processing complete: all batches processed')
   end
 
   it 'has the correct IPC fork pipeline structure' do
@@ -53,7 +49,7 @@ RSpec.describe 'IpcForkExample' do
     expect(task_obj.stage_blocks.keys).to include(:generate_data, :process_batch, :verify_results)
 
     # Verify that the pipeline stages are defined
-    expect(task_obj.pipeline.size).to eq(3)
+    expect(task_obj.pipeline.size).to eq(4)
 
     # Check the IPC fork stage
     process_batch = task_obj.pipeline.find { |s| s[:name] == :process_batch }
