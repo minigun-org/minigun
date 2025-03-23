@@ -89,12 +89,16 @@ module Minigun
 
         # Start a new process if forking is available and fork mode allows
         if Process.respond_to?(:fork) && @fork_mode != :never
-          # Create a pipe for parent-child communication
-          read_pipe, write_pipe = IO.pipe
+          # Force GC before forking to avoid unnecessary CoW pages
+          GC.start
 
+          # Fork using proper Copy-On-Write approach
           pid = Process.fork do
-            # In child process
-            read_pipe.close
+            # In child process - no need for pipes
+            
+            # Clean up any resources that shouldn't be shared
+            @process_mutex = nil
+            @child_processes = nil
 
             # Run any before_fork hooks
             @task.run_hooks(:before_fork, @context) if @task.respond_to?(:run_hooks)
@@ -102,37 +106,39 @@ module Minigun
             # Set this process title for easier identification
             Process.setproctitle("minigun-cow-#{@name}-#{Process.pid}") if Process.respond_to?(:setproctitle)
 
-            # Process the items
-            results = process_items_in_child(items)
-
-            # Send results back to parent
-            write_pipe.write(Marshal.dump(results))
-            write_pipe.close
-
-            # Run any after_fork hooks
-            @task.run_hooks(:after_fork, @context) if @task.respond_to?(:run_hooks)
-
-            # Exit cleanly
-            exit!(0)
-          rescue StandardError => e
-            # Handle errors in child process
-            write_pipe.write(Marshal.dump({ error: e.message, backtrace: e.backtrace }))
-            write_pipe.close
-            exit!(1)
+            # Process the items directly - we already have them in memory
+            begin
+              # Process items and get results
+              results = process_items_in_child(items)
+              
+              # Log completion
+              @logger.info("[Minigun:#{@job_id}][#{@name}] Child process completed: #{results[:success]} processed, #{results[:failed]} failed")
+              
+              # Run any after_fork hooks
+              @task.run_hooks(:after_fork, @context) if @task.respond_to?(:run_hooks)
+              
+              # Exit with success code
+              exit!(0)
+            rescue StandardError => e
+              # Handle errors in child process
+              @logger.error("[Minigun:#{@job_id}][#{@name}] Error in child process: #{e.message}")
+              @logger.error("[Minigun:#{@job_id}][#{@name}] #{e.backtrace.join("\n")}") if e.backtrace
+              exit!(1)
+            end
           end
 
-          # In parent process
-          write_pipe.close
-
-          # Track the child process
+          # In parent process - track the child process
           @process_mutex.synchronize do
             @child_processes << {
               pid: pid,
-              pipe: read_pipe,
               start_time: Time.now,
               items_count: items.size
             }
           end
+          
+          # Update counts in parent based on batch size
+          # We can't know exact counts since the child process handles this independently
+          @processed_count.increment(items.size)
         else
           # If forking is not available or disabled, process using thread pool
           @thread_pool.post do
@@ -149,9 +155,6 @@ module Minigun
       end
 
       def process_items_in_child(items)
-        # Execute the fork block with the items
-
-
         # Store fork context for emit tracking
         Thread.current[:minigun_fork_context] = {
           emit_count: 0,
@@ -253,65 +256,57 @@ module Minigun
 
       def check_child_processes
         @process_mutex.synchronize do
-          @child_processes.reject! do |child|
-            # Check if the process has finished
-            status = begin
-              Process.waitpid(child[:pid], Process::WNOHANG)
-            rescue Errno::ECHILD
-              child[:pid] # Process doesn't exist anymore
-            end
+          @child_processes.each_with_index do |child, index|
+            # Check if process has exited
+            if Process.waitpid(child[:pid], Process::WNOHANG)
+              # Process has exited, get the status
+              exit_status = $?.exitstatus
 
-            if status
-              # Process has finished, read the results
-              begin
-                results = Marshal.load(child[:pipe].read)
-                child[:pipe].close
-
-                # Check for errors in child
-                if results[:error]
-                  @logger.error("[Minigun:#{@job_id}][#{@name}] Child process error: #{results[:error]}")
-                  @logger.error("[Minigun:#{@job_id}][#{@name}] #{results[:backtrace].join("\n")}") if results[:backtrace]
-                  @failed_count.increment(child[:items_count])
-                else
-                  # Update statistics
-                  @processed_count.increment(results[:success] || 0)
-                  @failed_count.increment(results[:failed] || 0)
-                  @emitted_count.increment(results[:emitted] || 0) if results[:emitted] && results[:emitted] > 0
-                end
-              rescue EOFError, TypeError, ArgumentError => e
-                # Error reading from pipe
-                @logger.error("[Minigun:#{@job_id}][#{@name}] Error reading from child pipe: #{e.message}")
+              # Log process completion
+              duration = Time.now - child[:start_time]
+              if exit_status == 0
+                @logger.info("[Minigun:#{@job_id}][#{@name}] Child process #{child[:pid]} completed in #{duration.round(2)}s")
+              else
+                @logger.error("[Minigun:#{@job_id}][#{@name}] Child process #{child[:pid]} failed with status #{exit_status} after #{duration.round(2)}s")
                 @failed_count.increment(child[:items_count])
               end
 
-              # Remove from list
-              true
-            else
-              # Process still running
-              false
+              # Remove from tracking
+              @child_processes.delete_at(index)
             end
+          rescue Errno::ECHILD
+            # Process already reaped, just remove from tracking
+            @child_processes.delete_at(index)
           end
         end
       end
 
       def wait_for_child_processes
         @process_mutex.synchronize do
-          return if @child_processes.empty?
-
-          @logger.info("[Minigun:#{@job_id}][#{@name}] Waiting for #{@child_processes.size} child processes to finish")
-        end
-
-        # Wait for all child processes to complete
-        loop do
-          @process_mutex.synchronize do
-            break if @child_processes.empty?
+          @child_processes.each do |child|
+            begin
+              # Wait for the process to finish
+              @logger.info("[Minigun:#{@job_id}][#{@name}] Waiting for child process #{child[:pid]} to finish...")
+              
+              # Wait for process with its PID
+              _, status = Process.waitpid2(child[:pid])
+              
+              # Log completion status
+              duration = Time.now - child[:start_time]
+              if status.success?
+                @logger.info("[Minigun:#{@job_id}][#{@name}] Child process #{child[:pid]} completed successfully in #{duration.round(2)}s")
+              else
+                @logger.error("[Minigun:#{@job_id}][#{@name}] Child process #{child[:pid]} failed with status #{status.exitstatus} after #{duration.round(2)}s")
+                @failed_count.increment(child[:items_count])
+              end
+            rescue Errno::ECHILD
+              # Process already reaped
+              @logger.warn("[Minigun:#{@job_id}][#{@name}] Child process #{child[:pid]} already reaped")
+            end
           end
-
-          # Check child processes and collect any that have finished
-          check_child_processes
-
-          # Sleep briefly before checking again
-          sleep(0.1)
+          
+          # Clear the child processes array
+          @child_processes.clear
         end
       end
 
@@ -347,41 +342,49 @@ module Minigun
         end
       end
 
-      # Process items in a forked process
+      # Process items in a forked process using COW
       def process_batch_with_fork(items)
-        # Create a pipe for results
-        rd, wr = IO.pipe
-
+        # Force GC before forking to avoid unnecessary CoW pages
+        GC.start
+        
         # Fork a new process
         pid = Process.fork do
-          # Close read end in child
-          rd.close
-
-          # Process the items
-          result = process_items_directly(items)
-
-          # Send results back to parent
-          Marshal.dump(result, wr)
-          wr.close
-
-          # Exit the forked process
-          exit!(0)
+          # Process the items directly - we already have them in memory
+          begin
+            # Process items
+            results = process_items_directly(items)
+            
+            # Log completion
+            @logger.info("[Minigun:#{@job_id}][#{@name}] Child process completed: #{results[:success]} processed, #{results[:failed]} failed")
+            
+            # Exit with success code
+            exit!(0)
+          rescue StandardError => e
+            # Handle errors in child process
+            @logger.error("[Minigun:#{@job_id}][#{@name}] Error in child process: #{e.message}")
+            @logger.error("[Minigun:#{@job_id}][#{@name}] #{e.backtrace.join("\n")}") if e.backtrace
+            exit!(1)
+          end
         end
 
-        # Close write end in parent
-        wr.close
-
-        # Wait for the child process
-        Process.wait(pid)
-
-        # Read results from pipe
-        result = Marshal.load(rd)
-        rd.close
-
-        # Update stats based on child process results
-        @processed_count.increment(result[:success] || 0)
-        @failed_count.increment(result[:failed] || 0)
-        @emitted_count.increment(result[:emitted] || 0)
+        # In parent process
+        begin
+          # Wait for the child process to complete
+          _, status = Process.waitpid2(pid)
+          
+          # Update stats based on child process exit status
+          if status.success?
+            # If successful, update processed count with items size
+            # We can't know exact counts since the child process handles this independently
+            @processed_count.increment(items.size)
+          else
+            # If failed, count as failures
+            @failed_count.increment(items.size)
+          end
+        rescue StandardError => e
+          @logger.error("[Minigun:#{@job_id}][#{@name}] Error waiting for child process: #{e.message}")
+          @failed_count.increment(items.size)
+        end
       end
     end
   end
