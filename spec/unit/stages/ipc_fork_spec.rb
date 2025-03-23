@@ -112,22 +112,35 @@ RSpec.describe Minigun::Stages::IpcFork do
 
     context 'with forking' do
       it 'calls GC.start before forking' do
+        # Create a subject with fork_mode set to :always for this test
+        config_with_fork_enabled = config.merge(fork_mode: :always)
+        fork_enabled_subject = described_class.new(stage_name, pipeline, config_with_fork_enabled)
+
         # Allow forking
         allow(Process).to receive(:respond_to?).with(:fork).and_return(true)
-
-        # Mock fork to avoid actual process creation
-        allow(Process).to receive(:fork).and_return(123)
 
         # Expect GC.start to be called
         expect(GC).to receive(:start)
 
-        # Stub other methods to focus on the GC call
-        allow_any_instance_of(IO).to receive(:binmode)
-        allow_any_instance_of(IO).to receive(:close_on_exec=)
-        allow_any_instance_of(IO).to receive(:close)
+        # Allow other necessary methods to prevent actual forking
+        allow(fork_enabled_subject).to receive(:wait_for_available_process_slot)
+
+        # Create IO doubles for the pipe
+        read_pipe = double('IO')
+        write_pipe = double('IO')
+        allow(read_pipe).to receive(:binmode)
+        allow(read_pipe).to receive(:close_on_exec=)
+        allow(read_pipe).to receive(:close)
+        allow(write_pipe).to receive(:binmode)
+        allow(write_pipe).to receive(:close_on_exec=)
+        allow(write_pipe).to receive(:close)
+
+        # Mock IO.pipe to return our doubles
+        allow(IO).to receive(:pipe).and_return([read_pipe, write_pipe])
+        allow(Process).to receive(:fork).and_return(123)
 
         # Process an item
-        subject.process(1)
+        fork_enabled_subject.process(1)
       end
     end
   end
@@ -195,17 +208,14 @@ RSpec.describe Minigun::Stages::IpcFork do
       # Expect batch processing
       expect(subject).to receive(:process_batch).at_least(:twice)
 
-      # Setup random calls for GC probability
-      allow(Random).to receive(:rand).and_return(0.05) # Below GC_PROBABILITY
+      # Set the GC probability to 1.0 (100%) to ensure GC.start is called
+      stub_const('Minigun::Stages::IpcFork::GC_PROBABILITY', 1.0)
 
       # Spy on GC.start
-      allow(GC).to receive(:start).and_call_original
+      expect(GC).to receive(:start).at_least(:once)
 
       # Call process_items_directly
       subject.send(:process_items_directly, items)
-
-      # Verify GC.start was called
-      expect(GC).to have_received(:start).at_least(1).times
     end
   end
 

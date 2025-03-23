@@ -20,7 +20,7 @@ module Minigun
         @max_retries = config[:max_retries] || 3
         @fork_mode = config[:fork_mode] || :auto
         @pipe_timeout = config[:pipe_timeout] || DEFAULT_PIPE_TIMEOUT
-        @use_compression = config[:use_compression].nil? || !config[:use_compression].nil?
+        @use_compression = config.key?(:use_compression) ? config[:use_compression] : true
 
         # For compatibility with the processor interface
         @processes = @max_processes
