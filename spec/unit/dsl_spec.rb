@@ -73,13 +73,13 @@ RSpec.describe Minigun::DSL do
       it 'stores producer blocks' do
         producer_block = proc { produce([1, 2, 3]) }
         task_class.producer(:test_producer, &producer_block)
-        expect(task_class._minigun_processor_blocks[:test_producer]).to eq(producer_block)
+        expect(task_class._minigun_stage_blocks[:test_producer]).to eq(producer_block)
       end
 
       it 'stores processor blocks' do
         processor_block = proc { |item| emit(item * 2) }
         task_class.processor(:test_processor, &processor_block)
-        expect(task_class._minigun_processor_blocks[:test_processor]).to eq(processor_block)
+        expect(task_class._minigun_stage_blocks[:test_processor]).to eq(processor_block)
       end
 
       it 'adds stages to the pipeline' do

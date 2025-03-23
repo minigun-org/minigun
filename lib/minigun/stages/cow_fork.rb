@@ -36,11 +36,6 @@ module Minigun
         # Check stage blocks directly 
         @stage_block = @task.stage_blocks[name.to_sym] if @task.respond_to?(:stage_blocks) && @task.stage_blocks[name.to_sym]
 
-        # For backward compatibility
-        if @stage_block.nil? && @task.class.respond_to?(:_minigun_consumer_block)
-          @stage_block = @task.class._minigun_consumer_block
-        end
-
         # Fallback to a default implementation
         @stage_block ||= proc { |items| items }
       end

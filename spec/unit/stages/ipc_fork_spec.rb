@@ -8,13 +8,6 @@ RSpec.describe Minigun::Stages::IpcFork do
   let(:consumer_block) { proc { |items| items.each { |i| processed << i } } }
   let(:task_class) do
     Class.new do
-      def self._minigun_consumer_blocks
-        {}
-      end
-
-      def self._minigun_consumer_block
-        nil
-      end
     end
   end
 
@@ -45,7 +38,6 @@ RSpec.describe Minigun::Stages::IpcFork do
   let(:stage_name) { :test_consumer }
 
   before do
-    allow(task_class).to receive(:_minigun_consumer_blocks).and_return({ test_consumer: consumer_block })
     allow(pipeline).to receive(:downstream_stages).and_return([])
   end
 

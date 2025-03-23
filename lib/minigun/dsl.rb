@@ -45,52 +45,6 @@ module Minigun
             _minigun_task.queue_subscriptions
           end
 
-          # For backward compatibility with code that expects separate block collections
-          def _minigun_processor_blocks
-            # Create a map of processor blocks from stage_blocks
-            result = {}
-            _minigun_task.pipeline.each do |stage|
-              name = stage[:name]
-              if stage[:type] == :processor
-                result[name] = _minigun_task.stage_blocks[name] if _minigun_task.stage_blocks[name]
-              end
-            end
-            result
-          end
-
-          # For backward compatibility with code that expects accumulator blocks
-          def _minigun_accumulator_blocks
-            # Create a map of accumulator blocks from stage_blocks
-            result = {}
-            _minigun_task.pipeline.each do |stage|
-              name = stage[:name]
-              if stage[:type] == :accumulator
-                result[name] = _minigun_task.stage_blocks[name] if _minigun_task.stage_blocks[name]
-              end
-            end
-            result
-          end
-
-          # For backward compatibility with code that expects producer blocks
-          def _minigun_producer_blocks
-            _minigun_processor_blocks
-          end
-
-          # For compatibility with older code
-          def _minigun_producer_block
-            _minigun_stage_blocks[:default]
-          end
-
-          # For backward compatibility with code that expects consumer blocks
-          def _minigun_consumer_blocks
-            _minigun_processor_blocks
-          end
-
-          # For compatibility with older code
-          def _minigun_consumer_block
-            _minigun_stage_blocks[:default]
-          end
-
           # Class method to start the job
           def run(context = nil)
             _minigun_task.run(context || self)
