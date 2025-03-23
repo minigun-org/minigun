@@ -1,8 +1,5 @@
 # frozen_string_literal: true
 
-require 'logger'
-require 'securerandom'
-
 module Minigun
   # The Task class manages the configuration and execution of Minigun tasks
   class Task

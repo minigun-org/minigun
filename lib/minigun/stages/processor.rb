@@ -1,8 +1,5 @@
 # frozen_string_literal: true
 
-require 'concurrent'
-require 'ostruct'
-
 module Minigun
   module Stages
     # Unified processor stage for all pipeline stages
@@ -30,9 +27,9 @@ module Minigun
 
         # Initialize fork implementation if needed
         fork_type = options[:fork] || options[:type]
-        if %i[cow ipc].include?(fork_type)
-          init_fork_implementation(fork_type)
-        end
+        return unless %i[cow ipc].include?(fork_type)
+
+        init_fork_implementation(fork_type)
       end
 
       # Process a single item

@@ -1,9 +1,5 @@
 # frozen_string_literal: true
 
-require 'concurrent'
-require 'securerandom'
-require 'yaml'
-
 module Minigun
   module Stages
     # Implementation of Copy-On-Write fork behavior
@@ -33,7 +29,7 @@ module Minigun
         # Get the block for this stage from the task
         @stage_block = nil
 
-        # Check stage blocks directly 
+        # Check stage blocks directly
         @stage_block = @task.stage_blocks[name.to_sym] if @task.respond_to?(:stage_blocks) && @task.stage_blocks[name.to_sym]
 
         # Fallback to a default implementation

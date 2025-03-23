@@ -1,10 +1,5 @@
 # frozen_string_literal: true
 
-require 'securerandom'
-require 'concurrent'
-require 'forwardable'
-require 'logger'
-
 module Minigun
   # Orchestrates the flow of items through stages
   class Pipeline

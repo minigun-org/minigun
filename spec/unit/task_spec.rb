@@ -40,7 +40,7 @@ RSpec.describe Minigun::Task do
 
   describe 'stage definition methods' do
     it 'adds a producer to the pipeline' do
-      task = Minigun::Task.new
+      task = described_class.new
       task.add_producer(:test_producer)
 
       expect(task.pipeline.size).to eq(1)

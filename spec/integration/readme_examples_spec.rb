@@ -1,9 +1,6 @@
 # frozen_string_literal: true
 
-require 'minigun'
-require 'rspec'
-require 'ostruct'
-require 'set'
+require 'spec_helper'
 
 RSpec.describe 'README Examples Integration' do
   describe 'Quick Start Example' do
@@ -202,7 +199,7 @@ RSpec.describe 'README Examples Integration' do
 
       # Verify that the processor blocks are defined
       expect(task_obj.stage_blocks.keys).to include(:seed_urls, :fetch_pages, :extract_links, :process_pages)
-      
+
       # Verify the pipeline includes an accumulator
       expect(task_obj.pipeline.any? { |s| s[:type] == :accumulator && s[:name] == :batch_pages }).to be true
 
@@ -380,7 +377,7 @@ RSpec.describe 'README Examples Integration' do
 
       # Verify that the processor blocks are defined
       expect(task_obj.stage_blocks.keys).to include(:user_producer, :email_processor, :consumer)
-      
+
       # Verify the pipeline includes an accumulator
       expect(task_obj.pipeline.any? { |s| s[:type] == :accumulator && s[:name] == :email_accumulator }).to be true
 
@@ -465,7 +462,7 @@ RSpec.describe 'README Examples Integration' do
 
       # Verify that the processor blocks are defined
       expect(task_obj.stage_blocks.keys).to include(:data_source, :worker_1, :worker_2, :worker_3)
-      
+
       # Verify the pipeline includes an accumulator
       expect(task_obj.pipeline.any? { |s| s[:type] == :accumulator && s[:name] == :result_collector }).to be true
 

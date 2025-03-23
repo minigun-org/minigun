@@ -1,8 +1,5 @@
 # frozen_string_literal: true
 
-require 'logger'
-require 'forwardable'
-
 module Minigun
   module Stages
     # Base class for all stages in a Minigun pipeline

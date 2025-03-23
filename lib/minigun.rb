@@ -1,5 +1,12 @@
 # frozen_string_literal: true
 
+require 'securerandom'
+require 'concurrent'
+require 'forwardable'
+require 'yaml'
+require 'logger'
+require 'ostruct'
+
 require 'minigun/version'
 require 'minigun/error'
 require 'minigun/task'

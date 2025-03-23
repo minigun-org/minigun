@@ -1,9 +1,5 @@
 # frozen_string_literal: true
 
-require 'concurrent'
-require 'securerandom'
-require 'yaml'
-
 module Minigun
   module Stages
     # Implementation of IPC-style fork behavior

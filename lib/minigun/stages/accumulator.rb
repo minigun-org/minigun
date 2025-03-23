@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'concurrent'
-
 module Minigun
   module Stages
     # Accumulator stage that collects items and batches them
@@ -19,14 +17,14 @@ module Minigun
 
         # Get the stage block
         @block = nil
-        
+
         # Check stage blocks directly
         @block = @task.stage_blocks[name.to_sym] if @task.respond_to?(:stage_blocks) && @task.stage_blocks[name.to_sym]
-        
+
         # For backward compatibility
-        if @block.nil? && @task.respond_to?(:accumulator_blocks) && @task.accumulator_blocks
-          @block = @task.accumulator_blocks[name.to_sym]
-        end
+        return unless @block.nil? && @task.respond_to?(:accumulator_blocks) && @task.accumulator_blocks
+
+        @block = @task.accumulator_blocks[name.to_sym]
       end
 
       # Run method starts the flush timer

@@ -1,10 +1,5 @@
 # frozen_string_literal: true
 
-require 'securerandom'
-require 'concurrent'
-require 'forwardable'
-require 'yaml'
-
 module Minigun
   # The Runner class handles the execution of a Minigun job
   class Runner
@@ -376,36 +371,34 @@ module Minigun
       info("[Minigun:#{@job_id}] Waiting for #{@stage_process_pids.size} running processes to finish...")
 
       @stage_process_pids.dup.each do |child_info|
+        pid = child_info[:pid]
+
+        # Wait for this child to finish
+        _, status = Process.wait2(pid)
+
+        # Collect and parse result
         begin
-          pid = child_info[:pid]
+          result = child_info[:result_reader].read
+          result = YAML.safe_load(result, permitted_classes: [Symbol, Time, DateTime, Date]) if result && !result.empty?
+          runtime = Time.now - child_info[:start_time]
 
-          # Wait for this child to finish
-          child_pid, status = Process.wait2(pid)
-
-          # Collect and parse result
-          begin
-            result = child_info[:result_reader].read
-            result = YAML.safe_load(result, permitted_classes: [Symbol, Time, DateTime, Date]) if result && !result.empty?
-            runtime = Time.now - child_info[:start_time]
-
-            if result && result[:error]
-              error("[Minigun:#{@job_id}][Stage:fork][PID #{pid}] Failed with error: #{result[:error]}")
-            else
-              items_processed = result.is_a?(Hash) ? result[:processed] || 0 : 0
-              info("[Minigun:#{@job_id}][Stage:fork][PID #{pid}] Finished in #{runtime.round(2)}s. "\
-                  "Processed #{items_processed} items (exited with #{status.exitstatus})")
-            end
-          rescue StandardError => e
-            error("[Minigun:#{@job_id}][Stage:fork][PID #{pid}] Error reading result: #{e.message}")
+          if result && result[:error]
+            error("[Minigun:#{@job_id}][Stage:fork][PID #{pid}] Failed with error: #{result[:error]}")
+          else
+            items_processed = result.is_a?(Hash) ? result[:processed] || 0 : 0
+            info("[Minigun:#{@job_id}][Stage:fork][PID #{pid}] Finished in #{runtime.round(2)}s. "\
+                 "Processed #{items_processed} items (exited with #{status.exitstatus})")
           end
-
-          # Clean up resources
-          child_info[:result_reader].close if child_info[:result_reader] && !child_info[:result_reader].closed?
-          @stage_process_pids.delete(child_info)
-        rescue Errno::ECHILD
-          # Child process doesn't exist anymore
-          @stage_process_pids.delete(child_info)
+        rescue StandardError => e
+          error("[Minigun:#{@job_id}][Stage:fork][PID #{pid}] Error reading result: #{e.message}")
         end
+
+        # Clean up resources
+        child_info[:result_reader].close if child_info[:result_reader] && !child_info[:result_reader].closed?
+        @stage_process_pids.delete(child_info)
+      rescue Errno::ECHILD
+        # Child process doesn't exist anymore
+        @stage_process_pids.delete(child_info)
       end
     end
 

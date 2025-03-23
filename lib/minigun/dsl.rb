@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'logger'
-
 module Minigun
   # The DSL module provides a Domain Specific Language for defining Minigun tasks
   module DSL
