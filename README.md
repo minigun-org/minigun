@@ -13,6 +13,9 @@ Minigun is a high-performance data processing pipeline framework for Ruby.
 - Queue-based routing with selective queue subscriptions.
 - Batch accumulation for efficient processing.
 - Comprehensive error handling and retry mechanisms.
+- Optional MessagePack serialization for faster IPC.
+- Data compression for large transfers between processes.
+- Smart garbage collection for memory optimization.
 
 In many use cases, Minigun can replace queue systems like Resque, Solid Queue, or Sidekiq.
 Minigun itself is run entire in Ruby's memory, and is database and application agnostic.
@@ -352,6 +355,11 @@ class ConfiguredTask
   batch_size 100        # Default batch size
   consumer_type :cow    # Default consumer fork implementation (:cow or :ipc)
   
+  # Advanced IPC options
+  pipe_timeout 30       # Timeout for IPC pipe operations (seconds)
+  use_compression true  # Enable compression for large IPC transfers
+  gc_probability 0.1    # Probability of GC during batch processing (0.0-1.0)
+  
   # Stage-specific configuration
   pipeline do
     producer :source do
@@ -476,3 +484,89 @@ end
 ## License
 
 The gem is available as open source under the terms of the [MIT License](LICENSE).
+
+## Fork Implementation Options
+
+Minigun provides two different fork implementations for processing data in separate processes:
+
+### COW Fork (Copy-On-Write)
+
+```ruby
+cow_fork :process_batch do |batch|
+  # Process items in a child process with copy-on-write memory sharing
+  process_items(batch)
+end
+```
+
+The COW fork implementation leverages Ruby's copy-on-write memory sharing between parent and child processes. With COW fork:
+
+- Memory pages are shared between parent and child until modified
+- No serialization overhead for passing data between processes
+- Ideal for read-only operations on large data structures
+- Best performance when memory footprint is important
+
+### IPC Fork 
+
+```ruby
+ipc_fork :process_batch do |batch|
+  # Process items in a child process with explicit IPC communication
+  process_items(batch)
+end
+```
+
+The IPC fork implementation uses explicit interprocess communication:
+
+- Data is serialized and passed through pipes between parent and child
+- Provides process isolation with explicit memory boundaries
+- Supports optimizations like MessagePack and compression
+- Better when child processes significantly modify data
+
+#### IPC Fork Optimizations
+
+##### MessagePack Serialization
+
+For better performance, install the MessagePack gem to automatically improve serialization speed:
+
+```ruby
+# Add to your Gemfile
+gem 'msgpack'
+```
+
+When MessagePack is available, Minigun automatically uses it for IPC communication instead of Ruby's Marshal, providing:
+- Faster serialization/deserialization
+- Smaller data size
+- Better cross-language compatibility
+
+##### Compression
+
+By default, Minigun will compress large data transfers between processes:
+
+```ruby
+# Configure compression settings
+ipc_fork :process_batch, use_compression: true do |batch|
+  process_items(batch)
+end
+```
+
+- Automatically compresses data when beneficial (>1KB and compression reduces size)
+- Uses Zlib for compression
+- Can be disabled with `use_compression: false`
+
+##### Garbage Collection Optimization
+
+Minigun optimizes garbage collection in forked processes:
+
+- Performs GC before forking to minimize unnecessary memory duplication
+- Periodic GC during batch processing to prevent memory bloat
+- Configurable GC probability with `gc_probability` option
+
+##### Additional IPC Options
+
+```ruby
+ipc_fork :process_batch, 
+         pipe_timeout: 60,         # Timeout for pipe operations (seconds)
+         max_chunk_size: 2_000_000 # Max size for chunked data (bytes)
+         do |batch|
+  process_items(batch)
+end
+```
