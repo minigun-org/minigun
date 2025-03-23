@@ -16,7 +16,7 @@ RSpec.describe 'WebCrawlerExample' do
 
   it 'executes the web crawler example correctly' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/web_crawler_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/web_crawler_example.rb')
 
     # Create an instance of the class
     task = WebCrawlerExample.new
@@ -41,7 +41,7 @@ RSpec.describe 'WebCrawlerExample' do
 
   it 'has the correct web crawler pipeline structure' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/web_crawler_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/web_crawler_example.rb')
 
     # Get the task object directly
     task_obj = WebCrawlerExample._minigun_task
@@ -81,7 +81,7 @@ RSpec.describe 'WebCrawlerExample' do
 
   it 'correctly handles URL filtering and cycle detection' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/web_crawler_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/web_crawler_example.rb')
 
     # Create a test instance
     task = WebCrawlerExample.new

@@ -16,7 +16,7 @@ RSpec.describe 'BasicExample' do
 
   it 'executes the pipeline correctly' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/basic_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/basic_example.rb')
 
     # Create an instance of the class
     task = BasicExample.new
@@ -46,7 +46,7 @@ RSpec.describe 'BasicExample' do
 
   it 'has the correct pipeline structure' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/basic_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/basic_example.rb')
 
     # Get the task object directly
     task_obj = BasicExample._minigun_task
@@ -76,7 +76,7 @@ RSpec.describe 'BasicExample' do
 
   it 'has the correct configuration' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/basic_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/basic_example.rb')
 
     # Get the task object directly
     task_obj = BasicExample._minigun_task

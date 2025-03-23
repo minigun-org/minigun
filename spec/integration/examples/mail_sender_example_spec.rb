@@ -16,7 +16,7 @@ RSpec.describe 'MailSenderExample' do
 
   it 'executes the mail sender pipeline correctly' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/mail_sender_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/mail_sender_example.rb')
 
     # Create an instance of the class
     task = MailSenderExample.new
@@ -49,7 +49,7 @@ RSpec.describe 'MailSenderExample' do
 
   it 'has the correct mail sender pipeline structure' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/mail_sender_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/mail_sender_example.rb')
 
     # Get the task object directly
     task_obj = MailSenderExample._minigun_task
@@ -76,7 +76,7 @@ RSpec.describe 'MailSenderExample' do
 
   it 'handles test mode correctly' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/mail_sender_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/mail_sender_example.rb')
 
     # Create an instance of the class in test mode
     task = MailSenderExample.new(test_mode: true)

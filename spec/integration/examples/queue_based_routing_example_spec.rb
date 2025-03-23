@@ -16,7 +16,7 @@ RSpec.describe 'QueueBasedRoutingExample' do
 
   it 'executes the queue-based routing example correctly' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/queue_based_routing_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/queue_based_routing_example.rb')
 
     # Create an instance of the class
     task = QueueBasedRoutingExample.new
@@ -44,7 +44,7 @@ RSpec.describe 'QueueBasedRoutingExample' do
 
   it 'has the correct queue-based routing pipeline structure' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/queue_based_routing_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/queue_based_routing_example.rb')
 
     # Get the task object directly
     task_obj = QueueBasedRoutingExample._minigun_task
@@ -81,7 +81,7 @@ RSpec.describe 'QueueBasedRoutingExample' do
 
   it 'correctly routes messages based on type' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/queue_based_routing_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/queue_based_routing_example.rb')
 
     # Clear output
     output.string = ''

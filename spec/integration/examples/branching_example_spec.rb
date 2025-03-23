@@ -16,7 +16,7 @@ RSpec.describe 'BranchingExample' do
 
   it 'executes the branching pipeline correctly' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/branching_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/branching_example.rb')
 
     # Create an instance of the class
     task = BranchingExample.new
@@ -41,7 +41,7 @@ RSpec.describe 'BranchingExample' do
 
   it 'has the correct branching pipeline structure' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/branching_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/branching_example.rb')
 
     # Get the task object directly
     task_obj = BranchingExample._minigun_task

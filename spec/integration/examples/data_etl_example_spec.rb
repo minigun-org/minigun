@@ -16,7 +16,7 @@ RSpec.describe 'DataEtlExample' do
 
   it 'executes the data ETL pipeline correctly' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/data_etl_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/data_etl_example.rb')
 
     # Create an instance of the class
     task = DataEtlExample.new
@@ -40,7 +40,7 @@ RSpec.describe 'DataEtlExample' do
 
   it 'has the correct data ETL pipeline structure' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/data_etl_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/data_etl_example.rb')
 
     # Get the task object directly
     task_obj = DataEtlExample._minigun_task
@@ -77,7 +77,7 @@ RSpec.describe 'DataEtlExample' do
 
   it 'correctly processes records through the ETL stages' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/data_etl_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/data_etl_example.rb')
 
     # Create an instance and configure for testing
     task = DataEtlExample.new

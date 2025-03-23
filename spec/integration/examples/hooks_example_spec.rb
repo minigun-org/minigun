@@ -16,7 +16,7 @@ RSpec.describe 'HooksExample' do
 
   it 'executes the pipeline with hooks correctly' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/task_with_hooks_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/hooks_example.rb')
 
     # Create an instance of the class
     task = HooksExample.new
@@ -46,7 +46,7 @@ RSpec.describe 'HooksExample' do
 
   it 'has the correct hooks defined' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/task_with_hooks_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/hooks_example.rb')
 
     # Get the task object directly
     task_obj = HooksExample._minigun_task
@@ -67,7 +67,7 @@ RSpec.describe 'HooksExample' do
 
   it 'has the correct pipeline structure' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/task_with_hooks_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/hooks_example.rb')
 
     # Get the task object directly
     task_obj = HooksExample._minigun_task

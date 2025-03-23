@@ -16,7 +16,7 @@ RSpec.describe 'ExplicitConnectionExample' do
 
   it 'executes the explicit connections pipeline correctly' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/explicit_connection_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/explicit_connection_example.rb')
 
     # Create an instance of the class
     task = ExplicitConnectionExample.new
@@ -40,7 +40,7 @@ RSpec.describe 'ExplicitConnectionExample' do
 
   it 'has the correct explicit connections pipeline structure' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/explicit_connection_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/explicit_connection_example.rb')
 
     # Get the task object directly
     task_obj = ExplicitConnectionExample._minigun_task

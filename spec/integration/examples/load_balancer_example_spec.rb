@@ -16,7 +16,7 @@ RSpec.describe 'LoadBalancerExample' do
 
   it 'executes the load balancer example correctly' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/load_balancer_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/load_balancer_example.rb')
 
     # Create an instance of the class
     task = LoadBalancerExample.new
@@ -38,7 +38,7 @@ RSpec.describe 'LoadBalancerExample' do
 
   it 'has the correct load balancer pipeline structure' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/load_balancer_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/load_balancer_example.rb')
 
     # Get the task object directly
     task_obj = LoadBalancerExample._minigun_task
@@ -66,7 +66,7 @@ RSpec.describe 'LoadBalancerExample' do
 
   it 'correctly balances the load across servers' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/load_balancer_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/load_balancer_example.rb')
 
     # Clear output for this test
     output.string = ''

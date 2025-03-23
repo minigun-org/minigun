@@ -16,7 +16,7 @@ RSpec.describe 'QuickStartExample' do
 
   it 'executes the pipeline correctly' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/quick_start_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/quick_start_example.rb')
 
     # Create an instance of the class
     task = QuickStartExample.new
@@ -43,7 +43,7 @@ RSpec.describe 'QuickStartExample' do
 
   it 'has the correct pipeline structure' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/quick_start_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/quick_start_example.rb')
 
     # Get the task object directly
     task_obj = QuickStartExample._minigun_task

@@ -16,7 +16,7 @@ RSpec.describe 'DiamondShapedExample' do
 
   it 'executes the diamond shaped pipeline correctly' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/diamond_shaped_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/diamond_shaped_example.rb')
 
     # Create an instance of the class
     task = DiamondShapedExample.new
@@ -39,7 +39,7 @@ RSpec.describe 'DiamondShapedExample' do
 
   it 'has the correct diamond shaped pipeline structure' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/diamond_shaped_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/diamond_shaped_example.rb')
 
     # Get the task object directly
     task_obj = DiamondShapedExample._minigun_task
@@ -73,7 +73,7 @@ RSpec.describe 'DiamondShapedExample' do
 
   it 'correctly processes items through all branches' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/diamond_shaped_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/diamond_shaped_example.rb')
 
     # Create a test instance with fewer items for faster testing
     task = DiamondShapedExample.new

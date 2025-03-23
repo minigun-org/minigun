@@ -16,7 +16,7 @@ RSpec.describe 'ConfiguredExample' do
 
   it 'executes the configured pipeline correctly' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/configured_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/configured_example.rb')
 
     # Create an instance of the class
     task = ConfiguredExample.new
@@ -39,7 +39,7 @@ RSpec.describe 'ConfiguredExample' do
 
   it 'loads the correct configuration' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/configured_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/configured_example.rb')
 
     # Get the task object directly
     task_obj = ConfiguredExample._minigun_task
@@ -54,7 +54,7 @@ RSpec.describe 'ConfiguredExample' do
 
   it 'has the correct pipeline structure' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/configured_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/configured_example.rb')
 
     # Get the task object directly
     task_obj = ConfiguredExample._minigun_task
@@ -80,7 +80,7 @@ RSpec.describe 'ConfiguredExample' do
 
   it 'correctly implements the handler methods' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/configured_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/configured_example.rb')
 
     # Create a test instance with override config
     task = ConfiguredExample.new(

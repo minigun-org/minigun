@@ -147,7 +147,7 @@ Style/Documentation:
     - 'examples/priority_processing_example.rb'
     - 'examples/queue_based_routing_example.rb'
     - 'examples/quick_start_example.rb'
-    - 'examples/task_with_hooks_example.rb'
+    - 'examples/hooks_example.rb'
     - 'examples/web_crawler_example.rb'
 
 # Offense count: 1

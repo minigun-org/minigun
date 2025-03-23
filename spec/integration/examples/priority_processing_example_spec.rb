@@ -16,7 +16,7 @@ RSpec.describe 'PriorityProcessingExample' do
 
   it 'executes the priority processing pipeline correctly' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/priority_processing_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/priority_processing_example.rb')
 
     # Create an instance of the class
     task = PriorityProcessingExample.new
@@ -46,7 +46,7 @@ RSpec.describe 'PriorityProcessingExample' do
 
   it 'has the correct priority-based routing structure' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/priority_processing_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/priority_processing_example.rb')
 
     # Get the task object directly
     task_obj = PriorityProcessingExample._minigun_task
@@ -82,7 +82,7 @@ RSpec.describe 'PriorityProcessingExample' do
 
   it 'correctly routes VIP users to high priority queues' do
     # Load the example file
-    load File.join(File.dirname(__FILE__), '../../examples/priority_processing_example.rb')
+    load File.join(File.dirname(__FILE__), '../../../examples/priority_processing_example.rb')
 
     # Create an instance
     task = PriorityProcessingExample.new
