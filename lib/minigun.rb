@@ -7,6 +7,10 @@ require 'yaml'
 require 'logger'
 require 'ostruct'
 require 'zlib'
+begin
+  require 'msgpack'
+rescue LoadError # rubocop:disable Lint/SuppressedException
+end
 
 require 'minigun/version'
 require 'minigun/error'
