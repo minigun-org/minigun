@@ -2,8 +2,8 @@
 
 require 'minigun'
 
-# Example task using Minigun DSL
-class BasicTask
+# Basic example using Minigun DSL
+class BasicExample
   include Minigun::DSL
 
   # Configure the task
