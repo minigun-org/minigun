@@ -19,8 +19,6 @@ Minigun itself is run entire in Ruby's memory, and is database and application a
 
 ## TODOs
 
-- [ ] Remove all references to producer/consumer except aliases
-- [ ] Merge processor / accumulator stages in code to just have "stages", then those stage can be any class with custom args.
 - [ ] Extract examples to examples folder
 - [ ] Add more examples based on real-world use cases
 - [ ] Add support for named queues and queue-based routing (already there?)
