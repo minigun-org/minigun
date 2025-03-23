@@ -127,22 +127,14 @@ RSpec.describe Minigun::DSL do
     end
 
     describe '#produce' do
-      it 'adds items to the thread-local queue' do
-        Thread.current[:minigun_queue] = []
+      it 'calls emit with the item' do
+        expect(subject).to receive(:emit).with([1, 2, 3])
         subject.produce([1, 2, 3])
-
-        # The implementation might iterate over arrays or directly add them
-        # We just want to ensure all items are in the queue
-        queue_items = Thread.current[:minigun_queue].flatten
-        expect(queue_items).to include(1, 2, 3)
       end
 
-      it 'adds a single item to the thread-local queue' do
-        Thread.current[:minigun_queue] = []
+      it 'calls emit with a single item' do
+        expect(subject).to receive(:emit).with(42)
         subject.produce(42)
-
-        queue_items = Thread.current[:minigun_queue].flatten
-        expect(queue_items).to include(42)
       end
     end
   end

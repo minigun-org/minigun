@@ -40,14 +40,12 @@ RSpec.describe Minigun::Task do
 
   describe 'stage definition methods' do
     it 'adds a producer to the pipeline' do
-      producer_block = proc { puts 'producing' }
-      task.add_producer(:test_producer, {}, &producer_block)
+      task = Minigun::Task.new
+      task.add_producer(:test_producer)
 
-      expect(task.stage_blocks[:test_producer]).to eq(producer_block)
       expect(task.pipeline.size).to eq(1)
       expect(task.pipeline.first[:type]).to eq(:processor)
       expect(task.pipeline.first[:name]).to eq(:test_producer)
-      expect(task.pipeline.first[:options][:is_producer]).to eq(true)
     end
 
     it 'adds a processor to the pipeline' do

@@ -5,8 +5,7 @@ require 'ostruct'
 
 module Minigun
   module Stages
-    # Unified processor stage that can function with different roles 
-    # (producer or processor) based on configuration
+    # Unified processor stage for all pipeline stages
     class Processor < Base
       # ResultWrapper class provides a simple wrapper for results that don't respond to wait
       ResultWrapper = Struct.new(:wait, :value)
@@ -16,8 +15,6 @@ module Minigun
         @processed_count = Concurrent::AtomicFixnum.new(0)
         @failed_count = Concurrent::AtomicFixnum.new(0)
         @emitted_count = Concurrent::AtomicFixnum.new(0)
-
-        @is_producer = options[:is_producer] || false
 
         # Set configuration with defaults
         @threads = options[:threads] || options[:max_threads] || 5
@@ -40,14 +37,22 @@ module Minigun
 
       # Process a single item
       def process(item)
-        if @is_producer
-          # For producer role, the block is called without any arguments
-          # and it's expected to call produce() to generate items
-          process_as_producer(item)
-        else
-          # For processor roles, the block is called with each item
-          process_as_processor(item)
-        end
+        # Process the item and emit result(s)
+        result = execute_block(item)
+
+        # Track processing
+        @processed_count.increment
+
+        # If result is not explicitly nil, emit it
+        # This allows processors to filter by returning nil
+        emit(result) unless result.nil?
+
+        # Return the result
+        result
+      rescue StandardError => e
+        @failed_count.increment
+        error("[Minigun:#{@job_id}][Stage:#{@name}] Error processing item: #{e.class}: #{e.message}\n#{e.backtrace.join("\n")}")
+        raise e
       end
 
       # Shutdown the processor stage
@@ -71,72 +76,24 @@ module Minigun
 
       private
 
-      # Process item as a producer role (ignore input item, generate outputs)
-      def process_as_producer(_item)
-        # Prepare the context for producer
-        Thread.current[:minigun_queue] = []
-
-        begin
-          # Call the block
-          if @block
-            # Execute in the context using instance_exec
-            @context.instance_exec(&@block)
+      # Execute the stage block with the given item
+      def execute_block(item)
+        if @block
+          if @block.arity == 0
+            # If block takes no arguments, use instance_eval
+            @context.instance_exec do
+              # Make the item available as an instance variable
+              @item = item
+              instance_eval(&@block)
+            end
           else
-            # Default implementation just returns nil
-            nil
+            # Otherwise call with the item as argument
+            @context.instance_exec(item, &@block)
           end
-
-          # Get the produced items
-          items = Thread.current[:minigun_queue]
-
-          # If there are items in the queue, emit them
-          items.each { |produced_item| emit(produced_item) }
-
-          @processed_count.increment
-          @emitted_count.increment(items.size)
-
-          # Return number of items produced
-          items.size
-        rescue StandardError => e
-          @failed_count.increment
-          error("[Minigun:#{@job_id}][Stage:#{@name}] Error in producer role: #{e.class}: #{e.message}\n#{e.backtrace.join("\n")}")
-          raise e
+        else
+          # Default implementation just passes the item through
+          item
         end
-      end
-
-      # Process item as a processor role (transform input)
-      def process_as_processor(item)
-        # Call the block with the item
-        result = if @block
-                   if @block.arity == 0
-                     # If block takes no arguments, use instance_eval
-                     @context.instance_exec do
-                       # Make the item available as an instance variable
-                       @item = item
-                       instance_eval(&@block)
-                     end
-                   else
-                     # Otherwise call with the item as argument
-                     @context.instance_exec(item, &@block)
-                   end
-                 else
-                   # Default implementation just passes the item through
-                   item
-                 end
-
-        # Track processing
-        @processed_count.increment
-
-        # If result is not explicitly nil, emit it
-        # This allows processors to filter by returning nil
-        emit(result) unless result.nil?
-
-        # Return the result
-        result
-      rescue StandardError => e
-        @failed_count.increment
-        error("[Minigun:#{@job_id}][Stage:#{@name}] Error processing item: #{e.class}: #{e.message}\n#{e.backtrace.join("\n")}")
-        raise e
       end
 
       # Initialize appropriate fork implementation based on type

@@ -82,7 +82,6 @@ module Minigun
     def add_producer(name = :default, options = {}, &block)
       # Process connection options
       options = process_connection_options(name, options)
-      options[:is_producer] = true
 
       # Store the block
       @stage_blocks[name] = block if block_given?
@@ -150,9 +149,9 @@ module Minigun
       # Store the consumer block
       @stage_blocks[name] = block if block_given?
 
-      # Record stage in pipeline
+      # Record stage in pipeline - use processor type for all stages
       @pipeline << {
-        type: :processor, # Consumers are just processors
+        type: :processor, # All stages are now processors
         name: name,
         options: options
       }

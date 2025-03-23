@@ -252,7 +252,7 @@ module Minigun
       task.add_producer(name, options, &block)
 
       # Add to pipeline
-      @pipeline.add_stage(Minigun::Stages::Processor, name, options.merge(is_producer: true))
+      @pipeline.add_stage(Minigun::Stages::Processor, name, options)
     end
 
     # Define a processor stage

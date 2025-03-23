@@ -202,11 +202,9 @@ module Minigun
     end
     alias_method :go_brrr!, :run
 
-    # Add an item to be processed
+    # Add an item to be processed (now just calls emit)
     def produce(item)
-      job_queue = Thread.current[:minigun_queue] || []
-      job_queue << item
-      Thread.current[:minigun_queue] = job_queue
+      emit(item)
     end
 
     # Emit an item to the next stage (used in processor stages)
