@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'English'
 module Minigun
   module Stages
     # Implementation of IPC-style fork behavior
@@ -19,7 +20,7 @@ module Minigun
         @max_retries = config[:max_retries] || 3
         @fork_mode = config[:fork_mode] || :auto
         @pipe_timeout = config[:pipe_timeout] || DEFAULT_PIPE_TIMEOUT
-        @use_compression = config[:use_compression].nil? ? true : !!config[:use_compression]
+        @use_compression = config[:use_compression].nil? || !config[:use_compression].nil?
 
         # For compatibility with the processor interface
         @processes = @max_processes
@@ -110,13 +111,13 @@ module Minigun
             # Send results back to parent
             begin
               send_results_to_parent(write_pipe, results)
-            rescue => e
+            rescue StandardError => e
               # Handle errors in sending results
               @logger.error("[Minigun:#{@job_id}][#{@name}] Error sending results to parent: #{e.message}")
               # Try to send error information
               begin
                 write_pipe.write(Marshal.dump({ error: e.message, backtrace: e.backtrace }))
-              rescue
+              rescue StandardError
                 # Last-ditch effort to communicate failure
                 write_pipe.write("ERROR: #{e.message}")
               ensure
@@ -136,7 +137,7 @@ module Minigun
             # Handle errors in child process
             begin
               write_pipe.write(Marshal.dump({ error: e.message, backtrace: e.backtrace }))
-            rescue
+            rescue StandardError
               # Last-ditch effort to communicate failure
               write_pipe.write("ERROR: #{e.message}")
             ensure
@@ -183,12 +184,12 @@ module Minigun
         # Process items in batches to allow periodic GC
         items_count = items.count
         batch_size = [100, (items_count / 10.0).ceil].min
-        
+
         if batch_size > 1 && items_count > batch_size
           items.each_slice(batch_size) do |batch|
             # Execute the fork block for this batch
             process_batch(batch)
-            
+
             # Periodic GC to prevent memory bloat
             GC.start if rand < GC_PROBABILITY
           end
@@ -244,12 +245,12 @@ module Minigun
         # Process smaller batches to allow GC if needed
         items_count = items.count
         batch_size = [100, (items_count / 10.0).ceil].min
-        
+
         if batch_size > 1 && items_count > batch_size
           items.each_slice(batch_size) do |batch|
             # Execute the fork block for this batch
             process_batch(batch)
-            
+
             # Periodic GC to prevent memory bloat
             GC.start if rand < GC_PROBABILITY
           end
@@ -299,10 +300,10 @@ module Minigun
           # Only use compression if it's actually smaller
           if compressed.bytesize < serialized.bytesize
             serialized = compressed
-            format = (format == :msgpack) ? :msgpack_compressed : :marshal_compressed
+            format = format == :msgpack ? :msgpack_compressed : :marshal_compressed
           end
         end
-        
+
         # Send format identifier (1 byte)
         format_byte = case format
                       when :msgpack then 1
@@ -311,7 +312,7 @@ module Minigun
                       when :marshal_compressed then 4
                       end
         pipe.write([format_byte].pack('C'))
-        
+
         # For large results, send in chunks
         if serialized.bytesize > MAX_CHUNK_SIZE
           send_chunked_data(pipe, serialized)
@@ -321,15 +322,15 @@ module Minigun
           pipe.write(serialized)
         end
       end
-      
+
       def send_chunked_data(pipe, data)
         # Split data into chunks
-        chunks = data.scan(/.{1,#{MAX_CHUNK_SIZE}}/m)
-        
+        chunks = data.scan(/.{1,#{MAX_CHUNK_SIZE}}/mo)
+
         # Mark as chunked with total size and number of chunks
-        pipe.write([0xFFFFFFFF].pack('L'))  # Special marker for chunked data
+        pipe.write([0xFFFFFFFF].pack('L')) # Special marker for chunked data
         pipe.write([data.bytesize, chunks.size].pack('LL'))
-        
+
         # Send each chunk
         chunks.each do |chunk|
           pipe.write([chunk.bytesize].pack('L'))
@@ -338,65 +339,61 @@ module Minigun
       end
 
       def receive_results_from_child(pipe)
-        begin
-          # Set up non-blocking read with timeout
-          ready = IO.select([pipe], nil, nil, @pipe_timeout)
-          unless ready
-            raise Timeout::Error, "Timeout waiting for child process data"
+        # Set up non-blocking read with timeout
+        ready = IO.select([pipe], nil, nil, @pipe_timeout)
+        raise Timeout::Error, 'Timeout waiting for child process data' unless ready
+
+        # Read format byte
+        format_byte = pipe.read(1)
+        return { error: 'Empty pipe' } unless format_byte
+
+        format_byte = format_byte.unpack1('C')
+
+        # Read data size
+        size_data = pipe.read(4)
+        return { error: 'Invalid pipe data (size)' } unless size_data
+
+        size = size_data.unpack1('L')
+
+        # Check if data is chunked
+        if size == 0xFFFFFFFF
+          # Read total size and chunk count
+          _, chunk_count = pipe.read(8).unpack('LL')
+
+          # Read and concatenate chunks
+          data = ''
+          chunk_count.times do
+            chunk_size = pipe.read(4).unpack1('L')
+            chunk = pipe.read(chunk_size)
+            data << chunk
           end
-          
-          # Read format byte
-          format_byte = pipe.read(1)
-          return { error: "Empty pipe" } unless format_byte
-          
-          format_byte = format_byte.unpack('C')[0]
-          
-          # Read data size
-          size_data = pipe.read(4)
-          return { error: "Invalid pipe data (size)" } unless size_data
-          
-          size = size_data.unpack('L')[0]
-          
-          # Check if data is chunked
-          if size == 0xFFFFFFFF
-            # Read total size and chunk count
-            total_size, chunk_count = pipe.read(8).unpack('LL')
-            
-            # Read and concatenate chunks
-            data = ""
-            chunk_count.times do
-              chunk_size = pipe.read(4).unpack('L')[0]
-              chunk = pipe.read(chunk_size)
-              data << chunk
-            end
-          else
-            # Read data directly
-            data = pipe.read(size)
-          end
-          
-          # Process based on format
-          case format_byte
-          when 1 # msgpack
-            defined?(MessagePack) ? MessagePack.unpack(data) : Marshal.load(data)
-          when 2 # marshal
-            Marshal.load(data)
-          when 3 # msgpack_compressed
-            decompressed = Zlib::Inflate.inflate(data)
-            defined?(MessagePack) ? MessagePack.unpack(decompressed) : Marshal.load(decompressed)
-          when 4 # marshal_compressed
-            Marshal.load(Zlib::Inflate.inflate(data))
-          else
-            { error: "Unknown format: #{format_byte}" }
-          end
-        rescue Timeout::Error => e
-          { error: "Timeout reading from pipe: #{e.message}" }
-        rescue EOFError => e
-          { error: "EOF reading from pipe: #{e.message}" }
-        rescue Errno::EPIPE, Errno::ECONNRESET => e
-          { error: "Pipe broken: #{e.message}" }
-        rescue StandardError => e
-          { error: "Error reading from pipe: #{e.class}: #{e.message}", backtrace: e.backtrace }
+        else
+          # Read data directly
+          data = pipe.read(size)
         end
+
+        # Process based on format
+        case format_byte
+        when 1 # msgpack
+          defined?(MessagePack) ? MessagePack.unpack(data) : Marshal.load(data)
+        when 2 # marshal
+          Marshal.load(data)
+        when 3 # msgpack_compressed
+          decompressed = Zlib::Inflate.inflate(data)
+          defined?(MessagePack) ? MessagePack.unpack(decompressed) : Marshal.load(decompressed)
+        when 4 # marshal_compressed
+          Marshal.load(Zlib::Inflate.inflate(data))
+        else
+          { error: "Unknown format: #{format_byte}" }
+        end
+      rescue Timeout::Error => e
+        { error: "Timeout reading from pipe: #{e.message}" }
+      rescue EOFError => e
+        { error: "EOF reading from pipe: #{e.message}" }
+      rescue Errno::EPIPE, Errno::ECONNRESET => e
+        { error: "Pipe broken: #{e.message}" }
+      rescue StandardError => e
+        { error: "Error reading from pipe: #{e.class}: #{e.message}", backtrace: e.backtrace }
       end
 
       def wait_for_available_process_slot
@@ -426,7 +423,11 @@ module Minigun
               # Process has finished, read the results
               begin
                 results = receive_results_from_child(child[:pipe])
-                child[:pipe].close rescue nil
+                begin
+                  child[:pipe].close
+                rescue StandardError
+                  nil
+                end
 
                 # Check for errors in child
                 if results[:error]
@@ -448,14 +449,14 @@ module Minigun
                 # Make sure pipe is closed
                 begin
                   child[:pipe].close unless child[:pipe].closed?
-                rescue
+                rescue StandardError
                   # Ignore errors closing pipe
                 end
               end
 
               # Process duration for logging
               duration = Time.now - child[:start_time]
-              status_code = $?.exitstatus
+              status_code = $CHILD_STATUS.exitstatus
               if status_code == 0
                 @logger.info("[Minigun:#{@job_id}][#{@name}] Child process #{child[:pid]} completed successfully in #{duration.round(2)}s")
               else
