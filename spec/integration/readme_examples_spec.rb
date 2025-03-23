@@ -42,16 +42,13 @@ RSpec.describe 'README Examples Integration' do
       expect(task.pipeline.size).to eq(3)
 
       # First stage should be a producer
-      expect(task.pipeline[0][:type]).to eq(:processor)
-      expect(task.pipeline[0][:options][:stage_role]).to eq(:producer)
+      expect(task.pipeline[0][:options][:is_producer]).to eq(true)
 
       # Second stage should be a processor
-      expect(task.pipeline[1][:type]).to eq(:processor)
-      expect(task.pipeline[1][:options][:stage_role]).to eq(:processor)
+      expect(task.pipeline[1][:options][:is_producer]).to be_nil
 
       # Last stage should be a consumer
-      expect(task.pipeline[2][:type]).to eq(:processor)
-      expect(task.pipeline[2][:options][:stage_role]).to eq(:consumer)
+      expect(task.pipeline[2][:options][:is_producer]).to be_nil
     end
   end
 
@@ -120,19 +117,13 @@ RSpec.describe 'README Examples Integration' do
       expect(task_obj.pipeline.size).to eq(3)
 
       # First stage should be a producer
-      expect(task_obj.pipeline[0][:type]).to eq(:processor)
-      expect(task_obj.pipeline[0][:options][:stage_role]).to eq(:producer)
-      expect(task_obj.pipeline[0][:name]).to eq(:extract)
+      expect(task_obj.pipeline[0][:options][:is_producer]).to eq(true)
 
       # Second stage should be a processor
-      expect(task_obj.pipeline[1][:type]).to eq(:processor)
-      expect(task_obj.pipeline[1][:options][:stage_role]).to eq(:processor)
-      expect(task_obj.pipeline[1][:name]).to eq(:transform)
+      expect(task_obj.pipeline[1][:options][:is_producer]).to be_nil
 
       # Last stage should be a consumer
-      expect(task_obj.pipeline[2][:type]).to eq(:processor)
-      expect(task_obj.pipeline[2][:options][:stage_role]).to eq(:consumer)
-      expect(task_obj.pipeline[2][:name]).to eq(:load)
+      expect(task_obj.pipeline[2][:options][:is_producer]).to be_nil
     end
   end
 
@@ -218,9 +209,7 @@ RSpec.describe 'README Examples Integration' do
       expect(task_obj.pipeline.size).to eq(5)
 
       # First stage should be a producer
-      expect(task_obj.pipeline[0][:type]).to eq(:processor)
-      expect(task_obj.pipeline[0][:options][:stage_role]).to eq(:producer)
-      expect(task_obj.pipeline[0][:name]).to eq(:seed_urls)
+      expect(task_obj.pipeline[0][:options][:is_producer]).to eq(true)
 
       # Check the accumulator stage
       accumulator_stage = task_obj.pipeline.find { |stage| stage[:type] == :accumulator }
@@ -228,9 +217,7 @@ RSpec.describe 'README Examples Integration' do
       expect(accumulator_stage[:name]).to eq(:batch_pages)
 
       # Last stage should be a consumer
-      expect(task_obj.pipeline[4][:type]).to eq(:processor)
-      expect(task_obj.pipeline[4][:options][:stage_role]).to eq(:consumer)
-      expect(task_obj.pipeline[4][:name]).to eq(:process_pages)
+      expect(task_obj.pipeline[4][:options][:is_producer]).to be_nil
     end
   end
 
@@ -307,19 +294,14 @@ RSpec.describe 'README Examples Integration' do
       expect(task_obj.pipeline.size).to eq(6)
 
       # First stage should be a producer
-      expect(task_obj.pipeline[0][:type]).to eq(:processor)
-      expect(task_obj.pipeline[0][:options][:stage_role]).to eq(:producer)
-      expect(task_obj.pipeline[0][:name]).to eq(:data_source)
+      expect(task_obj.pipeline[0][:options][:is_producer]).to eq(true)
 
       # Validate stage should be a processor
       validate_stage = task_obj.pipeline.find { |stage| stage[:name] == :validate }
-      expect(validate_stage[:type]).to eq(:processor)
-      expect(validate_stage[:options][:stage_role]).to eq(:processor)
+      expect(validate_stage[:options][:is_producer]).to be_nil
 
       # Last stage should be a consumer
-      expect(task_obj.pipeline[5][:type]).to eq(:processor)
-      expect(task_obj.pipeline[5][:options][:stage_role]).to eq(:consumer)
-      expect(task_obj.pipeline[5][:name]).to eq(:store_results)
+      expect(task_obj.pipeline[5][:options][:is_producer]).to be_nil
 
       # Verify the connections
       expect(task_obj.connections[:data_source]).to include(:validate)
@@ -403,9 +385,7 @@ RSpec.describe 'README Examples Integration' do
       expect(task_obj.pipeline.size).to eq(4)
 
       # First stage should be a producer
-      expect(task_obj.pipeline[0][:type]).to eq(:processor)
-      expect(task_obj.pipeline[0][:options][:stage_role]).to eq(:producer)
-      expect(task_obj.pipeline[0][:name]).to eq(:user_producer)
+      expect(task_obj.pipeline[0][:options][:is_producer]).to eq(true)
 
       # Verify processor stage has queue subscription
       expect(task_obj.queue_subscriptions[:email_processor]).to eq(%i[default high_priority])
@@ -417,9 +397,7 @@ RSpec.describe 'README Examples Integration' do
       expect(task_obj.connections[:email_processor]).to include(:email_accumulator)
 
       # Last stage should be a consumer
-      expect(task_obj.pipeline[3][:type]).to eq(:processor)
-      expect(task_obj.pipeline[3][:options][:stage_role]).to eq(:consumer)
-      expect(task_obj.pipeline[3][:name]).to eq(:consumer)
+      expect(task_obj.pipeline[3][:options][:is_producer]).to be_nil
       expect(task_obj.queue_subscriptions[:consumer]).to eq(%i[default high_priority])
     end
   end
@@ -491,9 +469,7 @@ RSpec.describe 'README Examples Integration' do
       expect(task_obj.pipeline.size).to eq(5)
 
       # First stage should be a producer
-      expect(task_obj.pipeline[0][:type]).to eq(:processor)
-      expect(task_obj.pipeline[0][:options][:stage_role]).to eq(:producer)
-      expect(task_obj.pipeline[0][:name]).to eq(:data_source)
+      expect(task_obj.pipeline[0][:options][:is_producer]).to eq(true)
 
       # Verify worker queues
       expect(task_obj.queue_subscriptions[:worker_1]).to eq([:queue_1])

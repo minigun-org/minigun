@@ -6,7 +6,7 @@ require 'ostruct'
 module Minigun
   module Stages
     # Unified processor stage that can function with different roles 
-    # (producer, processor, or consumer) based on configuration
+    # (producer or processor) based on configuration
     class Processor < Base
       # ResultWrapper class provides a simple wrapper for results that don't respond to wait
       ResultWrapper = Struct.new(:wait, :value)
@@ -16,7 +16,8 @@ module Minigun
         @processed_count = Concurrent::AtomicFixnum.new(0)
         @failed_count = Concurrent::AtomicFixnum.new(0)
         @emitted_count = Concurrent::AtomicFixnum.new(0)
-        @stage_role = options[:stage_role] || :processor
+
+        @is_producer = options[:is_producer] || false
 
         # Set configuration with defaults
         @threads = options[:threads] || options[:max_threads] || 5
@@ -30,34 +31,22 @@ module Minigun
         @block = nil
         @block = @task.stage_blocks[name.to_sym] if @task.stage_blocks[name.to_sym]
 
-        # For :consumer role, initialize fork implementation if needed
-        return unless @stage_role == :consumer
-
-        # Support both fork: and type: parameter syntax
+        # Initialize fork implementation if needed
         fork_type = options[:fork] || options[:type]
-        return unless %i[cow ipc].include?(fork_type)
-
-        init_fork_implementation(fork_type)
+        if %i[cow ipc].include?(fork_type)
+          init_fork_implementation(fork_type)
+        end
       end
 
       # Process a single item
       def process(item)
-        # Run appropriate processing based on stage role
-        case @stage_role
-        when :producer
+        if @is_producer
           # For producer role, the block is called without any arguments
           # and it's expected to call produce() to generate items
-          process_as_role_producer(item)
-        when :processor
-          # For processor role, the block is called with each item
-          # and expected to call emit() to send to next stage
-          process_as_role_processor(item)
-        when :consumer
-          # For consumer role, the block is called with each item/batch
-          # and not expected to emit anything further
-          process_as_role_consumer(item)
+          process_as_producer(item)
         else
-          raise "Unknown stage role: #{@stage_role}"
+          # For processor roles, the block is called with each item
+          process_as_processor(item)
         end
       end
 
@@ -83,7 +72,7 @@ module Minigun
       private
 
       # Process item as a producer role (ignore input item, generate outputs)
-      def process_as_role_producer(_item)
+      def process_as_producer(_item)
         # Prepare the context for producer
         Thread.current[:minigun_queue] = []
 
@@ -115,8 +104,8 @@ module Minigun
         end
       end
 
-      # Process item as a processor role (transform input to output)
-      def process_as_role_processor(item)
+      # Process item as a processor role (transform input)
+      def process_as_processor(item)
         # Call the block with the item
         result = if @block
                    if @block.arity == 0
@@ -147,31 +136,6 @@ module Minigun
       rescue StandardError => e
         @failed_count.increment
         error("[Minigun:#{@job_id}][Stage:#{@name}] Error processing item: #{e.class}: #{e.message}\n#{e.backtrace.join("\n")}")
-        raise e
-      end
-
-      # Process item as a consumer role (take input, produce no output)
-      def process_as_role_consumer(item)
-        # Call the block with the item
-        if @block
-          if @block.arity == 0
-            # If block takes no arguments, use instance_eval
-            @context.instance_exec do
-              # Make the item available as an instance variable
-              @item = item
-              instance_eval(&@block)
-            end
-          else
-            # Otherwise call with the item as argument
-            @context.instance_exec(item, &@block)
-          end
-        end
-
-        @processed_count.increment
-        nil # Consumer role doesn't return a value
-      rescue StandardError => e
-        @failed_count.increment
-        error("[Minigun:#{@job_id}][Stage:#{@name}] Error in consumer role: #{e.class}: #{e.message}\n#{e.backtrace.join("\n")}")
         raise e
       end
 

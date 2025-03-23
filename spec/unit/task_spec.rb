@@ -47,7 +47,7 @@ RSpec.describe Minigun::Task do
       expect(task.pipeline.size).to eq(1)
       expect(task.pipeline.first[:type]).to eq(:processor)
       expect(task.pipeline.first[:name]).to eq(:test_producer)
-      expect(task.pipeline.first[:options][:stage_role]).to eq(:producer)
+      expect(task.pipeline.first[:options][:is_producer]).to eq(true)
     end
 
     it 'adds a processor to the pipeline' do
@@ -58,7 +58,7 @@ RSpec.describe Minigun::Task do
       expect(task.pipeline.size).to eq(1)
       expect(task.pipeline.first[:type]).to eq(:processor)
       expect(task.pipeline.first[:name]).to eq(:test_processor)
-      expect(task.pipeline.first[:options][:stage_role]).to eq(:processor)
+      expect(task.pipeline.first[:options][:is_producer]).to be_nil
     end
 
     it 'adds an accumulator to the pipeline' do
@@ -79,7 +79,7 @@ RSpec.describe Minigun::Task do
       expect(task.pipeline.size).to eq(1)
       expect(task.pipeline.first[:type]).to eq(:processor)
       expect(task.pipeline.first[:name]).to eq(:test_consumer)
-      expect(task.pipeline.first[:options][:stage_role]).to eq(:consumer)
+      expect(task.pipeline.first[:options][:is_producer]).to be_nil
     end
   end
 

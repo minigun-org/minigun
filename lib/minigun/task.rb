@@ -82,7 +82,7 @@ module Minigun
     def add_producer(name = :default, options = {}, &block)
       # Process connection options
       options = process_connection_options(name, options)
-      options[:stage_role] = :producer
+      options[:is_producer] = true
 
       # Store the block
       @stage_blocks[name] = block if block_given?
@@ -99,7 +99,6 @@ module Minigun
     def add_processor(name = :default, options = {}, &block)
       # Process connection options
       options = process_connection_options(name, options)
-      options[:stage_role] = :processor
 
       # Store the processor block
       @stage_blocks[name] = block if block_given?
@@ -136,7 +135,6 @@ module Minigun
     def add_consumer(name = :default, options = {}, &block)
       # Process connection options
       options = process_connection_options(name, options)
-      options[:stage_role] = :consumer
 
       # Extract consumer-specific options with appropriate defaults
       # Support fork: as an alternative to type:
@@ -154,7 +152,7 @@ module Minigun
 
       # Record stage in pipeline
       @pipeline << {
-        type: :processor, # Use processor type with consumer role
+        type: :processor, # Consumers are just processors
         name: name,
         options: options
       }

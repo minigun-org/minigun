@@ -68,9 +68,9 @@ RSpec.describe Minigun::Pipeline do
       pipeline = described_class.new(real_task, test_config)
 
       # Add the real stages
-      pipeline.add_stage(:processor, :test_producer, test_config.merge(stage_role: :producer))
+      pipeline.add_stage(:processor, :test_producer, test_config.merge(is_producer: true))
       pipeline.add_stage(:processor, :test_processor, test_config)
-      pipeline.add_stage(:processor, :test_consumer, test_config.merge(stage_role: :consumer))
+      pipeline.add_stage(:processor, :test_consumer, test_config)
 
       # Connect stages
       pipeline.instance_variable_set(:@stage_connections, {
@@ -164,7 +164,7 @@ RSpec.describe Minigun::Pipeline do
       pipeline = described_class.new(branching_task, test_config)
 
       # Add the stages
-      pipeline.add_stage(:processor, :source, test_config.merge(stage_role: :producer))
+      pipeline.add_stage(:processor, :source, test_config.merge(is_producer: true))
       pipeline.add_stage(:processor, :double, test_config)
       pipeline.add_stage(:processor, :triple, test_config)
 

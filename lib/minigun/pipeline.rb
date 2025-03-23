@@ -252,7 +252,7 @@ module Minigun
       task.add_producer(name, options, &block)
 
       # Add to pipeline
-      @pipeline.add_stage(Minigun::Stages::Processor, name, options.merge(stage_role: :producer))
+      @pipeline.add_stage(Minigun::Stages::Processor, name, options.merge(is_producer: true))
     end
 
     # Define a processor stage
@@ -285,7 +285,7 @@ module Minigun
       task.add_consumer(name, options, &block)
 
       # Add to pipeline
-      @pipeline.add_stage(Minigun::Stages::Processor, name, options.merge(stage_role: :consumer))
+      @pipeline.add_stage(Minigun::Stages::Processor, name, options)
     end
 
     # Define a cow_fork consumer
