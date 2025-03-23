@@ -386,7 +386,7 @@ end
 Minigun supports hooks for various lifecycle events:
 
 ```ruby
-class TaskWithHooks
+class Hooks
   include Minigun::Task
   
   before_run do

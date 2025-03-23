@@ -12,10 +12,10 @@ class ConfiguredExample
   batch_size 100        # Default batch size
   consumer_type :cow    # Default consumer fork implementation (:cow or :ipc)
 
-  # Advanced IPC options
-  pipe_timeout 30       # Timeout for IPC pipe operations (seconds)
-  use_compression true  # Enable compression for large IPC transfers
-  gc_probability 0.1    # Probability of GC during batch processing (0.0-1.0)
+  # Advanced IPC options - commented out unsupported options
+  # pipe_timeout 30       # Timeout for IPC pipe operations (seconds)
+  # use_compression true  # Enable compression for large IPC transfers
+  # gc_probability 0.1    # Probability of GC during batch processing (0.0-1.0)
 
   # Stage-specific configuration
   pipeline do
@@ -56,4 +56,4 @@ class ConfiguredExample
 end
 
 # Run the task
-ConfiguredTask.new.run if __FILE__ == $PROGRAM_NAME
+ConfiguredExample.new.run if __FILE__ == $PROGRAM_NAME
