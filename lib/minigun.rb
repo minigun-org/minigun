@@ -27,4 +27,16 @@ require_relative 'minigun/pipeline_dsl'
 
 # Minigun is a high-performance parallel data processing framework.
 module Minigun
+  # Singleton logger instance
+  @logger = Logger.new($stdout)
+  
+  class << self
+    attr_writer :logger
+    
+    # Get the logger instance
+    # @return [Logger] the logger
+    def logger
+      @logger
+    end
+  end
 end

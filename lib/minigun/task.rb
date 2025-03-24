@@ -6,7 +6,7 @@ module Minigun
     attr_reader :hooks, :pipeline, :connections, :queue_subscriptions
     attr_accessor :config, :stage_blocks, :pipeline_definition, :accumulated_items
 
-    def initialize
+    def initialize(options = {})
       @config = {
         max_threads: 5,
         max_processes: 2,
@@ -19,6 +19,9 @@ module Minigun
         fork_mode: :auto, # :auto, :always, :never
         consumer_type: :ipc # :ipc or :cow
       }
+      
+      # Apply any options passed in the initializer
+      @config.merge!(options) if options.is_a?(Hash)
 
       # Initialize hook arrays
       @hooks = {
@@ -48,7 +51,7 @@ module Minigun
       # Initialize accumulated items for testing
       @accumulated_items = []
     end
-    
+
     # Generic method to add a stage of any type
     def add_stage(type, name = :default, options = {}, &block)
       # Process connection options

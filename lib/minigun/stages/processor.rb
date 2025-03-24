@@ -34,6 +34,9 @@ module Minigun
       def process(item)
         return if item.nil?
 
+        # Track remaining retries separately from the initial setting
+        retries_left = @max_retries
+        
         begin
           # Keep track of items processed
           @processed_count.increment
@@ -58,9 +61,9 @@ module Minigun
           Minigun.logger.error(e.backtrace.join("\n")) if e.backtrace
           
           # If we have retries left, retry
-          if @max_retries > 0
-            @max_retries -= 1
-            Minigun.logger.info("Retrying #{@name} stage (#{@max_retries} retries left)")
+          if retries_left > 0
+            retries_left -= 1
+            Minigun.logger.info("Retrying #{@name} stage (#{retries_left} retries left)")
             retry
           end
           
@@ -124,11 +127,11 @@ module Minigun
 
         # Call the block with the appropriate arguments
         if block.arity == 1
-          block.call(item)
+          execution_context.instance_exec(item, &block)
         elsif block.arity == 2
-          block.call(item, execution_context)
+          execution_context.instance_exec(item, execution_context, &block)
         else
-          block.call
+          execution_context.instance_exec(&block)
         end
       end
 
