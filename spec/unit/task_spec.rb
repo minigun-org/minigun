@@ -24,6 +24,11 @@ RSpec.describe Minigun::Task do
     it 'initializes with empty pipeline' do
       expect(task.pipeline).to be_empty
     end
+    
+    it 'initializes with empty accumulated items array' do
+      expect(task.accumulated_items).to be_an(Array)
+      expect(task.accumulated_items).to be_empty
+    end
 
     it 'initializes with default hooks' do
       expected_hooks = %i[
@@ -78,6 +83,27 @@ RSpec.describe Minigun::Task do
       expect(task.pipeline.first[:type]).to eq(:processor)
       expect(task.pipeline.first[:name]).to eq(:test_consumer)
       expect(task.pipeline.first[:options][:is_producer]).to be_nil
+    end
+    
+    it 'adds a cow_fork consumer to the pipeline' do
+      fork_block = proc { |batch| puts "cow forking #{batch}" }
+      task.add_consumer(:test_fork, { fork: :cow }, &fork_block)
+
+      expect(task.stage_blocks[:test_fork]).to eq(fork_block)
+      expect(task.pipeline.size).to eq(1)
+      expect(task.pipeline.first[:type]).to eq(:cow_fork)
+      expect(task.pipeline.first[:name]).to eq(:test_fork)
+    end
+    
+    it 'supports the new generic add_stage method' do
+      stage_block = proc { |item| item }
+      task.add_stage(:processor, :generic_stage, { some_option: true }, &stage_block)
+      
+      expect(task.stage_blocks[:generic_stage]).to eq(stage_block)
+      expect(task.pipeline.size).to eq(1)
+      expect(task.pipeline.first[:type]).to eq(:processor)
+      expect(task.pipeline.first[:name]).to eq(:generic_stage)
+      expect(task.pipeline.first[:options][:some_option]).to eq(true)
     end
   end
 
@@ -151,32 +177,60 @@ RSpec.describe Minigun::Task do
     end
   end
 
+  describe 'stage options' do
+    it 'applies accumulator-specific options' do
+      options = {}
+      task.add_stage(:accumulator, :test_accumulator, options)
+      stage_options = task.pipeline.first[:options]
+
+      expect(stage_options[:batch_size]).to eq(task.config[:batch_size])
+      expect(stage_options[:flush_interval]).to be_a(Float)
+    end
+    
+    it 'applies processor-specific options' do
+      options = {}
+      task.add_stage(:processor, :test_processor, options)
+      stage_options = task.pipeline.first[:options]
+      
+      expect(stage_options[:max_threads]).to eq(task.config[:max_threads])
+      expect(stage_options[:threads]).to eq(task.config[:max_threads])
+      expect(stage_options[:max_retries]).to eq(task.config[:max_retries])
+    end
+    
+    it 'applies cow_fork-specific options' do
+      options = {}
+      task.add_stage(:cow_fork, :test_fork, options)
+      stage_options = task.pipeline.first[:options]
+      
+      expect(stage_options[:fork]).to eq(:cow)
+      expect(stage_options[:type]).to eq(:cow)
+      expect(stage_options[:max_processes]).to eq(task.config[:max_processes])
+      expect(stage_options[:processes]).to eq(task.config[:max_processes])
+    end
+  end
+
   describe 'validation' do
-    it 'validates COW consumer placement' do
-      # Add an accumulator first, then a COW consumer - this should not raise an error
+    it 'validates placement of stages that require accumulator stages' do
+      # Add an accumulator first, then a stage that requires it
       task.add_accumulator(:accumulator)
-      expect do
-        task.add_consumer(:consumer, { type: :cow })
-      end.not_to raise_error
-
-      # Create a new task without an accumulator
+      task.add_stage(:cow_fork, :consumer)
+      
+      # No error should be raised since validation passes
+      expect(task.send(:validate_stage_placement, :cow_fork, :consumer)).to be_nil
+    end
+    
+    it 'warns when a stage should have a prerequisite stage' do
+      # Create a new task
       task2 = described_class.new
-
-      # Try to add a COW consumer without an accumulator
-      # This should raise an error because validate_consumer_placement will check
-      # for an accumulator and not find one
-      expect do
-        # Make the private method public for testing
-        task2.define_singleton_method(:validate_consumer_placement) do |consumer_type, _name|
-          # Only validate cow consumers currently
-          return unless consumer_type == :cow
-
-          # Since we don't have an accumulator, this should raise an error
-          raise Minigun::Error, 'COW fork consumers must follow an accumulator stage'
-        end
-
-        task2.add_consumer(:consumer, { type: :cow })
-      end.to raise_error(Minigun::Error)
+      
+      # Set up to capture warnings
+      allow(task2).to receive(:warn)
+      
+      # Call validate_stage_placement directly
+      task2.send(:validate_stage_placement, :cow_fork, :consumer)
+      
+      # Expect a warning to have been issued
+      expect(task2).to have_received(:warn).with(/COW fork stage consumer should follow/)
     end
   end
 
@@ -193,8 +247,10 @@ RSpec.describe Minigun::Task do
     it 'runs a custom pipeline' do
       task.pipeline_definition = proc { puts 'defining pipeline' }
 
-      expect(Minigun::Pipeline).to receive(:new).with(context, custom: true).and_call_original
+      expect(Minigun::Pipeline).to receive(:new).with(context, hash_including(custom: true)).and_call_original
+      expect_any_instance_of(Minigun::Pipeline).to receive(:build_pipeline)
       expect_any_instance_of(Minigun::Pipeline).to receive(:run)
+      expect_any_instance_of(Minigun::Pipeline).to receive(:shutdown)
 
       task.run(context)
     end

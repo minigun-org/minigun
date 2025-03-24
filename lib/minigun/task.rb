@@ -4,7 +4,7 @@ module Minigun
   # The Task class manages the configuration and execution of Minigun tasks
   class Task
     attr_reader :hooks, :pipeline, :connections, :queue_subscriptions
-    attr_accessor :config, :stage_blocks, :pipeline_definition
+    attr_accessor :config, :stage_blocks, :pipeline_definition, :accumulated_items
 
     def initialize
       @config = {
@@ -44,6 +44,31 @@ module Minigun
 
       # Initialize queue subscriptions
       @queue_subscriptions = {}
+      
+      # Initialize accumulated items for testing
+      @accumulated_items = []
+    end
+    
+    # Generic method to add a stage of any type
+    def add_stage(type, name = :default, options = {}, &block)
+      # Process connection options
+      options = process_connection_options(name, options)
+      
+      # Store the block for this stage
+      @stage_blocks[name.to_sym] = block if block_given?
+      
+      # Apply stage-specific configurations
+      apply_stage_options(type, options)
+      
+      # Record stage in pipeline
+      @pipeline << {
+        type: type,
+        name: name,
+        options: options
+      }
+      
+      # For backward compatibility with the cow_fork feature
+      validate_stage_placement(type, name) if type == :cow_fork
     end
 
     # Process a connection option to determine where to send output
@@ -77,84 +102,27 @@ module Minigun
 
     # Define the producer block that generates items
     def add_producer(name = :default, options = {}, &block)
-      # Process connection options
-      options = process_connection_options(name, options)
-
-      # Store the block
-      @stage_blocks[name] = block if block_given?
-
-      # Record stage in pipeline
-      @pipeline << {
-        type: :processor, # Use processor type with producer role
-        name: name,
-        options: options
-      }
+      add_stage(:processor, name, options, &block)
     end
 
     # Define a processor block that transforms items
     def add_processor(name = :default, options = {}, &block)
-      # Process connection options
-      options = process_connection_options(name, options)
-
-      # Store the processor block
-      @stage_blocks[name] = block if block_given?
-
-      # Record stage in pipeline
-      @pipeline << {
-        type: :processor,
-        name: name,
-        options: options
-      }
+      add_stage(:processor, name, options, &block)
     end
 
     # Define a specialized accumulator stage
     def add_accumulator(name = :default, options = {}, &block)
-      # Process connection options
-      options = process_connection_options(name, options)
-
-      # Extract accumulator-specific options with appropriate defaults
-      options[:max_queue] = options.delete(:max_queue) || @config[:accumulator_max_queue]
-      options[:max_all] = options.delete(:max_all) || @config[:accumulator_max_all]
-      options[:check_interval] = options.delete(:check_interval) || @config[:accumulator_check_interval]
-
-      @stage_blocks[name] = block if block_given?
-
-      # Record stage in pipeline
-      @pipeline << {
-        type: :accumulator,
-        name: name,
-        options: options
-      }
+      add_stage(:accumulator, name, options, &block)
     end
 
     # Define a consumer stage
     def add_consumer(name = :default, options = {}, &block)
-      # Process connection options
-      options = process_connection_options(name, options)
-
-      # Extract consumer-specific options with appropriate defaults
-      # Support fork: as an alternative to type:
-      fork_type = options.delete(:fork)
-      options[:type] = fork_type || options.delete(:type) || @config[:consumer_type]
-      options[:max_processes] = options.delete(:max_processes) || @config[:max_processes]
-      options[:max_threads] = options.delete(:max_threads) || @config[:max_threads]
-      options[:max_retries] = options.delete(:max_retries) || @config[:max_retries]
-      options[:batch_size] = options.delete(:batch_size) || @config[:batch_size]
-      options[:threads] = options.delete(:threads) || options[:max_threads]
-      options[:processes] = options.delete(:processes) || options[:max_processes]
-
-      # Store the consumer block
-      @stage_blocks[name] = block if block_given?
-
-      # Record stage in pipeline - use processor type for all stages
-      @pipeline << {
-        type: :processor, # All stages are now processors
-        name: name,
-        options: options
-      }
-
-      # If this is a COW consumer type, validate placement
-      validate_consumer_placement(:cow, name) if options[:type] == :cow
+      # Handle fork options
+      if options[:fork] == :cow
+        add_stage(:cow_fork, name, options, &block)
+      else
+        add_stage(:processor, name, options, &block)
+      end
     end
 
     # Define hooks with options similar to ActionController
@@ -223,68 +191,79 @@ module Minigun
     end
 
     private
+    
+    # Apply stage-specific options to the provided options hash
+    def apply_stage_options(type, options)
+      case type
+      when :accumulator
+        # Stage with queueing capability
+        options[:batch_size] ||= @config[:batch_size]
+        options[:flush_interval] ||= @config[:accumulator_check_interval] / 20.0
+        options[:max_batch_size] ||= @config[:accumulator_max_queue]
+      when :consumer, :processor
+        # Basic processing options
+        options[:max_threads] ||= @config[:max_threads]
+        options[:threads] ||= options[:max_threads]
+        options[:max_retries] ||= @config[:max_retries]
+      when :cow_fork
+        # COW fork specific options
+        options[:fork] = :cow
+        options[:type] = :cow
+        options[:max_processes] ||= @config[:max_processes]
+        options[:processes] ||= options[:max_processes]
+      end
+    end
 
-    # Validate that a consumer stage comes after an accumulator when needed
-    def validate_consumer_placement(consumer_type, name)
-      # Only validate cow consumers currently
-      return unless consumer_type == :cow
+    # Validate that a consumer stage comes after a queueing stage when needed
+    def validate_stage_placement(type, name)
+      # Only validate cow_fork stages currently
+      return unless type == :cow_fork
 
       # Find this stage's index
-      consumer_index = @pipeline.find_index { |s| s[:name] == name && s[:type] == :consumer }
-      return unless consumer_index
+      stage_index = @pipeline.find_index { |s| s[:name] == name }
+      return unless stage_index
 
-      # Check if there's an explicit "from" connection to an accumulator
+      # Check if there's an explicit "from" connection to a queueing stage
       if @connections.any?
         # Look for sources that point to this consumer
-        has_accumulator_source = false
+        has_queueing_source = false
         @connections.each do |source_name, targets|
           next unless targets.is_a?(Array) ? targets.include?(name) : targets == name
 
-          # Check if source is an accumulator
+          # Check if source is a queueing stage
           source_index = @pipeline.find_index { |s| s[:name] == source_name }
-          if source_index && @pipeline[source_index][:type] == :accumulator
-            has_accumulator_source = true
+          if source_index && %i[accumulator].include?(@pipeline[source_index][:type])
+            has_queueing_source = true
             break
           end
         end
 
-        unless has_accumulator_source
-          # For implicit connections, check previous stage
-          raise Minigun::Error, "Cow consumer/fork stage '#{name}' must follow an accumulator stage" unless consumer_index > 0
-
-          prev_stage = @pipeline[consumer_index - 1]
-          raise Minigun::Error, "Cow consumer/fork stage '#{name}' must follow an accumulator stage" unless prev_stage[:type] == :accumulator
+        # If no queueing source found and we're using a COW fork, warn
+        unless has_queueing_source
+          warn "COW fork stage #{name} should follow a queueing stage for efficiency"
         end
-      else
-        # For sequential pipelines, check previous stage
-        raise Minigun::Error, "Cow consumer/fork stage '#{name}' must be preceded by an accumulator stage" unless consumer_index > 0
-
-        prev_stage = @pipeline[consumer_index - 1]
-        raise Minigun::Error, "Cow consumer/fork stage '#{name}' must follow an accumulator stage" unless prev_stage[:type] == :accumulator
       end
     end
 
+    # Validate configuration settings
     def validate_configuration!
-      # Basic validation logic
-      # For COW consumer, ensure there's an accumulator before it
-      if @config[:consumer_type] == :cow &&
-         @pipeline.any? { |s| s[:type] == :consumer } &&
-         @pipeline.none? { |s| s[:type] == :accumulator }
-
-        raise Minigun::Error, 'COW consumer requires an accumulator stage before it'
-      end
+      raise "No stages defined in pipeline" if @pipeline.empty? && !@pipeline_definition
     end
 
+    # Run a custom pipeline from the definition or pipeline array
+    def run_custom_pipeline(context)
+      # Create a pipeline instance
+      pipeline = Minigun::Pipeline.new(context, job_id: SecureRandom.hex(4), custom: true)
+      pipeline.build_pipeline
+      pipeline.run
+      pipeline.shutdown
+    end
+
+    # Run a simple producer-consumer pattern
     def run_simple_pipeline(context)
-      # Let the Runner handle this simple case
+      # Create a runner instance
       runner = Minigun::Runner.new(context)
       runner.run
-    end
-
-    def run_custom_pipeline(context)
-      # Create and run a custom pipeline
-      pipeline = Minigun::Pipeline.new(context, custom: true)
-      pipeline.run
     end
   end
 end

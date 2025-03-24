@@ -4,6 +4,25 @@ module Minigun
   module Stages
     # Accumulator stage that collects items and batches them
     class Accumulator < Base
+      # Hook that runs when the stage starts - starts the flush timer
+      before_start do
+        @flush_timer = Concurrent::TimerTask.new(execution_interval: @flush_interval) do
+          flush_all_batches
+        end
+        @flush_timer.execute
+        debug("[Minigun:#{@job_id}][#{@name}] Started flush timer with interval #{@flush_interval}s")
+      end
+      
+      # Hook that runs when the stage finishes - flushes batches
+      after_finish do
+        # Shutdown the timer if we have one
+        @flush_timer&.shutdown
+        
+        # Flush all batches
+        flush_all_batches
+        debug("[Minigun:#{@job_id}][#{@name}] Flushed remaining batches during shutdown")
+      end
+      
       def initialize(name, pipeline, options = {})
         super
         @batch_size = options[:batch_size] || 100
@@ -27,19 +46,10 @@ module Minigun
         @block = @task.accumulator_blocks[name.to_sym]
       end
 
-      # Run method starts the flush timer
-      def run
-        on_start
-        @flush_timer = Concurrent::TimerTask.new(execution_interval: @flush_interval) do
-          flush_all_batches
-        end
-        @flush_timer.execute
-      end
-
       # Process a single item
       def process(item)
         # We track processed count
-        @processed_count.increment
+        super
         @accumulated_count.increment
 
         # Call the block if provided, otherwise use default accumulation
@@ -78,26 +88,7 @@ module Minigun
           end
         end
       end
-
-      # Shutdown the stage and flush any remaining batches
-      def shutdown
-        # Shutdown the timer if we have one
-        @flush_timer&.shutdown
-
-        # Flush all batches
-        flush_all_batches
-
-        # Call on_finish hook
-        on_finish
-
-        # Return stats
-        {
-          processed: @processed_count.value,
-          emitted: @emitted_count.value,
-          accumulated: @accumulated_count.value
-        }
-      end
-
+      
       # Force emission of all batches
       def flush
         flush_all_batches
@@ -111,6 +102,13 @@ module Minigun
         debug("Forcing flush of batch with #{@batches[key].size} items of type #{key}")
         flush_batch_items(key, @batches[key])
         @batches[key] = []
+      end
+      
+      # Return accumulator stats
+      def shutdown
+        result = super
+        result[:accumulated] = @accumulated_count.value
+        result
       end
 
       private
@@ -171,23 +169,22 @@ module Minigun
       # Flush items from a specific batch
       def flush_batch_items(key, items)
         return if items.empty?
-
+        
+        # Track flushed items when fork_mode is :never
+        if @pipeline.task.config && @pipeline.task.config[:fork_mode] == :never
+          # Store in both pipeline and task for flexibility
+          @pipeline.instance_variable_set(:@flushed_items, []) unless @pipeline.instance_variable_get(:@flushed_items)
+          @pipeline.instance_variable_get(:@flushed_items) << items
+          
+          # Also store in task for easier access in tests
+          if !@task.instance_variable_defined?(:@accumulated_items)
+            @task.instance_variable_set(:@accumulated_items, [])
+          end
+          @task.instance_variable_get(:@accumulated_items) << items
+        end
+        
         # Split into chunks of batch_size and emit each
         items.each_slice(@batch_size) do |batch_items|
-          # Track flushed items when fork_mode is :never to ensure they can be manually
-          # forwarded to consumer stages
-          if @pipeline.task.config && @pipeline.task.config[:fork_mode] == :never
-            # Store in both pipeline and task for flexibility
-            @pipeline.instance_variable_set(:@flushed_items, []) unless @pipeline.instance_variable_get(:@flushed_items)
-            @pipeline.instance_variable_get(:@flushed_items) << batch_items
-            
-            # Also store in task for easier access in tests
-            if !@task.instance_variable_defined?(:@accumulated_items)
-              @task.instance_variable_set(:@accumulated_items, [])
-            end
-            @task.instance_variable_get(:@accumulated_items) << batch_items
-          end
-          
           emit(batch_items, key.to_sym)
           @emitted_count.increment
         end

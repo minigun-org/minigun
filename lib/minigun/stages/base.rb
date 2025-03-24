@@ -9,6 +9,34 @@ module Minigun
 
       attr_reader :name, :config
 
+      # Class-level storage for hook blocks
+      class << self
+        def before_start_hooks
+          @before_start_hooks ||= []
+        end
+
+        def after_finish_hooks
+          @after_finish_hooks ||= []
+        end
+        
+        # Define a hook that runs before the stage starts
+        def before_start(&block)
+          before_start_hooks << block if block_given?
+        end
+        
+        # Define a hook that runs after the stage finishes
+        def after_finish(&block)
+          after_finish_hooks << block if block_given?
+        end
+        
+        # Inherit hooks when subclassing
+        def inherited(subclass)
+          super
+          subclass.instance_variable_set(:@before_start_hooks, before_start_hooks.dup)
+          subclass.instance_variable_set(:@after_finish_hooks, after_finish_hooks.dup)
+        end
+      end
+
       def initialize(name, pipeline, config = {})
         @name = name
         @pipeline = pipeline
@@ -29,6 +57,12 @@ module Minigun
                 end
 
         @job_id = pipeline.job_id
+        @processed_count = Concurrent::AtomicFixnum.new(0)
+        @emitted_count = Concurrent::AtomicFixnum.new(0)
+
+        # Instance-level hooks for dynamic registration
+        @before_start_hooks = []
+        @after_finish_hooks = []
 
         # Register hooks if provided
         register_hooks
@@ -36,11 +70,13 @@ module Minigun
 
       # Process a single item
       def process(item)
+        @processed_count.increment
         raise NotImplementedError, "#{self.class} must implement #process"
       end
 
       # Send an item to the next stage(s) in the pipeline
       def emit(item, queue = :default)
+        @emitted_count.increment
         # Check if pipeline has the new method
         if @pipeline.respond_to?(:downstream_stages)
           send_to_next_stage(item, queue)
@@ -76,8 +112,56 @@ module Minigun
 
       # Alias for emit_to_queue
       alias_method :enqueue, :emit_to_queue
+      
+      # Add a hook that runs before the stage starts
+      def before_start(&block)
+        @before_start_hooks << block if block_given?
+      end
+      
+      # Add a hook that runs after the stage finishes
+      def after_finish(&block)
+        @after_finish_hooks << block if block_given?
+      end
 
       # Called when the stage is starting
+      def run
+        # Run class-level before_start hooks
+        self.class.before_start_hooks.each do |hook|
+          instance_exec(&hook)
+        end
+        
+        # Run instance-level before_start hooks
+        @before_start_hooks.each do |hook|
+          instance_exec(&hook)
+        end
+        
+        # Call on_start hook for backward compatibility
+        on_start
+      end
+
+      # Called when the stage is finishing
+      def shutdown
+        # Run class-level after_finish hooks
+        self.class.after_finish_hooks.each do |hook|
+          instance_exec(&hook)
+        end
+        
+        # Run instance-level after_finish hooks
+        @after_finish_hooks.each do |hook|
+          instance_exec(&hook)
+        end
+        
+        # Call on_finish hook for backward compatibility
+        on_finish
+        
+        # Return stats
+        {
+          processed: @processed_count.value,
+          emitted: @emitted_count.value
+        }
+      end
+
+      # Called when the stage is starting (for backward compatibility)
       def on_start
         @logger.info "[Minigun:#{@job_id}][#{name}] Stage starting"
 
@@ -90,7 +174,7 @@ module Minigun
         end
       end
 
-      # Called when the stage is finishing
+      # Called when the stage is finishing (for backward compatibility)
       def on_finish
         @logger.info "[Minigun:#{@job_id}][#{name}] Stage finished"
 

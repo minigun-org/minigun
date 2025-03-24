@@ -61,6 +61,13 @@ module Minigun
               when Class
                 # If a class is passed directly
                 type
+              when Symbol
+                # Try to find the class by name
+                if Minigun::Stages.const_defined?(type.to_s.capitalize)
+                  Minigun::Stages.const_get(type.to_s.capitalize)
+                else
+                  raise "Unknown stage type: #{type}"
+                end
               else
                 raise "Unknown stage type: #{type}"
               end
@@ -130,8 +137,11 @@ module Minigun
         end
       end
       
-      @executor.run
-
+      # Run each stage
+      @stages.each do |stage|
+        stage.run if stage.respond_to?(:run)
+      end
+      
       # Run after_run hooks if task has hooks defined
       @task.run_hooks(:after_run, @context) if @task.respond_to?(:run_hooks)
 
@@ -139,6 +149,28 @@ module Minigun
       @logger.info("[Minigun:#{@job_id}] Pipeline execution completed")
 
       self
+    end
+    
+    # Shutdown the pipeline and all stages
+    def shutdown
+      @logger.info("[Minigun:#{@job_id}] Shutting down pipeline")
+      
+      # Shutdown all stages in reverse order
+      stats = {}
+      @stages.reverse_each do |stage|
+        if stage.respond_to?(:shutdown)
+          result = stage.shutdown
+          stats[stage.name] = result
+          
+          # Log the stage stats
+          if result.is_a?(Hash)
+            stats_str = result.map { |k, v| "#{k}: #{v}" }.join(', ')
+            @logger.info("[Minigun:#{@job_id}][Stage:#{stage.name}] Stats: #{stats_str}")
+          end
+        end
+      end
+      
+      stats
     end
 
     # Print a log message if debug is enabled
@@ -183,17 +215,6 @@ module Minigun
     def build_pipeline_from_stages
       # For each stage in the pipeline, add it to the pipeline
       @task.pipeline.each do |stage_def|
-        # Determine the appropriate stage class
-        case stage_def[:type]
-        when :processor
-          Minigun::Stages::Processor
-        when :accumulator
-          Minigun::Stages::Accumulator
-        else
-          raise "Unknown stage type: #{stage_def[:type]}"
-        end
-
-        # Add the stage
         add_stage(stage_def[:type], stage_def[:name], stage_def[:options])
       end
     end
@@ -201,51 +222,28 @@ module Minigun
     # Validate the pipeline configuration
     def validate_pipeline
       # Collect all COW fork stages
-      @stages.each do |stage_name, stage_info|
-        next unless stage_info[:instance].respond_to?(:stage_type) && stage_info[:instance].stage_type == :cow
+      @stages.each do |stage|
+        next unless stage.respond_to?(:stage_type) && stage.stage_type == :cow
 
         # Find stage index in pipeline
-        stage_names = @stages.keys
-        index = stage_names.index(stage_name)
+        index = @stages.index(stage)
 
-        # Check if any previous stage is an accumulator
+        # Check if any previous stage is a accumulator stage
         has_accumulator = false
         (0...index).each do |i|
-          prev_stage = @stages[stage_names[i]]
-          if prev_stage[:type] == :accumulator
+          prev_stage = @stages[i]
+          if prev_stage.is_a?(Minigun::Stages::Accumulator)
             has_accumulator = true
             break
           end
         end
 
-        # Warn and fall back to IPC if no accumulator
+        # Warn and fall back to IPC if no accumulator stage
         unless has_accumulator
-          warn "[Minigun:#{@job_id}] COW fork stage #{stage_name} must follow an accumulator stage - falling back to IPC"
-          stage_info[:instance].stage_type = :ipc if stage_info[:instance].respond_to?(:stage_type=)
+          warn "[Minigun:#{@job_id}] COW fork stage #{stage.name} must follow an accumulator stage - falling back to IPC"
+          stage.stage_type = :ipc if stage.respond_to?(:stage_type=)
         end
       end
-    end
-
-    # Shutdown all stages and collect statistics
-    def shutdown_stages
-      # Shutdown all stages, collect statistics
-      stage_stats = {}
-      @stages.each do |stage_name, stage_info|
-        # Call shutdown method if it exists
-        next unless stage_info[:instance].respond_to?(:shutdown)
-
-        stats = stage_info[:instance].shutdown
-        stage_stats[stage_name] = stats
-
-        # Log stats
-        if stats.is_a?(Hash)
-          stats_str = stats.map { |k, v| "#{k}: #{v}" }.join(', ')
-          info("[Minigun:#{@job_id}] Stage #{stage_name} stats: #{stats_str}")
-        end
-      end
-
-      # Return all stats
-      stage_stats
     end
   end
 end

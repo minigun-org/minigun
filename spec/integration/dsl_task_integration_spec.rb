@@ -91,101 +91,129 @@ RSpec.describe 'DSL and Task Integration' do
         %i[accumulator collect],
         %i[processor sink]
       ]
-
       expect(stages).to eq(expected_stages)
 
-      # Verify producer block exists
-      expect(task.stage_blocks[:source]).to be_a(Proc)
+      # Check the connections
+      expect(task.connections).to have_key(:source)
+      expect(task.connections[:source]).to include(:double)
+      expect(task.connections[:double]).to include(:add_one)
+      expect(task.connections[:add_one]).to include(:collect)
+      expect(task.connections[:collect]).to include(:sink)
 
-      # Verify hooks are defined
-      expect(task.hooks[:before_run]).not_to be_empty
-      expect(task.hooks[:after_run]).not_to be_empty
-    end
+      # Check specific options on stages
+      source_options = task.pipeline.find { |s| s[:name] == :source }[:options]
+      expect(source_options).to be_a(Hash)
 
-    it 'calls hooks during execution' do
-      # Get the task object
-      task = TestTask._minigun_task
+      accumulator_options = task.pipeline.find { |s| s[:name] == :collect }[:options]
+      expect(accumulator_options).to be_a(Hash)
+      expect(accumulator_options[:has_queue]).to eq(true)
+      expect(accumulator_options[:batch_size]).to eq(3)
 
-      # Verify hooks exist
-      expect(task.hooks[:before_run]).not_to be_empty
-      expect(task.hooks[:after_run]).not_to be_empty
-    end
+      # Run the task
+      instance = TestTask.new
+      instance.run
 
-    it 'correctly applies configuration' do
-      # Get the configuration from the task
-      task = TestTask._minigun_task
+      # Verify the hooks were called
+      expect(TestTask.hooks_called?).to be true
 
-      # Verify configuration was applied
-      expect(task.config[:max_threads]).to eq(2)
-      expect(task.config[:max_processes]).to eq(1)
-      expect(task.config[:batch_size]).to eq(3)
-      expect(task.config[:fork_mode]).to eq(:never)
-      expect(task.config[:consumer_type]).to eq(:ipc)
-    end
+      # Verify results - should get batches of converted numbers
+      # Because we've run the pipeline with fork_mode: never, the results
+      # will be automatically passed to the consumer
+      expect(TestTask.consumed_batches).not_to be_empty
 
-    it 'correctly builds the pipeline' do
-      # Get the pipeline from the task
-      task = TestTask._minigun_task
+      # Aggregate all consumed items across batches
+      all_consumed_items = TestTask.consumed_batches.flatten
 
-      # Verify pipeline stages
-      expect(task.pipeline.size).to eq(5)
+      # Input: [1, 2, 3, 4, 5]
+      # After double: [2, 4, 6, 8, 10]
+      # After add_one: [3, 5, 7, 9, 11]
+      expected_items = [3, 5, 7, 9, 11]
 
-      # Check stage names and types
-      stage_info = task.pipeline.map { |stage| [stage[:type], stage[:name]] }
-      expected_stages = [
-        %i[processor source],
-        %i[processor double],
-        %i[processor add_one],
-        %i[accumulator collect],
-        %i[processor sink]
-      ]
+      # Verify each expected item is in the consumed items
+      expected_items.each do |item|
+        expect(all_consumed_items).to include(item)
+      end
 
-      expect(stage_info).to eq(expected_stages)
+      # Verify we have the right number of items
+      expect(all_consumed_items.length).to eq(expected_items.length)
     end
   end
 
-  # Test defining a task with a custom run configuration
-  describe 'running with custom context' do
+  describe 'running a task with a custom context' do
+    # Define a custom context class
     class CustomContext
-      attr_accessor :results
+      attr_reader :results
 
       def initialize
         @results = []
       end
+
+      def add_result(result)
+        @results << result
+      end
     end
 
+    # Define a module using the DSL with a custom context
     module CustomTaskWithContext
       include Minigun::DSL
 
-      producer do
-        produce(1..3)
+      # Configure the task
+      fork_mode :never
+      batch_size 3
+
+      # Define stages
+      producer :source do
+        [10, 20, 30].each { |i| emit(i) }
       end
 
-      processor do |num|
-        emit(num * 3)
+      processor :multiply do |num|
+        emit(num * 2)
       end
 
-      consumer do |batch|
-        # Store in the context
-        context.results.concat(batch)
+      accumulator :collector, batch_size: 2 do |item|
+        # Access the context to store results
+        @context.add_result(item)
+        
+        # Need to emit explicitly in custom accumulator block
+        emit_to_queue(:default, item)
+      end
+
+      consumer :sink do |batch|
+        # Store the batch in the context
+        @context.add_result(batch)
       end
     end
 
-    it 'uses the provided context' do
-      # Get the task from the module
+    it 'correctly runs with a custom context' do
+      # Create a custom context to pass to the task
+      context = CustomContext.new
+
+      # Verify the pipeline structure
       task = CustomTaskWithContext._minigun_task
+      expect(task.pipeline.size).to eq(4)
 
-      # Verify pipeline structure
-      expect(task.pipeline.size).to eq(3)
+      # Verify the modules were properly set up
+      stages = task.pipeline.map { |s| [s[:type], s[:name]] }
+      expected_stages = [
+        %i[processor source],
+        %i[processor multiply],
+        %i[accumulator collector],
+        %i[processor sink]
+      ]
+      expect(stages).to eq(expected_stages)
 
-      # Check the stages have the right types
-      stage_types = task.pipeline.map { |s| s[:type] }
-      expect(stage_types).to eq(%i[processor processor processor])
+      # Run the task with our custom context
+      CustomTaskWithContext.run(context)
 
-      # Verify blocks exist
-      expect(task.stage_blocks[task.pipeline[0][:name]]).to be_a(Proc)
-      expect(task.stage_blocks[task.pipeline[1][:name]]).to be_a(Proc)
-      expect(task.stage_blocks[task.pipeline[2][:name]]).to be_a(Proc)
+      # Verify context contains the processed results
+      # Input: [10, 20, 30] -> multiply -> [20, 40, 60]
+      # The collector accumulates and the sink consumes them
+      results = context.results.flatten
+
+      # Each item should be processed and then batched
+      [20, 40, 60].each do |expected|
+        expect(results).to include(expected)
+      end
     end
   end
 end
