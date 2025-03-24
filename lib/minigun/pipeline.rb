@@ -101,10 +101,18 @@ module Minigun
 
     # Build the pipeline based on task configuration
     def build_pipeline
+      # Skip if already built
+      return self if @stages.any?
+      
       if @task.pipeline_definition
         # If we have a pipeline definition block, execute it
         @executor = PipelineDSL.new(self)
         @executor.instance_eval(&@task.pipeline_definition)
+
+        # TODO: need to decide whether to allow this...
+        # After executing the pipeline definition, make sure connections are updated
+        # This ensures connections defined in the block are applied to the pipeline
+        @stage_connections = @task.connections if @task.connections.any?
       else
         # Add all stages from the task
         @task.pipeline.each do |stage_config|

@@ -120,7 +120,21 @@ module Minigun
 
       # Define the pipeline stages
       def pipeline(&block)
+        # Store the pipeline definition block
         _minigun_task.pipeline_definition = block
+        
+        # Execute the block immediately to set up connections in the task itself
+        # if block_given?
+        #   # Create a temporary context with connections that will be assigned to the task
+        #   context = Object.new
+        #   context.instance_variable_set(:@connections, {})
+        #   context.instance_exec(&block)
+        #  
+        #   # Get the connections from the context and assign them to the task
+        #   if context.instance_variable_defined?(:@connections) && !context.instance_variable_get(:@connections).empty?
+        #     _minigun_task.instance_variable_set(:@connections, context.instance_variable_get(:@connections))
+        #   end
+        # end
       end
 
       # Define the producer block that generates items

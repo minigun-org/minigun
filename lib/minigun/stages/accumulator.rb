@@ -48,7 +48,7 @@ module Minigun
 
       # Process a single item
       def process(item)
-        # We track processed count
+        # Call the parent class process method which increments processed_count
         super
         @accumulated_count.increment
 

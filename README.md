@@ -22,6 +22,7 @@ Minigun itself is run entire in Ruby's memory, and is database and application a
 
 ## TODOs
 
+- [ ] Extract out hooks into separate module
 - [ ] Remove all special logic for accumulators vs. processors. Flush for example should be a stage method?
 - [ ] Add Minigun::EndOfQueue object.
 - [ ] Extract examples to examples folder
