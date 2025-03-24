@@ -82,20 +82,15 @@ module Minigun
         _minigun_task.config[:fork_mode] = value.to_sym
       end
 
-      # Set consumer type for the task
-      def consumer_type(value)
+      # Set fork type for the task
+      def fork_type(value)
         unless [:ipc, :cow].include?(value.to_sym)
-          raise ArgumentError, "Invalid consumer type: #{value}. Must be :ipc or :cow"
+          raise ArgumentError, "Invalid fork type: #{value}. Must be :ipc or :cow"
         end
         if value.to_sym == :cow
-          warn "Setting consumer type to :cow. Remember that COW consumers must follow an accumulator stage."
+          warn "Setting fork type to :cow. Remember that COW consumers must follow an accumulator stage."
         end
-        _minigun_task.config[:consumer_type] = value.to_sym
-      end
-
-      # Set processor type for the task (alias for consumer_type)
-      def processor_type(value)
-        consumer_type(value)
+        _minigun_task.config[:fork_type] = value.to_sym
       end
 
       # Define a pipeline block

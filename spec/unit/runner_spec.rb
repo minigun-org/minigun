@@ -7,44 +7,44 @@ RSpec.describe Minigun::Runner do
     task = Minigun::Task.new
 
     # Add instance variables for tracking
-    task.instance_variable_set(:@producer_called, 0)
+    task.instance_variable_set(:@source_called, 0)
     task.instance_variable_set(:@processor_called, 0)
-    task.instance_variable_set(:@consumer_called, 0)
-    task.instance_variable_set(:@producer_items, [])
+    task.instance_variable_set(:@sink_called, 0)
+    task.instance_variable_set(:@source_items, [])
     task.instance_variable_set(:@processor_items, [])
-    task.instance_variable_set(:@consumer_batches, [])
+    task.instance_variable_set(:@sink_batches, [])
 
     # Add methods for testing
-    def task.producer_called
-      @producer_called
+    def task.source_called
+      @source_called
     end
 
     def task.processor_called
       @processor_called
     end
 
-    def task.consumer_called
-      @consumer_called
+    def task.sink_called
+      @sink_called
     end
 
-    def task.producer_items
-      @producer_items
+    def task.source_items
+      @source_items
     end
 
     def task.processor_items
       @processor_items
     end
 
-    def task.consumer_batches
-      @consumer_batches
+    def task.sink_batches
+      @sink_batches
     end
 
-    # Add processor and consumer stages
-    task.add_producer(:test_producer, {}) do
-      @producer_called += 1
+    # Add processor stages for each role
+    task.add_processor(:source_processor, {}) do
+      @source_called += 1
       items = [1, 2, 3]
-      @producer_items = items.dup
-      produce(items)
+      @source_items = items.dup
+      emit(items)
     end
 
     task.add_processor(:test_processor, {}) do |item|
@@ -53,9 +53,9 @@ RSpec.describe Minigun::Runner do
       emit(item * 2)
     end
 
-    task.add_processor(:test_consumer, {}) do |batch|
-      @consumer_called += 1
-      @consumer_batches << batch
+    task.add_processor(:sink_processor, {}) do |batch|
+      @sink_called += 1
+      @sink_batches << batch
     end
 
     # Configure task for testing
@@ -87,14 +87,14 @@ RSpec.describe Minigun::Runner do
   describe '#run' do
     it 'calls hooks on the task when run' do
       # Mock the core methods to prevent actual execution
-      allow(runner).to receive(:run_producer)
+      allow(runner).to receive(:run_processor)
       allow(runner).to receive(:run_accumulator)
-      allow(runner).to receive(:wait_all_consumer_processes)
+      allow(runner).to receive(:wait_all_processor_processes)
 
       # Mock futures to avoid asynchronous execution
-      producer_future = instance_double(Concurrent::Future, wait: nil, rejected?: false)
+      processor_future = instance_double(Concurrent::Future, wait: nil, rejected?: false)
       accumulator_future = instance_double(Concurrent::Future, wait: nil, rejected?: false)
-      allow(Concurrent::Future).to receive(:execute).and_return(producer_future, accumulator_future)
+      allow(Concurrent::Future).to receive(:execute).and_return(processor_future, accumulator_future)
 
       # Expect the hooks to be called
       expect(task).to receive(:run_hooks).with(:before_run, task)

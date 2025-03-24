@@ -238,7 +238,7 @@ module Minigun
       end
 
       # For COW processor, ensure there's an accumulator before it
-      if @task.config[:processor_type] == :cow
+      if @task.config[:fork_type] == :cow
         @stages.each do |stage|
           if stage.is_a?(Minigun::Stages::Processor) && stage.options[:forking] == :cow
             unless stage.sources.any? { |s| s.is_a?(Minigun::Stages::Accumulator) }

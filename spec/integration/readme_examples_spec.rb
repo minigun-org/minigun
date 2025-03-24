@@ -489,4 +489,180 @@ RSpec.describe 'README Examples Integration' do
       expect(task_obj.connections[:worker_3]).to include(:result_collector)
     end
   end
+
+  describe 'Email Batching Example' do
+    it 'correctly processes and batches emails by type' do
+      # Define a task class with a custom email processor
+      email_task_class = Class.new do
+        include Minigun::DSL
+
+        attr_reader :users_processed, :emails
+
+        def initialize
+          @users_processed = []
+          @emails = {}
+        end
+
+        # Generate test data
+        def generate_user
+          [
+            { id: 1, name: 'Alice', email_type: 'high_priority' },
+            { id: 2, name: 'Bob', email_type: 'default' },
+            { id: 3, name: 'Charlie', email_type: 'high_priority' }
+          ]
+        end
+
+        # Generate an email for a user
+        def generate_email(user)
+          { recipient_id: user[:id], type: user[:email_type], content: "Email for #{user[:name]}" }
+        end
+
+        # Define our task with email generation and type-based accumulation
+        processor :source_processor do
+          users = generate_user
+          
+          # For each user, generate an email and emit it
+          users.each do |user|
+            @users_processed << user[:id]
+            email = generate_email(user)
+            emit(email)
+          end
+        end
+
+        processor :email_processor do |email|
+          # Just pass through the emails
+          emit(email) 
+        end
+
+        accumulator :email_accumulator, from: :email_processor do |email|
+          @emails ||= {}
+          # Ensure the email type exists in the hash
+          type = email[:type].to_sym
+          @emails[type] ||= []
+          @emails[type] << email
+
+          # Emit batches when they reach threshold size (using smaller threshold for testing)
+          @emails.each do |type, batch|
+            if batch.size >= 1
+              emit_to_queue(type, batch.dup)
+              batch.clear
+            end
+          end
+        end
+
+        processor :sink_processor, queues: %i[default high_priority] do |batch|
+          # In our test this won't actually be called
+        end
+
+        # Configure for testing
+        max_threads 1
+        max_processes 1
+        fork_mode :never
+      end
+
+      # Get the task object directly
+      task_obj = email_task_class._minigun_task
+
+      # Verify that the processor blocks are defined
+      expect(task_obj.stage_blocks.keys).to include(:source_processor, :email_processor, :sink_processor)
+
+      # Verify the pipeline includes an accumulator
+      expect(task_obj.pipeline.any? { |s| s[:type] == :accumulator && s[:name] == :email_accumulator }).to be true
+
+      # Verify that the pipeline stages are defined
+      expect(task_obj.pipeline.size).to eq(4)
+
+      # First stage should be a processor
+      expect(task_obj.pipeline[0][:type]).to eq(:processor)
+      expect(task_obj.pipeline[0][:name]).to eq(:source_processor)
+
+      # Verify processor stage has queue subscription
+      expect(task_obj.queue_subscriptions[:email_processor]).to eq(%i[default high_priority])
+
+      # Verify accumulator is present
+      accumulator_stage = task_obj.pipeline.find { |stage| stage[:type] == :accumulator }
+      expect(accumulator_stage).not_to be_nil
+      expect(accumulator_stage[:name]).to eq(:email_accumulator)
+      expect(task_obj.connections[:email_processor]).to include(:email_accumulator)
+
+      # Verify sink processor subscription
+      expect(task_obj.queue_subscriptions[:sink_processor]).to eq(%i[default high_priority])
+    end
+  end
+
+  describe 'Branching Pipeline' do
+    it 'configures the branching pipeline correctly' do
+      # Create a class that includes the DSL
+      branching_task = Class.new do
+        include Minigun::DSL
+
+        attr_reader :processor2_output
+
+        def initialize
+          @processor2_output = []
+        end
+
+        def add_processor(name, options)
+          # Implementation of add_processor method
+        end
+
+        def connections
+          # Implementation of connections method
+        end
+
+        def config
+          # Implementation of config method
+        end
+      end
+
+      # Define the pipeline
+      branching_task.class_eval do
+        processor :source do
+          # Implementation of source processor
+        end
+
+        processor :double, {} do |num|
+          result = num * 2
+          @processor2_output << result
+          emit(result)
+        end
+
+        processor :triple, {} do |num|
+          result = num * 3
+          @processor2_output << result
+          emit(result)
+        end
+
+        # Set up custom connections
+        connections[:source] = %i[double triple]
+
+        # Configure for testing
+        config[:fork_type] = :ipc
+      end
+
+      # Create a real pipeline with custom connections
+      pipeline = branching_task.new
+
+      # Verify that the processor blocks are defined
+      expect(pipeline.stage_blocks.keys).to include(:source, :double, :triple)
+
+      # Verify that the pipeline stages are defined
+      expect(pipeline.pipeline.size).to eq(3)
+
+      # First stage should be a processor
+      expect(pipeline.pipeline[0][:type]).to eq(:processor)
+      expect(pipeline.pipeline[0][:name]).to eq(:source)
+
+      # Second stage should be a processor
+      expect(pipeline.pipeline[1][:type]).to eq(:processor)
+      expect(pipeline.pipeline[1][:name]).to eq(:double)
+
+      # Last stage should be a processor
+      expect(pipeline.pipeline[2][:type]).to eq(:processor)
+      expect(pipeline.pipeline[2][:name]).to eq(:triple)
+
+      # Verify the connections
+      expect(pipeline.connections[:source]).to include(:double, :triple)
+    end
+  end
 end

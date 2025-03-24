@@ -10,8 +10,8 @@ RSpec.describe Minigun::DSL do
       include Minigun::DSL
 
       # Define a simple task with all stages
-      producer do
-        produce([1, 2, 3, 4, 5])
+      processor :source do
+        emit([1, 2, 3, 4, 5])
       end
 
       processor :process_numbers do |num|
@@ -22,7 +22,7 @@ RSpec.describe Minigun::DSL do
         # Default accumulator behavior
       end
 
-      consumer do |batch|
+      processor :sink do |batch|
         # Process the batch
       end
     end
@@ -59,21 +59,21 @@ RSpec.describe Minigun::DSL do
         expect { task_class.fork_mode(:invalid) }.to raise_error(Minigun::Error)
       end
 
-      it 'sets consumer_type' do
-        task_class.consumer_type(:cow)
-        expect(task_class._minigun_config[:consumer_type]).to eq(:cow)
+      it 'sets fork_type' do
+        task_class.fork_type(:cow)
+        expect(task_class._minigun_config[:fork_type]).to eq(:cow)
       end
 
-      it 'validates consumer_type values' do
-        expect { task_class.consumer_type(:invalid) }.to raise_error(Minigun::Error)
+      it 'validates fork_type values' do
+        expect { task_class.fork_type(:invalid) }.to raise_error(Minigun::Error)
       end
     end
 
     describe 'stage definition methods' do
-      it 'stores producer blocks' do
-        producer_block = proc { produce([1, 2, 3]) }
-        task_class.producer(:test_producer, &producer_block)
-        expect(task_class._minigun_stage_blocks[:test_producer]).to eq(producer_block)
+      it 'stores source processor blocks' do
+        source_block = proc { emit([1, 2, 3]) }
+        task_class.processor(:source_processor, &source_block)
+        expect(task_class._minigun_stage_blocks[:source_processor]).to eq(source_block)
       end
 
       it 'stores processor blocks' do
@@ -83,10 +83,10 @@ RSpec.describe Minigun::DSL do
       end
 
       it 'adds stages to the pipeline' do
-        task_class.producer(:new_producer) { produce([1, 2, 3]) }
+        task_class.processor(:new_source) { emit([1, 2, 3]) }
 
         pipeline = task_class._minigun_pipeline
-        expect(pipeline.any? { |stage| stage[:type] == :processor && stage[:name] == :new_producer }).to be true
+        expect(pipeline.any? { |stage| stage[:type] == :processor && stage[:name] == :new_source }).to be true
       end
     end
 
@@ -126,15 +126,15 @@ RSpec.describe Minigun::DSL do
       end
     end
 
-    describe '#produce' do
+    describe '#emit' do
       it 'calls emit with the item' do
         expect(subject).to receive(:emit).with([1, 2, 3])
-        subject.produce([1, 2, 3])
+        subject.emit([1, 2, 3])
       end
 
       it 'calls emit with a single item' do
         expect(subject).to receive(:emit).with(42)
-        subject.produce(42)
+        subject.emit(42)
       end
     end
   end
@@ -145,17 +145,17 @@ RSpec.describe Minigun::DSL do
       Class.new do
         include Minigun::DSL
 
-        attr_reader :processed_items, :consumed_batches
+        attr_reader :processed_items, :sink_batches
 
         def initialize
           @processed_items = []
-          @consumed_batches = []
+          @sink_batches = []
         end
 
         # Define a real task with all stages
-        producer :source do
+        processor :source do
           items = [1, 2, 3, 4, 5]
-          items.each { |item| produce(item) }
+          items.each { |item| emit(item) }
         end
 
         processor :process_numbers do |num|
@@ -167,8 +167,8 @@ RSpec.describe Minigun::DSL do
           # Default accumulator behavior
         end
 
-        consumer :sink do |batch|
-          @consumed_batches << batch
+        processor :sink do |batch|
+          @sink_batches << batch
         end
 
         # Use single-threaded, single-process configuration for testing
@@ -176,7 +176,7 @@ RSpec.describe Minigun::DSL do
         max_processes 1
         batch_size 2
         fork_mode :never
-        consumer_type :ipc
+        fork_type :ipc
       end
     end
 
@@ -186,24 +186,24 @@ RSpec.describe Minigun::DSL do
       it 'processes items through the entire pipeline' do
         # Override the run method to simulate task execution
         def real_task.run
-          # Simulate producer
-          produce([1, 2, 3, 4, 5])
-
+          # Simulate source processor
+          items = [1, 2, 3, 4, 5]
+          
           # Simulate processor
-          [1, 2, 3, 4, 5].each do |item|
+          items.each do |item|
             @processed_items << item
 
-            # Simulate emitting to consumer
+            # Simulate emitting to sink processor
             doubled = item * 2
 
-            # Add to consumed batches (simplified for testing)
+            # Add to sink batches (simplified for testing)
             batch_size = 2
             @current_batch = [] if @current_batch.nil?
 
             @current_batch << doubled
 
             if @current_batch.size >= batch_size
-              @consumed_batches << @current_batch
+              @sink_batches << @current_batch
               @current_batch = nil
             end
           end
@@ -211,7 +211,7 @@ RSpec.describe Minigun::DSL do
           # Handle any remaining items in the last batch
           return unless @current_batch&.any?
 
-          @consumed_batches << @current_batch
+          @sink_batches << @current_batch
         end
 
         # Run the task with our simplified implementation
@@ -222,8 +222,8 @@ RSpec.describe Minigun::DSL do
 
         # Verify that batches were consumed
         # With batch_size 2, we should get these batches: [2, 4], [6, 8], [10]
-        expect(real_task.consumed_batches.size).to eq(3)
-        expect(real_task.consumed_batches.flatten).to contain_exactly(2, 4, 6, 8, 10)
+        expect(real_task.sink_batches.size).to eq(3)
+        expect(real_task.sink_batches.flatten).to contain_exactly(2, 4, 6, 8, 10)
       end
     end
   end

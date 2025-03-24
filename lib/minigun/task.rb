@@ -55,8 +55,7 @@ module Minigun
         max_retries: 3,
         batch_size: 100,
         fork_mode: :auto,
-        consumer_type: :ipc, # Keep for backward compatibility
-        processor_type: :ipc,
+        fork_type: :ipc,
         accumulator_max_queue: 1000,
         accumulator_max_all: 5000,
         accumulator_check_interval: 0.1,
@@ -280,7 +279,7 @@ module Minigun
 
       # Basic validation logic
       # For COW processor, ensure there's an accumulator before it
-      if (@config[:processor_type] == :cow || @config[:consumer_type] == :cow) &&
+      if @config[:fork_type] == :cow &&
          @pipeline.any? { |stage| stage[:type] == :processor }
         has_accumulator = false
         @pipeline.each do |stage|

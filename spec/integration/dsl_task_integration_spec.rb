@@ -31,7 +31,7 @@ RSpec.describe 'DSL and Task Integration' do
     max_processes 1
     batch_size 3
     fork_mode :never
-    consumer_type :ipc
+    fork_type :ipc
 
     # Define stages
     processor :source do
@@ -120,7 +120,7 @@ RSpec.describe 'DSL and Task Integration' do
       expect(task.config[:max_processes]).to eq(1)
       expect(task.config[:batch_size]).to eq(3)
       expect(task.config[:fork_mode]).to eq(:never)
-      expect(task.config[:consumer_type]).to eq(:ipc)
+      expect(task.config[:fork_type]).to eq(:ipc)
     end
 
     it 'correctly builds the pipeline' do

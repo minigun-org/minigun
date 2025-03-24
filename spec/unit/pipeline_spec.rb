@@ -9,13 +9,13 @@ RSpec.describe Minigun::Pipeline do
       task = Minigun::Task.new
 
       # Add instance variables for tracking
-      task.instance_variable_set(:@emitter_output, [])
+      task.instance_variable_set(:@source_output, [])
       task.instance_variable_set(:@processor_output, [])
       task.instance_variable_set(:@processor_input, [])
 
       # Add accessor methods
-      def task.emitter_output
-        @emitter_output
+      def task.source_output
+        @source_output
       end
 
       def task.processor_output
@@ -26,8 +26,8 @@ RSpec.describe Minigun::Pipeline do
         @processor_input
       end
 
-      def task.emitter_output=(value)
-        @emitter_output = value
+      def task.source_output=(value)
+        @source_output = value
       end
 
       def task.processor_output=(value)
@@ -39,9 +39,9 @@ RSpec.describe Minigun::Pipeline do
       end
 
       # Add stages
-      task.add_processor(:test_emitter, {}) do
+      task.add_processor(:source_processor, {}) do
         items = [1, 2, 3]
-        @emitter_output = items.dup
+        @source_output = items.dup
         emit(items)
       end
 
@@ -56,7 +56,7 @@ RSpec.describe Minigun::Pipeline do
       end
 
       # Configure for testing
-      task.config[:consumer_type] = :ipc
+      task.config[:fork_type] = :ipc
 
       task
     end
@@ -68,27 +68,27 @@ RSpec.describe Minigun::Pipeline do
       pipeline = described_class.new(real_task, test_config)
 
       # Add the real stages
-      pipeline.add_stage(:processor, :test_emitter, test_config)
+      pipeline.add_stage(:processor, :source_processor, test_config)
       pipeline.add_stage(:processor, :test_processor, test_config)
       pipeline.add_stage(:processor, :test_processor2, test_config)
 
       # Connect stages
       pipeline.instance_variable_set(:@stage_connections, {
-                                       test_emitter: [:test_processor],
+                                       source_processor: [:test_processor],
                                        test_processor: [:test_processor2]
                                      })
 
       # We won't actually run the pipeline, but let's verify the structure
       expect(pipeline.stages.size).to eq(3)
-      expect(pipeline.stages[0].name).to eq(:test_emitter)
+      expect(pipeline.stages[0].name).to eq(:source_processor)
       expect(pipeline.stages[1].name).to eq(:test_processor)
       expect(pipeline.stages[2].name).to eq(:test_processor2)
 
       # Manually test the output we expect
-      real_task.instance_variable_set(:@emitter_output, [1, 2, 3])
+      real_task.instance_variable_set(:@source_output, [1, 2, 3])
 
       # Simulate processing
-      real_task.emitter_output.each do |item|
+      real_task.source_output.each do |item|
         result = item * 2
         real_task.processor_output << result
       end
@@ -106,13 +106,13 @@ RSpec.describe Minigun::Pipeline do
       branching_task = Minigun::Task.new
 
       # Add instance variables for tracking
-      branching_task.instance_variable_set(:@emitter_output, [])
+      branching_task.instance_variable_set(:@source_output, [])
       branching_task.instance_variable_set(:@processor1_output, [])
       branching_task.instance_variable_set(:@processor2_output, [])
 
       # Add accessor methods
-      def branching_task.emitter_output
-        @emitter_output
+      def branching_task.source_output
+        @source_output
       end
 
       def branching_task.processor1_output
@@ -123,8 +123,8 @@ RSpec.describe Minigun::Pipeline do
         @processor2_output
       end
 
-      def branching_task.emitter_output=(value)
-        @emitter_output = value
+      def branching_task.source_output=(value)
+        @source_output = value
       end
 
       def branching_task.processor1_output=(value)
@@ -138,7 +138,7 @@ RSpec.describe Minigun::Pipeline do
       # Add stages
       branching_task.add_processor(:source, {}) do
         items = [1, 2, 3]
-        @emitter_output = items.dup
+        @source_output = items.dup
         emit(items)
       end
 
@@ -158,7 +158,7 @@ RSpec.describe Minigun::Pipeline do
       branching_task.connections[:source] = %i[double triple]
 
       # Configure for testing
-      branching_task.config[:consumer_type] = :ipc
+      branching_task.config[:fork_type] = :ipc
 
       # Create a real pipeline with custom connections
       pipeline = described_class.new(branching_task, test_config)
@@ -182,11 +182,11 @@ RSpec.describe Minigun::Pipeline do
       expect(downstream.map(&:name)).to contain_exactly(:double, :triple)
 
       # Now emulate the pipeline processing
-      # 1. Emitter output
-      branching_task.instance_variable_set(:@emitter_output, [1, 2, 3])
+      # 1. Source processor output
+      branching_task.instance_variable_set(:@source_output, [1, 2, 3])
 
       # 2. Process with double processor
-      branching_task.emitter_output.each do |item|
+      branching_task.source_output.each do |item|
         result = item * 2
         branching_task.processor1_output << result
 

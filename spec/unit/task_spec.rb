@@ -14,7 +14,7 @@ RSpec.describe Minigun::Task do
       expect(task.config[:max_retries]).to eq(3)
       expect(task.config[:batch_size]).to eq(100)
       expect(task.config[:fork_mode]).to eq(:auto)
-      expect(task.config[:consumer_type]).to eq(:ipc)
+      expect(task.config[:fork_type]).to eq(:ipc)
     end
 
     it 'initializes with empty stage blocks' do
@@ -42,13 +42,13 @@ RSpec.describe Minigun::Task do
   end
 
   describe 'stage definition methods' do
-    it 'adds an emitter to the pipeline' do
+    it 'adds a source processor to the pipeline' do
       task = described_class.new
-      task.add_processor(:test_emitter)
+      task.add_processor(:source_processor)
 
       expect(task.pipeline.size).to eq(1)
       expect(task.pipeline.first[:type]).to eq(:processor)
-      expect(task.pipeline.first[:name]).to eq(:test_emitter)
+      expect(task.pipeline.first[:name]).to eq(:source_processor)
     end
 
     it 'adds a processor to the pipeline' do
@@ -158,9 +158,9 @@ RSpec.describe Minigun::Task do
       # for an accumulator and not find one
       expect do
         # Make the private method public for testing
-        task2.define_singleton_method(:validate_processor_placement) do |processor_type, _name|
+        task2.define_singleton_method(:validate_processor_placement) do |fork_type, _name|
           # Only validate cow processors currently
-          return unless processor_type == :cow
+          return unless fork_type == :cow
 
           # Since we don't have an accumulator, this should raise an error
           raise Minigun::Error, 'COW fork processors must follow an accumulator stage'

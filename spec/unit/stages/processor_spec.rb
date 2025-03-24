@@ -165,7 +165,7 @@ RSpec.describe Minigun::Stages::Processor do
       end
 
       # Configure for testing
-      task.config[:consumer_type] = :ipc
+      task.config[:fork_type] = :ipc
 
       task
     end
