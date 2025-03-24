@@ -23,26 +23,6 @@ module Minigun
             _minigun_task.stage_blocks
           end
 
-          def _minigun_hooks
-            _minigun_task.hooks
-          end
-
-          def _minigun_pipeline
-            _minigun_task.pipeline
-          end
-
-          def _minigun_pipeline_definition
-            _minigun_task.pipeline_definition
-          end
-
-          def _minigun_connections
-            _minigun_task.connections
-          end
-
-          def _minigun_queue_subscriptions
-            _minigun_task.queue_subscriptions
-          end
-
           # Class method to start the job
           def run(context = nil)
             # Create a context if none provided
@@ -110,14 +90,10 @@ module Minigun
 
       # Set consumer type (:ipc, :cow)
       def consumer_type(type)
-        raise Minigun::Error, 'Consumer type must be :ipc or :cow' unless %i[ipc cow].include?(type)
-
-        if type == :cow
-          # When setting to :cow, warn about accumulator requirement
-          warn 'WARNING: Setting consumer type to :cow. Remember that COW consumers must follow an accumulator stage.'
+        unless [:cow, :ipc].include?(type.to_sym)
+          raise ArgumentError, "Consumer type must be :cow or :ipc"
         end
-
-        _minigun_task.config[:consumer_type] = type
+        _minigun_task.config[:consumer_type] = type.to_sym
       end
 
       # Set logger for output
@@ -127,34 +103,7 @@ module Minigun
 
       # Define the pipeline stages
       def pipeline(&block)
-        # Store the pipeline definition block
         _minigun_task.pipeline_definition = block
-
-        # Execute the block to set up stages
-        return unless block_given?
-
-        # Create a PipelineDSL to evaluate the pipeline block
-        require_relative 'pipeline_dsl'
-        executor = Minigun::PipelineDSL.new(_minigun_task)
-        executor.instance_eval(&block)
-
-        # If no connections were set up, create default linear connections
-        return unless _minigun_task.connections.empty? && _minigun_task.pipeline.size > 1
-
-        # Create linear connections between all stages
-        _minigun_task.pipeline.each_with_index do |stage, idx|
-          next if idx >= _minigun_task.pipeline.size - 1
-
-          # Connect this stage to the next one
-          source = stage[:name]
-          target = _minigun_task.pipeline[idx + 1][:name]
-
-          # Create the connection
-          _minigun_task.connections[source] ||= []
-          _minigun_task.connections[source] = [target] unless _minigun_task.connections[source].is_a?(Array)
-          _minigun_task.connections[source] = [_minigun_task.connections[source]] unless _minigun_task.connections[source].is_a?(Array)
-          _minigun_task.connections[source] << target unless _minigun_task.connections[source].include?(target)
-        end
       end
 
       # Define the producer block that generates items
@@ -174,16 +123,12 @@ module Minigun
 
       # Define a cow_fork stage (alias for consumer with cow type)
       def cow_fork(name = :default, options = {}, &block)
-        # Alias for consumer with cow type
-        options = options.merge(fork: :cow)
-        consumer(name, options, &block)
+        _minigun_task.add_cow_fork(name, options, &block)
       end
 
       # Define an ipc_fork stage (alias for consumer with ipc type)
       def ipc_fork(name = :default, options = {}, &block)
-        # Alias for consumer with ipc type
-        options = options.merge(fork: :ipc)
-        consumer(name, options, &block)
+        _minigun_task.add_ipc_fork(name, options, &block)
       end
 
       # Define a consumer stage
@@ -193,38 +138,54 @@ module Minigun
 
       # Define a hook to run before the job starts
       def before_run(options = {}, &block)
-        _minigun_task.add_hook(:before_run, options, &block)
+        task_class = _minigun_task.class
+        task_class.set_hook(:run, :before, &block)
       end
 
       # Define a hook to run after the job finishes
       def after_run(options = {}, &block)
-        _minigun_task.add_hook(:after_run, options, &block)
+        task_class = _minigun_task.class
+        task_class.set_hook(:run, :after, &block)
+      end
+
+      # Define a hook to run around the job execution
+      def around_run(options = {}, &block)
+        task_class = _minigun_task.class
+        task_class.set_hook(:run, :around, &block)
       end
 
       # Define a hook to run before forking a consumer process
       def before_fork(options = {}, &block)
-        _minigun_task.add_hook(:before_fork, options, &block)
+        task_class = _minigun_task.class
+        task_class.set_hook(:fork, :before, &block)
       end
 
       # Define a hook to run after forking a consumer process
       def after_fork(options = {}, &block)
-        _minigun_task.add_hook(:after_fork, options, &block)
+        task_class = _minigun_task.class
+        task_class.set_hook(:fork, :after, &block)
+      end
+
+      # Define a hook to run around forking
+      def around_fork(options = {}, &block)
+        task_class = _minigun_task.class
+        task_class.set_hook(:fork, :around, &block)
       end
 
       # Define stage-specific hooks
       def before_stage(name, options = {}, &block)
-        stage_name = :"before_stage_#{name.to_s.gsub(/\s+/, '_').downcase}"
-        _minigun_task.add_hook(stage_name, options, &block)
+        task_class = _minigun_task.class
+        task_class.set_hook(:stage, :before, &block)
       end
 
       def after_stage(name, options = {}, &block)
-        stage_name = :"after_stage_#{name.to_s.gsub(/\s+/, '_').downcase}"
-        _minigun_task.add_hook(stage_name, options, &block)
+        task_class = _minigun_task.class
+        task_class.set_hook(:stage, :after, &block)
       end
 
-      def on_stage_error(name, options = {}, &block)
-        stage_name = :"on_stage_error_#{name.to_s.gsub(/\s+/, '_').downcase}"
-        _minigun_task.add_hook(stage_name, options, &block)
+      def around_stage(name, options = {}, &block)
+        task_class = _minigun_task.class
+        task_class.set_hook(:stage, :around, &block)
       end
     end
 
@@ -236,28 +197,21 @@ module Minigun
 
     # Emit an item to the next stage (used in processor stages)
     def emit(item)
-      # This is implemented by the Pipeline class when running
-      # Here we just provide it for the DSL
+      Thread.current[:minigun_queue] ||= []
+      Thread.current[:minigun_queue] << item
     end
 
     # Emit an item to a specific queue
     def emit_to_queue(queue, item)
-      # Queue routing is handled by the Pipeline class at runtime
-      # Here we just provide the method for the DSL
+      emit(item)
     end
 
     # Alias for emit_to_queue
     alias_method :enqueue, :emit_to_queue
 
-    # Accumulate an item in the current accumulator
-    def accumulate(item, options = {})
-      # This is implemented by the Accumulator stage class
-      # Here we just provide it for the DSL
-    end
-
     # Run all hooks of a specific type (delegates to task)
-    def run_hooks(type, *args)
-      self.class.class_variable_get(:@@_minigun_task).run_hooks(type, self, *args)
+    def run_hook(name, *args, &block)
+      self.class._minigun_task.run_hook(name, *args, &block)
     end
   end
 end

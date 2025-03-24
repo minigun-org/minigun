@@ -386,26 +386,89 @@ end
 
 ## Hooks
 
-Minigun supports hooks for various lifecycle events:
+Minigun provides a lightweight hook system via the `Minigun::HooksMixin` mixin. This allows you to define hooks at key points in your class's lifecycle.
+
+### Available Hook Points
+
+* **Run hooks**: `before_run`, `after_run`, `around_run` - For pipeline execution
+* **Stage hooks**: `before_stage`, `after_stage`, `around_stage` - For stage execution
+* **Fork hooks**: `before_fork`, `after_fork` - For process forking
+
+### Basic Usage
 
 ```ruby
-class Hooks
-  include Minigun::Task
+class Pipeline
+  include Minigun::HooksMixin
   
-  before_run do
-    # Called before the pipeline starts
+  def run(data)
+    run_hook :run, data do
+      # Pipeline processing logic goes here
+      puts "Processing: #{data}"
+      "result_#{data}"
+    end
+  end
+end
+
+class CustomPipeline < Pipeline
+  # Define hooks using DSL-style methods
+  before_run do |data|
+    puts "Before running pipeline: #{data}"
   end
   
-  after_run do
-    # Called after the pipeline completes
+  after_run :log_completion
+  
+  around_run :with_timing
+  
+  def log_completion(data)
+    puts "Pipeline complete"
   end
   
-  before_fork do
-    # Called in the parent process before forking
+  def with_timing(data)
+    start_time = Time.now
+    result = yield  # This executes the original block
+    end_time = Time.now
+    puts "Pipeline took #{end_time - start_time} seconds"
+    result
   end
-  
-  after_fork do
-    # Called in the child process after forking
+end
+```
+
+### Hook Types
+
+* **Before hooks**: Run before the main action
+* **After hooks**: Run after the main action
+* **Around hooks**: Wrap the main action, yielding control when appropriate
+
+### Adding Hooks
+
+Hooks can be defined as methods, procs, or blocks:
+
+```ruby
+# As a block:
+before_run { |data| puts "Starting with #{data}" }
+
+# As a method reference:
+after_run :cleanup_method
+
+# With a proc:
+around_stage ->(stage, data) { 
+  puts "Before stage"
+  result = yield  # Run the original block
+  puts "After stage"
+  result
+}
+```
+
+### Running Hooks
+
+To run hooks at specific points in your code:
+
+```ruby
+def some_action(arg1, arg2)
+  run_hook :action_name, arg1, arg2 do
+    # Main logic here
+    # This block is wrapped by any around hooks
+    # and called after before hooks and before after hooks
   end
 end
 ```
@@ -573,3 +636,58 @@ ipc_fork :process_batch,
   process_items(batch)
 end
 ```
+
+## Callbacks
+
+Minigun provides a lightweight callback system via the `Minigun::Callbacks` module. This allows you to define hooks at key points in your class's lifecycle.
+
+### Basic Usage
+
+```ruby
+class MyStage
+  include Minigun::Callbacks
+  
+  # Define the callback points
+  define_callbacks :process, :initialize, :finalize
+  
+  def process(data)
+    # Run process callbacks and return the result
+    run_callbacks :process, data do
+      # Process the data
+      puts "Processing: #{data}"
+      "processed_#{data}"
+    end
+  end
+end
+
+class FilterStage < MyStage
+  # Add callbacks with blocks
+  set_callback :process, :before do |data|
+    puts "Before processing: #{data}"
+  end
+  
+  set_callback :process, :after do |data|
+    puts "After processing: #{data}"
+  end
+  
+  # Add callbacks with methods
+  set_callback :initialize, :after, :announce_ready
+  
+  def announce_ready
+    puts "Stage is ready!"
+  end
+end
+```
+
+### Available Callback Types
+
+* `:before` - Runs before the main block
+* `:after` - Runs after the main block
+
+### Callback Methods
+
+* `define_callbacks(*names)` - Define callback points for your class
+* `set_callback(name, type, method_or_proc)` - Register a callback
+* `run_callbacks(name, *args)` - Run callbacks for a given event
+* `skip_callback(name, type, method_or_proc)` - Remove a specific callback
+* `reset_callbacks(name)` - Remove all callbacks for an event

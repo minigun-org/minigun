@@ -2,6 +2,5 @@
 
 module Minigun
   # Base error class for all Minigun errors
-  class Error < StandardError
-  end
+  class Error < StandardError; end
 end

@@ -1,5 +1,9 @@
 # frozen_string_literal: true
 
+require 'concurrent'
+require 'securerandom'
+require 'logger'
+
 module Minigun
   # The Runner class handles the execution of a Minigun job
   class Runner
@@ -50,48 +54,50 @@ module Minigun
 
     def run
       log_job_started
-      @task.run_hooks(:before_run, @context)
+      @task.run_hook :run, @context do
+        # Create the thread pool for producer
+        producer_pool = Concurrent::FixedThreadPool.new(1)
 
-      # Create the thread pool for producer
-      producer_pool = Concurrent::FixedThreadPool.new(1)
+        # Start the producer and accumulator stages
+        producer_future = Concurrent::Future.execute(executor: producer_pool) { run_producer_stage }
+        accumulator_future = Concurrent::Future.execute { run_accumulator_stage }
 
-      # Start the producer and accumulator stages
-      producer_future = Concurrent::Future.execute(executor: producer_pool) { run_producer_stage }
-      accumulator_future = Concurrent::Future.execute { run_accumulator_stage }
+        # Wait for the producer to finish
+        producer_future.wait
+        log_producer_finished
+        @task.run_hook :after_producer_finished, @context
 
-      # Wait for the producer to finish
-      producer_future.wait
-      log_producer_finished
+        # Special handling for fork_mode=:never
+        # Ensure we process any accumulated batches for testing
+        if @fork_mode == :never && (@fork_mode == :never && @task.stage_blocks.keys.any? { |k| k.to_s.include?('batch') })
+          accumulated_items = get_test_accumulated_items
 
-      # Special handling for fork_mode=:never
-      # Ensure we process any accumulated batches for testing
-      if @fork_mode == :never && (@fork_mode == :never && @task.stage_blocks.keys.any? { |k| k.to_s.include?('batch') })
-        accumulated_items = get_test_accumulated_items
+          # If we have items from the accumulator and a consumer that can handle them
+          if accumulated_items&.any? && @task.stage_blocks.keys.any? { |k| k.to_s.include?('process') }
+            # Find consumer block
+            consumer_name = @task.stage_blocks.keys.find { |k| k.to_s.include?('process') }
 
-        # If we have items from the accumulator and a consumer that can handle them
-        if accumulated_items&.any? && @task.stage_blocks.keys.any? { |k| k.to_s.include?('process') }
-          # Find consumer block
-          consumer_name = @task.stage_blocks.keys.find { |k| k.to_s.include?('process') }
-
-          # Process accumulated items directly with the consumer
-          accumulated_items.each do |batch|
-            @task.instance_exec(batch, &@task.stage_blocks[consumer_name]) if @task.stage_blocks[consumer_name]
+            # Process accumulated items directly with the consumer
+            accumulated_items.each do |batch|
+              @task.instance_exec(batch, &@task.stage_blocks[consumer_name]) if @task.stage_blocks[consumer_name]
+            end
           end
         end
+
+        # Process any remaining accumulated items
+        process_accumulated_items
+
+        # Wait for accumulator to finish (should be quick once producer is done)
+        wait_for_accumulator(accumulator_future)
+
+        # Shutdown stages in order
+        shutdown_producer
+        shutdown_accumulator
+        
+        @task.run_hook :after_consumer_finished, @context
+
+        log_job_finished
       end
-
-      # Process any remaining accumulated items
-      process_accumulated_items
-
-      # Wait for accumulator to finish (should be quick once producer is done)
-      wait_for_accumulator(accumulator_future)
-
-      # Shutdown stages in order
-      shutdown_producer
-      shutdown_accumulator
-
-      log_job_finished
-      @task.run_hooks(:after_run, @context)
     end
 
     private
@@ -112,7 +118,6 @@ module Minigun
         raise e
       end
 
-      @task.run_hooks(:after_producer_finished, @context)
       info("[Minigun:#{@job_id}][Stage:producer] Done. #{@produced_count} items produced")
     end
 
@@ -141,24 +146,23 @@ module Minigun
       process_batch(accumulator_map) unless accumulator_map.empty?
 
       info("[Minigun:#{@job_id}][Stage:accumulator] Done. #{@accumulated_count} items accumulated")
+      accumulator_map
     end
 
-    def check_and_fork_stages(accumulator_map)
+    def check_and_fork_stages(accumulator_map, force: false)
       # Fork if any queue contains more than the max threshold
       accumulator_map.each do |type, items|
-        next unless items.size >= @accumulator_max_queue
+        next if items.empty? || (!force && items.size < @batch_size)
 
-        # Process this batch
-        process_batch(type => items)
-        accumulator_map[type] = []
+        # Create a batch of items to process
+        batch = items.slice!(0, items.size)
+
+        # Log the batch 
+        info("[Minigun:#{@job_id}][Stage:accumulator] Created batch of #{batch.size} #{type} items")
+
+        # Process the batch
+        process_batch({ type => batch })
       end
-
-      # If total items exceeds max_all, process all items
-      total_items = accumulator_map.values.sum(&:size)
-      return unless total_items >= @accumulator_max_all
-
-      process_batch(accumulator_map)
-      accumulator_map.clear
     end
 
     def process_batch(items_map)
@@ -218,56 +222,56 @@ module Minigun
       rd, wr = IO.pipe
 
       # Run before_fork hook
-      @task.run_hooks(:before_fork, @context)
+      @task.run_hook :fork, @context do
+        # Fork a new process
+        @pid = Process.fork do
+          # Set up signal handling for the child
+          trap_child_signals
 
-      # Fork a new process
-      @pid = Process.fork do
-        # Set up signal handling for the child
-        trap_child_signals
+          # Close parent's pipe end
+          rd.close
 
-        # Close parent's pipe end
-        rd.close
+          # Run after_fork hook
+          @task.run_hooks(:after_fork, @context)
 
-        # Run after_fork hook
-        @task.run_hooks(:after_fork, @context)
+          # Set descriptive process title if available
+          Process.setproctitle("minigun-#{@job_id}-stage-fork") if Process.respond_to?(:setproctitle)
 
-        # Set descriptive process title if available
-        Process.setproctitle("minigun-#{@job_id}-stage-fork") if Process.respond_to?(:setproctitle)
+          info("[Minigun:#{@job_id}][Stage:fork][PID #{@pid}] Started")
 
-        info("[Minigun:#{@job_id}][Stage:fork][PID #{@pid}] Started")
+          # Process the items
+          result = {}
+          begin
+            result = consume_items(items_map.values.flatten)
+          rescue StandardError => e
+            result = { error: "#{e.class}: #{e.message}" }
+            error("[Minigun:#{@job_id}][Stage:fork][PID #{@pid}] Error: #{e.class}: #{e.message}\n#{e.backtrace.join("\n")}")
+          ensure
+            # Run after stage finished hook
+            @task.run_hooks(:after_consumer_finished)
+          end
 
-        # Process the items
-        result = {}
-        begin
-          result = consume_items(items_map.values.flatten)
-        rescue StandardError => e
-          result = { error: "#{e.class}: #{e.message}" }
-          error("[Minigun:#{@job_id}][Stage:fork][PID #{@pid}] Error: #{e.class}: #{e.message}\n#{e.backtrace.join("\n")}")
-        ensure
-          # Run after stage finished hook
-          @task.run_hooks(:after_consumer_finished)
+          # Write results back to the parent process
+          wr.write(YAML.dump(result))
+          wr.close
+
+          # Exit cleanly
+          exit!(0)
         end
 
-        # Write results back to the parent process
-        wr.write(YAML.dump(result))
+        # In parent process
         wr.close
 
-        # Exit cleanly
-        exit!(0)
+        @stage_process_pids << {
+          pid: @pid,
+          result_reader: rd,
+          items: total_items,
+          start_time: Time.now
+        }
+
+        # Reset PID to indicate we're back in the parent
+        @pid = nil
       end
-
-      # In parent process
-      wr.close
-
-      @stage_process_pids << {
-        pid: @pid,
-        result_reader: rd,
-        items: total_items,
-        start_time: Time.now
-      }
-
-      # Reset PID to indicate we're back in the parent
-      @pid = nil
     end
 
     def consume_items_in_current_process(items)

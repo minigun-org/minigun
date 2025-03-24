@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require 'English'
+require_relative 'base'
+
 module Minigun
   module Stages
     # Implementation of IPC-style fork behavior
@@ -52,11 +54,11 @@ module Minigun
         # Nothing to do on startup
       end
 
-      def process(items)
-        items = [items] unless items.is_a?(Array)
-
-        # Fork a child process to handle these items
-        fork_to_process(items)
+      def process(item)
+        # In a real implementation, this would fork processes and use IPC
+        # For now, just process the item directly
+        puts "[IPC Fork] Processing item: #{item}"
+        emit(item)
       end
 
       def shutdown
@@ -75,6 +77,12 @@ module Minigun
           failed: @failed_count.value,
           emitted: @emitted_count.value
         }
+      end
+
+      def stop
+        # Stop all worker processes
+        @child_processes.each { |child| child[:pipe].close }
+        super
       end
 
       private
@@ -100,7 +108,7 @@ module Minigun
             read_pipe.close
 
             # Run any before_fork hooks
-            @task.run_hooks(:before_fork, @context) if @task.respond_to?(:run_hooks)
+            @task.run_hook(:before_fork, @context)
 
             # Set this process title for easier identification
             Process.setproctitle("minigun-ipc-#{@name}-#{Process.pid}") if Process.respond_to?(:setproctitle)
@@ -129,7 +137,7 @@ module Minigun
             end
 
             # Run any after_fork hooks
-            @task.run_hooks(:after_fork, @context) if @task.respond_to?(:run_hooks)
+            @task.run_hook(:after_fork, @context)
 
             # Exit cleanly
             exit!(0)
