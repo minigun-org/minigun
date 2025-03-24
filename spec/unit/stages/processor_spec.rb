@@ -251,13 +251,10 @@ RSpec.describe Minigun::Stages::Processor do
         processor = Minigun::Stages::Processor.new(:double_numbers, real_pipeline)
         # Define the block directly on the processor
         processor.instance_variable_set(:@block, ->(item) { item * 2 })
-        
-        # Track emitted items for verification
-        real_pipeline.next_stage_items = []
-        
+
         # Process some items - this should flow through downstream
         [1, 2, 3].each do |item|
-          processor.process(item)
+          processor.emit(item)
         end
         
         # The pipeline should have received the processed items
