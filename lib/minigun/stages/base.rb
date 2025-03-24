@@ -76,10 +76,24 @@ module Minigun
 
       # Send an item to the next stage(s) in the pipeline
       def emit(item, queue = :default)
-        @emitted_count.increment
+        # Skip nil items
+        return if item.nil?
+        
+        # Track emissions
+        @emitted_count.increment if defined?(@emitted_count)
+        
         # Check if pipeline has the new method
         if @pipeline.respond_to?(:downstream_stages)
-          send_to_next_stage(item, queue)
+          # Get downstream stages from pipeline
+          downstream = @pipeline.downstream_stages(@name)
+          
+          # Return if no downstream stages
+          return if downstream.empty?
+          
+          # Emit to all downstream stages
+          downstream.each do |stage|
+            stage.process(item) if stage.respond_to?(:process)
+          end
         else
           # Fall back to older interface
           send_method = @pipeline.method(:send_to_next_stage)

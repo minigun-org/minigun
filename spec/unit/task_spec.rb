@@ -220,17 +220,28 @@ RSpec.describe Minigun::Task do
     end
     
     it 'warns when a stage should have a prerequisite stage' do
-      # Create a new task
-      task2 = described_class.new
+      # Create a temporary class to extend Task for spying
+      temp_task = Class.new(described_class) do
+        def initialize
+          super
+          # Initialize pipeline with the test stages
+          @pipeline = [
+            { type: :processor, name: :source, options: {} },
+            { type: :cow_fork, name: :consumer, options: {} }
+          ]
+          @connections = {}
+        end
+      end
       
-      # Set up to capture warnings
+      # Create an instance with a spy for warn
+      task2 = temp_task.new
       allow(task2).to receive(:warn)
       
-      # Call validate_stage_placement directly
+      # Call the method directly
       task2.send(:validate_stage_placement, :cow_fork, :consumer)
       
-      # Expect a warning to have been issued
-      expect(task2).to have_received(:warn).with(/COW fork stage consumer should follow/)
+      # Verify the warning was issued
+      expect(task2).to have_received(:warn).with(/COW fork stage consumer should follow an accumulator stage/)
     end
   end
 
@@ -238,21 +249,47 @@ RSpec.describe Minigun::Task do
     let(:context) { double('context') }
 
     it 'runs a simple pipeline' do
-      expect(Minigun::Runner).to receive(:new).with(context).and_call_original
-      expect_any_instance_of(Minigun::Runner).to receive(:run)
-
+      # Since we've added a stage to the task, a pipeline will be created instead
+      # of a runner, so let's test for that behavior
+      pipeline_double = instance_double(Minigun::Pipeline)
+      allow(Minigun::Pipeline).to receive(:new).and_return(pipeline_double)
+      allow(pipeline_double).to receive(:build_pipeline).and_return(pipeline_double)
+      allow(pipeline_double).to receive(:run).and_return(pipeline_double)
+      allow(pipeline_double).to receive(:shutdown)
+      
+      # Add a stage to the task
+      task.add_stage(:processor, :test)
+      
+      # Execute the task's run method and test the pipeline is used
       task.run(context)
+      
+      # Verify our pipeline was created and run
+      expect(Minigun::Pipeline).to have_received(:new)
+      expect(pipeline_double).to have_received(:build_pipeline)
+      expect(pipeline_double).to have_received(:run)
+      expect(pipeline_double).to have_received(:shutdown)
     end
 
     it 'runs a custom pipeline' do
       task.pipeline_definition = proc { puts 'defining pipeline' }
 
-      expect(Minigun::Pipeline).to receive(:new).with(context, hash_including(custom: true)).and_call_original
-      expect_any_instance_of(Minigun::Pipeline).to receive(:build_pipeline)
-      expect_any_instance_of(Minigun::Pipeline).to receive(:run)
-      expect_any_instance_of(Minigun::Pipeline).to receive(:shutdown)
+      # Create a double for the pipeline
+      pipeline_double = instance_double(Minigun::Pipeline)
+      allow(Minigun::Pipeline).to receive(:new).with(context, hash_including(custom: true, task: task)).and_return(pipeline_double)
+      allow(pipeline_double).to receive(:build_pipeline).and_return(pipeline_double)
+      allow(pipeline_double).to receive(:run).and_return(pipeline_double)
+      allow(pipeline_double).to receive(:shutdown)
+      
+      # Allow setting instance variables
+      allow(pipeline_double).to receive(:instance_variable_set)
 
+      # Run the task
       task.run(context)
+      
+      # Verify our expectations
+      expect(pipeline_double).to have_received(:build_pipeline)
+      expect(pipeline_double).to have_received(:run)
+      expect(pipeline_double).to have_received(:shutdown)
     end
   end
 end

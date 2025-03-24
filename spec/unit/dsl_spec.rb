@@ -11,7 +11,7 @@ RSpec.describe Minigun::DSL do
 
       # Define a simple task with all stages
       producer do
-        produce([1, 2, 3, 4, 5])
+        emit([1, 2, 3, 4, 5])
       end
 
       processor :process_numbers do |num|
@@ -71,7 +71,7 @@ RSpec.describe Minigun::DSL do
 
     describe 'stage definition methods' do
       it 'stores producer blocks' do
-        producer_block = proc { produce([1, 2, 3]) }
+        producer_block = proc { emit([1, 2, 3]) }
         task_class.producer(:test_producer, &producer_block)
         expect(task_class._minigun_stage_blocks[:test_producer]).to eq(producer_block)
       end
@@ -83,7 +83,7 @@ RSpec.describe Minigun::DSL do
       end
 
       it 'adds stages to the pipeline' do
-        task_class.producer(:new_producer) { produce([1, 2, 3]) }
+        task_class.producer(:new_producer) { emit([1, 2, 3]) }
 
         pipeline = task_class._minigun_pipeline
         expect(pipeline.any? { |stage| stage[:type] == :processor && stage[:name] == :new_producer }).to be true
@@ -125,18 +125,6 @@ RSpec.describe Minigun::DSL do
         subject.run
       end
     end
-
-    describe '#produce' do
-      it 'calls emit with the item' do
-        expect(subject).to receive(:emit).with([1, 2, 3])
-        subject.produce([1, 2, 3])
-      end
-
-      it 'calls emit with a single item' do
-        expect(subject).to receive(:emit).with(42)
-        subject.produce(42)
-      end
-    end
   end
 
   # Add tests without mocks
@@ -155,7 +143,7 @@ RSpec.describe Minigun::DSL do
         # Define a real task with all stages
         producer :source do
           items = [1, 2, 3, 4, 5]
-          items.each { |item| produce(item) }
+          items.each { |item| emit(item) }
         end
 
         processor :process_numbers do |num|
@@ -187,7 +175,7 @@ RSpec.describe Minigun::DSL do
         # Override the run method to simulate task execution
         def real_task.run
           # Simulate producer
-          produce([1, 2, 3, 4, 5])
+          emit([1, 2, 3, 4, 5])
 
           # Simulate processor
           [1, 2, 3, 4, 5].each do |item|

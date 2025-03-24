@@ -42,7 +42,7 @@ RSpec.describe Minigun::Pipeline do
       task.add_producer(:test_producer, {}) do
         items = [1, 2, 3]
         @producer_output = items.dup
-        produce(items)
+        emit(items)
       end
 
       task.add_processor(:test_processor, {}) do |num|
@@ -139,7 +139,7 @@ RSpec.describe Minigun::Pipeline do
       branching_task.add_producer(:source, {}) do
         items = [1, 2, 3]
         @producer_output = items.dup
-        produce(items)
+        emit(items)
       end
 
       branching_task.add_processor(:double, {}) do |num|

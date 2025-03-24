@@ -44,7 +44,7 @@ RSpec.describe Minigun::Runner do
       @producer_called += 1
       items = [1, 2, 3]
       @producer_items = items.dup
-      produce(items)
+      emit(items)
     end
 
     task.add_processor(:test_processor, {}) do |item|

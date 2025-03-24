@@ -4,6 +4,7 @@ module Minigun
   # Pipeline DSL executor used during pipeline definition
   class PipelineDSL
     attr_reader :pipeline
+    attr_accessor :current_stage
 
     def initialize(pipeline)
       @pipeline = pipeline

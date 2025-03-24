@@ -10,23 +10,22 @@ module Minigun
 
     def initialize(context, options = {})
       @context = context
-
-      # Get the task from the context - more flexible approach
-      @task = if options[:task]
-                options[:task]
-              elsif context.is_a?(Minigun::Task)
-                context
-              elsif context.class.respond_to?(:_minigun_task)
-                context.class._minigun_task
-              elsif context.is_a?(Module) && context.respond_to?(:_minigun_task)
-                context._minigun_task
-              else
-                # For custom contexts that are not tasks or modules with DSL
-                # we'll use the task from options or create a simple one
-                options[:task] || Minigun::Task.new
-              end
-
-      # Generate a unique ID for this pipeline
+      
+      # Initialize task from context or directly provided task
+      @task = options[:task]
+      
+      # Handle various ways of getting the task
+      if @task.nil?
+        if @context.is_a?(Minigun::Task)
+          @task = @context
+        elsif @context.class.respond_to?(:_minigun_task)
+          @task = @context.class._minigun_task
+        else
+          # Create a new task if none exists
+          @task = Minigun::Task.new
+        end
+      end
+      
       @job_id = options[:job_id] || SecureRandom.hex(4)
 
       # Get pipeline configuration
@@ -43,11 +42,6 @@ module Minigun
       @stages = []
       @stage_connections = {}
       @executor = nil
-
-      # Build pipeline
-      return unless @is_custom || false
-
-      build_pipeline
     end
 
     # Add a stage to the pipeline
@@ -108,19 +102,20 @@ module Minigun
         # If we have a pipeline definition block, execute it
         @executor = PipelineDSL.new(self)
         @executor.instance_eval(&@task.pipeline_definition)
-
-        # TODO: need to decide whether to allow this...
-        # After executing the pipeline definition, make sure connections are updated
-        # This ensures connections defined in the block are applied to the pipeline
-        @stage_connections = @task.connections if @task.connections.any?
-      else
+      elsif @task.pipeline && @task.pipeline.any?
         # Add all stages from the task
         @task.pipeline.each do |stage_config|
           add_stage(stage_config[:type], stage_config[:name], stage_config[:options])
         end
       end
 
-      # Connect stages
+      # After executing the pipeline definition, make sure connections are updated
+      # This ensures connections defined in the block are applied to the pipeline
+      if @stage_connections.empty? && @task.connections && @task.connections.any?
+        @stage_connections = @task.connections
+      end
+
+      # Connect stages - this will use the connections we've established
       connect_stages
 
       self

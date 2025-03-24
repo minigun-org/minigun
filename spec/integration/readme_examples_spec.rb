@@ -11,7 +11,7 @@ RSpec.describe 'README Examples Integration' do
 
         # Define a simplified pipeline
         producer do
-          (1..5).each { |i| produce(i) }
+          (1..5).each { |i| emit(i) }
         end
 
         processor do |item|
