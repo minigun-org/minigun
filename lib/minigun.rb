@@ -23,6 +23,7 @@ require_relative 'minigun/stages/ipc_fork'
 require_relative 'minigun/stages/cow_fork'
 require_relative 'minigun/runner'
 require_relative 'minigun/dsl'
+require_relative 'minigun/pipeline_dsl'
 
 # Minigun is a high-performance parallel data processing framework.
 module Minigun

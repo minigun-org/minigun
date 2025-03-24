@@ -78,8 +78,8 @@ module Minigun
         # Create a context that includes the emit method
         execution_context = @context
         
-        # If the context is a PipelineExecutor, set the current stage
-        if execution_context.is_a?(Minigun::PipelineExecutor)
+        # If the context is a PipelineDSL, set the current stage
+        if execution_context.is_a?(Minigun::PipelineDSL)
           execution_context.set_current_stage(self)
         # If the context doesn't respond to emit, create a wrapper that does
         elsif !execution_context.respond_to?(:emit)
