@@ -5,7 +5,7 @@ require 'spec_helper'
 RSpec.describe 'Task Integration' do
   describe 'running without full pipeline mocks' do
     it 'simulates running the task without full pipeline execution' do
-      # Create a tracking array
+      # Create tracking arrays
       processed_items = []
 
       # Define a simple processor

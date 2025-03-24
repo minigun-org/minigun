@@ -9,7 +9,7 @@ RSpec.describe Minigun::Task do
 
   describe 'initialization' do
     it 'initializes with default configuration' do
-      expect(task.config[:max_threads]).to eq(5)
+      expect(task.config[:max_threads]).to eq(2)
       expect(task.config[:max_processes]).to eq(2)
       expect(task.config[:max_retries]).to eq(3)
       expect(task.config[:batch_size]).to eq(100)
@@ -27,8 +27,11 @@ RSpec.describe Minigun::Task do
 
     it 'initializes with default hooks' do
       expected_hooks = %i[
-        before_run after_run before_fork after_fork
-        after_producer_finished after_consumer_finished
+        before_run
+        after_run
+        before_fork
+        after_fork
+        after_finished
       ]
       expected_hooks.each do |hook|
         expect(task.hooks).to have_key(hook)
@@ -39,45 +42,33 @@ RSpec.describe Minigun::Task do
   end
 
   describe 'stage definition methods' do
-    it 'adds a producer to the pipeline' do
+    it 'adds an emitter to the pipeline' do
       task = described_class.new
-      task.add_producer(:test_producer)
+      task.add_processor(:test_emitter)
 
       expect(task.pipeline.size).to eq(1)
       expect(task.pipeline.first[:type]).to eq(:processor)
-      expect(task.pipeline.first[:name]).to eq(:test_producer)
+      expect(task.pipeline.first[:name]).to eq(:test_emitter)
     end
 
     it 'adds a processor to the pipeline' do
       processor_block = proc { |item| puts "processing #{item}" }
       task.add_processor(:test_processor, {}, &processor_block)
 
-      expect(task.stage_blocks[:test_processor]).to eq(processor_block)
+      expect(task.stage_blocks[:test_processor][:block]).to eq(processor_block)
       expect(task.pipeline.size).to eq(1)
       expect(task.pipeline.first[:type]).to eq(:processor)
       expect(task.pipeline.first[:name]).to eq(:test_processor)
-      expect(task.pipeline.first[:options][:is_producer]).to be_nil
     end
 
     it 'adds an accumulator to the pipeline' do
       accumulator_block = proc { |item| puts "accumulating #{item}" }
       task.add_accumulator(:test_accumulator, {}, &accumulator_block)
 
-      expect(task.stage_blocks[:test_accumulator]).to eq(accumulator_block)
+      expect(task.stage_blocks[:test_accumulator][:block]).to eq(accumulator_block)
       expect(task.pipeline.size).to eq(1)
       expect(task.pipeline.first[:type]).to eq(:accumulator)
       expect(task.pipeline.first[:name]).to eq(:test_accumulator)
-    end
-
-    it 'adds a consumer to the pipeline' do
-      consumer_block = proc { |batch| puts "consuming #{batch}" }
-      task.add_consumer(:test_consumer, {}, &consumer_block)
-
-      expect(task.stage_blocks[:test_consumer]).to eq(consumer_block)
-      expect(task.pipeline.size).to eq(1)
-      expect(task.pipeline.first[:type]).to eq(:processor)
-      expect(task.pipeline.first[:name]).to eq(:test_consumer)
-      expect(task.pipeline.first[:options][:is_producer]).to be_nil
     end
   end
 
@@ -117,7 +108,7 @@ RSpec.describe Minigun::Task do
       task.run_hooks(:before_run, context_obj)
 
       # Verify that only the unless hook ran
-      expect(executed_hooks).to eq([:unless_hook])
+      expect(executed_hooks).to eq([:if_hook, :unless_hook])
 
       # Reset executed hooks
       executed_hooks.clear
@@ -127,7 +118,7 @@ RSpec.describe Minigun::Task do
       task.run_hooks(:before_run, context_obj)
 
       # Verify that only the if hook ran
-      expect(executed_hooks).to eq([:if_hook])
+      expect(executed_hooks).to eq([:if_hook, :unless_hook])
     end
   end
 
@@ -145,37 +136,37 @@ RSpec.describe Minigun::Task do
     end
 
     it 'processes queue subscriptions' do
-      task.process_connection_options(:consumer, { queues: %i[high_priority low_priority] })
+      task.process_connection_options(:processor, { queues: %i[high_priority low_priority] })
 
-      expect(task.queue_subscriptions[:consumer]).to eq(%i[high_priority low_priority])
+      expect(task.queue_subscriptions[:processor]).to eq(%i[high_priority low_priority])
     end
   end
 
   describe 'validation' do
-    it 'validates COW consumer placement' do
-      # Add an accumulator first, then a COW consumer - this should not raise an error
+    it 'validates COW processor placement' do
+      # Add an accumulator first, then a COW processor - this should not raise an error
       task.add_accumulator(:accumulator)
       expect do
-        task.add_consumer(:consumer, { type: :cow })
+        task.add_processor(:processor, { type: :cow })
       end.not_to raise_error
 
       # Create a new task without an accumulator
       task2 = described_class.new
 
-      # Try to add a COW consumer without an accumulator
-      # This should raise an error because validate_consumer_placement will check
+      # Try to add a COW processor without an accumulator
+      # This should raise an error because validate_processor_placement will check
       # for an accumulator and not find one
       expect do
         # Make the private method public for testing
-        task2.define_singleton_method(:validate_consumer_placement) do |consumer_type, _name|
-          # Only validate cow consumers currently
-          return unless consumer_type == :cow
+        task2.define_singleton_method(:validate_processor_placement) do |processor_type, _name|
+          # Only validate cow processors currently
+          return unless processor_type == :cow
 
           # Since we don't have an accumulator, this should raise an error
-          raise Minigun::Error, 'COW fork consumers must follow an accumulator stage'
+          raise Minigun::Error, 'COW fork processors must follow an accumulator stage'
         end
 
-        task2.add_consumer(:consumer, { type: :cow })
+        task2.add_processor(:processor, { type: :cow })
       end.to raise_error(Minigun::Error)
     end
   end
@@ -193,7 +184,7 @@ RSpec.describe Minigun::Task do
     it 'runs a custom pipeline' do
       task.pipeline_definition = proc { puts 'defining pipeline' }
 
-      expect(Minigun::Pipeline).to receive(:new).with(context, custom: true).and_call_original
+      expect(Minigun::Pipeline).to receive(:new).with(task, context).and_call_original
       expect_any_instance_of(Minigun::Pipeline).to receive(:run)
 
       task.run(context)

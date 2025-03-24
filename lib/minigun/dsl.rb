@@ -64,74 +64,51 @@ module Minigun
         _minigun_task.config[:max_processes] = value
       end
 
-      # Alias for max_processes for more intuitive API
-      def max_consumer_forks(value)
-        max_processes(value)
-      end
-
-      # Set maximum retry attempts for failed item processing
+      # Set maximum number of retries for failed items
       def max_retries(value)
         _minigun_task.config[:max_retries] = value
       end
 
-      # Set batch size for consumer threads
+      # Set batch size for accumulator stages
       def batch_size(value)
         _minigun_task.config[:batch_size] = value
       end
 
-      # Set maximum items in a single queue before forking
-      def accumulator_max_queue(value)
-        _minigun_task.config[:accumulator_max_queue] = value
-      end
-
-      # Set maximum items across all queues before forking
-      def accumulator_max_all(value)
-        _minigun_task.config[:accumulator_max_all] = value
-      end
-
-      # Set interval for checking accumulator queues
-      def accumulator_check_interval(value)
-        _minigun_task.config[:accumulator_check_interval] = value
-      end
-
-      # Set forking mode (:auto, :always, :never)
-      def fork_mode(mode)
-        raise Minigun::Error, 'Fork mode must be :auto, :always, or :never' unless %i[auto always never].include?(mode)
-
-        _minigun_task.config[:fork_mode] = mode
-      end
-
-      # Set consumer type (:ipc, :cow)
-      def consumer_type(type)
-        raise Minigun::Error, 'Consumer type must be :ipc or :cow' unless %i[ipc cow].include?(type)
-
-        if type == :cow
-          # When setting to :cow, warn about accumulator requirement
-          warn 'WARNING: Setting consumer type to :cow. Remember that COW consumers must follow an accumulator stage.'
+      # Set fork mode for the task
+      def fork_mode(value)
+        unless [:auto, :never, :always].include?(value.to_sym)
+          raise ArgumentError, "Invalid fork mode: #{value}. Must be :auto, :never, or :always"
         end
-
-        _minigun_task.config[:consumer_type] = type
+        _minigun_task.config[:fork_mode] = value.to_sym
       end
 
-      # Set logger for output
-      def logger(logger)
-        _minigun_task.config[:logger] = logger
+      # Set consumer type for the task
+      def consumer_type(value)
+        unless [:ipc, :cow].include?(value.to_sym)
+          raise ArgumentError, "Invalid consumer type: #{value}. Must be :ipc or :cow"
+        end
+        if value.to_sym == :cow
+          warn "Setting consumer type to :cow. Remember that COW consumers must follow an accumulator stage."
+        end
+        _minigun_task.config[:consumer_type] = value.to_sym
       end
 
-      # Define the pipeline stages
+      # Set processor type for the task (alias for consumer_type)
+      def processor_type(value)
+        consumer_type(value)
+      end
+
+      # Define a pipeline block
       def pipeline(&block)
         _minigun_task.pipeline_definition = block
-      end
-
-      # Define the producer block that generates items
-      def producer(name = :default, options = {}, &block)
-        _minigun_task.add_producer(name, options, &block)
       end
 
       # Define a processor block that transforms items
       def processor(name = :default, options = {}, &block)
         _minigun_task.add_processor(name, options, &block)
       end
+      alias_method :consumer, :processor
+      alias_method :producer, :processor
 
       # Define a specialized accumulator stage
       def accumulator(name = :default, options = {}, &block)
@@ -142,55 +119,83 @@ module Minigun
       def cow_fork(name = :default, options = {}, &block)
         # Alias for consumer with cow type
         options = options.merge(fork: :cow)
-        consumer(name, options, &block)
+        processor(name, options, &block)
       end
 
       # Define an ipc_fork stage (alias for consumer with ipc type)
       def ipc_fork(name = :default, options = {}, &block)
         # Alias for consumer with ipc type
         options = options.merge(fork: :ipc)
-        consumer(name, options, &block)
-      end
-
-      # Define a consumer stage
-      def consumer(name = :default, options = {}, &block)
-        _minigun_task.add_consumer(name, options, &block)
+        processor(name, options, &block)
       end
 
       # Define a hook to run before the job starts
       def before_run(options = {}, &block)
-        _minigun_task.add_hook(:before_run, options, &block)
+        _minigun_task.class.before(:run, &block)
       end
 
       # Define a hook to run after the job finishes
       def after_run(options = {}, &block)
-        _minigun_task.add_hook(:after_run, options, &block)
+        _minigun_task.class.after(:run, &block)
+      end
+
+      # Define a hook to run around the job execution
+      def around_run(options = {}, &block)
+        _minigun_task.class.around(:run, &block)
       end
 
       # Define a hook to run before forking a consumer process
       def before_fork(options = {}, &block)
-        _minigun_task.add_hook(:before_fork, options, &block)
+        _minigun_task.class.before(:fork, &block)
       end
 
       # Define a hook to run after forking a consumer process
       def after_fork(options = {}, &block)
-        _minigun_task.add_hook(:after_fork, options, &block)
+        _minigun_task.class.after(:fork, &block)
+      end
+
+      # Define a hook to run around forking
+      def around_fork(options = {}, &block)
+        _minigun_task.class.around(:fork, &block)
       end
 
       # Define stage-specific hooks
       def before_stage(name, options = {}, &block)
-        stage_name = :"before_stage_#{name.to_s.gsub(/\s+/, '_').downcase}"
-        _minigun_task.add_hook(stage_name, options, &block)
+        _minigun_task.class.before(:stage, &block)
       end
 
       def after_stage(name, options = {}, &block)
-        stage_name = :"after_stage_#{name.to_s.gsub(/\s+/, '_').downcase}"
-        _minigun_task.add_hook(stage_name, options, &block)
+        _minigun_task.class.after(:stage, &block)
       end
 
-      def on_stage_error(name, options = {}, &block)
-        stage_name = :"on_stage_error_#{name.to_s.gsub(/\s+/, '_').downcase}"
-        _minigun_task.add_hook(stage_name, options, &block)
+      def around_stage(name, options = {}, &block)
+        _minigun_task.class.around(:stage, &block)
+      end
+
+      # Define processor-specific hooks
+      def before_processor_finished(options = {}, &block)
+        _minigun_task.class.before(:processor_finished, &block)
+      end
+
+      def after_processor_finished(options = {}, &block)
+        _minigun_task.class.after(:processor_finished, &block)
+      end
+
+      def around_processor_finished(options = {}, &block)
+        _minigun_task.class.around(:processor_finished, &block)
+      end
+
+      # Define accumulator-specific hooks
+      def before_accumulator_finished(options = {}, &block)
+        _minigun_task.class.before(:accumulator_finished, &block)
+      end
+
+      def after_accumulator_finished(options = {}, &block)
+        _minigun_task.class.after(:accumulator_finished, &block)
+      end
+
+      def around_accumulator_finished(options = {}, &block)
+        _minigun_task.class.around(:accumulator_finished, &block)
       end
     end
 
@@ -200,35 +205,23 @@ module Minigun
     end
     alias_method :go_brrr!, :run
 
-    # Add an item to be processed (now just calls emit)
-    def produce(item)
-      emit(item)
-    end
-
     # Emit an item to the next stage (used in processor stages)
     def emit(item)
-      # This is implemented by the Pipeline class when running
-      # Here we just provide it for the DSL
+      Thread.current[:minigun_queue] ||= []
+      Thread.current[:minigun_queue] << item
     end
 
     # Emit an item to a specific queue
     def emit_to_queue(queue, item)
-      # Queue routing is handled by the Pipeline class at runtime
-      # Here we just provide the method for the DSL
+      emit(item)
     end
 
     # Alias for emit_to_queue
     alias_method :enqueue, :emit_to_queue
 
-    # Accumulate an item in the current accumulator
-    def accumulate(item, options = {})
-      # This is implemented by the Accumulator stage class
-      # Here we just provide it for the DSL
-    end
-
     # Run all hooks of a specific type (delegates to task)
-    def run_hooks(type, *args)
-      self.class.class_variable_get(:@@_minigun_task).run_hooks(type, self, *args)
+    def run_hook(name, *args, &block)
+      self.class._minigun_task.run_hook(name, *args, &block)
     end
   end
 end

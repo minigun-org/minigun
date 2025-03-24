@@ -10,15 +10,15 @@ RSpec.describe 'README Examples Integration' do
         include Minigun::DSL
 
         # Define a simplified pipeline
-        producer do
-          (1..5).each { |i| produce(i) }
+        processor do
+          (1..5).each { |i| emit(i) }
         end
 
         processor do |item|
           emit(item * 2)
         end
 
-        consumer do |batch|
+        processor do |batch|
           # In our test this won't actually be called
         end
 
@@ -38,13 +38,13 @@ RSpec.describe 'README Examples Integration' do
       # Verify that the pipeline stages are defined
       expect(task.pipeline.size).to eq(3)
 
-      # First stage should be a producer
+      # First stage should be a processor
       expect(task.pipeline[0][:type]).to eq(:processor)
 
       # Second stage should be a processor
       expect(task.pipeline[1][:type]).to eq(:processor)
 
-      # Last stage should be a consumer
+      # Last stage should be a processor
       expect(task.pipeline[2][:type]).to eq(:processor)
     end
   end
@@ -75,7 +75,7 @@ RSpec.describe 'README Examples Integration' do
 
       # Define the pipeline
       task_class.class_eval do
-        producer :extract do
+        processor :extract do
           # Mock database.each_batch
           @database.each_slice(2) do |batch|
             emit(batch)
@@ -88,7 +88,7 @@ RSpec.describe 'README Examples Integration' do
           transformed
         end
 
-        consumer :load do |batch|
+        processor :load do |batch|
           # Load data to destination
         end
 
@@ -113,14 +113,14 @@ RSpec.describe 'README Examples Integration' do
       # Verify that the pipeline stages are defined
       expect(task_obj.pipeline.size).to eq(3)
 
-      # First stage should be a producer
+      # First stage should be a processor
       expect(task_obj.pipeline[0][:type]).to eq(:processor)
       expect(task_obj.pipeline[0][:name]).to eq(:extract)
 
       # Second stage should be a processor
       expect(task_obj.pipeline[1][:type]).to eq(:processor)
 
-      # Last stage should be a consumer
+      # Last stage should be a processor
       expect(task_obj.pipeline[2][:type]).to eq(:processor)
     end
   end
@@ -153,7 +153,7 @@ RSpec.describe 'README Examples Integration' do
 
       # Define the pipeline
       crawler_class.class_eval do
-        producer :seed_urls do
+        processor :seed_urls do
           seed_urls = ['https://example.com/page1', 'https://example.com/page2']
           seed_urls.each { |url| emit(url) }
         end
@@ -183,7 +183,7 @@ RSpec.describe 'README Examples Integration' do
           end
         end
 
-        consumer :process_pages do |batch|
+        processor :process_pages do |batch|
           # Process pages in parallel using forked processes
           batch.each { |page| process_content(page) }
         end
@@ -206,7 +206,7 @@ RSpec.describe 'README Examples Integration' do
       # Verify that the pipeline stages are defined
       expect(task_obj.pipeline.size).to eq(5)
 
-      # First stage should be a producer
+      # First stage should be a processor
       expect(task_obj.pipeline[0][:type]).to eq(:processor)
       expect(task_obj.pipeline[0][:name]).to eq(:seed_urls)
 
@@ -215,7 +215,7 @@ RSpec.describe 'README Examples Integration' do
       expect(accumulator_stage).not_to be_nil
       expect(accumulator_stage[:name]).to eq(:batch_pages)
 
-      # Last stage should be a consumer
+      # Last stage should be a processor
       expect(task_obj.pipeline[4][:type]).to eq(:processor)
     end
   end
@@ -241,7 +241,7 @@ RSpec.describe 'README Examples Integration' do
 
       # Define the pipeline
       diamond_class.class_eval do
-        producer :data_source do
+        processor :data_source do
           items = %w[item1 item2 item3]
           items.each { |item| emit(item) }
         end
@@ -271,7 +271,7 @@ RSpec.describe 'README Examples Integration' do
           end
         end
 
-        consumer :store_results, from: :combine do |result|
+        processor :store_results, from: :combine do |result|
           # Store the result
         end
 
@@ -292,7 +292,7 @@ RSpec.describe 'README Examples Integration' do
       # Verify that the pipeline stages are defined
       expect(task_obj.pipeline.size).to eq(6)
 
-      # First stage should be a producer
+      # First stage should be a processor
       expect(task_obj.pipeline[0][:type]).to eq(:processor)
       expect(task_obj.pipeline[0][:name]).to eq(:data_source)
 
@@ -300,7 +300,7 @@ RSpec.describe 'README Examples Integration' do
       validate_stage = task_obj.pipeline.find { |stage| stage[:name] == :validate }
       expect(validate_stage[:type]).to eq(:processor)
 
-      # Last stage should be a consumer
+      # Last stage should be a processor
       expect(task_obj.pipeline[5][:type]).to eq(:processor)
 
       # Verify the connections
@@ -325,7 +325,7 @@ RSpec.describe 'README Examples Integration' do
 
       # Define the pipeline
       priority_class.class_eval do
-        producer :user_producer do
+        processor :user_producer do
           all_users = [
             { id: 1, name: 'Regular User 1', vip: false, email_type: 'regular' },
             { id: 2, name: 'VIP User 1', vip: true, email_type: 'newsletter' },
@@ -362,7 +362,7 @@ RSpec.describe 'README Examples Integration' do
           end
         end
 
-        consumer :consumer, queues: %i[default high_priority] do |batch|
+        processor :consumer, queues: %i[default high_priority] do |batch|
           # In our test this won't actually be called
         end
 
@@ -384,7 +384,7 @@ RSpec.describe 'README Examples Integration' do
       # Verify that the pipeline stages are defined
       expect(task_obj.pipeline.size).to eq(4)
 
-      # First stage should be a producer
+      # First stage should be a processor
       expect(task_obj.pipeline[0][:type]).to eq(:processor)
       expect(task_obj.pipeline[0][:name]).to eq(:user_producer)
 
@@ -397,7 +397,7 @@ RSpec.describe 'README Examples Integration' do
       expect(accumulator_stage[:name]).to eq(:email_accumulator)
       expect(task_obj.connections[:email_processor]).to include(:email_accumulator)
 
-      # Last stage should be a consumer
+      # Last stage should be a processor
       expect(task_obj.pipeline[3][:type]).to eq(:processor)
       expect(task_obj.queue_subscriptions[:consumer]).to eq(%i[default high_priority])
     end
@@ -416,7 +416,7 @@ RSpec.describe 'README Examples Integration' do
 
       # Define the pipeline
       load_balancer_class.class_eval do
-        producer :data_source do
+        processor :data_source do
           dataset = (1..9).to_a
           dataset.each_with_index do |item, i|
             # Round-robin distribute across multiple queues
@@ -469,7 +469,7 @@ RSpec.describe 'README Examples Integration' do
       # Verify that the pipeline stages are defined
       expect(task_obj.pipeline.size).to eq(5)
 
-      # First stage should be a producer
+      # First stage should be a processor
       expect(task_obj.pipeline[0][:type]).to eq(:processor)
       expect(task_obj.pipeline[0][:name]).to eq(:data_source)
 

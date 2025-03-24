@@ -4,128 +4,169 @@ module Minigun
   # Orchestrates the flow of items through stages
   class Pipeline
     extend Forwardable
+    include Minigun::HooksMixin
+    
+    # Register standard Minigun hook points
+    register_hook_points :run, :stage
+    
     def_delegators :@logger, :info, :warn, :error, :debug
 
     attr_reader :context, :job_id, :stages, :task, :stage_connections
 
-    def initialize(context, options = {})
+    def initialize(task, context, options = {})
+      @task = task
       @context = context
-
-      # Get the task from the context - more flexible approach
-      @task = if options[:task]
-                options[:task]
-              elsif context.is_a?(Minigun::Task)
-                context
-              elsif context.class.respond_to?(:_minigun_task)
-                context.class._minigun_task
-              elsif context.is_a?(Module) && context.respond_to?(:_minigun_task)
-                context._minigun_task
-              else
-                # For custom contexts that are not tasks or modules with DSL
-                # we'll use the task from options or create a simple one
-                options[:task] || Minigun::Task.new
-              end
-
-      # Generate a unique ID for this pipeline
       @job_id = options[:job_id] || SecureRandom.hex(4)
 
-      # Get pipeline configuration
-      @is_custom = options[:custom] || false
-
-      # Initialize task execution options
-      @max_threads = options[:max_threads] || @task.config[:max_threads]
-      @max_processes = options[:max_processes] || @task.config[:max_processes]
-      @max_retries = options[:max_retries] || @task.config[:max_retries]
-      @logger = options[:logger] || @task.config[:logger]
+      # Set up logger
+      @logger = Logger.new($stdout)
+      @logger.level = options[:log_level] || Logger::INFO
       @debug = options[:debug] || false
 
-      # Initialize pipeline components
+      # Initialize stages array
       @stages = []
+
+      # Initialize stage connections
       @stage_connections = {}
-      @executor = nil
 
-      # Build pipeline
-      return unless @is_custom || false
+      # Initialize queue state
+      @queues = {}
 
-      build_pipeline
+      # Initialize status flags
+      @running = false
+      @terminating = false
     end
 
     # Add a stage to the pipeline
-    def add_stage(type, name, options = {})
-      # Create the appropriate stage class
-      klass = case type
-              when :processor
-                Minigun::Stages::Processor
-              when :accumulator
-                Minigun::Stages::Accumulator
-              when Minigun::Stages::Processor, Minigun::Stages::Accumulator
-                type
-              else
-                raise "Unknown stage type: #{type}"
-              end
+    def add_stage(name, type, options = {}, &block)
+      # Create stage based on type
+      stage = case type.to_sym
+             when :processor, :consumer, :producer
+               Minigun::Stages::Processor.new(name, options)
+             when :accumulator
+               Minigun::Stages::Accumulator.new(name, options)
+             when :double
+               # Test double stage - just stores items
+               Minigun::Stages::TestDouble.new(name, options)
+             else
+               raise ArgumentError, "Unknown stage type: #{type}"
+             end
 
-      stage = klass.new(name, self, options)
+      # Set the block if provided
+      stage.block = block if block
+
+      # Add to stages array
       @stages << stage
+
+      # Return the stage
       stage
     end
 
-    # Connect stages in the pipeline
+    # Connect stages together
     def connect_stages(stage_connections = nil)
       # Use provided connections or initialize from task
       if stage_connections
         @stage_connections = stage_connections
-      elsif @task.connections.any?
-        @stage_connections = @task.connections
+      elsif @task.connections&.any?
+        @stage_connections = @task.connections.dup
       else
-        # If no connections provided, create default linear pipeline
-        # where each stage connects to the next one
-        @stages.each_with_index do |stage, i|
-          next unless i < @stages.size - 1
+        # Create linear connections (default)
+        @stage_connections = build_linear_connections
+      end
 
-          next_stage = @stages[i + 1]
-          @stage_connections[stage.name] ||= []
-          @stage_connections[stage.name] << next_stage.name
+      # Connect stages based on the connections map
+      @stages.each do |stage|
+        # Get downstream connections
+        downstream = downstream_stages(stage.name)
+
+        # Connect to downstream stages
+        downstream.each do |ds_name|
+          # Find the referenced stage
+          target_stage = @stages.find { |s| s.name.to_sym == ds_name.to_sym }
+          
+          # Connect if we found it
+          if target_stage
+            stage.add_output(target_stage)
+          else
+            warn "Stage #{ds_name} referenced in connections not found"
+          end
         end
+
+        # Set up queue subscriptions
+        stage.queues = queue_subscriptions(stage.name)
       end
 
       self
     end
 
-    # Build the pipeline based on task configuration
+    # Build the pipeline from the task definitions
     def build_pipeline
-      # Add all stages from the task
-      @task.pipeline.each do |stage_config|
-        add_stage(stage_config[:type], stage_config[:name], stage_config[:options])
+      # Skip if already built
+      return self if @stages.any?
+
+      # Build the pipeline
+      if @task.pipeline_definition
+        build_pipeline_from_task_definition
+      elsif @task.pipeline.any?
+        build_pipeline_from_stages
+      else
+        raise 'No pipeline definition found'
       end
 
-      # Connect stages
+      # Connect the stages
       connect_stages
 
+      # Validate the pipeline
+      validate_pipeline
+
+      # Return the pipeline
       self
     end
 
-    # Run the built pipeline
+    # Run the pipeline
     def run
-      # Run before_run hooks if task has hooks defined
-      @task.run_hooks(:before_run, @context) if @task.respond_to?(:run_hooks)
+      validate_pipeline!
 
-      # Log pipeline startup
-      @logger.info("[Minigun:#{@job_id}] Starting pipeline execution")
+      # Run before_run hooks
+      @task.run_hooks(:before_run, @context)
 
-      # Create and initialize the executor
-      @executor = PipelineExecutor.new(self)
-      @executor.run
-
-      # Run after_run hooks if task has hooks defined
-      @task.run_hooks(:after_run, @context) if @task.respond_to?(:run_hooks)
-
-      # Log pipeline completion
-      @logger.info("[Minigun:#{@job_id}] Pipeline execution completed")
-
-      self
+      begin
+        # Process remaining stages
+        processor_stages = @stages.reject { |s| s.is_a?(Minigun::Stages::Emitter) }
+        processor_stages.each { |stage| stage.run(@context) }
+      ensure
+        # Run after_run hooks
+        @task.run_hooks(:after_run, @context)
+      end
     end
 
-    # Print a log message if debug is enabled
+    # Shutdown the pipeline
+    def shutdown
+      @logger.info("[Minigun:#{@job_id}] Shutting down pipeline")
+
+      # Signal termination
+      @terminating = true
+
+      # Stop all stages
+      @stages.each(&:stop)
+    end
+
+    # Get a stage by name
+    def stage(name)
+      @stages.find { |s| s.name.to_sym == name.to_sym }
+    end
+
+    # Check if the pipeline is still running
+    def running?
+      @running
+    end
+
+    # Check if the pipeline is terminating
+    def terminating?
+      @terminating
+    end
+
+    # Debug output if debug mode is enabled
     def debug(message)
       @logger.debug(message) if @debug
     end
@@ -137,177 +178,94 @@ module Minigun
       @task.queue_subscriptions[stage_name.to_sym]
     end
 
-    # Find downstream stages connected to a given stage
+    # Get downstream stages for a given stage
     def downstream_stages(stage_name)
       return [] unless @stage_connections && @stage_connections[stage_name]
 
-      # Get connected stage names
-      stage_names = @stage_connections[stage_name]
-
-      # Find stage objects by name
-      stage_names.filter_map { |name| @stages.find { |s| s.name == name } }
+      if @stage_connections[stage_name].is_a?(Array)
+        @stage_connections[stage_name]
+      else
+        [@stage_connections[stage_name]]
+      end
     end
 
     private
 
-    # Build pipeline from task definition
+    # Build a pipeline from a direct definition block
     def build_pipeline_from_task_definition
       # If we have a pipeline definition block, execute it
       if @task.pipeline_definition
-        # Use an executor to build the pipeline
-        executor = PipelineExecutor.new(self)
-        executor.instance_eval(&@task.pipeline_definition)
-      else
-        # Otherwise use the pipeline array
-        build_pipeline_from_stages
+        # Call the pipeline definition block with this pipeline
+        @task.pipeline_definition.call(self)
       end
     end
 
-    # Build the pipeline from the stages array
+    # Build a pipeline from the stages array
     def build_pipeline_from_stages
-      # For each stage in the pipeline, add it to the pipeline
-      @task.pipeline.each do |stage_def|
-        # Determine the appropriate stage class
-        case stage_def[:type]
-        when :processor
-          Minigun::Stages::Processor
-        when :accumulator
-          Minigun::Stages::Accumulator
-        else
-          raise "Unknown stage type: #{stage_def[:type]}"
-        end
-
+      @stages.clear
+      
+      @task.pipeline.each do |stage_config|
+        name = stage_config[:name]
+        type = stage_config[:type]
+        options = stage_config[:options] || {}
+        block = stage_config[:block]
+        
+        # Add from/to if they exist
+        options[:from] = stage_config[:from] if stage_config[:from]
+        options[:to] = stage_config[:to] if stage_config[:to]
+        
         # Add the stage
-        add_stage(stage_def[:type], stage_def[:name], stage_def[:options])
+        add_stage(name, type, options, &block)
       end
+
+      # Connect stages based on from/to relationships
+      connect_stages
+      
+      self
     end
 
     # Validate the pipeline configuration
-    def validate_pipeline
-      # Collect all COW fork stages
-      @stages.each do |stage_name, stage_info|
-        next unless stage_info[:instance].respond_to?(:stage_type) && stage_info[:instance].stage_type == :cow
+    def validate_pipeline!
+      # Ensure we have at least one stage
+      raise Minigun::Error, 'Pipeline must have at least one stage' if @stages.empty?
 
-        # Find stage index in pipeline
-        stage_names = @stages.keys
-        index = stage_names.index(stage_name)
+      # Validate stage connections
+      @stages.each do |stage|
+        # Ensure non-emitter stages have at least one source
+        if stage.sources.empty?
+          raise Minigun::Error, "Stage #{stage.name} has no source stages"
+        end
+      end
 
-        # Check if any previous stage is an accumulator
-        has_accumulator = false
-        (0...index).each do |i|
-          prev_stage = @stages[stage_names[i]]
-          if prev_stage[:type] == :accumulator
-            has_accumulator = true
-            break
+      # For COW processor, ensure there's an accumulator before it
+      if @task.config[:processor_type] == :cow
+        @stages.each do |stage|
+          if stage.is_a?(Minigun::Stages::Processor) && stage.options[:forking] == :cow
+            unless stage.sources.any? { |s| s.is_a?(Minigun::Stages::Accumulator) }
+              raise Minigun::Error, "COW processor stage #{stage.name} must have an accumulator as input"
+            end
           end
         end
-
-        # Warn and fall back to IPC if no accumulator
-        unless has_accumulator
-          warn "[Minigun:#{@job_id}] COW fork stage #{stage_name} must follow an accumulator stage - falling back to IPC"
-          stage_info[:instance].stage_type = :ipc if stage_info[:instance].respond_to?(:stage_type=)
-        end
       end
     end
 
-    # Shutdown all stages and collect statistics
-    def shutdown_stages
-      # Shutdown all stages, collect statistics
-      stage_stats = {}
-      @stages.each do |stage_name, stage_info|
-        # Call shutdown method if it exists
-        next unless stage_info[:instance].respond_to?(:shutdown)
-
-        stats = stage_info[:instance].shutdown
-        stage_stats[stage_name] = stats
-
-        # Log stats
-        if stats.is_a?(Hash)
-          stats_str = stats.map { |k, v| "#{k}: #{v}" }.join(', ')
-          info("[Minigun:#{@job_id}] Stage #{stage_name} stats: #{stats_str}")
-        end
+    # Build linear connections between stages
+    def build_linear_connections
+      connections = {}
+      
+      # For each stage, connect to the next stage
+      @stages.each_with_index do |stage, index|
+        # Skip the last stage
+        next if index >= @stages.size - 1
+        
+        # Get the next stage
+        next_stage = @stages[index + 1]
+        
+        # Create a connection
+        connections[stage.name] = [next_stage.name]
       end
-
-      # Return all stats
-      stage_stats
-    end
-  end
-
-  # Pipeline DSL executor used during pipeline definition
-  class PipelineExecutor
-    def initialize(pipeline)
-      @pipeline = pipeline
-    end
-
-    # Define a producer stage
-    def producer(name = :default, options = {}, &block)
-      task = @pipeline.task
-
-      # Add the stage to the task
-      task.add_producer(name, options, &block)
-
-      # Add to pipeline
-      @pipeline.add_stage(Minigun::Stages::Processor, name, options)
-    end
-
-    # Define a processor stage
-    def processor(name = :default, options = {}, &block)
-      task = @pipeline.task
-
-      # Add the stage to the task
-      task.add_processor(name, options, &block)
-
-      # Add to pipeline
-      @pipeline.add_stage(Minigun::Stages::Processor, name, options)
-    end
-
-    # Define an accumulator stage
-    def accumulator(name = :default, options = {}, &block)
-      task = @pipeline.task
-
-      # Add the stage to the task
-      task.add_accumulator(name, options, &block)
-
-      # Add to pipeline
-      @pipeline.add_stage(Minigun::Stages::Accumulator, name, options)
-    end
-
-    # Define a consumer stage
-    def consumer(name = :default, options = {}, &block)
-      task = @pipeline.task
-
-      # Add the stage to the task
-      task.add_consumer(name, options, &block)
-
-      # Add to pipeline
-      @pipeline.add_stage(Minigun::Stages::Processor, name, options)
-    end
-
-    # Define a cow_fork consumer
-    def cow_fork(name = :default, options = {}, &block)
-      options = options.merge(fork: :cow)
-      consumer(name, options, &block)
-    end
-
-    # Define an ipc_fork consumer
-    def ipc_fork(name = :default, options = {}, &block)
-      options = options.merge(fork: :ipc)
-      consumer(name, options, &block)
-    end
-
-    def run
-      # Run a simple input-output pipeline with a starting item
-      run_pipeline_with_input(nil)
-    end
-
-    private
-
-    def run_pipeline_with_input(input_item)
-      # Track the first stage in the pipeline
-      first_stage = @pipeline.stages.first
-
-      # The first stage processes the input item
-      first_stage&.process(input_item)
+      
+      connections
     end
   end
 end

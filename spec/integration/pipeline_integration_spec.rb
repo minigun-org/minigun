@@ -11,7 +11,7 @@ RSpec.describe 'Pipeline Integration' do
       transformed_items = []
 
       # Define blocks that would be used in a task
-      producer_block = proc do
+      processor_block = proc do
         items = (1..10).to_a
         items_generated.replace(items)
         items
@@ -28,7 +28,7 @@ RSpec.describe 'Pipeline Integration' do
       end
 
       # Execute pipeline manually
-      items = producer_block.call
+      items = processor_block.call
       doubled_items = items.map { |item| processor_block.call(item) }
       final_items = doubled_items.map { |item| transformer_block.call(item) }
 
@@ -51,7 +51,7 @@ RSpec.describe 'Pipeline Integration' do
       tripled_items = []
 
       # Define blocks for the three stages
-      producer_block = proc do
+      processor_block = proc do
         items = [1, 2, 3, 4, 5]
         items_generated.replace(items)
         items
@@ -70,7 +70,7 @@ RSpec.describe 'Pipeline Integration' do
       end
 
       # Manually execute the pipeline with custom connections
-      items = producer_block.call
+      items = processor_block.call
 
       # Send each item to both processors (simulating fan-out)
       doubled_results = items.map { |item| doubler_block.call(item) }

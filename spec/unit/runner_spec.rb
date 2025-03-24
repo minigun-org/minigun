@@ -53,7 +53,7 @@ RSpec.describe Minigun::Runner do
       emit(item * 2)
     end
 
-    task.add_consumer(:test_consumer, {}) do |batch|
+    task.add_processor(:test_consumer, {}) do |batch|
       @consumer_called += 1
       @consumer_batches << batch
     end

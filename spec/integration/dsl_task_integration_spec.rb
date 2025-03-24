@@ -8,19 +8,19 @@ RSpec.describe 'DSL and Task Integration' do
     include Minigun::DSL
 
     # Track class variables
-    @@consumed_batches = []
+    @@processed_batches = []
     @@before_run_called = false
     @@after_run_called = false
 
     class << self
-      attr_accessor :consumed_batches, :before_run_called, :after_run_called
+      attr_accessor :processed_batches, :before_run_called, :after_run_called
 
       def hooks_called?
         @@before_run_called && @@after_run_called
       end
 
       def reset!
-        @@consumed_batches = []
+        @@processed_batches = []
         @@before_run_called = false
         @@after_run_called = false
       end
@@ -34,10 +34,10 @@ RSpec.describe 'DSL and Task Integration' do
     consumer_type :ipc
 
     # Define stages
-    producer :source do
+    processor :source do
       # Use a local reference
       items = [1, 2, 3, 4, 5]
-      items.each { |i| produce(i) }
+      items.each { |i| emit(i) }
     end
 
     processor :double do |num|
@@ -52,10 +52,10 @@ RSpec.describe 'DSL and Task Integration' do
       # Default behavior
     end
 
-    consumer :sink do |batch|
-      # Just consume the batch
-      TestTask.consumed_batches ||= []
-      TestTask.consumed_batches << batch
+    processor :sink do |batch|
+      # Just process the batch
+      TestTask.processed_batches ||= []
+      TestTask.processed_batches << batch
     end
 
     # Add hooks
@@ -94,7 +94,7 @@ RSpec.describe 'DSL and Task Integration' do
 
       expect(stages).to eq(expected_stages)
 
-      # Verify producer block exists
+      # Verify processor block exists
       expect(task.stage_blocks[:source]).to be_a(Proc)
 
       # Verify hooks are defined
@@ -157,15 +157,15 @@ RSpec.describe 'DSL and Task Integration' do
     module CustomTaskWithContext
       include Minigun::DSL
 
-      producer do
-        produce(1..3)
+      processor do
+        emit(1..3)
       end
 
       processor do |num|
         emit(num * 3)
       end
 
-      consumer do |batch|
+      processor do |batch|
         # Store in the context
         context.results.concat(batch)
       end

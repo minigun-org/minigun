@@ -5,7 +5,7 @@ require 'spec_helper'
 RSpec.describe Minigun::Stages::IpcFork do
   subject { described_class.new(stage_name, pipeline, config) }
 
-  let(:consumer_block) { proc { |items| items.each { |i| processed << i } } }
+  let(:processor_block) { proc { |items| items.each { |i| processed << i } } }
   let(:task_class) do
     Class.new do
     end
@@ -21,7 +21,7 @@ RSpec.describe Minigun::Stages::IpcFork do
       block.call(item)
     end
     allow(task).to receive(:run_hooks)
-    allow(task).to receive_messages(hooks: {}, stage_blocks: { test_consumer: consumer_block })
+    allow(task).to receive_messages(hooks: {}, stage_blocks: { test_processor: processor_block })
     task
   end
 
@@ -35,7 +35,7 @@ RSpec.describe Minigun::Stages::IpcFork do
       fork_mode: :never # Force thread pool mode for predictable testing
     }
   end
-  let(:stage_name) { :test_consumer }
+  let(:stage_name) { :test_processor }
 
   before do
     allow(pipeline).to receive(:downstream_stages).and_return([])
@@ -44,8 +44,8 @@ RSpec.describe Minigun::Stages::IpcFork do
   end
 
   describe '#initialize' do
-    it 'sets up the consumer with the correct configuration' do
-      expect(subject.instance_variable_get(:@stage_block)).to eq(consumer_block)
+    it 'sets up the processor with the correct configuration' do
+      expect(subject.instance_variable_get(:@stage_block)).to eq(processor_block)
       expect(subject.instance_variable_get(:@max_threads)).to eq(2)
       expect(subject.instance_variable_get(:@max_retries)).to eq(2)
       expect(subject.instance_variable_get(:@fork_mode)).to eq(:never)
