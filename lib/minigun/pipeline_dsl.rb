@@ -35,13 +35,13 @@ module Minigun
     # Add a cow_fork stage (consumer with :cow forking)
     def cow_fork(name, options = {}, &block)
       options = options.merge(fork: :cow)
-      producer(name, options, &block)
+      processor(name, options, &block)
     end
     
     # Add an ipc_fork stage (consumer with :ipc forking)
     def ipc_fork(name, options = {}, &block)
       options = options.merge(fork: :ipc)
-      producer(name, options, &block)
+      processor(name, options, &block)
     end
   end
 end

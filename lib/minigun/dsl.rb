@@ -95,11 +95,13 @@ module Minigun
 
       # Define a pipeline block
       def pipeline(&block)
+        puts "DSL: Setting pipeline definition on task: #{block.inspect}"
         _minigun_task.pipeline_definition = block
       end
 
       # Define a processor block that transforms items
       def processor(name = :default, options = {}, &block)
+        puts "DSL: Adding processor #{name} to task"
         _minigun_task.add_processor(name, options, &block)
       end
       alias_method :consumer, :processor
@@ -107,6 +109,7 @@ module Minigun
 
       # Define a specialized accumulator stage
       def accumulator(name = :default, options = {}, &block)
+        puts "DSL: Adding accumulator #{name} to task"
         _minigun_task.add_accumulator(name, options, &block)
       end
 
@@ -200,15 +203,18 @@ module Minigun
     end
     alias_method :go_brrr!, :run
 
-    # Emit an item to the next stage (used in processor stages)
+    # Emit an item to the default queue
     def emit(item)
-      Thread.current[:minigun_queue] ||= []
-      Thread.current[:minigun_queue] << item
+      # This is a convenience method for use in blocks
+      # It will be replaced with the actual emit method when the block is executed
+      raise "emit called outside of pipeline stage execution context"
     end
 
     # Emit an item to a specific queue
     def emit_to_queue(queue, item)
-      emit(item)
+      # This is a convenience method for use in blocks
+      # It will be replaced with the actual emit_to_queue method when the block is executed
+      raise "emit_to_queue called outside of pipeline stage execution context"
     end
 
     # Alias for emit_to_queue

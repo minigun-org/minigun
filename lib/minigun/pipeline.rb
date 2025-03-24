@@ -39,22 +39,15 @@ module Minigun
 
     # Add a stage to the pipeline
     def add_stage(type, name, options = {}, &block)
-      # Create stage based on type
-      stage = case type.to_sym
-              when :processor, :consumer, :producer
-                Minigun::Stages::Processor.new(name, options)
-              when :accumulator
-                Minigun::Stages::Accumulator.new(name, options)
-              when :double
-                # Test double stage - just stores items
-                Minigun::Stages::TestDouble.new(name, options)
-              else
-                raise ArgumentError, "Unknown stage type: #{type}"
-              end
-
+      # Get the stage type - for now we treat accumulator specially, everything else is a processor
+      stage_class = type.to_sym == :accumulator ? Minigun::Stages::Accumulator : Minigun::Stages::Processor
+      
+      # Create the stage instance
+      stage = stage_class.new(name, self, options)
+      
       # Set the block if provided
-      stage.block = block if block
-
+      stage.block = block if block && stage.respond_to?(:block=)
+      
       # Add to stages array
       @stages << stage
 
@@ -117,7 +110,7 @@ module Minigun
       connect_stages
 
       # Validate the pipeline
-      validate_pipeline
+      validate_pipeline!
 
       # Return the pipeline
       self
@@ -125,6 +118,16 @@ module Minigun
 
     # Run the pipeline
     def run
+      # Debug output
+      puts "Running pipeline with task pipeline: #{@task.pipeline.inspect}"
+      puts "Current stages: #{@stages.inspect}"
+      
+      # Build the pipeline if needed
+      if @stages.empty?
+        puts "Building pipeline because stages are empty"
+        build_pipeline
+      end
+      
       validate_pipeline!
 
       # Run before_run hooks
@@ -195,8 +198,18 @@ module Minigun
     def build_pipeline_from_task_definition
       # If we have a pipeline definition block, execute it
       if @task.pipeline_definition
-        # Call the pipeline definition block with this pipeline
-        @task.pipeline_definition.call(self)
+        puts "Building pipeline from task definition"
+        
+        # Rather than having the pipeline definition build the pipeline,
+        # let's use the stages we already have in the task's pipeline
+        if @task.pipeline.any?
+          puts "Using #{@task.pipeline.size} existing stages from task's pipeline"
+          build_pipeline_from_stages
+        else
+          puts "No stages found in task's pipeline, executing definition block"
+          # Call the pipeline definition block with this pipeline
+          @task.pipeline_definition.call(self)
+        end
       end
     end
 
@@ -204,22 +217,28 @@ module Minigun
     def build_pipeline_from_stages
       @stages.clear
       
+      puts "Building pipeline from stages: #{@task.pipeline.size} stages"
+      
       @task.pipeline.each do |stage_config|
         name = stage_config[:name]
         type = stage_config[:type]
         options = stage_config[:options] || {}
         block = stage_config[:block]
         
+        puts "Adding stage: #{name} (#{type})"
+        
         # Add from/to if they exist
         options[:from] = stage_config[:from] if stage_config[:from]
         options[:to] = stage_config[:to] if stage_config[:to]
         
         # Add the stage
-        add_stage(name, type, options, &block)
+        add_stage(type, name, options, &block)
       end
 
       # Connect stages based on from/to relationships
       connect_stages
+      
+      puts "Built pipeline with #{@stages.size} stages"
       
       self
     end
@@ -230,8 +249,11 @@ module Minigun
       raise Minigun::Error, 'Pipeline must have at least one stage' if @stages.empty?
 
       # Validate stage connections
-      @stages.each do |stage|
-        # Ensure non-emitter stages have at least one source
+      @stages.each_with_index do |stage, index|
+        # Skip the source check for the first stage (assumed to be a producer)
+        next if index == 0
+
+        # Ensure non-first stages have at least one source
         if stage.sources.empty?
           raise Minigun::Error, "Stage #{stage.name} has no source stages"
         end
@@ -240,7 +262,7 @@ module Minigun
       # For COW processor, ensure there's an accumulator before it
       if @task.config[:fork_type] == :cow
         @stages.each do |stage|
-          if stage.is_a?(Minigun::Stages::Processor) && stage.options[:forking] == :cow
+          if stage.options[:fork] == :cow || stage.options[:forking] == :cow
             unless stage.sources.any? { |s| s.is_a?(Minigun::Stages::Accumulator) }
               raise Minigun::Error, "COW processor stage #{stage.name} must have an accumulator as input"
             end
