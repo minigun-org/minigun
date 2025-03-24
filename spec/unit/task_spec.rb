@@ -24,7 +24,7 @@ RSpec.describe Minigun::Task do
     it 'initializes with empty pipeline' do
       expect(task.pipeline).to be_empty
     end
-    
+
     it 'initializes with empty accumulated items array' do
       expect(task.accumulated_items).to be_an(Array)
       expect(task.accumulated_items).to be_empty
@@ -84,7 +84,7 @@ RSpec.describe Minigun::Task do
       expect(task.pipeline.first[:name]).to eq(:test_consumer)
       expect(task.pipeline.first[:options][:is_producer]).to be_nil
     end
-    
+
     it 'adds a cow_fork consumer to the pipeline' do
       fork_block = proc { |batch| puts "cow forking #{batch}" }
       task.add_consumer(:test_fork, { fork: :cow }, &fork_block)
@@ -94,16 +94,16 @@ RSpec.describe Minigun::Task do
       expect(task.pipeline.first[:type]).to eq(:cow_fork)
       expect(task.pipeline.first[:name]).to eq(:test_fork)
     end
-    
+
     it 'supports the new generic add_stage method' do
       stage_block = proc { |item| item }
       task.add_stage(:processor, :generic_stage, { some_option: true }, &stage_block)
-      
+
       expect(task.stage_blocks[:generic_stage]).to eq(stage_block)
       expect(task.pipeline.size).to eq(1)
       expect(task.pipeline.first[:type]).to eq(:processor)
       expect(task.pipeline.first[:name]).to eq(:generic_stage)
-      expect(task.pipeline.first[:options][:some_option]).to eq(true)
+      expect(task.pipeline.first[:options][:some_option]).to be(true)
     end
   end
 
@@ -186,22 +186,22 @@ RSpec.describe Minigun::Task do
       expect(stage_options[:batch_size]).to eq(task.config[:batch_size])
       expect(stage_options[:flush_interval]).to be_a(Float)
     end
-    
+
     it 'applies processor-specific options' do
       options = {}
       task.add_stage(:processor, :test_processor, options)
       stage_options = task.pipeline.first[:options]
-      
+
       expect(stage_options[:max_threads]).to eq(task.config[:max_threads])
       expect(stage_options[:threads]).to eq(task.config[:max_threads])
       expect(stage_options[:max_retries]).to eq(task.config[:max_retries])
     end
-    
+
     it 'applies cow_fork-specific options' do
       options = {}
       task.add_stage(:cow_fork, :test_fork, options)
       stage_options = task.pipeline.first[:options]
-      
+
       expect(stage_options[:fork]).to eq(:cow)
       expect(stage_options[:type]).to eq(:cow)
       expect(stage_options[:max_processes]).to eq(task.config[:max_processes])
@@ -214,11 +214,11 @@ RSpec.describe Minigun::Task do
       # Add an accumulator first, then a stage that requires it
       task.add_accumulator(:accumulator)
       task.add_stage(:cow_fork, :consumer)
-      
+
       # No error should be raised since validation passes
       expect(task.send(:validate_stage_placement, :cow_fork, :consumer)).to be_nil
     end
-    
+
     it 'warns when a stage should have a prerequisite stage' do
       # Create a temporary class to extend Task for spying
       temp_task = Class.new(described_class) do
@@ -232,14 +232,14 @@ RSpec.describe Minigun::Task do
           @connections = {}
         end
       end
-      
+
       # Create an instance with a spy for warn
       task2 = temp_task.new
       allow(task2).to receive(:warn)
-      
+
       # Call the method directly
       task2.send(:validate_stage_placement, :cow_fork, :consumer)
-      
+
       # Verify the warning was issued
       expect(task2).to have_received(:warn).with(/COW fork stage consumer should follow an accumulator stage/)
     end
@@ -253,16 +253,15 @@ RSpec.describe Minigun::Task do
       # of a runner, so let's test for that behavior
       pipeline_double = instance_double(Minigun::Pipeline)
       allow(Minigun::Pipeline).to receive(:new).and_return(pipeline_double)
-      allow(pipeline_double).to receive(:build_pipeline).and_return(pipeline_double)
-      allow(pipeline_double).to receive(:run).and_return(pipeline_double)
+      allow(pipeline_double).to receive_messages(build_pipeline: pipeline_double, run: pipeline_double)
       allow(pipeline_double).to receive(:shutdown)
-      
+
       # Add a stage to the task
       task.add_stage(:processor, :test)
-      
+
       # Execute the task's run method and test the pipeline is used
       task.run(context)
-      
+
       # Verify our pipeline was created and run
       expect(Minigun::Pipeline).to have_received(:new)
       expect(pipeline_double).to have_received(:build_pipeline)
@@ -276,16 +275,15 @@ RSpec.describe Minigun::Task do
       # Create a double for the pipeline
       pipeline_double = instance_double(Minigun::Pipeline)
       allow(Minigun::Pipeline).to receive(:new).with(context, hash_including(custom: true, task: task)).and_return(pipeline_double)
-      allow(pipeline_double).to receive(:build_pipeline).and_return(pipeline_double)
-      allow(pipeline_double).to receive(:run).and_return(pipeline_double)
+      allow(pipeline_double).to receive_messages(build_pipeline: pipeline_double, run: pipeline_double)
       allow(pipeline_double).to receive(:shutdown)
-      
+
       # Allow setting instance variables
       allow(pipeline_double).to receive(:instance_variable_set)
 
       # Run the task
       task.run(context)
-      
+
       # Verify our expectations
       expect(pipeline_double).to have_received(:build_pipeline)
       expect(pipeline_double).to have_received(:run)

@@ -36,41 +36,36 @@ module Minigun
 
         # Track remaining retries separately from the initial setting
         retries_left = @max_retries
-        
+
         begin
           # Keep track of items processed
           @processed_count.increment
-          
+
           # Process the item
           result = nil
-          
+
           # First try running the processor block
-          if @block
-            result = execute_block(@block, item)
-          end
-          
+          result = execute_block(@block, item) if @block
+
           # Emit the result if it's not nil
           emit(result) unless result.nil?
-          
-        rescue => e
+        rescue StandardError => e
           # Increment the error counter
           @fail_count.increment
-          
+
           # Log the error
           Minigun.logger.error("Error processing item in #{@name} stage: #{e.message}")
           Minigun.logger.error(e.backtrace.join("\n")) if e.backtrace
-          
+
           # If we have retries left, retry
           if retries_left > 0
             retries_left -= 1
             Minigun.logger.info("Retrying #{@name} stage (#{retries_left} retries left)")
             retry
           end
-          
+
           # No retries left, raise the error if in test environment or if explicitly configured to
-          if ENV['MINIGUN_ALLOW_EXCEPTIONS'] || (@task.respond_to?(:config) && @task.config.is_a?(Hash) && @task.config[:fork_mode] == :never)
-            raise e
-          end
+          raise e if ENV['MINIGUN_ALLOW_EXCEPTIONS'] || (@task.respond_to?(:config) && @task.config.is_a?(Hash) && @task.config[:fork_mode] == :never)
         end
       end
 
@@ -97,7 +92,7 @@ module Minigun
       def run
         # Run the on_start hook
         on_start
-        
+
         # If this is a source or producer stage, run it immediately
         # to generate initial items for the pipeline
         if @name == :source || @name == :producer
@@ -105,7 +100,7 @@ module Minigun
           result = execute_block(@block, nil)
           emit(result) unless result.nil?
         end
-        
+
         # Return the stage for method chaining
         self
       end
@@ -150,7 +145,7 @@ module Minigun
           include_or_delegate(ipc_implementation)
         end
       end
-      
+
       # Include or delegate to the implementation based on the type
       def include_or_delegate(implementation)
         if implementation.is_a?(Module) && !implementation.is_a?(Class)
@@ -159,25 +154,25 @@ module Minigun
         elsif implementation.is_a?(Class)
           # When it's a class, create an instance and delegate to it
           @fork_implementation = implementation.new(@name, @pipeline, @config)
-          
+
           # Pass the block to the fork implementation directly
           # First try to use our own block
           if @block && @fork_implementation.instance_variable_defined?(:@stage_block)
             @fork_implementation.instance_variable_set(:@stage_block, @block)
           # If our block is nil, try to get it from the task
-          elsif @task && @task.respond_to?(:stage_blocks) && 
-                @task.stage_blocks[@name.to_sym] && 
+          elsif @task.respond_to?(:stage_blocks) &&
+                @task.stage_blocks[@name.to_sym] &&
                 @fork_implementation.instance_variable_defined?(:@stage_block)
             @fork_implementation.instance_variable_set(:@stage_block, @task.stage_blocks[@name.to_sym])
           end
-          
+
           # Define singleton methods that delegate to the implementation
-          [:process, :shutdown].each do |method|
-            if @fork_implementation.respond_to?(method)
-              # Define a method that delegates to the implementation
-              define_singleton_method(method) do |*args|
-                @fork_implementation.send(method, *args)
-              end
+          %i[process shutdown].each do |method|
+            next unless @fork_implementation.respond_to?(method)
+
+            # Define a method that delegates to the implementation
+            define_singleton_method(method) do |*args|
+              @fork_implementation.send(method, *args)
             end
           end
         end

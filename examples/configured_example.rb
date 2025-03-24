@@ -13,14 +13,14 @@ class ConfiguredExample
   consumer_type :cow    # Default consumer fork implementation (:cow or :ipc)
 
   # Custom configuration not directly mapped to Minigun options
-  _minigun_task.config[:retry_delay] = 1.5  # Retry delay in seconds
+  _minigun_task.config[:retry_delay] = 1.5 # Retry delay in seconds
 
   # Pipeline definition
   pipeline do
     producer :source do
-      puts "Starting configured task"
+      puts 'Starting configured task'
       puts "Environment: #{@environment}"
-      10.times do |i| 
+      10.times do |i|
         puts "Producing item #{i}"
         emit(i)
       end
@@ -43,21 +43,19 @@ class ConfiguredExample
   after_run do
     puts 'Task completed!'
   end
-  
+
   # Support for constructor parameters
   attr_reader :max_items, :environment, :test_mode
-  
+
   def initialize(options = {})
     @max_items = options[:max_items] || 10
     @batch_size = options[:batch_size] || 20
     @environment = options[:environment] || 'production'
     @test_mode = @environment == 'test'
   end
-  
+
   # Allow accessing batch_size from tests
-  def batch_size
-    @batch_size
-  end
+  attr_reader :batch_size
 end
 
 # Run the task if executed directly

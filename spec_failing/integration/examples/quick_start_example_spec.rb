@@ -63,10 +63,10 @@ RSpec.describe 'QuickStartExample' do
     expect(task_obj.pipeline[1][:type]).to eq(:processor)  # processor
     expect(task_obj.pipeline[1][:name]).to eq(:transform)
 
-    expect(task_obj.pipeline[2][:type]).to eq(:accumulator)  # accumulator
+    expect(task_obj.pipeline[2][:type]).to eq(:accumulator) # accumulator
     expect(task_obj.pipeline[2][:name]).to eq(:batch)
 
-    expect(task_obj.pipeline[3][:type]).to eq(:processor)  # consumer (cow_fork)
+    expect(task_obj.pipeline[3][:type]).to eq(:processor) # consumer (cow_fork)
     expect(task_obj.pipeline[3][:name]).to eq(:process_batch)
   end
 end

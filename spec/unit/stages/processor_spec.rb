@@ -35,52 +35,53 @@ RSpec.describe Minigun::Stages::Processor do
   end
 
   describe '#process' do
-    it "should process items with a block" do
+    it 'processes items with a block' do
       # Create a real task and processor
       task = Minigun::Task.new(fork_mode: :never)
       pipeline = Minigun::Pipeline.new(task)
-      
+
       # Create a processor that doubles items
       processor = described_class.new(:processor, pipeline, {})
       processor.instance_variable_set(:@block, ->(item) { item * 2 })
-      
+
       # Create a collector to receive emitted items
       emitted_items = []
       allow(processor).to receive(:emit) do |item|
         emitted_items << item
       end
-      
+
       # Process an item
       processor.process(5)
-      
+
       # Verify that the item was processed and emitted
       expect(emitted_items).to eq([10])
     end
-    
-    it "should retry processing on error" do
+
+    it 'retries processing on error' do
       # Create a task and processor
       task = Minigun::Task.new(fork_mode: :never)
       pipeline = Minigun::Pipeline.new(task)
-      
+
       # Create a processor with a block that raises an error on first call
       processor = described_class.new(:processor, pipeline, { retry_count: 1 })
-      
+
       call_count = 0
-      processor.instance_variable_set(:@block, ->(item) { 
+      processor.instance_variable_set(:@block, lambda { |item|
         call_count += 1
-        raise "Error" if call_count == 1
+        raise 'Error' if call_count == 1
+
         item * 2
       })
-      
+
       # Create a collector to receive emitted items
       emitted_items = []
       allow(processor).to receive(:emit) do |item|
         emitted_items << item
       end
-      
+
       # Process should retry and succeed
       processor.process(5)
-      
+
       # Verify that the item was processed and emitted after retry
       expect(emitted_items).to eq([10])
     end
@@ -244,11 +245,11 @@ RSpec.describe Minigun::Stages::Processor do
       it 'processes items and emits transformed values' do
         # Create a real pipeline
         task = Minigun::Task.new
-        task.config[:fork_mode] = :never  # Ensure we trigger errors
+        task.config[:fork_mode] = :never # Ensure we trigger errors
         real_pipeline = TestPipeline.new(task)
-        
+
         # Use a real processor with a real block
-        processor = Minigun::Stages::Processor.new(:double_numbers, real_pipeline)
+        processor = described_class.new(:double_numbers, real_pipeline)
         # Define the block directly on the processor
         processor.instance_variable_set(:@block, ->(item) { item * 2 })
 
@@ -256,7 +257,7 @@ RSpec.describe Minigun::Stages::Processor do
         [1, 2, 3].each do |item|
           processor.emit(item)
         end
-        
+
         # The pipeline should have received the processed items
         # First, we should check if real_pipeline has the items directly
         if real_pipeline.next_stage_items.any?

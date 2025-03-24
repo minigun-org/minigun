@@ -18,17 +18,17 @@ module Minigun
         def after_finish_hooks
           @after_finish_hooks ||= []
         end
-        
+
         # Define a hook that runs before the stage starts
         def before_start(&block)
           before_start_hooks << block if block_given?
         end
-        
+
         # Define a hook that runs after the stage finishes
         def after_finish(&block)
           after_finish_hooks << block if block_given?
         end
-        
+
         # Inherit hooks when subclassing
         def inherited(subclass)
           super
@@ -69,7 +69,7 @@ module Minigun
       end
 
       # Process a single item
-      def process(item)
+      def process(_item)
         @processed_count.increment
         raise NotImplementedError, "#{self.class} must implement #process"
       end
@@ -78,18 +78,18 @@ module Minigun
       def emit(item, queue = :default)
         # Skip nil items
         return if item.nil?
-        
+
         # Track emissions
         @emitted_count.increment if defined?(@emitted_count)
-        
+
         # Check if pipeline has the new method
         if @pipeline.respond_to?(:downstream_stages)
           # Get downstream stages from pipeline
           downstream = @pipeline.downstream_stages(@name)
-          
+
           # Return if no downstream stages
           return if downstream.empty?
-          
+
           # Emit to all downstream stages
           downstream.each do |stage|
             stage.process(item) if stage.respond_to?(:process)
@@ -126,12 +126,12 @@ module Minigun
 
       # Alias for emit_to_queue
       alias_method :enqueue, :emit_to_queue
-      
+
       # Add a hook that runs before the stage starts
       def before_start(&block)
         @before_start_hooks << block if block_given?
       end
-      
+
       # Add a hook that runs after the stage finishes
       def after_finish(&block)
         @after_finish_hooks << block if block_given?
@@ -143,12 +143,12 @@ module Minigun
         self.class.before_start_hooks.each do |hook|
           instance_exec(&hook)
         end
-        
+
         # Run instance-level before_start hooks
         @before_start_hooks.each do |hook|
           instance_exec(&hook)
         end
-        
+
         # Call on_start hook for backward compatibility
         on_start
       end
@@ -159,15 +159,15 @@ module Minigun
         self.class.after_finish_hooks.each do |hook|
           instance_exec(&hook)
         end
-        
+
         # Run instance-level after_finish hooks
         @after_finish_hooks.each do |hook|
           instance_exec(&hook)
         end
-        
+
         # Call on_finish hook for backward compatibility
         on_finish
-        
+
         # Return stats
         {
           processed: @processed_count.value,

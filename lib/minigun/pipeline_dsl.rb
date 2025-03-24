@@ -19,40 +19,38 @@ module Minigun
     # Emit method to be used within blocks
     def emit(item, queue = :default)
       # Special handling for fork_mode=:never
-      if @pipeline.task.config && @pipeline.task.config[:fork_mode] == :never
-        # If emit is called from a processor stage and we have a consumer stage,
-        # directly feed items to consumer stages to bypass accumulator issues
-        if @current_stage && @current_stage.is_a?(Minigun::Stages::Processor) &&
-          @current_stage.name.to_s != 'process_batch' && @current_stage.name.to_s != 'batch'
+      # If emit is called from a processor stage and we have a consumer stage,
+      # directly feed items to consumer stages to bypass accumulator issues
+      if @pipeline.task.config && @pipeline.task.config[:fork_mode] == :never && (@current_stage.is_a?(Minigun::Stages::Processor) &&
+                 @current_stage.name.to_s != 'process_batch' && @current_stage.name.to_s != 'batch')
 
-          # Find any consumer stages to directly feed to
-          consumer_stages = @pipeline.stages.select { |s| s.name.to_s.include?('process') || s.name.to_s == 'consumer' }
-          if consumer_stages.any?
-            # Directly feed the item to consumer stages
-            consumer_stages.each do |consumer|
-              # If it's a consumer, feed the item directly for processing
-              begin
-                consumer.process(item) if consumer.respond_to?(:process)
-              rescue => e
-                # Log error but continue processing
-                @pipeline.task.config[:logger].error("Error direct feeding item to consumer: #{e.message}")
-              end
-            end
+        # Find any consumer stages to directly feed to
+        consumer_stages = @pipeline.stages.select { |s| s.name.to_s.include?('process') || s.name.to_s == 'consumer' }
+        if consumer_stages.any?
+          # Directly feed the item to consumer stages
+          consumer_stages.each do |consumer|
+            # If it's a consumer, feed the item directly for processing
+
+            consumer.process(item) if consumer.respond_to?(:process)
+          rescue StandardError => e
+            # Log error but continue processing
+            @pipeline.task.config[:logger].error("Error direct feeding item to consumer: #{e.message}")
           end
         end
       end
 
       # Normal emit behavior
-      if @current_stage && @current_stage.respond_to?(:emit)
+      if @current_stage.respond_to?(:emit)
         @current_stage.emit(item, queue)
       else
         # If no stage is set, try to find the first stage
         first_stage = @pipeline.stages.first
-        if first_stage && first_stage.respond_to?(:emit)
-          first_stage.emit(item, queue)
-        else
-          raise "No stage available to emit items"
-        end
+        raise 'No stage available to emit items' unless first_stage.respond_to?(:emit)
+
+        first_stage.emit(item, queue)
+
+
+
       end
     end
 
@@ -120,52 +118,50 @@ module Minigun
       run_pipeline_with_input(nil)
 
       # Special handling for fork_mode=:never to ensure all stages flush
-      if @pipeline.task.config && @pipeline.task.config[:fork_mode] == :never
-        # Find any accumulator stages and ensure they flush
-        accumulators = @pipeline.stages.select { |s| s.is_a?(Minigun::Stages::Accumulator) }
-        accumulators.each do |accumulator|
-          # Force a final flush of any accumulator stages
-          accumulator.flush if accumulator.respond_to?(:flush)
-        end
+      return unless @pipeline.task.config && @pipeline.task.config[:fork_mode] == :never
 
-        # After flushing accumulators, make sure we manually route items to consumers
-        # This is especially important in fork_mode=:never since normal forking is skipped
-        consumers = @pipeline.stages.select { |s| s.is_a?(Minigun::Stages::Processor) &&
-          (s.name.to_s.include?('process') || s.name.to_s == 'consumer') }
+      # Find any accumulator stages and ensure they flush
+      accumulators = @pipeline.stages.select { |s| s.is_a?(Minigun::Stages::Accumulator) }
+      accumulators.each do |accumulator|
+        # Force a final flush of any accumulator stages
+        accumulator.flush if accumulator.respond_to?(:flush)
+      end
 
-        if consumers.any? && !accumulators.empty?
-          # We have both accumulators and consumers, ensure items flowed correctly
-          consumers.each do |consumer|
-            # If any consumer takes batches, ensure it received them
-            flushed_items = @pipeline.instance_variable_get(:@flushed_items) || []
+      # After flushing accumulators, make sure we manually route items to consumers
+      # This is especially important in fork_mode=:never since normal forking is skipped
+      consumers = @pipeline.stages.select do |s|
+        s.is_a?(Minigun::Stages::Processor) &&
+          (s.name.to_s.include?('process') || s.name.to_s == 'consumer')
+      end
 
-            # Send each item/batch to the consumer for processing
-            flushed_items.each do |batch|
-              begin
-                consumer.process(batch) if consumer.respond_to?(:process)
-              rescue => e
-                # Log error but continue processing
-                @pipeline.task.config[:logger].error("Error feeding batch to consumer in never mode: #{e.message}")
-              end
-            end
+      if consumers.any? && !accumulators.empty?
+        # We have both accumulators and consumers, ensure items flowed correctly
+        consumers.each do |consumer|
+          # If any consumer takes batches, ensure it received them
+          flushed_items = @pipeline.instance_variable_get(:@flushed_items) || []
+
+          # Send each item/batch to the consumer for processing
+          flushed_items.each do |batch|
+            consumer.process(batch) if consumer.respond_to?(:process)
+          rescue StandardError => e
+            # Log error but continue processing
+            @pipeline.task.config[:logger].error("Error feeding batch to consumer in never mode: #{e.message}")
           end
         end
+      end
 
-        # Also check if the task has any accumulated items that need processing
-        if @pipeline.task.instance_variable_defined?(:@accumulated_items) &&
-          @pipeline.task.instance_variable_get(:@accumulated_items)
+      # Also check if the task has any accumulated items that need processing
+      if @pipeline.task.instance_variable_defined?(:@accumulated_items) &&
+         @pipeline.task.instance_variable_get(:@accumulated_items)
 
-          accumulated_items = @pipeline.task.instance_variable_get(:@accumulated_items)
-          if accumulated_items && accumulated_items.any?
-            consumers.each do |consumer|
-              accumulated_items.each do |batch|
-                begin
-                  consumer.process(batch) if consumer.respond_to?(:process)
-                rescue => e
-                  # Log error but continue processing
-                  @pipeline.task.config[:logger].error("Error feeding accumulated items to consumer: #{e.message}")
-                end
-              end
+        accumulated_items = @pipeline.task.instance_variable_get(:@accumulated_items)
+        if accumulated_items&.any?
+          consumers.each do |consumer|
+            accumulated_items.each do |batch|
+              consumer.process(batch) if consumer.respond_to?(:process)
+            rescue StandardError => e
+              # Log error but continue processing
+              @pipeline.task.config[:logger].error("Error feeding accumulated items to consumer: #{e.message}")
             end
           end
         end

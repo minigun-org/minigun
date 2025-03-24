@@ -31,7 +31,7 @@ class BranchingExample
   # Pipeline definition
   pipeline do
     # Define producer with connections to both processors
-    producer :user_producer, to: [:email_processor, :notification_processor] do
+    producer :user_producer, to: %i[email_processor notification_processor] do
       puts 'Generating users...'
       users = [
         User.new(1, 'Alice', 'alice@example.com', { email_notifications: true }),
@@ -51,19 +51,17 @@ class BranchingExample
       # Handle fork_mode=:never case where we might receive a batch instead of a single user
       if user.is_a?(Array)
         user.each do |single_user|
-          if single_user.preferences[:email_notifications]
-            puts "Generating email for #{single_user.name}"
-            email = { to: single_user.email, subject: 'Newsletter', body: "Hello #{single_user.name}!" }
-            emit(email)
-          end
-        end
-      else
-        # Normal single user processing
-        if user.preferences[:email_notifications]
-          puts "Generating email for #{user.name}"
-          email = { to: user.email, subject: 'Newsletter', body: "Hello #{user.name}!" }
+          next unless single_user.preferences[:email_notifications]
+
+          puts "Generating email for #{single_user.name}"
+          email = { to: single_user.email, subject: 'Newsletter', body: "Hello #{single_user.name}!" }
           emit(email)
         end
+      elsif user.preferences[:email_notifications]
+        # Normal single user processing
+        puts "Generating email for #{user.name}"
+        email = { to: user.email, subject: 'Newsletter', body: "Hello #{user.name}!" }
+        emit(email)
       end
     end
 
@@ -125,14 +123,12 @@ class BranchingExample
             puts "Sending notification to user #{note[:user_id]}: '#{note[:message]}'"
           end
         end
+      elsif notification.is_a?(User)
+        puts "Sending notification to user #{notification.id}: 'Welcome back, #{notification.name}!'"
+      # Handle User objects directly
       else
-        if notification.is_a?(User)
-          # Handle User objects directly
-          puts "Sending notification to user #{notification.id}: 'Welcome back, #{notification.name}!'"
-        else
-          # Normal single notification as hash
-          puts "Sending notification to user #{notification[:user_id]}: '#{notification[:message]}'"
-        end
+        # Normal single notification as hash
+        puts "Sending notification to user #{notification[:user_id]}: '#{notification[:message]}'"
       end
     end
   end

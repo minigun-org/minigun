@@ -286,8 +286,8 @@ RSpec.describe 'README Examples Integration' do
 
       # Verify that the processor blocks are defined
       expect(task_obj.stage_blocks.keys).to include(
-                                              :data_source, :validate, :transform_a, :transform_b, :combine, :store_results
-                                            )
+        :data_source, :validate, :transform_a, :transform_b, :combine, :store_results
+      )
 
       # Verify that the pipeline stages are defined
       expect(task_obj.pipeline.size).to eq(6)

@@ -10,22 +10,22 @@ module Minigun
 
     def initialize(context, options = {})
       @context = context
-      
+
       # Initialize task from context or directly provided task
       @task = options[:task]
-      
+
       # Handle various ways of getting the task
       if @task.nil?
-        if @context.is_a?(Minigun::Task)
-          @task = @context
-        elsif @context.class.respond_to?(:_minigun_task)
-          @task = @context.class._minigun_task
-        else
-          # Create a new task if none exists
-          @task = Minigun::Task.new
-        end
+        @task = if @context.is_a?(Minigun::Task)
+                  @context
+                elsif @context.class.respond_to?(:_minigun_task)
+                  @context.class._minigun_task
+                else
+                  # Create a new task if none exists
+                  Minigun::Task.new
+                end
       end
-      
+
       @job_id = options[:job_id] || SecureRandom.hex(4)
 
       # Get pipeline configuration
@@ -57,11 +57,12 @@ module Minigun
                 type
               when Symbol
                 # Try to find the class by name
-                if Minigun::Stages.const_defined?(type.to_s.capitalize)
-                  Minigun::Stages.const_get(type.to_s.capitalize)
-                else
-                  raise "Unknown stage type: #{type}"
-                end
+                raise "Unknown stage type: #{type}" unless Minigun::Stages.const_defined?(type.to_s.capitalize)
+
+                Minigun::Stages.const_get(type.to_s.capitalize)
+
+
+
               else
                 raise "Unknown stage type: #{type}"
               end
@@ -97,12 +98,12 @@ module Minigun
     def build_pipeline
       # Skip if already built
       return self if @stages.any?
-      
+
       if @task.pipeline_definition
         # If we have a pipeline definition block, execute it
         @executor = PipelineDSL.new(self)
         @executor.instance_eval(&@task.pipeline_definition)
-      elsif @task.pipeline && @task.pipeline.any?
+      elsif @task.pipeline&.any?
         # Add all stages from the task
         @task.pipeline.each do |stage_config|
           add_stage(stage_config[:type], stage_config[:name], stage_config[:options])
@@ -111,9 +112,7 @@ module Minigun
 
       # After executing the pipeline definition, make sure connections are updated
       # This ensures connections defined in the block are applied to the pipeline
-      if @stage_connections.empty? && @task.connections && @task.connections.any?
-        @stage_connections = @task.connections
-      end
+      @stage_connections = @task.connections if @stage_connections.empty? && @task.connections&.any?
 
       # Connect stages - this will use the connections we've established
       connect_stages
@@ -131,7 +130,7 @@ module Minigun
 
       # Create and initialize the executor
       @executor = PipelineDSL.new(self)
-      
+
       # Set fork_mode flag to all stages if needed
       if @task.config && @task.config[:fork_mode] == :never
         # When fork_mode is :never, ensure all stages know about it
@@ -139,12 +138,12 @@ module Minigun
           stage.instance_variable_set(:@fork_mode, :never) if stage.respond_to?(:instance_variable_set)
         end
       end
-      
+
       # Run each stage
       @stages.each do |stage|
         stage.run if stage.respond_to?(:run)
       end
-      
+
       # Run after_run hooks if task has hooks defined
       @task.run_hooks(:after_run, @context) if @task.respond_to?(:run_hooks)
 
@@ -153,26 +152,26 @@ module Minigun
 
       self
     end
-    
+
     # Shutdown the pipeline and all stages
     def shutdown
       @logger.info("[Minigun:#{@job_id}] Shutting down pipeline")
-      
+
       # Shutdown all stages in reverse order
       stats = {}
       @stages.reverse_each do |stage|
-        if stage.respond_to?(:shutdown)
-          result = stage.shutdown
-          stats[stage.name] = result
-          
-          # Log the stage stats
-          if result.is_a?(Hash)
-            stats_str = result.map { |k, v| "#{k}: #{v}" }.join(', ')
-            @logger.info("[Minigun:#{@job_id}][Stage:#{stage.name}] Stats: #{stats_str}")
-          end
+        next unless stage.respond_to?(:shutdown)
+
+        result = stage.shutdown
+        stats[stage.name] = result
+
+        # Log the stage stats
+        if result.is_a?(Hash)
+          stats_str = result.map { |k, v| "#{k}: #{v}" }.join(', ')
+          @logger.info("[Minigun:#{@job_id}][Stage:#{stage.name}] Stats: #{stats_str}")
         end
       end
-      
+
       stats
     end
 

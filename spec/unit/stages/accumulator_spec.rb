@@ -76,7 +76,7 @@ RSpec.describe Minigun::Stages::Accumulator do
 
       expect(timer).to receive(:shutdown)
       expect(subject).to receive(:flush_all_batches)
-      
+
       # Add some items to the batches directly
       subject.instance_variable_set(:@batches, { 'String' => %w[item1 item2] })
       subject.instance_variable_set(:@accumulated_count, Concurrent::AtomicFixnum.new(2))
@@ -121,26 +121,26 @@ RSpec.describe Minigun::Stages::Accumulator do
       subject.send(:flush_batch_items, 'String', items)
     end
   end
-  
+
   describe 'hooks' do
     it 'has before_start hook that starts the flush timer' do
       expect(described_class.before_start_hooks.size).to be >= 1
-      
+
       # Add a custom hook to verify it gets called
       hook_called = false
       subject.before_start { hook_called = true }
-      
+
       subject.run
       expect(hook_called).to be true
     end
-    
+
     it 'has after_finish hook that flushes batches' do
       expect(described_class.after_finish_hooks.size).to be >= 1
-      
+
       # Add a custom hook to verify it gets called
       hook_called = false
       subject.after_finish { hook_called = true }
-      
+
       subject.shutdown
       expect(hook_called).to be true
     end

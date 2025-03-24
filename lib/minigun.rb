@@ -29,14 +29,10 @@ require_relative 'minigun/pipeline_dsl'
 module Minigun
   # Singleton logger instance
   @logger = Logger.new($stdout)
-  
+
   class << self
-    attr_writer :logger
-    
     # Get the logger instance
     # @return [Logger] the logger
-    def logger
-      @logger
-    end
+    attr_accessor :logger
   end
 end

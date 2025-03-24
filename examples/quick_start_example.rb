@@ -29,9 +29,9 @@ class QuickStartExample
     accumulator :batch do |item|
       @items ||= []
       @items << item
-      
+
       puts "Accumulator: Added item #{item}, current size #{@items.size}"
-      
+
       if @items.size >= batch_size || item == 0 || item % 8 == 0
         puts "Accumulator: Emitting batch #{@items.inspect}"
         batch = @items.dup
@@ -55,24 +55,24 @@ class QuickStartExample
 
   before_run do
     puts 'Starting task...'
-    
+
     # Special handling for fork_mode=:never in tests
     if self.class._minigun_task.config[:fork_mode] == :never
       # Pre-create important structures for the pipeline
-      self.class._minigun_task.instance_variable_set(:@flushed_items, []) 
+      self.class._minigun_task.instance_variable_set(:@flushed_items, [])
       self.class._minigun_task.instance_variable_set(:@never_mode_setup, true)
     end
   end
 
   after_run do
     puts 'Task completed!'
-    
+
     # Special handling for fork_mode=:never
-    if self.class._minigun_task.config[:fork_mode] == :never && instance_variable_defined?("@items") && @items && !@items.empty?
+    if self.class._minigun_task.config[:fork_mode] == :never && instance_variable_defined?(:@items) && @items && !@items.empty?
       # We need to manually process any remaining items in test mode
       items_to_process = @items.dup
       @items.clear
-      
+
       # Process directly
       items_to_process.each do |item|
         puts "Processing #{item}"

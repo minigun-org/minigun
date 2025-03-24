@@ -35,7 +35,7 @@ RSpec.describe 'BranchingExample' do
     expect(output_string).to include('Generating email for')
     expect(output_string).to include('Generating notification for')
     expect(output_string).to include('Sending notification to')
-    
+
     # Check for email handling - since fork_mode=:never, we won't see forking messages
     # but we should see messages about accumulating and sending emails
     expect(output_string).to include('Batching') if output_string.include?('Batching')
@@ -63,7 +63,7 @@ RSpec.describe 'BranchingExample' do
     # Verify that the pipeline stages are defined - check only the stage names match
     pipeline_stage_names = task_obj.pipeline.map { |s| s[:name] }
     expect(pipeline_stage_names).to match_array(expected_stages)
-    
+
     # Verify the task has all required stage blocks
     expect(task_obj.stage_blocks).to have_key(:user_producer)
     expect(task_obj.stage_blocks).to have_key(:email_processor)

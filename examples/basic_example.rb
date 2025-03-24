@@ -41,7 +41,7 @@ class BasicExample
       @items << item
 
       # Force emit at the end to make sure tests see batches
-      if @items.size >= batch_size || (item == 10 || item == 20 || item == 0) && @items.any?
+      if @items.size >= batch_size || ([10, 20, 0].include?(item) && @items.any?)
         puts "Batching items: #{@items.join(', ')}"
         batch = @items.dup
         @items.clear

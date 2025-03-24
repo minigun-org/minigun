@@ -16,23 +16,23 @@ RSpec.describe 'DSL and Task Integration' do
       def consumed_batches
         @@consumed_batches
       end
-      
+
       def consumed_batches=(val)
         @@consumed_batches = val
       end
-      
+
       def before_run_called
         @@before_run_called
       end
-      
+
       def before_run_called=(val)
         @@before_run_called = val
       end
-      
+
       def after_run_called
         @@after_run_called
       end
-      
+
       def after_run_called=(val)
         @@after_run_called = val
       end
@@ -82,13 +82,13 @@ RSpec.describe 'DSL and Task Integration' do
 
     # Add hooks
     before_run do
-      puts "Before run hook: setting @@before_run_called to true"
+      puts 'Before run hook: setting @@before_run_called to true'
       @@before_run_called = true
       TestTask.before_run_called = true
     end
 
     after_run do
-      puts "After run hook: setting @@after_run_called to true"
+      puts 'After run hook: setting @@after_run_called to true'
       @@after_run_called = true
       TestTask.after_run_called = true
     end
@@ -198,15 +198,15 @@ RSpec.describe 'DSL and Task Integration' do
       accumulator :collector, batch_size: 2 do |item|
         # Access the context to store results
         @context.add_result(item)
-        
+
         # Need to emit explicitly in custom accumulator block
         emit_to_queue(:default, item)
-        
+
         # We'll manually flush for testing with fork_mode=:never
-        if @pipeline && @pipeline.task && @pipeline.task.config[:fork_mode] == :never
+        if @pipeline&.task && @pipeline.task.config[:fork_mode] == :never && respond_to?(:flush)
           # Force flush in test mode
           # This ensures the next stages get our items
-          flush if respond_to?(:flush)
+          flush
         end
       end
 

@@ -38,7 +38,7 @@ RSpec.describe 'BasicExample' do
     # Check for expected output
     expect(output_string).to include('Starting task...')
     expect(output_string).to include('Task completed!')
-    
+
     # With fork_mode=:never, we should have seen at least some of the pipeline stages working
     expect(output_string).to include('Producing')
     expect(output_string).to include('Doubling')

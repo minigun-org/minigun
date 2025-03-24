@@ -9,7 +9,6 @@ class ConfigInPipelineExample
 
   # Pipeline definition
   pipeline do
-
     # Configuration
     max_threads 4
     max_processes 2

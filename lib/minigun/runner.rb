@@ -64,20 +64,18 @@ module Minigun
       log_producer_finished
 
       # Special handling for fork_mode=:never
-      if @fork_mode == :never
-        # Ensure we process any accumulated batches for testing
-        if @fork_mode == :never && @task.stage_blocks.keys.any? { |k| k.to_s.include?('batch') }
-          accumulated_items = get_test_accumulated_items
-          
-          # If we have items from the accumulator and a consumer that can handle them
-          if accumulated_items && accumulated_items.any? && @task.stage_blocks.keys.any? { |k| k.to_s.include?('process') }
-            # Find consumer block
-            consumer_name = @task.stage_blocks.keys.find { |k| k.to_s.include?('process') }
-            
-            # Process accumulated items directly with the consumer
-            accumulated_items.each do |batch|
-              @task.instance_exec(batch, &@task.stage_blocks[consumer_name]) if @task.stage_blocks[consumer_name]
-            end
+      # Ensure we process any accumulated batches for testing
+      if @fork_mode == :never && (@fork_mode == :never && @task.stage_blocks.keys.any? { |k| k.to_s.include?('batch') })
+        accumulated_items = get_test_accumulated_items
+
+        # If we have items from the accumulator and a consumer that can handle them
+        if accumulated_items&.any? && @task.stage_blocks.keys.any? { |k| k.to_s.include?('process') }
+          # Find consumer block
+          consumer_name = @task.stage_blocks.keys.find { |k| k.to_s.include?('process') }
+
+          # Process accumulated items directly with the consumer
+          accumulated_items.each do |batch|
+            @task.instance_exec(batch, &@task.stage_blocks[consumer_name]) if @task.stage_blocks[consumer_name]
           end
         end
       end
@@ -177,27 +175,27 @@ module Minigun
         # In :never mode, we need special handling for items that would normally be accumulated
         # and then processed in batches. Handle them directly.
         info("[Minigun:#{@job_id}][Stage:fork] Fork mode set to :never, directly processing items...")
-        
+
         # First, see if we have any batched items from accumulators
         if items_map && !items_map.empty?
           # Process each batch of items directly
-          items_map.each do |key, items|
+          items_map.each_value do |items|
             info("[Minigun:#{@job_id}][Stage:consume] Processing #{items.size} items from accumulator...")
-            
+
             # If we have consumer blocks, call them directly for each batch
-            if @task.stage_blocks && @task.stage_blocks.keys.any? { |k| k.to_s.include?('process') || k.to_s.include?('consumer') }
-              consumer_name = @task.stage_blocks.keys.find { |k| k.to_s.include?('process') || k.to_s.include?('consumer') }
-              
-              if consumer_name && @task.stage_blocks[consumer_name]
-                info("[Minigun:#{@job_id}][Stage:consume] Found consumer block #{consumer_name}, processing batch...")
-                
-                # Call the consumer block with the batch
-                @task.instance_exec(items, &@task.stage_blocks[consumer_name])
-              end
-            end
+            next unless @task.stage_blocks&.keys&.any? { |k| k.to_s.include?('process') || k.to_s.include?('consumer') }
+
+            consumer_name = @task.stage_blocks.keys.find { |k| k.to_s.include?('process') || k.to_s.include?('consumer') }
+
+            next unless consumer_name && @task.stage_blocks[consumer_name]
+
+            info("[Minigun:#{@job_id}][Stage:consume] Found consumer block #{consumer_name}, processing batch...")
+
+            # Call the consumer block with the batch
+            @task.instance_exec(items, &@task.stage_blocks[consumer_name])
           end
         end
-        
+
         # Process any individual items as well
         consume_items_in_current_process(items_map.values.flatten)
       else
@@ -525,10 +523,10 @@ module Minigun
 
     def shutdown_accumulator
       # Shutdown any accumulator resources
-      
+
       # Wait for all consumer processes to finish
       wait_all_stage_processes
-      
+
       # Complete the job
       @job_end_at = Time.now
     end
@@ -539,19 +537,19 @@ module Minigun
       if @task.respond_to?(:pipeline) && @task.pipeline.any? { |s| s[:type] == :accumulator }
         accumulator_stages = @task.pipeline.select { |s| s[:type] == :accumulator }
         accumulated_items = []
-        
+
         # Try to extract accumulated items from each accumulator for testing
         accumulator_stages.each do |acc_stage|
-          batch_name = acc_stage[:name]
-          
+          acc_stage[:name]
+
           # Try to find items from the accumulator stage's context
-          if @context.instance_variable_defined?("@items") 
-            items = @context.instance_variable_get("@items")
-            accumulated_items << items.dup if items && !items.empty?
-            @context.instance_variable_set("@items", []) # Clear after processing
-          end
+          next unless @context.instance_variable_defined?(:@items)
+
+          items = @context.instance_variable_get(:@items)
+          accumulated_items << items.dup if items && !items.empty?
+          @context.instance_variable_set(:@items, []) # Clear after processing
         end
-        
+
         accumulated_items
       else
         []
@@ -561,19 +559,19 @@ module Minigun
     # Process any accumulated items that haven't been processed yet
     def process_accumulated_items
       # If we have any accumulated items in testing mode, process them
-      if @fork_mode == :never && @task.respond_to?(:accumulated_items) && @task.accumulated_items && !@task.accumulated_items.empty?
-        # Find consumer block
-        consumer_name = @task.stage_blocks.keys.find { |k| k.to_s.include?('process') }
-        
-        # Process accumulated items directly with the consumer
-        if consumer_name && @task.stage_blocks[consumer_name]
-          @task.accumulated_items.each do |batch|
-            @task.instance_exec(batch, &@task.stage_blocks[consumer_name])
-          end
-          # Clear after processing
-          @task.accumulated_items.clear
-        end
+      return unless @fork_mode == :never && @task.respond_to?(:accumulated_items) && @task.accumulated_items && !@task.accumulated_items.empty?
+
+      # Find consumer block
+      consumer_name = @task.stage_blocks.keys.find { |k| k.to_s.include?('process') }
+
+      # Process accumulated items directly with the consumer
+      return unless consumer_name && @task.stage_blocks[consumer_name]
+
+      @task.accumulated_items.each do |batch|
+        @task.instance_exec(batch, &@task.stage_blocks[consumer_name])
       end
+      # Clear after processing
+      @task.accumulated_items.clear
     end
   end
 end

@@ -46,11 +46,11 @@ module Minigun
           # Class method to start the job
           def run(context = nil)
             # Create a context if none provided
-            context ||= self.new if self.respond_to?(:new)
-            
+            context ||= new if respond_to?(:new)
+
             # Before hooks are executed by the task or pipeline run
             _minigun_task.run(context || self)
-            
+
             # Return the context for testing/chaining
             context
           end
@@ -129,31 +129,31 @@ module Minigun
       def pipeline(&block)
         # Store the pipeline definition block
         _minigun_task.pipeline_definition = block
-        
+
         # Execute the block to set up stages
-        if block_given?
-          # Create a PipelineDSL to evaluate the pipeline block
-          require_relative 'pipeline_dsl'
-          executor = Minigun::PipelineDSL.new(_minigun_task)
-          executor.instance_eval(&block)
-          
-          # If no connections were set up, create default linear connections
-          if _minigun_task.connections.empty? && _minigun_task.pipeline.size > 1
-            # Create linear connections between all stages
-            _minigun_task.pipeline.each_with_index do |stage, idx|
-              next if idx >= _minigun_task.pipeline.size - 1
-              
-              # Connect this stage to the next one
-              source = stage[:name]
-              target = _minigun_task.pipeline[idx + 1][:name]
-              
-              # Create the connection
-              _minigun_task.connections[source] ||= []
-              _minigun_task.connections[source] = [target] unless _minigun_task.connections[source].is_a?(Array)
-              _minigun_task.connections[source] = [_minigun_task.connections[source]] unless _minigun_task.connections[source].is_a?(Array)
-              _minigun_task.connections[source] << target unless _minigun_task.connections[source].include?(target)
-            end
-          end
+        return unless block_given?
+
+        # Create a PipelineDSL to evaluate the pipeline block
+        require_relative 'pipeline_dsl'
+        executor = Minigun::PipelineDSL.new(_minigun_task)
+        executor.instance_eval(&block)
+
+        # If no connections were set up, create default linear connections
+        return unless _minigun_task.connections.empty? && _minigun_task.pipeline.size > 1
+
+        # Create linear connections between all stages
+        _minigun_task.pipeline.each_with_index do |stage, idx|
+          next if idx >= _minigun_task.pipeline.size - 1
+
+          # Connect this stage to the next one
+          source = stage[:name]
+          target = _minigun_task.pipeline[idx + 1][:name]
+
+          # Create the connection
+          _minigun_task.connections[source] ||= []
+          _minigun_task.connections[source] = [target] unless _minigun_task.connections[source].is_a?(Array)
+          _minigun_task.connections[source] = [_minigun_task.connections[source]] unless _minigun_task.connections[source].is_a?(Array)
+          _minigun_task.connections[source] << target unless _minigun_task.connections[source].include?(target)
         end
       end
 
