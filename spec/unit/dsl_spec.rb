@@ -56,7 +56,7 @@ RSpec.describe Minigun::DSL do
       end
 
       it 'validates fork_mode values' do
-        expect { task_class.fork_mode(:invalid) }.to raise_error(Minigun::Error)
+        expect { task_class.fork_mode(:invalid) }.to raise_error(ArgumentError)
       end
 
       it 'sets fork_type' do
@@ -65,7 +65,7 @@ RSpec.describe Minigun::DSL do
       end
 
       it 'validates fork_type values' do
-        expect { task_class.fork_type(:invalid) }.to raise_error(Minigun::Error)
+        expect { task_class.fork_type(:invalid) }.to raise_error(ArgumentError)
       end
     end
 
@@ -111,7 +111,7 @@ RSpec.describe Minigun::DSL do
         hook_block = proc { @before_stage_called = true }
         task_class.before_stage(:process_numbers, &hook_block)
 
-        hooks = task_class._minigun_hooks[:before_stage_process_numbers]
+        hooks = task_class._minigun_hooks[:before_stage]
         expect(hooks.first[:block]).to eq(hook_block)
       end
     end

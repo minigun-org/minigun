@@ -38,19 +38,19 @@ module Minigun
     end
 
     # Add a stage to the pipeline
-    def add_stage(name, type, options = {}, &block)
+    def add_stage(type, name, options = {}, &block)
       # Create stage based on type
       stage = case type.to_sym
-             when :processor, :consumer, :producer
-               Minigun::Stages::Processor.new(name, options)
-             when :accumulator
-               Minigun::Stages::Accumulator.new(name, options)
-             when :double
-               # Test double stage - just stores items
-               Minigun::Stages::TestDouble.new(name, options)
-             else
-               raise ArgumentError, "Unknown stage type: #{type}"
-             end
+              when :processor, :consumer, :producer
+                Minigun::Stages::Processor.new(name, options)
+              when :accumulator
+                Minigun::Stages::Accumulator.new(name, options)
+              when :double
+                # Test double stage - just stores items
+                Minigun::Stages::TestDouble.new(name, options)
+              else
+                raise ArgumentError, "Unknown stage type: #{type}"
+              end
 
       # Set the block if provided
       stage.block = block if block

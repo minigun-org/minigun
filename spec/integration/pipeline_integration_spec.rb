@@ -17,11 +17,6 @@ RSpec.describe 'Pipeline Integration' do
         items
       end
 
-      processor_block = proc do |item|
-        items_processed << item
-        item * 2
-      end
-
       transformer_block = proc do |item|
         transformed_items << item
         "Item: #{item}"

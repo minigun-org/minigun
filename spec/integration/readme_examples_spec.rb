@@ -621,30 +621,24 @@ RSpec.describe 'README Examples Integration' do
           # Implementation of source processor
         end
 
-        processor :double, {} do |num|
+        processor :double, from: :source do |num|
           result = num * 2
           @processor2_output << result
           emit(result)
         end
 
-        processor :triple, {} do |num|
+        processor :triple, from: :source do |num|
           result = num * 3
           @processor2_output << result
           emit(result)
         end
-
-        # Set up custom connections
-        connections[:source] = %i[double triple]
-
-        # Configure for testing
-        config[:fork_type] = :ipc
       end
 
       # Create a real pipeline with custom connections
       pipeline = branching_task.new
 
       # Verify that the processor blocks are defined
-      expect(pipeline.stage_blocks.keys).to include(:source, :double, :triple)
+      expect(pipeline.blocks.keys).to include(:source, :double, :triple)
 
       # Verify that the pipeline stages are defined
       expect(pipeline.pipeline.size).to eq(3)
