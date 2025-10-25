@@ -57,7 +57,7 @@ if __FILE__ == $0
     puts "    Runtime: #{stage_stats.runtime.round(3)}s"
     puts "    Total items: #{stage_stats.total_items}"
     puts "    Throughput: #{stage_stats.throughput.round(2)} items/s"
-    
+
     if stage_stats.has_latency_data?
       puts "    Latency P50/P90/P95: #{(stage_stats.p50 * 1000).round(2)}ms / #{(stage_stats.p90 * 1000).round(2)}ms / #{(stage_stats.p95 * 1000).round(2)}ms"
     end

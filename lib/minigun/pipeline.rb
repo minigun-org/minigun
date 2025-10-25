@@ -824,16 +824,18 @@ module Minigun
 
     def handle_multiple_producers_routing!
       producers = @stage_order.select { |s| find_stage(s)&.producer? }
-      first_non_producer = @stage_order.find { |s| !find_stage(s)&.producer? }
 
-      if producers.size > 1 && first_non_producer
-        # Multiple producers should all connect to the first non-producer, not to each other
-        # BUT: only connect producers that don't already have explicit routing
-        producers.each do |producer_name|
-          # Skip if this producer already has explicit downstream edges
-          if @dag.downstream(producer_name).empty?
-            @dag.add_edge(producer_name, first_non_producer)
-          end
+      # Each producer without explicit routing should connect to its next stage in definition order
+      producers.each do |producer_name|
+        # Skip if this producer already has explicit downstream edges
+        next unless @dag.downstream(producer_name).empty?
+
+        # Find the next non-producer stage after this producer
+        producer_index = @stage_order.index(producer_name)
+        next_stage = @stage_order[(producer_index + 1)..-1].find { |s| !find_stage(s)&.producer? }
+
+        if next_stage
+          @dag.add_edge(producer_name, next_stage)
         end
       end
     end
