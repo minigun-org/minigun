@@ -9,7 +9,7 @@ module Minigun
         # Create a single task instance for the class
         @_minigun_task = Minigun::Task.new
       end
-      
+
       # When a subclass is created, duplicate the parent's task
       def base.inherited(subclass)
         super if defined?(super)
@@ -17,7 +17,7 @@ module Minigun
         # Create a new task and copy the parent's configuration and pipelines
         new_task = Minigun::Task.new
         new_task.instance_variable_set(:@config, parent_task.config.dup)
-        new_task.instance_variable_set(:@implicit_pipeline, parent_task.implicit_pipeline) # Share the pipeline
+        new_task.instance_variable_set(:@implicit_pipeline, parent_task.implicit_pipeline.dup) # Duplicate the pipeline
         subclass.instance_variable_set(:@_minigun_task, new_task)
       end
     end

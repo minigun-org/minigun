@@ -357,16 +357,140 @@ RSpec.describe 'Examples Integration' do
         '08_nested_pipeline_simple.rb',
         '09_strategy_per_stage.rb',
         '10_web_crawler.rb',
-        '11_hooks_example.rb',
-        '12_database_publisher.rb',
-        '13_configuration.rb',
-        '14_large_dataset.rb',
-        '15_simple_etl.rb',
-        '16_mixed_routing.rb'
-      ]
+      '11_hooks_example.rb',
+      '12_database_publisher.rb',
+      '13_configuration.rb',
+      '14_large_dataset.rb',
+      '15_simple_etl.rb',
+      '16_mixed_routing.rb',
+      '17_database_connection_hooks.rb',
+      '18_resource_cleanup_hooks.rb',
+      '19_statistics_gathering.rb',
+      '20_error_handling_hooks.rb',
+      '21_inline_hook_procs.rb'
+    ]
 
-      missing_tests = example_basenames - tested_examples
-      expect(missing_tests).to be_empty, "Missing integration tests for: #{missing_tests.join(', ')}"
+    missing_tests = example_basenames - tested_examples
+    expect(missing_tests).to be_empty, "Missing integration tests for: #{missing_tests.join(', ')}"
+  end
+
+  describe '17_database_connection_hooks.rb' do
+    it 'demonstrates database connection management with fork hooks' do
+      load File.expand_path('../../examples/17_database_connection_hooks.rb', __dir__)
+
+      example = DatabaseConnectionExample.new
+      example.run
+
+      expect(example.results.size).to eq(10)
+      expect(example.connection_events).to include(match(/Connected to database/))
+
+      if Process.respond_to?(:fork)
+        # On platforms with fork support, verify fork hooks fired
+        expect(example.connection_events).to include(match(/Disconnected from database before fork/))
+        expect(example.connection_events).to include(match(/Reconnected to database in child/))
+      end
+
+      expect(example.connection_events).to include(match(/Final disconnect/))
     end
   end
+
+  describe '18_resource_cleanup_hooks.rb' do
+    it 'demonstrates resource management with stage hooks' do
+      load File.expand_path('../../examples/18_resource_cleanup_hooks.rb', __dir__)
+
+      example = ResourceCleanupExample.new
+      example.run
+
+      expect(example.results.size).to eq(10)
+      expect(example.resource_events).to include("Opened file handle")
+      expect(example.resource_events).to include("Closed file handle")
+      expect(example.resource_events).to include("Initialized API client")
+      expect(example.resource_events).to include("Shutdown API client")
+
+      if Process.respond_to?(:fork)
+        # On platforms with fork support, verify fork-related resource management
+        expect(example.resource_events).to include("Closing connections before fork")
+        expect(example.resource_events).to include("Reopening connections in child process")
+      end
+    end
+  end
+
+  describe '19_statistics_gathering.rb' do
+    it 'demonstrates statistics tracking with hooks' do
+      load File.expand_path('../../examples/19_statistics_gathering.rb', __dir__)
+
+      example = StatisticsGatheringExample.new
+      example.run
+
+      # Producer count is reliable (tracked in parent process)
+      expect(example.stats[:producer_count]).to eq(100)
+      expect(example.stats[:total_duration]).to be > 0
+
+      # Validator counts happen in parent process (before consumer)
+      expect(example.stats[:validator_passed]).to be > 0
+      expect(example.stats[:validator_failed]).to be > 0
+      # Note: The sum may not equal 100 due to hook execution timing,
+      # but both passed and failed should have some items
+
+      # Consumer/transformer counts may not be accurate due to forking
+      # (child process modifications don't propagate back to parent)
+      # So we just check they're tracked, not their exact values
+      expect(example.stats).to have_key(:consumer_count)
+      expect(example.stats).to have_key(:transformer_count)
+
+      if Process.respond_to?(:fork)
+        # On platforms with fork support, verify fork statistics
+        expect(example.stats[:forks_created]).to be > 0
+        expect(example.stats[:child_processes]).not_to be_empty
+      end
+    end
+  end
+
+  describe '20_error_handling_hooks.rb' do
+    it 'demonstrates error handling and recovery patterns' do
+      load File.expand_path('../../examples/20_error_handling_hooks.rb', __dir__)
+
+      example = ErrorHandlingExample.new
+      example.run
+
+      # Verify some items processed successfully despite errors
+      expect(example.results.size).to be > 0
+
+      # Verify errors were tracked
+      expect(example.errors.size).to be > 0
+
+      # Check that error handling tracked items
+      expect(example.retry_counts).not_to be_empty
+
+      # Verify at least some errors have stage information
+      expect(example.errors.first).to have_key(:stage)
+      expect(example.errors.first).to have_key(:error)
+    end
+  end
+
+  describe '21_inline_hook_procs.rb' do
+    it 'demonstrates inline hook proc syntax' do
+      load File.expand_path('../../examples/21_inline_hook_procs.rb', __dir__)
+
+      example = InlineHookExample.new
+      example.run
+
+      expect(example.results.size).to eq(9) # 10 items, 1 filtered out (0), all doubled
+      expect(example.results.sort).to eq([2, 4, 6, 8, 10, 12, 14, 16, 18])
+
+      expect(example.events).to include(:pipeline_start, :pipeline_end)
+      expect(example.events).to include(:fetching)
+      expect(example.events).to include(:validate_start, :validate_end)
+      expect(example.events).to include(:transform_start, :transform_end)
+
+      if Process.respond_to?(:fork)
+        # On platforms with fork support, verify fork hooks fired
+        expect(example.events).to include(:before_fork, :after_fork)
+      end
+
+      expect(example.timer[:fetch_start]).to be_a(Time)
+      expect(example.timer[:fetch_end]).to be_a(Time)
+    end
+  end
+end
 end

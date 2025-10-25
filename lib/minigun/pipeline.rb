@@ -64,10 +64,60 @@ module Minigun
       @output_queues[pipeline_name] = queue
     end
 
+    # Duplicate this pipeline for inheritance
+    def dup
+      new_pipeline = Pipeline.new(@name, @config.dup)
+
+      # Copy stages (they're already Stage objects, so we keep references)
+      new_pipeline.instance_variable_set(:@stages, {
+        producer: @stages[:producer],
+        processor: @stages[:processor].dup,
+        accumulator: @stages[:accumulator],
+        consumer: @stages[:consumer].dup
+      })
+
+      # Copy hooks (keep references to blocks)
+      new_pipeline.instance_variable_set(:@hooks, {
+        before_run: @hooks[:before_run].dup,
+        after_run: @hooks[:after_run].dup,
+        before_fork: @hooks[:before_fork].dup,
+        after_fork: @hooks[:after_fork].dup
+      })
+
+      # Copy stage hooks
+      new_pipeline.instance_variable_set(:@stage_hooks, {
+        before: @stage_hooks[:before].transform_values(&:dup),
+        after: @stage_hooks[:after].transform_values(&:dup),
+        before_fork: @stage_hooks[:before_fork].transform_values(&:dup),
+        after_fork: @stage_hooks[:after_fork].transform_values(&:dup)
+      })
+
+      # Create a fresh DAG (edges will be rebuilt based on new stage order)
+      new_dag = DAG.new
+      @stage_order.each { |stage_name| new_dag.add_node(stage_name) }
+      new_pipeline.instance_variable_set(:@dag, new_dag)
+      new_pipeline.instance_variable_set(:@stage_order, @stage_order.dup)
+
+      new_pipeline
+    end
+
     # Add a stage to this pipeline
     def add_stage(type, name, options = {}, &block)
-      @stage_order << name
-      @dag.add_node(name)
+      # Insert processors before consumers (for inheritance support)
+      if type == :processor && !@stages[:consumer].empty?
+        # Find the first consumer in stage_order
+        first_consumer_idx = @stage_order.index { |s| @stages[:consumer].any? { |c| c.name == s } }
+        if first_consumer_idx
+          @stage_order.insert(first_consumer_idx, name)
+        else
+          @stage_order << name
+        end
+      else
+        @stage_order << name
+      end
+
+      # Rebuild DAG nodes to match stage_order
+      @dag.instance_variable_set(:@nodes, @stage_order.dup)
 
       # Extract routing information
       to_targets = options.delete(:to)
