@@ -32,13 +32,8 @@ module Minigun
       # Execute pipeline(s)
       @job_start = Time.now
 
-      result = if @task.pipelines.empty?
-                 # Single-pipeline mode
-                 run_single_pipeline
-               else
-                 # Multi-pipeline mode
-                 run_multi_pipeline
-               end
+      # Just run the root pipeline - it handles all stages including PipelineStages
+      result = run_single_pipeline
 
       @job_end = Time.now
 
@@ -67,33 +62,6 @@ module Minigun
       result
     end
 
-    def run_multi_pipeline
-      # Build pipeline routing
-      @task.send(:build_pipeline_routing!)
-
-      # Create inter-pipeline queues
-      @task.send(:setup_inter_pipeline_queues)
-
-      # Pass job_id to all pipelines for logging
-      @task.pipelines.each do |_, pipeline|
-        pipeline.instance_variable_set(:@job_id, @job_id)
-      end
-
-      # Start all pipelines in threads
-      threads = @task.pipelines.map do |name, pipeline|
-        pipeline.run_in_thread(@context)
-      end
-
-      # Wait for all pipelines to complete
-      threads.each(&:join)
-
-      # Collect statistics from all pipelines
-      @task.pipelines.each do |_, pipeline|
-        @pipeline_stats << pipeline.stats if pipeline.stats
-      end
-
-      log_info "[Job:#{@job_id}] Multi-pipeline task completed"
-    end
 
     def setup_signal_handlers
       # Only set up handlers in the main process

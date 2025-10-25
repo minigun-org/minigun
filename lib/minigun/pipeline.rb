@@ -213,6 +213,32 @@ module Minigun
       # Run before_run hooks
       @hooks[:before_run].each { |h| context.instance_eval(&h) }
 
+      # Check if we have connected PipelineStages that need multi-pipeline execution
+      pipeline_stages = @stages.select { |_, stage| stage.is_a?(PipelineStage) }.values
+
+      if pipeline_stages.any? && has_pipeline_routing?(pipeline_stages)
+        # Multi-pipeline execution within this pipeline
+        run_child_pipelines(context, pipeline_stages)
+      else
+        # Normal pipeline execution
+        run_normal_pipeline(context)
+      end
+
+      @job_end = Time.now
+      @stats.finish!
+
+      log_info "#{log_prefix} Finished in #{(@job_end - @job_start).round(2)}s"
+      log_info "#{log_prefix} Produced: #{@produced_count.value}, Accumulated: #{@accumulated_count}"
+
+      # Run after_run hooks
+      @hooks[:after_run].each { |h| context.instance_eval(&h) }
+
+      # Return produced count (or accumulated count if using accumulator)
+      @accumulated_count > 0 ? @accumulated_count : @produced_count.value
+    end
+
+    # Normal pipeline execution (atomic stages)
+    def run_normal_pipeline(context)
       # Start internal queue (for stage-to-stage communication)
       @queue = SizedQueue.new(@config[:max_processes] * @config[:max_threads] * 2)
 
@@ -226,18 +252,59 @@ module Minigun
       isolated_pipeline_threads.each(&:join)
       accumulator_thread.join
       wait_all_consumers
+    end
 
-      @job_end = Time.now
-      @stats.finish!
+    # Check if pipeline stages have routing between them
+    def has_pipeline_routing?(pipeline_stages)
+      pipeline_names = pipeline_stages.map(&:name)
+      @dag.edges.any? do |from, tos|
+        pipeline_names.include?(from) && tos.any? { |to| pipeline_names.include?(to) }
+      end
+    end
 
-      log_info "#{log_prefix} Finished in #{(@job_end - @job_start).round(2)}s"
-      log_info "#{log_prefix} Produced: #{@produced_count.value}, Accumulated: #{@accumulated_count}"
+    # Run child pipelines with inter-pipeline communication
+    def run_child_pipelines(context, pipeline_stages)
+      pipeline_map = pipeline_stages.map { |ps| [ps.name, ps.pipeline] }.to_h
 
-      # Run after_run hooks
-      @hooks[:after_run].each { |h| context.instance_eval(&h) }
+      # Initialize counters
+      @produced_count ||= Concurrent::AtomicFixnum.new(0)
+      @accumulated_count = 0
 
-      # Return produced count (or accumulated count if using accumulator)
-      @accumulated_count > 0 ? @accumulated_count : @produced_count.value
+      # Set up queues between connected pipelines
+      @dag.edges.each do |from_name, to_names|
+        next unless pipeline_map.key?(from_name)
+
+        from_pipeline = pipeline_map[from_name]
+        to_names.each do |to_name|
+          next unless pipeline_map.key?(to_name)
+
+          to_pipeline = pipeline_map[to_name]
+          queue = SizedQueue.new(1000)
+
+          from_pipeline.add_output_queue(to_name, queue)
+          to_pipeline.add_input_queue(queue)
+
+          log_info "#{log_prefix} Connected #{from_name} -> #{to_name}"
+        end
+      end
+
+      # Start all child pipelines in threads
+      threads = pipeline_map.map do |name, pipeline|
+        pipeline.instance_variable_set(:@job_id, @job_id)
+        pipeline.run_in_thread(context)
+      end
+
+      # Wait for all to complete
+      threads.each(&:join)
+
+      # Collect stats from child pipelines
+      pipeline_map.each do |name, pipeline|
+        if pipeline.stats
+          @stats.instance_variable_get(:@stage_stats).merge!(pipeline.stats.instance_variable_get(:@stage_stats))
+        end
+      end
+
+      log_info "#{log_prefix} All child pipelines completed"
     end
 
     # Run this pipeline in a thread (for multi-pipeline execution)

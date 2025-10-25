@@ -33,13 +33,13 @@ module Minigun
         pipeline.config[key] = value
       end
     end
-    
+
     # Get all named pipelines (PipelineStage objects in root_pipeline)
     def pipelines
       @root_pipeline.stages.select { |_name, stage| stage.is_a?(PipelineStage) }
                            .transform_values(&:pipeline)
     end
-    
+
     # Get the DAG for pipeline-level routing
     def pipeline_dag
       @root_pipeline.dag
@@ -99,7 +99,7 @@ module Minigun
         pipeline_stage = PipelineStage.new(name: name, options: options)
         pipeline = Pipeline.new(name, @config)
         pipeline_stage.pipeline = pipeline
-        
+
         @root_pipeline.stages[name] = pipeline_stage
         @root_pipeline.instance_variable_get(:@stage_order) << name
         @root_pipeline.dag.add_node(name)
@@ -138,18 +138,8 @@ module Minigun
     # Direct pipeline execution without Runner overhead
     # Use this for testing or embedding in other systems
     def perform(context)
-      if has_multi_pipeline?
-        # Multi-pipeline mode: run all named pipelines
-        run_multi_pipeline(context)
-      else
-        # Single-pipeline mode: run root pipeline
-        @root_pipeline.run(context)
-      end
-    end
-    
-    # Check if we have multiple pipelines defined
-    def has_multi_pipeline?
-      @root_pipeline.stages.any? { |_name, stage| stage.is_a?(PipelineStage) }
+      # Just run the root pipeline - it handles all stages transparently
+      @root_pipeline.run(context)
     end
 
     # Access stages for backward compatibility
@@ -167,79 +157,5 @@ module Minigun
       @root_pipeline.dag
     end
 
-    private
-
-    def run_multi_pipeline(context)
-      pipeline_list = pipelines
-      log_info "Starting multi-pipeline task with #{pipeline_list.size} pipelines"
-
-      # Build pipeline routing
-      build_pipeline_routing!
-
-      # Create inter-pipeline queues
-      setup_inter_pipeline_queues
-
-      # Start all pipelines in threads
-      threads = pipeline_list.map do |name, pipeline|
-        pipeline.run_in_thread(context)
-      end
-
-      # Wait for all pipelines to complete
-      threads.each(&:join)
-
-      log_info "Multi-pipeline task completed"
-    end
-
-    def build_pipeline_routing!
-      pipeline_list = pipelines
-      
-      # Build a pipeline-only DAG (not root_pipeline's DAG which includes all stages)
-      @pipeline_only_dag = DAG.new
-      pipeline_list.keys.each { |name| @pipeline_only_dag.add_node(name) }
-      
-      # Copy edges between pipelines from root DAG
-      @root_pipeline.dag.edges.each do |from, tos|
-        next unless pipeline_list.key?(from)
-        tos.each do |to|
-          next unless pipeline_list.key?(to)
-          @pipeline_only_dag.add_edge(from, to)
-        end
-      end
-      
-      # If no explicit routing, build sequential pipeline connections
-      if @pipeline_only_dag.edges.values.all?(&:empty?)
-        @pipeline_only_dag.build_sequential!
-      end
-
-      @pipeline_only_dag.validate!
-
-      log_info "Pipeline DAG: #{@pipeline_only_dag.nodes.join(' -> ')}"
-    end
-
-    def setup_inter_pipeline_queues
-      pipeline_list = pipelines
-      
-      # Create queues between connected pipelines
-      @pipeline_only_dag.edges.each do |from_name, to_names|
-        from_pipeline = pipeline_list[from_name]
-
-        to_names.each do |to_name|
-          to_pipeline = pipeline_list[to_name]
-
-          # Create a queue for communication
-          queue = SizedQueue.new(1000)  # Reasonable buffer size
-
-          # Connect pipelines
-          from_pipeline.add_output_queue(to_name, queue)
-          to_pipeline.input_queue = queue
-
-          log_info "Connected pipeline #{from_name} -> #{to_name}"
-        end
-      end
-    end
-
-    def log_info(msg)
-      Minigun.logger.info(msg)
-    end
   end
 end
