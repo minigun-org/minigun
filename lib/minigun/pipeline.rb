@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'set'
+
 module Minigun
   # Pipeline represents a single data processing pipeline with stages
   # A Pipeline can be standalone or part of a multi-pipeline Task
@@ -213,16 +215,8 @@ module Minigun
       # Run before_run hooks
       @hooks[:before_run].each { |h| context.instance_eval(&h) }
 
-      # Check if we have connected PipelineStages that need multi-pipeline execution
-      pipeline_stages = @stages.select { |_, stage| stage.is_a?(PipelineStage) }.values
-
-      if pipeline_stages.any? && has_pipeline_routing?(pipeline_stages)
-        # Multi-pipeline execution within this pipeline
-        run_child_pipelines(context, pipeline_stages)
-      else
-        # Normal pipeline execution
-        run_normal_pipeline(context)
-      end
+      # Just run normally - PipelineStages will execute like any other stage
+      run_normal_pipeline(context)
 
       @job_end = Time.now
       @stats.finish!
@@ -237,85 +231,21 @@ module Minigun
       @accumulated_count > 0 ? @accumulated_count : @produced_count.value
     end
 
-    # Normal pipeline execution (atomic stages)
+    # Normal pipeline execution (all stages treated uniformly)
     def run_normal_pipeline(context)
       # Start internal queue (for stage-to-stage communication)
       @queue = SizedQueue.new(@config[:max_processes] * @config[:max_threads] * 2)
 
-      # Start producer, isolated pipelines, and accumulator threads
+      # Start producer and accumulator threads
       producer_thread = start_producer
-      isolated_pipeline_threads = start_isolated_pipelines
       accumulator_thread = start_accumulator
 
       # Wait for completion
       producer_thread.join
-      isolated_pipeline_threads.each(&:join)
       accumulator_thread.join
       wait_all_consumers
     end
 
-    # Check if pipeline stages have routing between them
-    def has_pipeline_routing?(pipeline_stages)
-      pipeline_names = pipeline_stages.map(&:name)
-      @dag.edges.any? do |from, tos|
-        pipeline_names.include?(from) && tos.any? { |to| pipeline_names.include?(to) }
-      end
-    end
-
-    # Run child pipelines with inter-pipeline communication
-    def run_child_pipelines(context, pipeline_stages)
-      pipeline_map = pipeline_stages.map { |ps| [ps.name, ps.pipeline] }.to_h
-
-      # Initialize counters
-      @produced_count ||= Concurrent::AtomicFixnum.new(0)
-      @accumulated_count = 0
-
-      # Set up queues between connected pipelines
-      @dag.edges.each do |from_name, to_names|
-        next unless pipeline_map.key?(from_name)
-
-        from_pipeline = pipeline_map[from_name]
-        to_names.each do |to_name|
-          next unless pipeline_map.key?(to_name)
-
-          to_pipeline = pipeline_map[to_name]
-          queue = SizedQueue.new(1000)
-
-          from_pipeline.add_output_queue(to_name, queue)
-          to_pipeline.add_input_queue(queue)
-
-          log_info "#{log_prefix} Connected #{from_name} -> #{to_name}"
-        end
-      end
-
-      # Start all child pipelines in threads
-      threads = pipeline_map.map do |name, pipeline|
-        pipeline.instance_variable_set(:@job_id, @job_id)
-        pipeline.run_in_thread(context)
-      end
-
-      # Wait for all to complete
-      threads.each(&:join)
-
-      # Collect stats from child pipelines
-      pipeline_map.each do |name, pipeline|
-        if pipeline.stats
-          @stats.instance_variable_get(:@stage_stats).merge!(pipeline.stats.instance_variable_get(:@stage_stats))
-        end
-      end
-
-      log_info "#{log_prefix} All child pipelines completed"
-    end
-
-    # Run this pipeline in a thread (for multi-pipeline execution)
-    def run_in_thread(context)
-      Thread.new do
-        run(context)
-      rescue => e
-        log_error "[Pipeline:#{@name}] Error: #{e.message}"
-        log_error e.backtrace.join("\n")
-      end
-    end
 
     def find_stage(name)
       @stages[name]
@@ -344,7 +274,15 @@ module Minigun
     end
 
     def find_all_producers
-      @stages.values.select { |stage| stage.producer? }
+      # Include both AtomicStage producers and PipelineStages with no upstream
+      @stages.values.select do |stage|
+        if stage.is_a?(PipelineStage)
+          # PipelineStage is a producer if it has no upstream
+          @dag.upstream(stage.name).empty?
+        else
+          stage.producer?
+        end
+      end
     end
 
     def find_accumulator
@@ -365,18 +303,21 @@ module Minigun
       producer_stages = find_all_producers
 
       # Handle both internal producers and input from upstream pipeline
-      has_internal_producers = producer_stages.any? { |p| p.block }
+      has_internal_producers = producer_stages.any?
       has_input_queues = @input_queues.any?
 
       Thread.new do
         producer_threads = []
 
         if has_internal_producers
-          # Start each producer in its own thread
-          producers_with_blocks = producer_stages.select { |p| p.block }
-          log_info "[Pipeline:#{@name}][Producers] Starting #{producers_with_blocks.size} producer(s)"
+          # Separate AtomicStage producers and PipelineStage producers
+          atomic_producers = producer_stages.select { |p| p.is_a?(AtomicStage) && p.block }
+          pipeline_producers = producer_stages.select { |p| p.is_a?(PipelineStage) }
 
-          producers_with_blocks.each do |producer_stage|
+          log_info "[Pipeline:#{@name}][Producers] Starting #{atomic_producers.size} atomic producer(s) and #{pipeline_producers.size} pipeline producer(s)"
+
+          # Start atomic producers
+          atomic_producers.each do |producer_stage|
             producer_threads << Thread.new do
               producer_name = producer_stage.name
               stage_stats = @stats.for_stage(producer_name, is_terminal: false)
@@ -415,6 +356,47 @@ module Minigun
               end
             end
           end
+
+          # Start pipeline producers
+          pipeline_producers.each do |pipeline_stage|
+            producer_threads << Thread.new do
+              producer_name = pipeline_stage.name
+              stage_stats = @stats.for_stage(producer_name, is_terminal: false)
+              stage_stats.start!
+
+              log_info "[Pipeline:#{@name}][PipelineProducer:#{producer_name}] Starting"
+
+              begin
+                # Run the nested pipeline and capture its output
+                emitted_items = []
+                emit_mutex = Mutex.new
+
+                producer_context = @context.dup
+                producer_context.define_singleton_method(:emit) do |item|
+                  emit_mutex.synchronize { emitted_items << item }
+                end
+
+                # Run the pipeline
+                pipeline_stage.pipeline.instance_variable_set(:@job_id, @job_id)
+                pipeline_stage.pipeline.run(producer_context)
+
+                # Emit all items into the queue
+                emitted_items.each do |item|
+                  in_flight_count.increment
+                  queue << [item, producer_name]
+                  produced_count.increment
+                  stage_stats.increment_produced
+                end
+
+                stage_stats.finish!
+                log_info "[Pipeline:#{@name}][PipelineProducer:#{producer_name}] Done. Produced #{stage_stats.items_produced} items"
+              rescue => e
+                stage_stats.finish!
+                log_error "[Pipeline:#{@name}][PipelineProducer:#{producer_name}] Error: #{e.message}"
+                log_error e.backtrace.join("\n")
+              end
+            end
+          end
         end
 
         if has_input_queues
@@ -448,32 +430,6 @@ module Minigun
       end
     end
 
-    def start_isolated_pipelines
-      # Find PipelineStages that have no upstream connections (isolated pipelines)
-      isolated_pipelines = @stages.values.select do |stage|
-        stage.is_a?(PipelineStage) && @dag.upstream(stage.name).empty?
-      end
-
-      return [] if isolated_pipelines.empty?
-
-      log_info "[Pipeline:#{@name}][Isolated] Starting #{isolated_pipelines.size} isolated pipeline(s)"
-
-      # Start each isolated pipeline in its own thread
-      isolated_pipelines.map do |pipeline_stage|
-        Thread.new do
-          log_info "[Pipeline:#{@name}][Isolated:#{pipeline_stage.name}] Starting"
-
-          begin
-            # Run the nested pipeline with the current context
-            pipeline_stage.pipeline.run(@context)
-
-            log_info "[Pipeline:#{@name}][Isolated:#{pipeline_stage.name}] Completed"
-          rescue => e
-            log_info "[Pipeline:#{@name}][Isolated:#{pipeline_stage.name}] Error: #{e.message}"
-          end
-        end
-      end
-    end
 
     def start_accumulator
       Thread.new do

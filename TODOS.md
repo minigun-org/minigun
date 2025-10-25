@@ -3,6 +3,9 @@ ADD to README:
 - execute in paralle, and do NOT route to each other, unless unless you add :to or :from keywords.
 
 
+multi-parents --> how do we know end of queues?
+
+
       if has_multi_pipeline?
         # Multi-pipeline mode: run all named pipelines
         run_multi_pipeline(context)
@@ -10,7 +13,7 @@ ADD to README:
         # Single-pipeline mode: run root pipeline
         @root_pipeline.run(context)
       end
-      
+
 
 
 from keyword in pipelines (connects pipelines)

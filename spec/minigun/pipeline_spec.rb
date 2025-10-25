@@ -173,48 +173,5 @@ RSpec.describe Minigun::Pipeline do
     end
   end
 
-  describe '#run_in_thread' do
-    before do
-      allow(Minigun.logger).to receive(:info)
-    end
-
-    it 'returns a thread' do
-      context = Class.new do
-        attr_accessor :results
-        def initialize
-          @results = []
-        end
-      end.new
-
-      pipeline.add_stage(:producer, :source) { emit(1) }
-      pipeline.add_stage(:consumer, :sink) { |item| results << item }
-
-      thread = pipeline.run_in_thread(context)
-      expect(thread).to be_a(Thread)
-      thread.join
-    end
-
-    it 'executes pipeline asynchronously' do
-      context = Class.new do
-        attr_accessor :results
-        def initialize
-          @results = []
-        end
-      end.new
-
-      pipeline.add_stage(:producer, :source) do
-        3.times { |i| emit(i) }
-      end
-
-      pipeline.add_stage(:consumer, :sink) do |item|
-        results << item
-      end
-
-      thread = pipeline.run_in_thread(context)
-      thread.join
-
-      expect(context.results).to contain_exactly(0, 1, 2)
-    end
-  end
 end
 

@@ -157,6 +157,12 @@ module Minigun
       true
     end
 
+    # Execute method for when PipelineStage is used as a consumer
+    def execute(context, item)
+      execute_with_emit(context, item)
+      nil  # Consumers don't return values
+    end
+
     # Set the wrapped pipeline (called by Task)
     def pipeline=(pipeline)
       @pipeline = pipeline
@@ -182,20 +188,27 @@ module Minigun
     def execute_with_emit(context, item)
       return [item] unless @pipeline
 
-      # Process item through nested pipeline stages sequentially
+      # Process item through the pipeline's stages sequentially (in-process, no full pipeline infrastructure)
+      # This is for PipelineStages used as processors/consumers in a DAG
       current_items = [item]
 
-      @pipeline.stage_order.each do |stage_name|
-        stage = @pipeline.find_stage(stage_name)
-        next unless stage
-        next if stage.producer?  # Skip producers in nested pipelines
+      @pipeline.stages.each_value do |stage|
+        # Skip producers - we're feeding items in from upstream
+        next if stage.producer? || stage.is_a?(PipelineStage)
+        # Skip accumulators in this inline execution
+        next if stage.accumulator?
 
         break if current_items.empty?
 
         next_items = []
         current_items.each do |current_item|
-          results = stage.execute_with_emit(context, current_item)
-          next_items.concat(results)
+          if stage.respond_to?(:execute_with_emit)
+            results = stage.execute_with_emit(context, current_item)
+            next_items.concat(results)
+          else
+            # Consumer - execute but don't collect output
+            stage.execute(context, current_item)
+          end
         end
         current_items = next_items
       end
