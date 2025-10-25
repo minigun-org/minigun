@@ -52,24 +52,24 @@ module Minigun
     def add_nested_pipeline(name, options = {}, &block)
       # Create a PipelineStage and configure it
       pipeline_stage = PipelineStage.new(name: name, options: options)
-      
+
       # Add stages to the nested pipeline via block
       if block_given?
         dsl = Minigun::DSL::PipelineDSL.new(pipeline_stage)
         dsl.instance_eval(&block)
       end
-      
+
       # Actually, let's just directly add it to the implicit pipeline
       # The implicit pipeline's add_stage method will handle it
       @implicit_pipeline.stages[:processor] << pipeline_stage
       @implicit_pipeline.dag.add_node(name)
-      
+
       # Extract routing if specified
       to_targets = options[:to]
       if to_targets
         Array(to_targets).each { |target| @implicit_pipeline.dag.add_edge(name, target) }
       end
-      
+
       pipeline_stage
     end
 

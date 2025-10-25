@@ -54,7 +54,7 @@ if __FILE__ == $0
   puts "\n=== Results ===\n"
   puts "Collected: #{example.results.sort.inspect}"
   puts "Expected: [12, 14, 16, 18, 20]"
-  
+
   success = example.results.sort == [12, 14, 16, 18, 20]
   puts success ? "✓ Success!" : "✗ Failed"
 end

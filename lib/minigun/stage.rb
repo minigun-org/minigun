@@ -148,40 +148,40 @@ module Minigun
   # This is the key to the composite pattern!
   class PipelineStage < Stage
     attr_reader :pipeline
-    
+
     def initialize(name:, options: {})
       super(name: name, options: options)
-      
+
       # PipelineStage wraps a Pipeline instance for execution
       # We'll inject the pipeline later when we have the config
       @pipeline = nil
       @stages_to_add = []  # Queue of stages to add when pipeline is created
     end
-    
+
     def type
       :pipeline
     end
-    
+
     def composite?
       true
     end
-    
+
     def emits?
       # A pipeline emits if it has output connections
       true
     end
-    
+
     # Set the wrapped pipeline (called by Task)
     def pipeline=(pipeline)
       @pipeline = pipeline
-      
+
       # Add any queued stages
       @stages_to_add.each do |stage_info|
         @pipeline.add_stage(stage_info[:type], stage_info[:name], stage_info[:options], &stage_info[:block])
       end
       @stages_to_add.clear
     end
-    
+
     # Add a child stage to this pipeline
     def add_stage(type, name, options = {}, &block)
       if @pipeline
@@ -191,16 +191,16 @@ module Minigun
         @stages_to_add << { type: type, name: name, options: options, block: block }
       end
     end
-    
+
     # Execute this pipeline stage (processes an item through the nested pipeline)
     def execute_with_emit(context, item)
       emitted_items = []
-      
+
       # The nested pipeline should process the item and emit results
       # For now, we'll simulate this by executing processors in the pipeline
       if @pipeline && @pipeline.stages[:processor].any?
         current_items = [item]
-        
+
         @pipeline.stages[:processor].each do |processor_stage|
           next_items = []
           current_items.each do |current_item|
@@ -209,13 +209,13 @@ module Minigun
           end
           current_items = next_items
         end
-        
+
         emitted_items = current_items
       else
         # No processors, just pass through
         emitted_items = [item]
       end
-      
+
       emitted_items
     end
   end
