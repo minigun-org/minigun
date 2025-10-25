@@ -87,4 +87,3 @@ module Minigun
     alias go_brrr! run
   end
 end
-

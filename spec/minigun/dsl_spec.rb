@@ -159,5 +159,192 @@ RSpec.describe Minigun::DSL do
       expect(task.hooks[:after_run].size).to eq(1)
     end
   end
+
+  describe 'implicit pipeline definition (without pipeline block)' do
+    before do
+      allow(Minigun.logger).to receive(:info)
+    end
+
+    it 'allows defining stages without pipeline block wrapper' do
+      # Define pipeline WITHOUT explicit pipeline block
+      pipeline_class = Class.new do
+        include Minigun::DSL
+
+        attr_accessor :results
+
+        def initialize
+          @results = []
+        end
+
+        # No pipeline do...end wrapper!
+        producer :generate do
+          3.times { |i| emit(i + 1) }
+        end
+
+        processor :double do |num|
+          emit(num * 2)
+        end
+
+        consumer :collect do |num|
+          results << num
+        end
+      end
+
+      pipeline = pipeline_class.new
+      pipeline.run
+
+      expect(pipeline.results).to contain_exactly(2, 4, 6)
+    end
+
+    it 'works identically with or without pipeline block' do
+      # WITH pipeline block
+      with_block = Class.new do
+        include Minigun::DSL
+        attr_accessor :results
+
+        def initialize
+          @results = []
+        end
+
+        pipeline do
+          producer :source do
+            5.times { |i| emit(i) }
+          end
+
+          consumer :sink do |num|
+            results << num
+          end
+        end
+      end
+
+      # WITHOUT pipeline block
+      without_block = Class.new do
+        include Minigun::DSL
+        attr_accessor :results
+
+        def initialize
+          @results = []
+        end
+
+        producer :source do
+          5.times { |i| emit(i) }
+        end
+
+        consumer :sink do |num|
+          results << num
+        end
+      end
+
+      with_result = with_block.new
+      with_result.run
+
+      without_result = without_block.new
+      without_result.run
+
+      expect(with_result.results.sort).to eq(without_result.results.sort)
+      expect(with_result.results).to contain_exactly(0, 1, 2, 3, 4)
+      expect(without_result.results).to contain_exactly(0, 1, 2, 3, 4)
+    end
+
+    it 'supports mixing both styles' do
+      mixed_class = Class.new do
+        include Minigun::DSL
+        attr_accessor :results
+
+        def initialize
+          @results = []
+        end
+
+        # Some stages outside pipeline block
+        producer :start do
+          emit(10)
+        end
+
+        # Some stages inside pipeline block
+        pipeline do
+          processor :multiply do |n|
+            emit(n * 3)
+          end
+
+          consumer :finish do |n|
+            results << n
+          end
+        end
+      end
+
+      pipeline = mixed_class.new
+      pipeline.run
+
+      expect(pipeline.results).to eq([30])
+    end
+
+    it 'can define complex routing without pipeline block' do
+      routing_class = Class.new do
+        include Minigun::DSL
+        attr_accessor :path_a_results, :path_b_results
+
+        def initialize
+          @path_a_results = []
+          @path_b_results = []
+          @mutex = Mutex.new
+        end
+
+        producer :start, to: [:process_a, :process_b] do
+          emit(5)
+        end
+
+        consumer :process_a do |n|
+          @mutex.synchronize { path_a_results << n * 2 }
+        end
+
+        consumer :process_b do |n|
+          @mutex.synchronize { path_b_results << n * 3 }
+        end
+      end
+
+      pipeline = routing_class.new
+      pipeline.run
+
+      expect(pipeline.path_a_results).to eq([10])
+      expect(pipeline.path_b_results).to eq([15])
+    end
+
+    it 'supports all stage types without pipeline block' do
+      full_class = Class.new do
+        include Minigun::DSL
+        attr_accessor :results
+
+        def initialize
+          @results = []
+        end
+
+        # Direct definition - no pipeline block needed
+        producer :fetch do
+          emit(1)
+          emit(2)
+        end
+
+        processor :validate do |n|
+          emit(n) if n > 0
+        end
+
+        processor :transform do |n|
+          emit(n * 10)
+        end
+
+        consumer :save do |n|
+          results << n
+        end
+
+        before_run { @results << :started }
+        after_run { @results << :finished }
+      end
+
+      pipeline = full_class.new
+      pipeline.run
+
+      expect(pipeline.results).to include(:started, 10, 20, :finished)
+    end
+  end
 end
 
