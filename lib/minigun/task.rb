@@ -4,7 +4,7 @@ module Minigun
   # Task orchestrates one or more pipelines
   # Supports both single-pipeline (implicit) and multi-pipeline modes
   class Task
-    attr_reader :config, :pipelines, :pipeline_dag, :current_pipeline
+    attr_reader :config, :pipelines, :pipeline_dag, :implicit_pipeline
 
     def initialize
       @config = {
@@ -17,57 +17,43 @@ module Minigun
         use_ipc: false
       }
 
+      # Implicit pipeline for single-pipeline mode (backward compatibility)
+      @implicit_pipeline = Pipeline.new(:default, @config)
+      
+      # Named pipelines for multi-pipeline mode
       @pipelines = {}  # { pipeline_name => Pipeline }
       @pipeline_dag = DAG.new  # Pipeline-level routing
-      @current_pipeline = nil  # For implicit single-pipeline mode
-      @mode = :single  # :single or :multi
     end
 
     # Set config value (applies to all pipelines)
     def set_config(key, value)
       @config[key] = value
+      
+      # Update implicit pipeline config
+      @implicit_pipeline.config[key] = value
+      
+      # Update all named pipelines
+      @pipelines.each_value do |pipeline|
+        pipeline.config[key] = value
+      end
     end
 
-    # Get or create a pipeline by name
-    # If name is nil, use default pipeline for backward compatibility
-    def get_or_create_pipeline(name = nil)
-      if name.nil?
-        # Implicit single-pipeline mode
-        @mode = :single
-        name = :default
-      else
-        # Explicit multi-pipeline mode
-        @mode = :multi
-      end
-
-      @pipelines[name] ||= begin
-        pipeline = Pipeline.new(name, @config)
-        @pipeline_dag.add_node(name)
-        pipeline
-      end
-
-      @current_pipeline = @pipelines[name]
-      @current_pipeline
-    end
-
-    # Add a stage to the current pipeline (for backward compatibility)
+    # Add a stage to the implicit pipeline (for backward compatibility)
     def add_stage(type, stage_name, options = {}, &block)
-      pipeline = get_or_create_pipeline
-      pipeline.add_stage(type, stage_name, options, &block)
+      @implicit_pipeline.add_stage(type, stage_name, options, &block)
     end
 
-    # Add a hook to the current pipeline (for backward compatibility)
+    # Add a hook to the implicit pipeline (for backward compatibility)
     def add_hook(type, &block)
-      pipeline = get_or_create_pipeline
-      pipeline.add_hook(type, &block)
+      @implicit_pipeline.add_hook(type, &block)
     end
 
     # Define a named pipeline with routing
     def define_pipeline(name, options = {}, &block)
-      @mode = :multi
-
-      pipeline = get_or_create_pipeline(name)
-
+      # Create or get named pipeline
+      pipeline = @pipelines[name] ||= Pipeline.new(name, @config)
+      @pipeline_dag.add_node(name)
+      
       # Extract pipeline-level routing
       to_targets = options[:to]
       if to_targets
@@ -75,46 +61,42 @@ module Minigun
           @pipeline_dag.add_edge(name, target)
         end
       end
-
+      
       # Execute block in context of pipeline definition
       if block_given?
         yield pipeline
       end
-
+      
       pipeline
     end
 
     # Run the task (single or multi-pipeline)
     def run(context)
-      if @mode == :single
-        run_single_pipeline(context)
+      if @pipelines.empty?
+        # Single-pipeline mode: run implicit pipeline
+        @implicit_pipeline.run(context)
       else
+        # Multi-pipeline mode: run all named pipelines
         run_multi_pipeline(context)
       end
     end
 
     # Access stages for backward compatibility
     def stages
-      get_or_create_pipeline.stages
+      @implicit_pipeline.stages
     end
 
     # Access hooks for backward compatibility
     def hooks
-      get_or_create_pipeline.hooks
+      @implicit_pipeline.hooks
     end
 
     # Access DAG for backward compatibility (stage-level DAG)
     def dag
-      get_or_create_pipeline.dag
+      @implicit_pipeline.dag
     end
 
     private
-
-    def run_single_pipeline(context)
-      # Backward compatible: run single pipeline directly
-      pipeline = get_or_create_pipeline
-      pipeline.run(context)
-    end
 
     def run_multi_pipeline(context)
       log_info "Starting multi-pipeline task with #{@pipelines.size} pipelines"
