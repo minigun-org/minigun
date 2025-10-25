@@ -10,7 +10,7 @@ module Minigun
     attr_reader :nodes, :edges
 
     def initialize
-      @nodes = []           # Track insertion order
+      @nodes = [] # Track insertion order
       @edges = Hash.new { |h, k| h[k] = [] }  # stage_name => [downstream_stage_names]
       @reverse_edges = Hash.new { |h, k| h[k] = [] }  # stage_name => [upstream_stage_names]
     end
