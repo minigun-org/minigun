@@ -667,44 +667,19 @@ module Minigun
 
         next_stage = @stage_order[index + 1]
 
-        # Skip if this stage is part of a fan-out pattern
-        # Check if the next_stage is a sibling (i.e., shares the same upstream)
-        upstream_stages = @dag.upstream(stage_name)
-        if upstream_stages.any?
-          # Get all siblings (stages that share the same upstream)
-          siblings = upstream_stages.flat_map { |up| @dag.downstream(up) } - [stage_name]
+        # Skip if this is a fan-out pattern (next_stage is a sibling)
+        next if @dag.fan_out_siblings?(stage_name, next_stage)
 
-          # If next_stage is a sibling, this is a fan-out pattern - don't add sequential edge
-          next if siblings.include?(next_stage)
-
-          # If any sibling already routes to next_stage, this is also a fan-out pattern
-          next if siblings.any? { |sib| @dag.downstream(sib).include?(next_stage) }
-        end
+        # Skip if any sibling already routes to next_stage
+        # (indicates a converging pattern after fan-out)
+        siblings = @dag.siblings(stage_name)
+        next if siblings.any? { |sib| @dag.downstream(sib).include?(next_stage) }
 
         # Don't add edge if it would create a cycle
-        # (i.e., next_stage is already upstream of stage_name)
-        next if would_create_cycle?(stage_name, next_stage)
+        next if @dag.would_create_cycle?(stage_name, next_stage)
 
         @dag.add_edge(stage_name, next_stage)
       end
-    end
-
-    def would_create_cycle?(from, to)
-      # Check if 'to' can already reach 'from' (which would create a cycle)
-      visited = Set.new
-      queue = [to]
-
-      while queue.any?
-        current = queue.shift
-        next if visited.include?(current)
-        visited.add(current)
-
-        return true if current == from
-
-        queue.concat(@dag.downstream(current))
-      end
-
-      false
     end
 
     def log_info(msg)

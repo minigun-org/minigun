@@ -367,7 +367,8 @@ RSpec.describe 'Examples Integration' do
       '18_resource_cleanup_hooks.rb',
       '19_statistics_gathering.rb',
       '20_error_handling_hooks.rb',
-      '21_inline_hook_procs.rb'
+      '21_inline_hook_procs.rb',
+      '22_reroute_stage.rb'
     ]
 
     missing_tests = example_basenames - tested_examples
@@ -490,6 +491,27 @@ RSpec.describe 'Examples Integration' do
 
       expect(example.timer[:fetch_start]).to be_a(Time)
       expect(example.timer[:fetch_end]).to be_a(Time)
+    end
+  end
+
+  describe '22_reroute_stage.rb' do
+    it 'demonstrates rerouting stages in child classes' do
+      load File.expand_path('../../examples/22_reroute_stage.rb', __dir__)
+
+      # Base pipeline: generate -> double -> collect
+      base = RerouteBaseExample.new
+      base.run
+      expect(base.results.sort).to eq([2, 4, 6, 8, 10])
+
+      # Skip stage: generate -> collect (skips double)
+      skip = RerouteSkipExample.new
+      skip.run
+      expect(skip.results.sort).to eq([1, 2, 3, 4, 5])
+
+      # Insert stage: generate -> double -> triple -> collect
+      insert = RerouteInsertExample.new
+      insert.run
+      expect(insert.results.sort).to eq([6, 12, 18, 24, 30])
     end
   end
 end

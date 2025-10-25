@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'tsort'
+require 'set'
 
 module Minigun
   # Directed Acyclic Graph for stage routing using Ruby's TSort
@@ -117,6 +118,37 @@ module Minigun
           add_edge(node, next_node)
         end
       end
+    end
+
+    # Get all sibling nodes (nodes that share at least one upstream parent)
+    def siblings(node)
+      upstream(node).flat_map { |parent| downstream(parent) } - [node]
+    end
+
+    # Check if adding edge from->to would create a cycle
+    # Returns true if 'to' can already reach 'from' (which would create a cycle)
+    def would_create_cycle?(from, to)
+      visited = Set.new
+      queue = [to]
+
+      while queue.any?
+        current = queue.shift
+        next if visited.include?(current)
+        visited.add(current)
+
+        return true if current == from
+
+        queue.concat(downstream(current))
+      end
+
+      false
+    end
+
+    # Check if two nodes are fan-out siblings (share upstream and don't connect to each other)
+    def fan_out_siblings?(node1, node2)
+      return false unless siblings(node1).include?(node2)
+      # They're siblings - check if one routes to the other
+      !downstream(node1).include?(node2) && !downstream(node2).include?(node1)
     end
 
     # Get execution order groups (stages that can run in parallel)
