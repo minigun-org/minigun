@@ -2,6 +2,7 @@
 
 require 'concurrent'
 require 'logger'
+require 'set'
 
 module Minigun
   class Error < StandardError; end
@@ -16,6 +17,7 @@ module Minigun
 end
 
 require_relative 'minigun/version'
+require_relative 'minigun/dag'
 require_relative 'minigun/task'
 require_relative 'minigun/dsl'
 

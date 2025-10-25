@@ -30,29 +30,29 @@ module Minigun
       end
 
       # Stage definition methods
-      def producer(name = :producer, &block)
-        _task.add_stage(:producer, name, &block)
+      def producer(name = :producer, options = {}, &block)
+        _task.add_stage(:producer, name, options, &block)
       end
 
-      def processor(name, &block)
-        _task.add_stage(:processor, name, &block)
+      def processor(name, options = {}, &block)
+        _task.add_stage(:processor, name, options, &block)
       end
 
-      def accumulator(name = :accumulator, &block)
-        _task.add_stage(:accumulator, name, &block)
+      def accumulator(name = :accumulator, options = {}, &block)
+        _task.add_stage(:accumulator, name, options, &block)
       end
 
-      def consumer(name = :consumer, &block)
-        _task.add_stage(:consumer, name, &block)
+      def consumer(name = :consumer, options = {}, &block)
+        _task.add_stage(:consumer, name, options, &block)
       end
 
       # Fork aliases
       def cow_fork(name = :consumer, options = {}, &block)
-        _task.add_stage(:consumer, name, &block)
+        _task.add_stage(:consumer, name, options, &block)
       end
 
       def ipc_fork(name = :consumer, options = {}, &block)
-        _task.add_stage(:consumer, name, &block)
+        _task.add_stage(:consumer, name, options, &block)
       end
 
       # Hook methods
