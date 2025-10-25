@@ -666,17 +666,17 @@ module Minigun
         next if index >= @stage_order.size - 1
 
         next_stage = @stage_order[index + 1]
-        
+
         # Skip if this stage is part of a fan-out pattern
         # Check if the next_stage is a sibling (i.e., shares the same upstream)
         upstream_stages = @dag.upstream(stage_name)
         if upstream_stages.any?
           # Get all siblings (stages that share the same upstream)
           siblings = upstream_stages.flat_map { |up| @dag.downstream(up) } - [stage_name]
-          
+
           # If next_stage is a sibling, this is a fan-out pattern - don't add sequential edge
           next if siblings.include?(next_stage)
-          
+
           # If any sibling already routes to next_stage, this is also a fan-out pattern
           next if siblings.any? { |sib| @dag.downstream(sib).include?(next_stage) }
         end
