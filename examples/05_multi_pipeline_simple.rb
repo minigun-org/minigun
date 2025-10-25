@@ -30,7 +30,7 @@ class SimplePipelineExample
 
   # Second pipeline doubles them
   pipeline :processor, to: :collector do
-    producer :input  # Receives from generator
+    producer :input # Receives from generator
 
     processor :double do |num|
       doubled = num * 2
@@ -39,13 +39,13 @@ class SimplePipelineExample
     end
 
     consumer :output do |num|
-      emit(num)  # Send to next pipeline
+      emit(num) # Send to next pipeline
     end
   end
 
   # Third pipeline collects results
   pipeline :collector do
-    producer :input  # Receives from processor
+    producer :input # Receives from processor
 
     consumer :collect do |num|
       puts "[Collector] Storing: #{num}"

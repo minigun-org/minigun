@@ -3,8 +3,10 @@
 
 require_relative '../lib/minigun'
 
-# Pipeline A: Generates main workflow items
-class MainWorkflowPipeline
+# Single Task with two nested pipelines
+# Pipeline A processes items and routes to Pipeline B
+# Pipeline B has its own multiple producers + receives from Pipeline A
+class MultiPipelineTask
   include Minigun::DSL
 
   attr_accessor :results
@@ -14,166 +16,115 @@ class MainWorkflowPipeline
     @mutex = Mutex.new
   end
 
-  # Single producer - main workflow generator
-  producer :generate_workflows do
-    puts "[Main Pipeline] Generating workflows..."
-    5.times do |i|
-      emit({ type: 'workflow', id: i, priority: i % 2 == 0 ? 'high' : 'normal' })
+  # Pipeline A: Processes some data and forwards to Pipeline B
+  pipeline :pipeline_a, to: :pipeline_b do
+    producer :source_x do
+      puts "[Pipeline A] Producer X: generating items..."
+      3.times do |i|
+        emit({ id: i, source: 'x', value: i * 10 })
+      end
+      puts "[Pipeline A] Producer X: done (3 items)"
     end
-    puts "[Main Pipeline] Generated 5 workflows"
-  end
 
-  processor :validate do |item|
-    item[:validated] = true
-    emit(item)
-  end
-
-  consumer :forward do |item|
-    @mutex.synchronize do
-      @results << item
-      puts "[Main] Forwarding: workflow #{item[:id]} (#{item[:priority]})"
+    processor :process_x do |item|
+      puts "[Pipeline A] Processing: #{item[:id]} from #{item[:source]}"
+      item[:processed_by_a] = true
+      emit(item)
     end
   end
-end
 
-# Pipeline B: Processes items from Pipeline A + has its own producers
-class EnrichmentPipeline
-  include Minigun::DSL
-
-  attr_accessor :results
-
-  def initialize
-    @results = []
-    @mutex = Mutex.new
-  end
-
-  # Producer 1: Reference data from cache
-  producer :cache_reference do
-    puts "[Enrichment] Loading reference data from cache..."
-    3.times do |i|
-      emit({ type: 'reference', source: 'cache', id: i + 100, data: "Cache ref #{i}" })
+  # Pipeline B: Has its own producers AND receives from Pipeline A
+  pipeline :pipeline_b do
+    # Producer 1 in Pipeline B
+    producer :source_y do
+      puts "[Pipeline B] Producer Y: generating items..."
+      2.times do |i|
+        emit({ id: i + 100, source: 'y', value: i * 20 })
+      end
+      puts "[Pipeline B] Producer Y: done (2 items)"
     end
-    puts "[Enrichment] Loaded 3 cache references"
-  end
 
-  # Producer 2: Configuration from config service
-  producer :config_data do
-    puts "[Enrichment] Fetching configuration..."
-    2.times do |i|
-      emit({ type: 'config', source: 'config_service', id: i + 200, setting: "Setting #{i}" })
+    # Producer 2 in Pipeline B
+    producer :source_z do
+      puts "[Pipeline B] Producer Z: generating items..."
+      2.times do |i|
+        emit({ id: i + 200, source: 'z', value: i * 30 })
+      end
+      puts "[Pipeline B] Producer Z: done (2 items)"
     end
-    puts "[Enrichment] Fetched 2 configs"
-  end
 
-  # Note: This pipeline ALSO receives items from MainWorkflowPipeline
-  # Those items come through the input_queue automatically
-
-  # Processor enriches all items (from upstream + local producers)
-  processor :enrich do |item|
-    enriched = item.merge(
-      enriched_at: Time.now.to_i,
-      pipeline: 'enrichment'
-    )
-    emit(enriched)
-  end
-
-  # Processor for routing
-  processor :route do |item|
-    case item[:type]
-    when 'workflow'
-      puts "[Route] Workflow item: #{item[:id]}"
-    when 'reference'
-      puts "[Route] Reference data: #{item[:source]}"
-    when 'config'
-      puts "[Route] Config: #{item[:setting]}"
-    end
-    emit(item)
-  end
-
-  consumer :store do |item|
-    @mutex.synchronize do
-      @results << item
-      puts "[Store] Stored: #{item[:type]} from #{item[:source] || 'upstream'}"
+    # Consumer receives items from:
+    # 1. Pipeline A's processor (via pipeline routing)
+    # 2. Pipeline B's producer Y
+    # 3. Pipeline B's producer Z
+    consumer :collect_all do |item|
+      @mutex.synchronize do
+        @results << item
+        processed_marker = item[:processed_by_a] ? " (from Pipeline A)" : ""
+        puts "[Pipeline B] Collected: #{item[:id]} from source '#{item[:source]}'#{processed_marker}"
+      end
     end
   end
 end
 
 if __FILE__ == $0
   puts "=== Multi-Pipeline with Multiple Producers Example ==="
-  puts "Pipeline A (main workflow) → Pipeline B (enrichment with 2 additional producers)\n\n"
+  puts "Pipeline A (processor) → Pipeline B (2 producers + consumer)\n\n"
 
-  # Create both pipelines
-  main_pipeline = MainWorkflowPipeline.new
-  enrichment_pipeline = EnrichmentPipeline.new
-
-  # Get the task instances
-  main_task = main_pipeline.class._minigun_task
-  enrichment_task = enrichment_pipeline.class._minigun_task
-
-  # Connect pipelines: Main → Enrichment
-  main_task.connect_to(enrichment_task)
+  task = MultiPipelineTask.new
 
   puts "=" * 60
-  puts "RUNNING PIPELINES"
+  puts "RUNNING TASK"
   puts "=" * 60
   puts ""
 
-  # Run main pipeline (will also trigger enrichment pipeline)
-  main_pipeline.run
+  task.run
 
   puts "\n" + "=" * 60
   puts "RESULTS"
   puts "=" * 60
 
-  puts "\nMain Pipeline Results: #{main_pipeline.results.size} items"
-  main_pipeline.results.each do |item|
-    puts "  Workflow #{item[:id]}: #{item[:priority]} priority"
+  puts "\nTotal items collected: #{task.results.size}"
+  puts "Expected: 7 items (3 from A, 2 from Y, 2 from Z)"
+
+  # Group by source
+  by_source = task.results.group_by { |r| r[:source] }
+  puts "\nItems by source:"
+  by_source.each do |source, items|
+    from_pipeline_a = items.any? { |i| i[:processed_by_a] }
+    marker = from_pipeline_a ? " (via Pipeline A)" : " (native to Pipeline B)"
+    puts "  #{source}: #{items.size} items#{marker}"
   end
 
-  puts "\nEnrichment Pipeline Results: #{enrichment_pipeline.results.size} items"
-  
-  # Group by type
-  by_type = enrichment_pipeline.results.group_by { |r| r[:type] }
-  puts "\nItems by type:"
-  by_type.each do |type, items|
-    puts "  #{type}: #{items.size} items"
+  # Show all items
+  puts "\nAll collected items:"
+  task.results.sort_by { |r| r[:id] }.each do |item|
+    processed = item[:processed_by_a] ? "✓ Processed by A" : "  Native to B"
+    puts "  ID: #{item[:id]}, Source: #{item[:source]}, Value: #{item[:value]} | #{processed}"
   end
 
-  # Show some samples
-  puts "\nSample enriched items:"
-  enrichment_pipeline.results.first(3).each do |item|
-    puts "  Type: #{item[:type]}, Source: #{item[:source] || 'upstream'}, Enriched: #{item[:enriched_at] ? 'Yes' : 'No'}"
+  # Verify routing
+  items_from_a = task.results.select { |r| r[:processed_by_a] }
+  items_from_y = task.results.select { |r| r[:source] == 'y' }
+  items_from_z = task.results.select { |r| r[:source] == 'z' }
+
+  puts "\n✓ Routing verification:"
+  puts "  Items from Pipeline A (via process_x): #{items_from_a.size} (expected 3)"
+  puts "  Items from Producer Y: #{items_from_y.size} (expected 2)"
+  puts "  Items from Producer Z: #{items_from_z.size} (expected 2)"
+  puts "  Total: #{task.results.size} (expected 7)"
+
+  if task.results.size == 7 &&
+     items_from_a.size == 3 &&
+     items_from_y.size == 2 &&
+     items_from_z.size == 2
+    puts "\n✅ SUCCESS: All items routed correctly!"
+    puts "\nKey points demonstrated:"
+    puts "  ✓ Pipeline A's processor routes to Pipeline B"
+    puts "  ✓ Pipeline B has 2 internal producers (Y and Z)"
+    puts "  ✓ All 3 sources (A's processor + B's 2 producers) route to B's consumer"
+    puts "  ✓ Multiple producers in nested pipelines work correctly"
+  else
+    puts "\n❌ FAILED: Item counts don't match expected values"
   end
-
-  # Statistics
-  puts "\n📊 Pipeline Statistics:"
-  
-  puts "\nMain Pipeline:"
-  main_stats = main_task.implicit_pipeline.stats
-  puts "  Total produced: #{main_stats.total_produced}"
-  puts "  Total consumed: #{main_stats.total_consumed}"
-  puts "  Runtime: #{main_stats.runtime.round(2)}s"
-
-  puts "\nEnrichment Pipeline:"
-  enrich_stats = enrichment_task.implicit_pipeline.stats
-  puts "  Total produced: #{enrich_stats.total_produced}"
-  puts "  Total consumed: #{enrich_stats.total_consumed}"
-  puts "  Runtime: #{enrich_stats.runtime.round(2)}s"
-  
-  # Show producer stats from enrichment pipeline
-  puts "\n  Producer breakdown:"
-  [:cache_reference, :config_data].each do |producer_name|
-    producer_stats = enrich_stats.stage_stats[producer_name]
-    if producer_stats
-      puts "    #{producer_name}: #{producer_stats.items_produced} items"
-    end
-  end
-
-  puts "\n✓ Multi-pipeline with multiple producers example complete!"
-  puts "\nKey points demonstrated:"
-  puts "  ✓ Pipeline A generated 5 items and forwarded them to Pipeline B"
-  puts "  ✓ Pipeline B has 2 additional producers (cache + config)"
-  puts "  ✓ Pipeline B processed #{enrichment_pipeline.results.size} total items"
-  puts "  ✓ All items were enriched and stored successfully"
 end
-

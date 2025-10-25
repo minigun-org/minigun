@@ -686,6 +686,11 @@ module Minigun
     end
 
     def build_dag_routing!
+      # If this pipeline receives input from upstream, add :input node and route it
+      if @input_queue
+        handle_input_queue_routing!
+      end
+
       # Handle multiple producers specially - they should all connect to first non-producer
       handle_multiple_producers_routing!
 
@@ -727,6 +732,27 @@ module Minigun
             "[Pipeline:#{@name}] Consumer '#{consumer_stage.name}' uses strategy '#{consumer_stage.strategy}' " \
             "but has no preceding accumulator stage. Add an accumulator stage before this consumer."
         end
+      end
+    end
+
+    def handle_input_queue_routing!
+      # Check if there's a stage named :input (placeholder for upstream items)
+      input_stage = find_stage(:input)
+
+      if input_stage
+        # If there's an :input stage, items from upstream already route through it
+        # No additional routing needed - the :input stage will handle it
+        return
+      end
+
+      # No :input stage, so add :input as a DAG node for items from upstream pipeline
+      @dag.add_node(:input) unless @dag.nodes.include?(:input)
+
+      # Route :input to the first non-producer stage (same logic as multiple producers)
+      first_non_producer = @stage_order.find { |s| !find_stage(s)&.producer? }
+
+      if first_non_producer
+        @dag.add_edge(:input, first_non_producer)
       end
     end
 

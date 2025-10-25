@@ -87,7 +87,7 @@ RSpec.describe 'Multiple Producers' do
 
       # Source X: 0,1,2 -> *10 = 0,10,20
       expect(instance.results_x.sort).to eq([0, 10, 20])
-      
+
       # Source Y: 100,101,102 -> *2 = 200,202,204
       expect(instance.results_y.sort).to eq([200, 202, 204])
     end
@@ -162,10 +162,10 @@ RSpec.describe 'Multiple Producers' do
       end
 
       instance = test_class.new
-      
+
       # Should still process items from good producer
       expect { instance.run }.not_to raise_error
-      
+
       # Should have items from the good producer
       expect(instance.results.size).to eq(3)
     end

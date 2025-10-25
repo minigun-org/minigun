@@ -72,7 +72,7 @@ if __FILE__ == $0
   puts "=" * 60
 
   puts "\nTotal records processed: #{example.results.size}"
-  
+
   # Group by source
   by_source = example.results.group_by { |r| r[:source] }
   by_source.each do |source, records|
