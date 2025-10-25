@@ -4,7 +4,7 @@ module Minigun
   # Pipeline represents a single data processing pipeline with stages
   # A Pipeline can be standalone or part of a multi-pipeline Task
   class Pipeline
-    attr_reader :name, :config, :stages, :hooks, :dag, :input_queue, :output_queues, :stage_order
+    attr_reader :name, :config, :stages, :hooks, :dag, :input_queue, :output_queues, :stage_order, :stats
 
     def initialize(name, config = {})
       @name = name
@@ -43,6 +43,9 @@ module Minigun
       @in_flight_count = Concurrent::AtomicFixnum.new(0)
       @accumulated_count = 0
       @consumer_pids = []
+
+      # Statistics tracking
+      @stats = nil  # Will be initialized in run()
 
       # For multi-pipeline communication
       @input_queue = nil
@@ -175,8 +178,13 @@ module Minigun
     def run(context)
       @context = context
       @job_start = Time.now
+      @job_id ||= nil  # Job ID may be set by Runner
 
-      log_info "[Pipeline:#{@name}] Starting"
+      # Initialize statistics tracking
+      @stats = AggregatedStats.new(@name, @dag)
+      @stats.start!
+
+      log_info "#{log_prefix} Starting"
 
       # Build and validate DAG routing
       build_dag_routing!
@@ -197,9 +205,10 @@ module Minigun
       wait_all_consumers
 
       @job_end = Time.now
+      @stats.finish!
 
-      log_info "[Pipeline:#{@name}] Finished in #{(@job_end - @job_start).round(2)}s"
-      log_info "[Pipeline:#{@name}] Produced: #{@produced_count.value}, Accumulated: #{@accumulated_count}"
+      log_info "#{log_prefix} Finished in #{(@job_end - @job_start).round(2)}s"
+      log_info "#{log_prefix} Produced: #{@produced_count.value}, Accumulated: #{@accumulated_count}"
 
       # Run after_run hooks
       @hooks[:after_run].each { |h| context.instance_eval(&h) }
@@ -269,6 +278,9 @@ module Minigun
         if has_internal_producer
           # Internal producer generates items
           producer_name = producer_stage.name
+          stage_stats = @stats.for_stage(producer_name, is_non_terminal: true)
+          stage_stats.start!
+
           log_info "[Pipeline:#{@name}][Producer] Starting"
 
           # Execute before hooks for this producer
@@ -279,6 +291,7 @@ module Minigun
             in_flight_count.increment
             queue << [item, producer_name]
             produced_count.increment
+            stage_stats.increment_produced
           end
 
           # Bind emit to context
@@ -287,6 +300,7 @@ module Minigun
           # Run producer block
           @context.instance_eval(&producer_stage.block)
 
+          stage_stats.finish!
           log_info "[Pipeline:#{@name}][Producer] Done. Produced #{produced_count.value} items"
 
           # Execute after hooks for this producer
@@ -435,8 +449,17 @@ module Minigun
     end
 
     def execute_stage(stage, item)
+      # Non-terminal stages produce items for downstream stages
+      is_non_terminal = !@dag.terminal?(stage.name)
+      stage_stats = @stats.for_stage(stage.name, is_non_terminal: is_non_terminal)
+      stage_stats.start! unless stage_stats.start_time
+      start_time = Time.now
+
       # Execute before hooks for this stage
       execute_stage_hooks(:before, stage.name)
+
+      # Track consumption of input item
+      stage_stats.increment_consumed
 
       result = if stage.respond_to?(:execute_with_emit)
         stage.execute_with_emit(@context, item)
@@ -444,6 +467,13 @@ module Minigun
         stage.execute(@context, item)
         []
       end
+
+      # Track production of output items
+      stage_stats.increment_produced(result.size)
+
+      # Record latency
+      duration = Time.now - start_time
+      stage_stats.record_latency(duration)
 
       # Execute after hooks for this stage
       execute_stage_hooks(:after, stage.name)
@@ -525,6 +555,11 @@ module Minigun
       pid = fork do
         @pid = Process.pid
 
+        # Set process title for easier identification in ps/top
+        if Process.respond_to?(:setproctitle)
+          Process.setproctitle("minigun-#{@name}-consumer-#{@pid}")
+        end
+
         # Execute pipeline-level after_fork hooks
         @hooks[:after_fork].each { |h| @context.instance_eval(&h) }
 
@@ -574,6 +609,10 @@ module Minigun
           Concurrent::Future.execute(executor: thread_pool) do
             item = item_data[:item]
             stage = item_data[:stage]
+            # Terminal consumers don't produce items
+            stage_stats = @stats.for_stage(stage.name, is_non_terminal: false)
+            stage_stats.start! unless stage_stats.start_time
+            start_time = Time.now
 
             if has_downstream
               # Create emit method for consumer to send to downstream pipelines
@@ -584,6 +623,14 @@ module Minigun
             end
 
             stage.execute(@context, item)
+
+            # Track consumption
+            stage_stats.increment_consumed
+
+            # Record latency
+            duration = Time.now - start_time
+            stage_stats.record_latency(duration)
+
             processed.increment
           end
         end
@@ -623,7 +670,7 @@ module Minigun
       @dag.validate!
       validate_stages_exist!
 
-      log_info "[Pipeline:#{@name}] DAG: #{@dag.topological_sort.join(' -> ')}"
+      log_info "#{log_prefix} DAG: #{@dag.topological_sort.join(' -> ')}"
     end
 
     def validate_stages_exist!
@@ -679,6 +726,14 @@ module Minigun
         next if @dag.would_create_cycle?(stage_name, next_stage)
 
         @dag.add_edge(stage_name, next_stage)
+      end
+    end
+
+    def log_prefix
+      if @job_id
+        "[Job:#{@job_id}][Pipeline:#{@name}]"
+      else
+        "[Pipeline:#{@name}]"
       end
     end
 

@@ -99,8 +99,16 @@ module Minigun
       pipeline
     end
 
-    # Run the task (single or multi-pipeline)
+    # Run the task with full lifecycle management (signal handling, job ID, stats)
+    # Use this for production execution
     def run(context)
+      runner = Minigun::Runner.new(self, context)
+      runner.run
+    end
+
+    # Direct pipeline execution without Runner overhead
+    # Use this for testing or embedding in other systems
+    def perform(context)
       if @pipelines.empty?
         # Single-pipeline mode: run implicit pipeline
         @implicit_pipeline.run(context)

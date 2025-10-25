@@ -368,7 +368,9 @@ RSpec.describe 'Examples Integration' do
       '19_statistics_gathering.rb',
       '20_error_handling_hooks.rb',
       '21_inline_hook_procs.rb',
-      '22_reroute_stage.rb'
+      '22_reroute_stage.rb',
+      '23_runner_features.rb',
+      '24_statistics_demo.rb'
     ]
 
     missing_tests = example_basenames - tested_examples
@@ -512,6 +514,41 @@ RSpec.describe 'Examples Integration' do
       insert = RerouteInsertExample.new
       insert.run
       expect(insert.results.sort).to eq([6, 12, 18, 24, 30])
+    end
+  end
+
+  describe '24_statistics_demo.rb' do
+    it 'demonstrates statistics tracking and reporting' do
+      load File.expand_path('../../examples/24_statistics_demo.rb', __dir__)
+
+      demo = StatisticsDemo.new
+      demo.run
+
+      # Check results
+      expect(demo.results.size).to eq(20)
+      expect(demo.results.sort).to eq((1..20).map { |n| n * 2 })
+
+      # Access stats
+      task = demo.class._minigun_task
+      pipeline = task.implicit_pipeline
+      stats = pipeline.stats
+
+      # Verify stats are collected
+      expect(stats).to be_a(Minigun::AggregatedStats)
+      expect(stats.total_produced).to eq(20)
+      expect(stats.total_consumed).to eq(20)
+      expect(stats.runtime).to be > 0
+      expect(stats.throughput).to be > 0
+
+      # Verify bottleneck detection
+      bottleneck = stats.bottleneck
+      expect(bottleneck).to be_a(Minigun::Stats)
+      expect(bottleneck.stage_name).to eq(:process) # process has sleep, should be bottleneck
+
+      # Verify stage stats
+      stages = stats.stages_in_order
+      expect(stages.size).to eq(3)
+      expect(stages.map(&:stage_name)).to eq([:generate, :process, :collect])
     end
   end
 end

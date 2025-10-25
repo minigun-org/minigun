@@ -1,0 +1,282 @@
+# frozen_string_literal: true
+
+module Minigun
+  # Tracks execution statistics for a single stage
+  class Stats
+    attr_reader :stage_name, :start_time, :end_time
+    attr_reader :items_produced, :items_consumed, :items_failed
+
+    # Latency tracking - sample at exponentially increasing intervals
+    INITIAL_SAMPLE_SIZE = 10
+    SAMPLE_GROWTH_FACTOR = 2
+
+    def initialize(stage_name, is_non_terminal: false)
+      @stage_name = stage_name
+      @is_non_terminal = is_non_terminal
+      @start_time = nil
+      @end_time = nil
+      @items_produced = 0
+      @items_consumed = 0
+      @items_failed = 0
+
+      # Latency tracking
+      @latency_samples = []
+      @next_sample_at = INITIAL_SAMPLE_SIZE
+      @sample_interval = INITIAL_SAMPLE_SIZE
+      @mutex = Mutex.new
+    end
+
+    # Mark stage as started
+    def start!
+      @start_time = Time.now
+    end
+
+    # Mark stage as completed
+    def finish!
+      @end_time = Time.now
+    end
+
+    # Increment counters (thread-safe)
+    def increment_produced(count = 1)
+      @mutex.synchronize { @items_produced += count }
+    end
+
+    def increment_consumed(count = 1)
+      @mutex.synchronize { @items_consumed += count }
+    end
+
+    def increment_failed(count = 1)
+      @mutex.synchronize { @items_failed += count }
+    end
+
+    # Record latency for an item (in seconds)
+    def record_latency(duration)
+      @mutex.synchronize do
+        # Sample at exponentially increasing intervals
+        # Sample at: 10, 20, 40, 80, 160, 320, 640, 1280...
+        if total_items >= @next_sample_at
+          @latency_samples << duration
+          @sample_interval *= SAMPLE_GROWTH_FACTOR
+          @next_sample_at += @sample_interval
+        end
+      end
+    end
+
+    # Calculate runtime
+    def runtime
+      return 0 if @start_time.nil?
+      (@end_time || Time.now) - @start_time
+    end
+
+    # Calculate items per second
+    def throughput
+      return 0 if runtime.zero?
+      total_items / runtime
+    end
+
+    # Calculate average time per item
+    def time_per_item
+      return 0 if total_items.zero?
+      runtime / total_items.to_f
+    end
+
+    # Total items processed
+    # For non-terminal stages (produce items for downstream), count produced items
+    # For terminal stages (final consumers), count consumed items
+    def total_items
+      @is_non_terminal ? @items_produced : @items_consumed
+    end
+
+    # Success rate
+    def success_rate
+      return 100.0 if total_items.zero?
+      ((total_items - @items_failed) / total_items.to_f) * 100
+    end
+
+    # Calculate percentile from latency samples
+    def percentile(p)
+      return 0 if @latency_samples.empty?
+
+      sorted = @latency_samples.sort
+      index = ((p / 100.0) * sorted.length).ceil - 1
+      index = [0, [index, sorted.length - 1].min].max
+      sorted[index]
+    end
+
+    # Latency percentiles (P50, P90, P95, P99)
+    def p50
+      percentile(50)
+    end
+
+    def p90
+      percentile(90)
+    end
+
+    def p95
+      percentile(95)
+    end
+
+    def p99
+      percentile(99)
+    end
+
+    # Check if we have latency data
+    def has_latency_data?
+      @latency_samples.any?
+    end
+
+    # Generate a summary hash
+    def to_h
+      {
+        stage_name: @stage_name,
+        runtime: runtime.round(2),
+        items_produced: @items_produced,
+        items_consumed: @items_consumed,
+        items_failed: @items_failed,
+        total_items: total_items,
+        throughput: throughput.round(2),
+        time_per_item: time_per_item.round(4),
+        success_rate: success_rate.round(2)
+      }.tap do |h|
+        if has_latency_data?
+          h[:latency] = {
+            p50: (p50 * 1000).round(2),  # Convert to ms
+            p90: (p90 * 1000).round(2),
+            p95: (p95 * 1000).round(2),
+            p99: (p99 * 1000).round(2),
+            samples: @latency_samples.size
+          }
+        end
+      end
+    end
+
+    # Pretty print
+    def to_s
+      parts = [
+        "Stage: #{@stage_name}",
+        "Runtime: #{runtime.round(2)}s",
+        "Items: #{total_items}",
+        "Throughput: #{throughput.round(2)} items/s"
+      ]
+
+      if @items_failed > 0
+        parts << "Failed: #{@items_failed} (#{(100 - success_rate).round(2)}%)"
+      end
+
+      if has_latency_data?
+        parts << "Latency P50/P90/P95: #{(p50*1000).round(1)}/#{(p90*1000).round(1)}/#{(p95*1000).round(1)}ms"
+      end
+
+      parts.join(', ')
+    end
+  end
+
+  # Aggregates statistics from multiple stages using DAG
+  class AggregatedStats
+    attr_reader :pipeline_name, :stage_stats
+
+    def initialize(pipeline_name, dag)
+      @pipeline_name = pipeline_name
+      @dag = dag
+      @stage_stats = {}
+      @start_time = nil
+      @end_time = nil
+    end
+
+    # Get or create stats for a stage
+    def for_stage(stage_name, is_non_terminal: false)
+      @stage_stats[stage_name] ||= Stats.new(stage_name, is_non_terminal: is_non_terminal)
+    end
+
+    # Mark pipeline as started
+    def start!
+      @start_time = Time.now
+    end
+
+    # Mark pipeline as completed
+    def finish!
+      @end_time = Time.now
+    end
+
+    # Total pipeline runtime
+    def runtime
+      return 0 if @start_time.nil?
+      (@end_time || Time.now) - @start_time
+    end
+
+    # Total items across all stages
+    def total_items
+      @stage_stats.values.sum(&:total_items)
+    end
+
+    # Total items produced (from source stages)
+    def total_produced
+      source_stages = @dag.sources
+      source_stages.sum { |name| @stage_stats[name]&.items_produced || 0 }
+    end
+
+    # Total items consumed (by terminal stages)
+    def total_consumed
+      terminal_stages = @dag.terminals
+      terminal_stages.sum { |name| @stage_stats[name]&.items_consumed || 0 }
+    end
+
+    # Pipeline throughput (items/second)
+    def throughput
+      return 0 if runtime.zero?
+      total_produced / runtime
+    end
+
+    # Find bottleneck stage (slowest throughput)
+    def bottleneck
+      return nil if @stage_stats.empty?
+
+      @stage_stats.values.min_by { |stats| stats.throughput }
+    end
+
+    # Get stats for stages in topological order
+    def stages_in_order
+      @dag.topological_sort.map { |name| @stage_stats[name] }.compact
+    end
+
+    # Generate summary hash
+    def to_h
+      {
+        pipeline: @pipeline_name,
+        runtime: runtime.round(2),
+        total_produced: total_produced,
+        total_consumed: total_consumed,
+        throughput: throughput.round(2),
+        stages: stages_in_order.map(&:to_h)
+      }.tap do |h|
+        if (bn = bottleneck)
+          h[:bottleneck] = {
+            stage: bn.stage_name,
+            throughput: bn.throughput.round(2)
+          }
+        end
+      end
+    end
+
+    # Pretty print summary
+    def summary
+      lines = []
+      lines << "Pipeline: #{@pipeline_name}"
+      lines << "Runtime: #{runtime.round(2)}s"
+      lines << "Items: #{total_produced} produced, #{total_consumed} consumed"
+      lines << "Throughput: #{throughput.round(2)} items/s"
+
+      if (bn = bottleneck)
+        lines << "Bottleneck: #{bn.stage_name} (#{bn.throughput.round(2)} items/s)"
+      end
+
+      lines << "\nStages:"
+      stages_in_order.each do |stats|
+        lines << "  • #{stats}"
+      end
+
+      lines.join("\n")
+    end
+  end
+end
+

@@ -264,16 +264,21 @@ module Minigun
       end
     end
 
-    # Instance method to run the task
+    # Full production execution with Runner (signal handling, job ID, stats)
     def run
       self.class._minigun_task.run(self)
     end
 
+    # Direct pipeline execution (lightweight, no Runner overhead)
+    def perform
+      self.class._minigun_task.perform(self)
+    end
+
     # Convenience aliases
-    alias perform run
-    alias go_brr! run
+    alias go_brr! run        # Fun production alias
     alias go_brrr! run
     alias go_brrrr! run
     alias go_brrrrr! run
+    alias execute perform    # Formal direct execution alias
   end
 end
