@@ -55,6 +55,9 @@ class ResourceCleanupExample
     emit(enriched)
   end
 
+  # Accumulator batches records
+  accumulator :batch, max_size: 5
+
   # Close connections before forking
   before_fork :save_to_db do
     @resource_events << "Closing connections before fork"
@@ -65,8 +68,8 @@ class ResourceCleanupExample
     @resource_events << "Reopening connections in child process"
   end
 
-  fork_accumulate :save_to_db do |record|
-    @results << record
+  spawn_fork :save_to_db do |batch|
+    batch.each { |record| @results << record }
   end
 
   private

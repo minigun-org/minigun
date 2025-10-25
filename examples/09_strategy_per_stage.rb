@@ -23,31 +23,31 @@ class StrategyPerStageExample
   end
 
   # Light processor uses threads (default)
-  # Route to both consumers explicitly (fan-out)
-  processor :validate, strategy: :threaded, to: [:heavy_save, :light_log] do |num|
-    puts "[Validator:threaded] Validating #{num}"
+  processor :validate, to: :batch do |num|
+    puts "[Validator] Validating #{num}"
     emit(num) if num > 0
   end
 
-  # Heavy consumer uses fork_accumulate (COW fork pattern)
-  consumer :heavy_save,
-           strategy: :fork_accumulate,
-           accumulator_max_single: 3 do |num|
-    puts "[HeavySave:fork_accumulate:#{Process.pid}] Processing #{num}"
+  # Accumulator batches items before spawning workers
+  accumulator :batch, max_size: 3, to: [:heavy_save, :light_log]
+
+  # Heavy consumer spawns forks per batch (COW fork pattern)
+  spawn_fork :heavy_save do |batch|
+    puts "[HeavySave:spawn_fork:#{Process.pid}] Processing batch of #{batch.size}"
     sleep 0.01  # Simulate heavy work
-    @mutex.synchronize { fork_results << num }
+    batch.each { |num| @mutex.synchronize { fork_results << num } }
   end
 
-  # Light consumer uses threads
-  consumer :light_log, strategy: :threaded do |num|
-    puts "[LightLog:threaded] Logging #{num}"
-    @mutex.synchronize { thread_results << num }
+  # Light consumer uses threads (stream mode, no batching needed)
+  consumer :light_log, strategy: :threaded do |batch|
+    puts "[LightLog:threaded] Logging batch of #{batch.size}"
+    batch.each { |num| @mutex.synchronize { thread_results << num } }
   end
 end
 
 if __FILE__ == $0
   puts "=== Strategy Per Stage Example ===\n\n"
-  puts "Producer → Validator (threaded) → [HeavySave (fork_accumulate), LightLog (threaded)]\n\n"
+  puts "Producer → Validator → Batch (accumulator) → [HeavySave (spawn_fork), LightLog (threaded)]\n\n"
 
   example = StrategyPerStageExample.new
   example.run

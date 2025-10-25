@@ -303,6 +303,7 @@ module Minigun
         log_info "[Pipeline:#{@name}][Accumulator] Starting"
 
         consumer_queues = Hash.new { |h, k| h[k] = [] }
+        accumulator_buffers = Hash.new { |h, k| h[k] = [] }  # Buffers for accumulator stages
         output_items = []  # Track items to send to downstream pipelines
         check_counter = 0
 
@@ -319,8 +320,37 @@ module Minigun
             target_stage = find_stage(target_name)
             next unless target_stage
 
-            if @dag.terminal?(target_name)
-              # Terminal stage - accumulate for batch processing
+            if target_stage.type == :accumulator
+              # Accumulator stage - batch items
+              accumulator_buffers[target_name] << item
+
+              # Check if we've reached the batch size
+              if accumulator_buffers[target_name].size >= target_stage.max_size
+                batch = accumulator_buffers[target_name].dup
+                accumulator_buffers[target_name].clear
+
+                # Execute accumulator logic if any (e.g., grouping)
+                processed_batch = target_stage.execute(@context, batch)
+
+                # Send batch directly to downstream consumers (don't re-queue)
+                downstream_targets = @dag.downstream(target_name)
+                downstream_targets.each do |downstream_name|
+                  downstream_stage = find_stage(downstream_name)
+
+                  if @dag.terminal?(downstream_name)
+                    # Add batch to consumer queue
+                    consumer_queues[downstream_name] << { item: processed_batch, stage: downstream_stage, output_items: output_items }
+                  else
+                    # Non-terminal - re-queue for further processing
+                    @in_flight_count.increment
+                    @queue << [processed_batch, target_name]
+                  end
+                end
+
+                @accumulated_count += batch.size
+              end
+            elsif @dag.terminal?(target_name)
+              # Terminal stage (consumer) - accumulate for batch processing
               consumer_queues[target_name] << { item: item, stage: target_stage, output_items: output_items }
               check_counter += 1
 
@@ -328,7 +358,7 @@ module Minigun
                 check_and_fork(consumer_queues, output_items)
               end
             else
-              # Processor - execute and route outputs
+              # Processor or Pipeline - execute and route outputs
               emitted_items = execute_stage(target_stage, item)
 
               emitted_items.each do |emitted_item|
@@ -339,10 +369,29 @@ module Minigun
           end
         end
 
-        # Process remaining items
-        fork_consumer(consumer_queues, output_items) unless consumer_queues.empty?
+        # Process remaining batches in accumulators
+        accumulator_buffers.each do |accum_name, items|
+          next if items.empty?
 
-        @accumulated_count = consumer_queues.values.sum(&:size)
+          accum_stage = find_stage(accum_name)
+          processed_batch = accum_stage.execute(@context, items)
+
+          # Send final batch to downstream
+          downstream_targets = @dag.downstream(accum_name)
+          downstream_targets.each do |downstream_name|
+            downstream_stage = find_stage(downstream_name)
+
+            if @dag.terminal?(downstream_name)
+              # Add to consumer queue
+              consumer_queues[downstream_name] << { item: processed_batch, stage: downstream_stage, output_items: output_items }
+            end
+          end
+
+          @accumulated_count += items.size
+        end
+
+        # Process remaining consumer items
+        fork_consumer(consumer_queues, output_items) unless consumer_queues.empty?
 
         # Send items to output queues if this pipeline has downstream pipelines
         send_to_output_queues(output_items)
@@ -528,6 +577,30 @@ module Minigun
 
         unless find_stage(node_name)
           raise Minigun::Error, "[Pipeline:#{@name}] Routing references non-existent stage '#{node_name}'"
+        end
+      end
+
+      # Validate spawn strategies require preceding accumulator
+      validate_spawn_strategies!
+    end
+
+    def validate_spawn_strategies!
+      spawn_strategies = [:spawn_thread, :spawn_fork, :spawn_ractor]
+
+      @stages[:consumer].each do |consumer_stage|
+        next unless spawn_strategies.include?(consumer_stage.options[:strategy])
+
+        # Check if there's an accumulator before this consumer
+        upstream_stages = @dag.upstream(consumer_stage.name)
+        has_accumulator = upstream_stages.any? do |upstream_name|
+          stage = find_stage(upstream_name)
+          stage && stage.type == :accumulator
+        end
+
+        unless has_accumulator
+          raise Minigun::Error,
+            "[Pipeline:#{@name}] Consumer '#{consumer_stage.name}' uses strategy '#{consumer_stage.options[:strategy]}' " \
+            "but has no preceding accumulator stage. Add an accumulator stage before this consumer."
         end
       end
     end

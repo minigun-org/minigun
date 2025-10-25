@@ -58,19 +58,22 @@ class InlineHookExample
     emit(num * 2)
   end
 
+  # Accumulator batches items
+  accumulator :batch, max_size: 5
+
   # Inline fork hooks for consumers
-  fork_accumulate :save_data,
-                  before: -> { @timer[:save_start] = Time.now },
-                  after: -> { @timer[:save_end] = Time.now },
-                  before_fork: -> {
-                    @events << :before_fork
-                    puts "About to fork..."
-                  },
-                  after_fork: -> {
-                    @events << :after_fork
-                    puts "Forked! Child PID: #{Process.pid}"
-                  } do |num|
-    @results << num
+  spawn_fork :save_data,
+             before: -> { @timer[:save_start] = Time.now },
+             after: -> { @timer[:save_end] = Time.now },
+             before_fork: -> {
+               @events << :before_fork
+               puts "About to fork..."
+             },
+             after_fork: -> {
+               @events << :after_fork
+               puts "Forked! Child PID: #{Process.pid}"
+             } do |batch|
+    batch.each { |num| @results << num }
   end
 end
 

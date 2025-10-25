@@ -89,7 +89,7 @@ if __FILE__ == $0
   puts "Results: #{example.results.inspect}"
 
   puts "\n=== Notes ===\n"
-  puts "• before_fork/after_fork hooks are only triggered with fork_accumulate strategy"
+  puts "• before_fork/after_fork hooks are only triggered with spawn_fork strategy"
   puts "• Hooks are useful for resource management (connections, files, etc.)"
   puts "• after_fork runs in the child process, before_fork in the parent"
   puts "\n✓ Hooks demonstration complete!"

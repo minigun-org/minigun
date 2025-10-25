@@ -128,21 +128,18 @@ module Minigun
         @pipeline.add_stage(:consumer, name, options, &block)
       end
 
-      def fork_accumulate(name = :consumer, options = {}, &block)
-        @pipeline.add_stage(:consumer, name, options.merge(strategy: :fork_accumulate), &block)
+      # Spawn strategies (require preceding accumulator stage)
+      def spawn_thread(name = :consumer, options = {}, &block)
+        @pipeline.add_stage(:consumer, name, options.merge(strategy: :spawn_thread), &block)
       end
 
-      def fork_ipc(name = :consumer, options = {}, &block)
-        @pipeline.add_stage(:consumer, name, options.merge(strategy: :fork_ipc), &block)
+      def spawn_fork(name = :consumer, options = {}, &block)
+        @pipeline.add_stage(:consumer, name, options.merge(strategy: :spawn_fork), &block)
       end
 
-      def ractor_accumulate(name = :consumer, options = {}, &block)
-        @pipeline.add_stage(:consumer, name, options.merge(strategy: :ractor_accumulate), &block)
+      def spawn_ractor(name = :consumer, options = {}, &block)
+        @pipeline.add_stage(:consumer, name, options.merge(strategy: :spawn_ractor), &block)
       end
-
-      # Backward compatibility aliases
-      alias cow_fork fork_accumulate
-      alias ipc_fork fork_ipc
 
       def before_run(&block)
         @pipeline.add_hook(:before_run, &block)
@@ -217,22 +214,18 @@ module Minigun
         _minigun_task.add_stage(:consumer, name, options, &block)
       end
 
-      # Fork/Ractor strategies
-      def fork_accumulate(name = :consumer, options = {}, &block)
-        _minigun_task.add_stage(:consumer, name, options.merge(strategy: :fork_accumulate), &block)
+      # Spawn strategies (require preceding accumulator stage)
+      def spawn_thread(name = :consumer, options = {}, &block)
+        _minigun_task.add_stage(:consumer, name, options.merge(strategy: :spawn_thread), &block)
       end
 
-      def fork_ipc(name = :consumer, options = {}, &block)
-        _minigun_task.add_stage(:consumer, name, options.merge(strategy: :fork_ipc), &block)
+      def spawn_fork(name = :consumer, options = {}, &block)
+        _minigun_task.add_stage(:consumer, name, options.merge(strategy: :spawn_fork), &block)
       end
 
-      def ractor_accumulate(name = :consumer, options = {}, &block)
-        _minigun_task.add_stage(:consumer, name, options.merge(strategy: :ractor_accumulate), &block)
+      def spawn_ractor(name = :consumer, options = {}, &block)
+        _minigun_task.add_stage(:consumer, name, options.merge(strategy: :spawn_ractor), &block)
       end
-
-      # Backward compatibility aliases
-      alias cow_fork fork_accumulate
-      alias ipc_fork fork_ipc
 
       # Hook methods
       def before_run(&block)

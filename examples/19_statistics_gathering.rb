@@ -85,6 +85,9 @@ class StatisticsGatheringExample
     emit(item.merge(transformed: true, doubled: item[:value] * 2))
   end
 
+  # Accumulator batches items
+  accumulator :batch, max_size: 25
+
   # Track consumer statistics and forks
   before :save_results do
     @stats[:consumer_start] = Time.now
@@ -103,9 +106,11 @@ class StatisticsGatheringExample
     @stats[:child_processes] << Process.pid
   end
 
-  fork_accumulate :save_results do |item|
-    @results << item
-    @stats[:consumer_count] += 1
+  spawn_fork :save_results do |batch|
+    batch.each do |item|
+      @results << item
+      @stats[:consumer_count] += 1
+    end
   end
 end
 

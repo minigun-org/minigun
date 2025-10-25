@@ -44,12 +44,17 @@ class DatabaseConnectionExample
     (1..10).each { |id| emit(id) }
   end
 
-  # Use fork_accumulate to process in batches
-  fork_accumulate :process_users do |user_id|
-    @connection_events << "Processing user #{user_id} in PID #{Process.pid}"
-    # Simulate database write
-    result = save_to_database(user_id)
-    @results << result
+  # Accumulator batches items
+  accumulator :batch, max_size: 5
+
+  # Use spawn_fork to process batches
+  spawn_fork :process_users do |batch|
+    batch.each do |user_id|
+      @connection_events << "Processing user #{user_id} in PID #{Process.pid}"
+      # Simulate database write
+      result = save_to_database(user_id)
+      @results << result
+    end
   end
 
   private

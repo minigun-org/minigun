@@ -122,10 +122,35 @@ module Minigun
     end
   end
 
-  # Accumulator stage - batches items (currently unused in new architecture)
+  # Accumulator stage - batches items before passing to consumer
+  # Collects N items, then emits them as a batch
   class AccumulatorStage < AtomicStage
+    attr_reader :max_size, :max_wait
+
+    def initialize(name:, block: nil, options: {})
+      super
+      @max_size = options[:max_size] || 100
+      @max_wait = options[:max_wait] || nil  # Future: time-based batching
+    end
+
     def type
       :accumulator
+    end
+
+    def emits?
+      true  # Accumulator emits batches
+    end
+
+    # Accumulator doesn't execute per-item - it batches
+    # The batching logic happens in Pipeline
+    def execute(context, batch)
+      # If there's custom logic, execute it
+      # Otherwise just pass through the batch
+      if @block
+        context.instance_exec(batch, &@block)
+      else
+        batch
+      end
     end
   end
 

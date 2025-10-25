@@ -99,6 +99,9 @@ class ErrorHandlingExample
     end
   end
 
+  # Accumulator batches items
+  accumulator :batch, max_size: 10
+
   # Consumer with error isolation
   before_fork :save_results do
     # Reset error tracking for child process
@@ -112,17 +115,19 @@ class ErrorHandlingExample
     end
   end
 
-  fork_accumulate :save_results do |item|
-    begin
-      # Simulate save that might fail
-      if item[:id] == 15
-        raise "Database connection lost"
-      end
+  spawn_fork :save_results do |batch|
+    batch.each do |item|
+      begin
+        # Simulate save that might fail
+        if item[:id] == 15
+          raise "Database connection lost"
+        end
 
-      @results << item
-    rescue => e
-      (@process_errors ||= []) << { item: item, error: e.message }
-      @errors << { stage: :save_results, item: item, error: e.message }
+        @results << item
+      rescue => e
+        (@process_errors ||= []) << { item: item, error: e.message }
+        @errors << { stage: :save_results, item: item, error: e.message }
+      end
     end
   end
 end
