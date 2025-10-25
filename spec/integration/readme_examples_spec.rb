@@ -218,7 +218,7 @@ RSpec.describe 'README Examples' do
     end
 
     it 'applies configuration correctly' do
-      task = configured_class._task
+      task = configured_class._minigun_task
 
       expect(task.config[:max_threads]).to eq(10)
       expect(task.config[:max_processes]).to eq(4)

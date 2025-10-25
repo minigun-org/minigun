@@ -255,7 +255,7 @@ RSpec.describe 'Pipeline Integration' do
         max_threads 10
       end
 
-      expect(pipeline_class._task.config[:max_threads]).to eq(10)
+      expect(pipeline_class._minigun_task.config[:max_threads]).to eq(10)
     end
 
     it 'respects max_processes configuration' do
@@ -264,7 +264,7 @@ RSpec.describe 'Pipeline Integration' do
         max_processes 8
       end
 
-      expect(pipeline_class._task.config[:max_processes]).to eq(8)
+      expect(pipeline_class._minigun_task.config[:max_processes]).to eq(8)
     end
 
     it 'respects max_retries configuration' do
@@ -273,7 +273,7 @@ RSpec.describe 'Pipeline Integration' do
         max_retries 5
       end
 
-      expect(pipeline_class._task.config[:max_retries]).to eq(5)
+      expect(pipeline_class._minigun_task.config[:max_retries]).to eq(5)
     end
   end
 
