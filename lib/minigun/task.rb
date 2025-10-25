@@ -57,16 +57,30 @@ module Minigun
         Array(to_targets).each { |target| @dag.add_edge(name, target) }
       end
 
+      # Create appropriate stage subclass
+      stage = case type
+              when :producer
+                ProducerStage.new(name: name, block: block, options: options)
+              when :processor
+                ProcessorStage.new(name: name, block: block, options: options)
+              when :accumulator
+                AccumulatorStage.new(name: name, block: block, options: options)
+              when :consumer
+                ConsumerStage.new(name: name, block: block, options: options)
+              else
+                raise Minigun::Error, "Unknown stage type: #{type}"
+              end
+
       # Store stage
       case type
       when :producer
-        @stages[:producer] = { name: name, block: block, options: options }
+        @stages[:producer] = stage
       when :processor
-        @stages[:processor] << { name: name, block: block, options: options }
+        @stages[:processor] << stage
       when :accumulator
-        @stages[:accumulator] = { name: name, block: block, options: options }
+        @stages[:accumulator] = stage
       when :consumer
-        @stages[:consumer] << { name: name, block: block, options: options }
+        @stages[:consumer] << stage
       end
     end
 
@@ -117,7 +131,8 @@ module Minigun
       queue = @queue
       produced_count = @produced_count
       in_flight_count = @in_flight_count
-      producer_name = @stages[:producer][:name]
+      producer_stage = @stages[:producer]
+      producer_name = producer_stage.name
 
       Thread.new do
         log_info "[Producer] Starting"
@@ -133,7 +148,7 @@ module Minigun
         @context.define_singleton_method(:emit, &emit_proc)
 
         # Run producer block
-        @context.instance_eval(&@stages[:producer][:block])
+        @context.instance_eval(&producer_stage.block)
 
         log_info "[Producer] Done. Produced #{produced_count.value} items"
 
@@ -205,15 +220,12 @@ module Minigun
 
     # Execute a stage and return emitted items
     def execute_stage(stage, item)
-      emitted_items = []
-      emit_proc = proc { |i| emitted_items << i }
-      @context.define_singleton_method(:emit, &emit_proc)
-
-      # Run stage block
-      @context.instance_exec(item, &stage[:block])
-
-      # Return only explicitly emitted items
-      emitted_items
+      if stage.respond_to?(:execute_with_emit)
+        stage.execute_with_emit(@context, item)
+      else
+        stage.execute(@context, item)
+        []
+      end
     end
 
     def check_and_fork(accumulator_map)
@@ -290,7 +302,7 @@ module Minigun
           Concurrent::Future.execute(executor: thread_pool) do
             item = item_data[:item]
             stage = item_data[:stage]
-            @context.instance_exec(item, &stage[:block])
+            stage.execute(@context, item)
             processed.increment
           end
         end
@@ -371,7 +383,8 @@ module Minigun
 
     # Check if a stage is a consumer
     def is_consumer_stage?(stage_name)
-      @stages[:consumer].any? { |c| c[:name] == stage_name }
+      stage = find_stage(stage_name)
+      stage && stage.is_a?(ConsumerStage)
     end
 
     # Get all stages that should receive items from a given stage
@@ -381,13 +394,13 @@ module Minigun
 
     # Find a stage by name
     def find_stage(name)
-      return @stages[:producer] if @stages[:producer] && @stages[:producer][:name] == name
-      return @stages[:accumulator] if @stages[:accumulator] && @stages[:accumulator][:name] == name
+      return @stages[:producer] if @stages[:producer] && @stages[:producer].name == name
+      return @stages[:accumulator] if @stages[:accumulator] && @stages[:accumulator].name == name
 
-      consumer = @stages[:consumer].find { |c| c[:name] == name }
+      consumer = @stages[:consumer].find { |c| c.name == name }
       return consumer if consumer
 
-      @stages[:processor].find { |s| s[:name] == name }
+      @stages[:processor].find { |s| s.name == name }
     end
   end
 end
