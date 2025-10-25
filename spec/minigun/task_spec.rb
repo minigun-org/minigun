@@ -18,7 +18,7 @@ RSpec.describe Minigun::Task do
       expect(task.stages[:producer]).to be_nil
       expect(task.stages[:processor]).to eq([])
       expect(task.stages[:accumulator]).to be_nil
-      expect(task.stages[:consumer]).to be_nil
+      expect(task.stages[:consumer]).to eq([])
     end
 
     it 'initializes empty hooks' do
@@ -70,8 +70,8 @@ RSpec.describe Minigun::Task do
       block = proc { "consumer" }
       task.add_stage(:consumer, :test_consumer, &block)
 
-      expect(task.stages[:consumer]).not_to be_nil
-      expect(task.stages[:consumer][:name]).to eq(:test_consumer)
+      expect(task.stages[:consumer]).not_to be_empty
+      expect(task.stages[:consumer][0][:name]).to eq(:test_consumer)
     end
   end
 

@@ -45,20 +45,20 @@ RSpec.describe Minigun::DSL do
 
     it 'allows defining a consumer' do
       test_class.consumer(:test_consumer) { "consumer code" }
-      expect(test_class._task.stages[:consumer]).not_to be_nil
-      expect(test_class._task.stages[:consumer][:name]).to eq(:test_consumer)
+      expect(test_class._task.stages[:consumer]).not_to be_empty
+      expect(test_class._task.stages[:consumer][0][:name]).to eq(:test_consumer)
     end
 
     it 'allows defining cow_fork as alias for consumer' do
       test_class.cow_fork(:test_fork) { "fork code" }
-      expect(test_class._task.stages[:consumer]).not_to be_nil
-      expect(test_class._task.stages[:consumer][:name]).to eq(:test_fork)
+      expect(test_class._task.stages[:consumer]).not_to be_empty
+      expect(test_class._task.stages[:consumer][0][:name]).to eq(:test_fork)
     end
 
     it 'allows defining ipc_fork as alias for consumer' do
       test_class.ipc_fork(:test_ipc) { "ipc code" }
-      expect(test_class._task.stages[:consumer]).not_to be_nil
-      expect(test_class._task.stages[:consumer][:name]).to eq(:test_ipc)
+      expect(test_class._task.stages[:consumer]).not_to be_empty
+      expect(test_class._task.stages[:consumer][0][:name]).to eq(:test_ipc)
     end
 
     it 'allows defining before_run hook' do
@@ -88,7 +88,7 @@ RSpec.describe Minigun::DSL do
       end
 
       expect(test_class._task.stages[:producer][:name]).to eq(:grouped_producer)
-      expect(test_class._task.stages[:consumer][:name]).to eq(:grouped_consumer)
+      expect(test_class._task.stages[:consumer][0][:name]).to eq(:grouped_consumer)
     end
   end
 

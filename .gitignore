@@ -59,3 +59,6 @@ dump.rdb
 # Sops decrypted files
 *.dec
 .irb_history
+
+Gemfile.lock
+/spec/examples.txt
