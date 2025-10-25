@@ -72,12 +72,12 @@ class WebCrawler
     processor :extract_links do |page|
       links = extract_links(page[:content])
       @mutex.synchronize { links_extracted.concat(links) }
-      
+
       puts "[Extract] Found #{links.size} links on #{page[:url]}"
-      
+
       # Emit the page for further processing
       emit(page)
-      
+
       # Could emit links here to crawl them (would create a loop)
       # For this demo, we just extract and log them
     end
@@ -102,27 +102,27 @@ if __FILE__ == $0
   ]
 
   crawler = WebCrawler.new(seed_urls)
-  
+
   puts "Starting crawl with #{seed_urls.size} seed URLs\n"
   puts "Max threads: 20 (for concurrent fetching)\n\n"
-  
+
   crawler.run
 
   puts "\n=== Crawl Results ===\n"
   puts "Pages fetched: #{crawler.pages_fetched.size}"
   puts "Links extracted: #{crawler.links_extracted.size}"
   puts "Pages processed: #{crawler.pages_processed.size}"
-  
+
   puts "\nFetched URLs:"
   crawler.pages_fetched.each do |page|
     puts "  - #{page[:url]} (#{page[:status]})"
   end
-  
+
   puts "\nExtracted Links:"
   crawler.links_extracted.each do |link|
     puts "  - #{link}"
   end
-  
+
   puts "\n✓ Crawl complete!"
 end
 

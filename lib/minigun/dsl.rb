@@ -9,6 +9,17 @@ module Minigun
         # Create a single task instance for the class
         @_minigun_task = Minigun::Task.new
       end
+      
+      # When a subclass is created, duplicate the parent's task
+      def base.inherited(subclass)
+        super if defined?(super)
+        parent_task = self._minigun_task
+        # Create a new task and copy the parent's configuration and pipelines
+        new_task = Minigun::Task.new
+        new_task.instance_variable_set(:@config, parent_task.config.dup)
+        new_task.instance_variable_set(:@implicit_pipeline, parent_task.implicit_pipeline) # Share the pipeline
+        subclass.instance_variable_set(:@_minigun_task, new_task)
+      end
     end
 
     module ClassMethods
@@ -141,12 +152,33 @@ module Minigun
         @pipeline.add_hook(:after_run, &block)
       end
 
-      def before_fork(&block)
-        @pipeline.add_hook(:before_fork, &block)
+      def after_producer(&block)
+        @pipeline.add_hook(:after_producer, &block)
       end
 
-      def after_fork(&block)
-        @pipeline.add_hook(:after_fork, &block)
+      def before_fork(stage_name = nil, &block)
+        if stage_name
+          @pipeline.add_stage_hook(:before_fork, stage_name, &block)
+        else
+          @pipeline.add_hook(:before_fork, &block)
+        end
+      end
+
+      def after_fork(stage_name = nil, &block)
+        if stage_name
+          @pipeline.add_stage_hook(:after_fork, stage_name, &block)
+        else
+          @pipeline.add_hook(:after_fork, &block)
+        end
+      end
+
+      # Stage-specific hooks (Option 2)
+      def before(stage_name, &block)
+        @pipeline.add_stage_hook(:before, stage_name, &block)
+      end
+
+      def after(stage_name, &block)
+        @pipeline.add_stage_hook(:after, stage_name, &block)
       end
     end
 
@@ -211,12 +243,29 @@ module Minigun
         _minigun_task.add_hook(:after_run, &block)
       end
 
-      def before_fork(&block)
-        _minigun_task.add_hook(:before_fork, &block)
+      def before_fork(stage_name = nil, &block)
+        if stage_name
+          _minigun_task.implicit_pipeline.add_stage_hook(:before_fork, stage_name, &block)
+        else
+          _minigun_task.add_hook(:before_fork, &block)
+        end
       end
 
-      def after_fork(&block)
-        _minigun_task.add_hook(:after_fork, &block)
+      def after_fork(stage_name = nil, &block)
+        if stage_name
+          _minigun_task.implicit_pipeline.add_stage_hook(:after_fork, stage_name, &block)
+        else
+          _minigun_task.add_hook(:after_fork, &block)
+        end
+      end
+
+      # Stage-specific hooks (Option 2)
+      def before(stage_name, &block)
+        _minigun_task.implicit_pipeline.add_stage_hook(:before, stage_name, &block)
+      end
+
+      def after(stage_name, &block)
+        _minigun_task.implicit_pipeline.add_stage_hook(:after, stage_name, &block)
       end
     end
 

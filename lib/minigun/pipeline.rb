@@ -25,11 +25,20 @@ module Minigun
         consumer: []
       }
 
+      # Pipeline-level hooks (run once per pipeline)
       @hooks = {
         before_run: [],
         after_run: [],
         before_fork: [],
         after_fork: []
+      }
+
+      # Stage-specific hooks (run per stage execution)
+      @stage_hooks = {
+        before: {},   # { stage_name => [blocks] }
+        after: {},    # { stage_name => [blocks] }
+        before_fork: {},
+        after_fork: {}
       }
 
       @dag = DAG.new
@@ -66,6 +75,23 @@ module Minigun
         Array(to_targets).each { |target| @dag.add_edge(name, target) }
       end
 
+      # Extract inline hook procs (Option 3)
+      if (before_proc = options.delete(:before))
+        add_stage_hook(:before, name, &before_proc)
+      end
+
+      if (after_proc = options.delete(:after))
+        add_stage_hook(:after, name, &after_proc)
+      end
+
+      if (before_fork_proc = options.delete(:before_fork))
+        add_stage_hook(:before_fork, name, &before_fork_proc)
+      end
+
+      if (after_fork_proc = options.delete(:after_fork))
+        add_stage_hook(:after_fork, name, &after_fork_proc)
+      end
+
       # Create appropriate stage subclass
       stage = case type
               when :producer
@@ -93,10 +119,23 @@ module Minigun
       end
     end
 
-    # Add a hook to this pipeline
+    # Add a pipeline-level hook
     def add_hook(type, &block)
       @hooks[type] ||= []
       @hooks[type] << block
+    end
+
+    # Add a stage-specific hook
+    def add_stage_hook(type, stage_name, &block)
+      @stage_hooks[type] ||= {}
+      @stage_hooks[type][stage_name] ||= []
+      @stage_hooks[type][stage_name] << block
+    end
+
+    # Execute stage-specific hooks
+    def execute_stage_hooks(type, stage_name)
+      hooks = @stage_hooks.dig(type, stage_name) || []
+      hooks.each { |h| @context.instance_exec(&h) }
     end
 
     # Run this pipeline
@@ -163,6 +202,9 @@ module Minigun
           producer_name = producer_stage.name
           log_info "[Pipeline:#{@name}][Producer] Starting"
 
+          # Execute before hooks for this producer
+          execute_stage_hooks(:before, producer_name)
+
           # Create emit method for producer
           emit_proc = proc do |item|
             in_flight_count.increment
@@ -177,6 +219,9 @@ module Minigun
           @context.instance_eval(&producer_stage.block)
 
           log_info "[Pipeline:#{@name}][Producer] Done. Produced #{produced_count.value} items"
+
+          # Execute after hooks for this producer
+          execute_stage_hooks(:after, producer_name)
         end
 
         if has_input_queue
@@ -272,12 +317,20 @@ module Minigun
     end
 
     def execute_stage(stage, item)
-      if stage.respond_to?(:execute_with_emit)
+      # Execute before hooks for this stage
+      execute_stage_hooks(:before, stage.name)
+
+      result = if stage.respond_to?(:execute_with_emit)
         stage.execute_with_emit(@context, item)
       else
         stage.execute(@context, item)
         []
       end
+
+      # Execute after hooks for this stage
+      execute_stage_hooks(:after, stage.name)
+
+      result
     end
 
     def check_and_fork(accumulator_map, output_items)
@@ -311,13 +364,27 @@ module Minigun
 
       log_info "[Pipeline:#{@name}][Fork] Forking to process #{total_items} items"
 
+      # Execute pipeline-level before_fork hooks
       @hooks[:before_fork].each { |h| @context.instance_eval(&h) }
+
+      # Execute stage-specific before_fork hooks for all consumer stages in this batch
+      consumer_stages = batch_map.values.flat_map { |items| items.map { |i| i[:stage] } }.uniq
+      consumer_stages.each do |stage|
+        execute_stage_hooks(:before_fork, stage.name)
+      end
 
       GC.start if @consumer_pids.empty? || @consumer_pids.size % 4 == 0
 
       pid = fork do
         @pid = Process.pid
+
+        # Execute pipeline-level after_fork hooks
         @hooks[:after_fork].each { |h| @context.instance_eval(&h) }
+
+        # Execute stage-specific after_fork hooks for all consumer stages in this batch
+        consumer_stages.each do |stage|
+          execute_stage_hooks(:after_fork, stage.name)
+        end
 
         log_info "[Pipeline:#{@name}][Consumer:#{@pid}] Started"
         consume_batch(batch_map, output_items)

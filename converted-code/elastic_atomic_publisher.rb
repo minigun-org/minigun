@@ -1,80 +1,77 @@
 # frozen_string_literal: true
 
-require_relative 'publisher_base_simple'
+require_relative 'publisher_base'
 
-# Publisher for upserting Vesper models to Elasticsearch
-# This is a converted version of the original ElasticAtomicPublisher
-# using the simplified PublisherBaseSimple class
-class ElasticAtomicPublisher < PublisherBaseSimple
+# Converted from original ElasticAtomicPublisher to use Minigun
+# Demonstrates inheritance pattern with PublisherBase
+class ElasticAtomicPublisher < PublisherBase
   MODELS = %w[
-    Vesper::Table::Franchise
-    Vesper::Table::Customer
-    Vesper::Table::CustomerMembership
-    Vesper::Table::Reservation
-    Vesper::Table::Payment
-    Vesper::Table::PosJournal
-    Vesper::Table::Voucher
+    Franchise
+    Customer
+    CustomerMembership
+    Reservation
+    Payment
+    PosJournal
+    Voucher
   ].freeze
 
-  MODEL_INCLUDES = {
-    'Vesper::Table::Reservation' => %i[customers],
-    'Vesper::Table::CustomerMembership' => %i[customers],
-    'Vesper::Table::Payment' => [reservation: %i[customers]],
-    'Vesper::Table::PosJournal' => [reservation: %i[customers]],
-    'Vesper::Table::Voucher' => %i[voucher_bundle voucher_product_snapshot reservation]
-  }.freeze
+  # Override consume_object to add Elastic-specific logic
+  def consume_object(model, id)
+    # Stub: In real code, this would fetch the object and call elastic methods
+    object = fetch_object(model, id)
 
-  private
+    if object[:archived]
+      elastic_destroy(model, id)
+    else
+      elastic_upsert(model, id, object)
+    end
+  end
 
   def default_models
     MODELS
   end
 
-  def consumer_scope(model, object_ids)
-    includes = MODEL_INCLUDES[model.to_s]
-    scope = model.unscoped.any_in(_id: object_ids)
-    scope = scope.includes(includes) if includes
-    scope
+  private
+
+  def fetch_object(model, id)
+    # Stub: Simulate fetching object from database
+    # In real code: model.unscoped.find(id)
+    {
+      id: id,
+      model: model,
+      archived: rand > 0.9, # 10% archived
+      data: { name: "#{model} #{id[0..7]}" }
+    }
   end
 
-  def consume_batch(model, object_ids)
-    # Use multi-upserters for better performance
-    case model.to_s
-    when 'Vesper::Table::Customer'
-      Vesper::Elastic::Upserter::CustomersMultiUpserter.new(object_ids).bulk_upsert
-    when 'Vesper::Table::CustomerMembership'
-      Vesper::Elastic::Upserter::MembershipsMultiUpserter.new(object_ids).bulk_upsert
-    when 'Vesper::Table::Reservation'
-      Vesper::Elastic::Upserter::ReservationsMultiUpserter.new(object_ids).bulk_upsert
-    when 'Vesper::Table::Payment'
-      Vesper::Elastic::Upserter::PaymentsMultiUpserter.new(object_ids).bulk_upsert
-    when 'Vesper::Table::PosJournal'
-      Vesper::Elastic::Upserter::PosJournalsMultiUpserter.new(object_ids).bulk_upsert
-    when 'Vesper::Table::Voucher'
-      Vesper::Elastic::Upserter::VouchersMultiUpserter.new(object_ids).bulk_upsert
-    else
-      # Fall back to individual processing
-      super
-    end
-
-    object_ids.size
+  def elastic_destroy(model, id)
+    # Stub: In real code, this would call Elasticsearch delete API
+    puts "[Elastic] Destroying #{model}##{id[0..15]}..."
   end
 
-  def consume_object(object)
-    if object.try(:archived?)
-      object.elastic_destroy!
-    else
-      object.elastic_upsert!
-    end
+  def elastic_upsert(model, id, object)
+    # Stub: In real code, this would call Elasticsearch index/update API
+    puts "[Elastic] Upserting #{model}##{id[0..15]}: #{object[:data]}"
   end
 end
 
-# Usage:
-# publisher = ElasticAtomicPublisher.new(
-#   start_time: 1.hour.ago,
-#   end_time: Time.current,
-#   max_processes: 4,
-#   max_threads: 10
-# )
-# publisher.perform
+# Example usage
+if __FILE__ == $0
+  puts "=== ElasticAtomicPublisher Example ===\n\n"
+
+  publisher = ElasticAtomicPublisher.new(
+    models: ['Customer', 'Reservation'],
+    start_time: Time.now - 86400, # 1 day in seconds
+    end_time: Time.now,
+    max_processes: 2,
+    max_threads: 5
+  )
+
+  publisher.run
+
+  puts "\n=== Final Stats ===\n"
+  puts "Produced: #{publisher.produced_count} IDs"
+  puts "Accumulated: #{publisher.accumulated_count} items"
+  puts "Consumed: #{publisher.consumed_count} items"
+end
 
