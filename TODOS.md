@@ -6,6 +6,15 @@ ADD to README:
 multi-parents --> how do we know end of queues?
 
 
+redundant with stats, stats should use Concurrent::AtomicFixnum no?
+      @produced_count = Concurrent::AtomicFixnum.new(0)
+      @in_flight_count = Concurrent::AtomicFixnum.new(0)
+      @accumulated_count = 0
+
+stats needs IPC back to parent
+are there reliability issues with IPC
+consider threading model vs fork model, we have lots of thread spawn/join we need an abstraction for concurrent execution -- ractor, thread, fork
+
       if has_multi_pipeline?
         # Multi-pipeline mode: run all named pipelines
         run_multi_pipeline(context)
