@@ -1,290 +1,279 @@
 # frozen_string_literal: true
 
 module Minigun
-  # The Task class manages the configuration and execution of Minigun tasks
+  # Task executes the producer→accumulator→consumer(fork) pipeline pattern
   class Task
-    attr_reader :hooks, :pipeline, :connections, :queue_subscriptions
-    attr_accessor :config, :stage_blocks, :pipeline_definition
+    attr_reader :config, :stages, :hooks
 
     def initialize
       @config = {
         max_threads: 5,
         max_processes: 2,
         max_retries: 3,
-        batch_size: 100,
-        accumulator_max_queue: 2000,
+        accumulator_max_single: 2000,
         accumulator_max_all: 4000,
-        accumulator_check_interval: 100,
-        logger: Logger.new($stdout),
-        fork_mode: :auto, # :auto, :always, :never
-        consumer_type: :ipc # :ipc or :cow
+        accumulator_check_interval: 100
       }
 
-      # Initialize hook arrays
+      @stages = {
+        producer: nil,
+        processor: [],
+        accumulator: nil,
+        consumer: nil
+      }
+
       @hooks = {
         before_run: [],
         after_run: [],
         before_fork: [],
-        after_fork: [],
-        after_producer_finished: [],
-        after_consumer_finished: []
+        after_fork: []
       }
 
-      # Initialize stage block maps - all stage variants share a common block structure
-      @stage_blocks = {}
-
-      # Initialize pipeline
-      @pipeline = []
-
-      # Initialize pipeline definition
-      @pipeline_definition = nil
-
-      # Initialize stage connections
-      @connections = {}
-
-      # Initialize queue subscriptions
-      @queue_subscriptions = {}
+      @produced_count = Concurrent::AtomicFixnum.new(0)
+      @accumulated_count = 0
+      @consumer_pids = []
     end
 
-    # Process a connection option to determine where to send output
-    def process_connection_options(name, options)
-      # Extract connection options
-      from = options.delete(:from)
-      to = options.delete(:to)
-      queues = options.delete(:queues) || [:default]
+    # Set config value
+    def set_config(key, value)
+      @config[key] = value
+    end
 
-      # Record "from" connection if specified
-      if from
-        source_names = from.is_a?(Array) ? from : [from]
-        source_names.each do |source_name|
-          @connections[source_name] ||= []
-          @connections[source_name] << name unless @connections[source_name].include?(name)
-        end
+    # Add a stage
+    def add_stage(type, name, &block)
+      case type
+      when :producer
+        @stages[:producer] = { name: name, block: block }
+      when :processor
+        @stages[:processor] << { name: name, block: block }
+      when :accumulator
+        @stages[:accumulator] = { name: name, block: block }
+      when :consumer
+        @stages[:consumer] = { name: name, block: block }
       end
-
-      # Record "to" connection if specified
-      if to
-        target_names = to.is_a?(Array) ? to : [to]
-        @connections[name] = target_names
-      end
-
-      # Record queue subscriptions
-      @queue_subscriptions[name] = queues.map(&:to_sym)
-
-      # Return the processed options
-      options
     end
 
-    # Define the producer block that generates items
-    def add_producer(name = :default, options = {}, &block)
-      # Process connection options
-      options = process_connection_options(name, options)
-
-      # Store the block
-      @stage_blocks[name] = block if block_given?
-
-      # Record stage in pipeline
-      @pipeline << {
-        type: :processor, # Use processor type with producer role
-        name: name,
-        options: options
-      }
+    # Add a hook
+    def add_hook(type, &block)
+      @hooks[type] ||= []
+      @hooks[type] << block
     end
 
-    # Define a processor block that transforms items
-    def add_processor(name = :default, options = {}, &block)
-      # Process connection options
-      options = process_connection_options(name, options)
-
-      # Store the processor block
-      @stage_blocks[name] = block if block_given?
-
-      # Record stage in pipeline
-      @pipeline << {
-        type: :processor,
-        name: name,
-        options: options
-      }
-    end
-
-    # Define a specialized accumulator stage
-    def add_accumulator(name = :default, options = {}, &block)
-      # Process connection options
-      options = process_connection_options(name, options)
-
-      # Extract accumulator-specific options with appropriate defaults
-      options[:max_queue] = options.delete(:max_queue) || @config[:accumulator_max_queue]
-      options[:max_all] = options.delete(:max_all) || @config[:accumulator_max_all]
-      options[:check_interval] = options.delete(:check_interval) || @config[:accumulator_check_interval]
-
-      @stage_blocks[name] = block if block_given?
-
-      # Record stage in pipeline
-      @pipeline << {
-        type: :accumulator,
-        name: name,
-        options: options
-      }
-    end
-
-    # Define a consumer stage
-    def add_consumer(name = :default, options = {}, &block)
-      # Process connection options
-      options = process_connection_options(name, options)
-
-      # Extract consumer-specific options with appropriate defaults
-      # Support fork: as an alternative to type:
-      fork_type = options.delete(:fork)
-      options[:type] = fork_type || options.delete(:type) || @config[:consumer_type]
-      options[:max_processes] = options.delete(:max_processes) || @config[:max_processes]
-      options[:max_threads] = options.delete(:max_threads) || @config[:max_threads]
-      options[:max_retries] = options.delete(:max_retries) || @config[:max_retries]
-      options[:batch_size] = options.delete(:batch_size) || @config[:batch_size]
-      options[:threads] = options.delete(:threads) || options[:max_threads]
-      options[:processes] = options.delete(:processes) || options[:max_processes]
-
-      # Store the consumer block
-      @stage_blocks[name] = block if block_given?
-
-      # Record stage in pipeline - use processor type for all stages
-      @pipeline << {
-        type: :processor, # All stages are now processors
-        name: name,
-        options: options
-      }
-
-      # If this is a COW consumer type, validate placement
-      validate_consumer_placement(:cow, name) if options[:type] == :cow
-    end
-
-    # Define hooks with options similar to ActionController
-    def add_hook(name, options = {}, &block)
-      hook_config = { only: [], except: [], if: [], unless: [] }
-      hook_config.merge!(options)
-      hook_config[:block] = block if block_given?
-
-      @hooks[name] ||= []
-      @hooks[name] << hook_config
-    end
-
-    # Run the defined task for the given context
+    # Run the pipeline
     def run(context)
-      validate_configuration!
+      @context = context
+      @job_start = Time.now
 
-      # If a custom pipeline is defined, use it
-      if @pipeline_definition || @pipeline.any?
-        run_custom_pipeline(context)
-      else
-        # Otherwise, use the simple producer-consumer pattern
-        run_simple_pipeline(context)
-      end
-    end
+      log_info "Starting Minigun pipeline"
 
-    # Run all hooks of a specific type
-    def run_hooks(type, context, *args)
-      return unless @hooks[type]
+      # Run before_run hooks
+      @hooks[:before_run].each { |h| context.instance_eval(&h) }
 
-      @hooks[type].each do |hook|
-        # Check conditions for running the hook
-        next if hook[:only].is_a?(Array) && hook[:only].any? && !hook[:only].include?(context.class.name)
-        next if hook[:except].is_a?(Array) && hook[:except].any? && hook[:except].include?(context.class.name)
+      # Start producer and accumulator threads
+      @queue = SizedQueue.new(@config[:max_processes] * @config[:max_threads] * 2)
 
-        # No conditions means always run
-        if_conditions = hook[:if]
-        unless_conditions = hook[:unless]
+      producer_thread = start_producer
+      accumulator_thread = start_accumulator
 
-        # If conditions must all pass
-        if if_conditions
-          if_conditions = [if_conditions].flatten
-          next unless if_conditions.all? do |condition|
-            if condition.is_a?(Proc)
-              context.instance_exec(*args, &condition)
-            else
-              condition
-            end
-          end
-        end
+      # Wait for completion
+      producer_thread.join
+      accumulator_thread.join
+      wait_all_consumers
 
-        # Unless conditions must all fail
-        if unless_conditions
-          unless_conditions = [unless_conditions].flatten
-          next if unless_conditions.any? do |condition|
-            if condition.is_a?(Proc)
-              context.instance_exec(*args, &condition)
-            else
-              condition
-            end
-          end
-        end
+      @job_end = Time.now
 
-        # Execute the hook block
-        context.instance_exec(*args, &hook[:block]) if hook[:block]
-      end
+      log_info "Finished in #{(@job_end - @job_start).round(2)}s"
+      log_info "Produced: #{@produced_count.value}, Accumulated: #{@accumulated_count}"
+
+      # Run after_run hooks
+      @hooks[:after_run].each { |h| context.instance_eval(&h) }
+
+      @accumulated_count
     end
 
     private
 
-    # Validate that a consumer stage comes after an accumulator when needed
-    def validate_consumer_placement(consumer_type, name)
-      # Only validate cow consumers currently
-      return unless consumer_type == :cow
+    def start_producer
+      queue = @queue
+      produced_count = @produced_count
 
-      # Find this stage's index
-      consumer_index = @pipeline.find_index { |s| s[:name] == name && s[:type] == :consumer }
-      return unless consumer_index
+      Thread.new do
+        log_info "[Producer] Starting"
 
-      # Check if there's an explicit "from" connection to an accumulator
-      if @connections.any?
-        # Look for sources that point to this consumer
-        has_accumulator_source = false
-        @connections.each do |source_name, targets|
-          next unless targets.is_a?(Array) ? targets.include?(name) : targets == name
+        # Create emit method for producer
+        emit_proc = proc do |item|
+          queue << item
+          produced_count.increment
+        end
 
-          # Check if source is an accumulator
-          source_index = @pipeline.find_index { |s| s[:name] == source_name }
-          if source_index && @pipeline[source_index][:type] == :accumulator
-            has_accumulator_source = true
-            break
+        # Bind emit to context
+        @context.define_singleton_method(:emit, &emit_proc)
+
+        # Run producer block
+        @context.instance_eval(&@stages[:producer][:block])
+
+        # Signal end
+        queue << :END_OF_QUEUE
+
+        log_info "[Producer] Done. Produced #{produced_count.value} items"
+      end
+    end
+
+    def start_accumulator
+      Thread.new do
+        log_info "[Accumulator] Starting"
+
+        accumulator_map = Hash.new { |h, k| h[k] = [] }
+        check_counter = 0
+
+        loop do
+          item = @queue.pop
+          break if item == :END_OF_QUEUE
+
+          # If we have processors, run them first
+          processed_item = item
+          @stages[:processor].each do |proc_stage|
+            # Create emit for processor
+            emitted_items = []
+            emit_proc = proc { |i| emitted_items << i }
+            @context.define_singleton_method(:emit, &emit_proc)
+
+            # Run processor
+            @context.instance_exec(processed_item, &proc_stage[:block])
+
+            # Use emitted items or pass through
+            processed_item = emitted_items.first if emitted_items.any?
+          end
+
+          # Accumulate by item class
+          key = processed_item.class.name
+          accumulator_map[key] << processed_item
+          check_counter += 1
+
+          # Check thresholds
+          if check_counter % @config[:accumulator_check_interval] == 0
+            check_and_fork(accumulator_map)
           end
         end
 
-        unless has_accumulator_source
-          # For implicit connections, check previous stage
-          raise Minigun::Error, "Cow consumer/fork stage '#{name}' must follow an accumulator stage" unless consumer_index > 0
+        # Process remaining
+        fork_consumer(accumulator_map) unless accumulator_map.empty?
 
-          prev_stage = @pipeline[consumer_index - 1]
-          raise Minigun::Error, "Cow consumer/fork stage '#{name}' must follow an accumulator stage" unless prev_stage[:type] == :accumulator
+        @accumulated_count = accumulator_map.values.sum(&:size)
+
+        log_info "[Accumulator] Done. Accumulated #{@accumulated_count} items"
+      end
+    end
+
+    def check_and_fork(accumulator_map)
+      # Check single queue threshold
+      accumulator_map.each do |key, items|
+        if items.size >= @config[:accumulator_max_single]
+          fork_consumer({ key => accumulator_map.delete(key) })
         end
+      end
+
+      # Check total threshold
+      total = accumulator_map.values.sum(&:size)
+      if total >= @config[:accumulator_max_all]
+        fork_consumer(accumulator_map.dup)
+        accumulator_map.clear
+      end
+    end
+
+    def fork_consumer(batch_map)
+      total_items = batch_map.values.sum(&:size)
+
+      # Check if fork is supported
+      if Process.respond_to?(:fork)
+        fork_consumer_process(batch_map, total_items)
       else
-        # For sequential pipelines, check previous stage
-        raise Minigun::Error, "Cow consumer/fork stage '#{name}' must be preceded by an accumulator stage" unless consumer_index > 0
-
-        prev_stage = @pipeline[consumer_index - 1]
-        raise Minigun::Error, "Cow consumer/fork stage '#{name}' must follow an accumulator stage" unless prev_stage[:type] == :accumulator
+        # Fallback to threading on Windows
+        consume_in_threads(batch_map, total_items)
       end
     end
 
-    def validate_configuration!
-      # Basic validation logic
-      # For COW consumer, ensure there's an accumulator before it
-      if @config[:consumer_type] == :cow &&
-         @pipeline.any? { |s| s[:type] == :consumer } &&
-         @pipeline.none? { |s| s[:type] == :accumulator }
+    def fork_consumer_process(batch_map, total_items)
+      wait_for_consumer_slot
 
-        raise Minigun::Error, 'COW consumer requires an accumulator stage before it'
+      log_info "[Fork] Forking to process #{total_items} items"
+
+      # Run before_fork hooks
+      @hooks[:before_fork].each { |h| @context.instance_eval(&h) }
+
+      # Trigger GC before fork
+      GC.start if @consumer_pids.empty? || @consumer_pids.size % 4 == 0
+
+      pid = fork do
+        # In child process
+        @pid = Process.pid
+
+        # Run after_fork hooks
+        @hooks[:after_fork].each { |h| @context.instance_eval(&h) }
+
+        log_info "[Consumer:#{@pid}] Started"
+
+        # Process items
+        consume_batch(batch_map)
+
+        log_info "[Consumer:#{@pid}] Done"
+
+        exit! 0
       end
+
+      @consumer_pids << pid
     end
 
-    def run_simple_pipeline(context)
-      # Let the Runner handle this simple case
-      runner = Minigun::Runner.new(context)
-      runner.run
+    def consume_in_threads(batch_map, total_items)
+      log_info "[Consumer] Processing #{total_items} items (no fork)"
+      consume_batch(batch_map)
     end
 
-    def run_custom_pipeline(context)
-      # Create and run a custom pipeline
-      pipeline = Minigun::Pipeline.new(context, custom: true)
-      pipeline.run
+    def consume_batch(batch_map)
+      # Process items with thread pool
+      thread_pool = Concurrent::FixedThreadPool.new(@config[:max_threads])
+      processed = Concurrent::AtomicFixnum.new(0)
+
+      batch_map.each do |_key, items|
+        items.each do |item|
+          Concurrent::Future.execute(executor: thread_pool) do
+            if @stages[:consumer]
+              @context.instance_exec(item, &@stages[:consumer][:block])
+            end
+            processed.increment
+          end
+        end
+      end
+
+      # Shutdown pool
+      thread_pool.shutdown
+      thread_pool.wait_for_termination(30)
+
+      log_info "[Consumer] Processed #{processed.value} items"
+    end
+
+    def wait_for_consumer_slot
+      return if @consumer_pids.size < @config[:max_processes]
+
+      # Wait for one to finish
+      pid = Process.wait
+      @consumer_pids.delete(pid)
+    rescue Errno::ECHILD
+      # No children
+    end
+
+    def wait_all_consumers
+      @consumer_pids.each do |pid|
+        Process.wait(pid)
+      rescue Errno::ECHILD
+        # Already exited
+      end
+      @consumer_pids.clear
+    end
+
+    def log_info(msg)
+      Minigun.logger.info(msg)
     end
   end
 end
+
