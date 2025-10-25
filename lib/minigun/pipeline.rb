@@ -519,7 +519,7 @@ module Minigun
       @dag.validate!
       validate_stages_exist!
 
-      log_info "[Pipeline:#{@name}] DAG: #{@dag.nodes.join(' -> ')}"
+      log_info "[Pipeline:#{@name}] DAG: #{@dag.topological_sort.join(' -> ')}"
     end
 
     def validate_stages_exist!

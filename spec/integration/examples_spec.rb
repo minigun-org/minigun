@@ -159,8 +159,7 @@ RSpec.describe 'Examples Integration' do
       expect(example.results.size).to be > 0
     end
 
-    # TODO: Enable when nested pipeline execution is fully implemented
-    xit 'processes items through nested pipeline' do
+    it 'processes items through nested pipeline' do
       load File.expand_path('../../examples/08_nested_pipeline_simple.rb', __dir__)
 
       example = NestedPipelineExample.new
@@ -183,14 +182,13 @@ RSpec.describe 'Examples Integration' do
       expect(example.fork_results.size).to be > 0
     end
 
-    # TODO: Enable when execution strategies are fully integrated
-    xit 'uses different strategies for different stages' do
+    it 'uses different strategies for different stages' do
       load File.expand_path('../../examples/09_strategy_per_stage.rb', __dir__)
 
       example = StrategyPerStageExample.new
       example.run
 
-      # All 10 items should be processed by both consumers
+      # All 10 items should be processed by both consumers (via explicit fan-out routing)
       expect(example.fork_results.sort).to eq((1..10).to_a)
       expect(example.thread_results.sort).to eq((1..10).to_a)
     end

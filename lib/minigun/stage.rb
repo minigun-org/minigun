@@ -194,29 +194,49 @@ module Minigun
 
     # Execute this pipeline stage (processes an item through the nested pipeline)
     def execute_with_emit(context, item)
+      return [item] unless @pipeline
+
       emitted_items = []
 
-      # The nested pipeline should process the item and emit results
-      # For now, we'll simulate this by executing processors in the pipeline
-      if @pipeline && @pipeline.stages[:processor].any?
-        current_items = [item]
+      # Process the item through the nested pipeline's stages
+      # Start with the input item
+      current_items = [item]
 
-        @pipeline.stages[:processor].each do |processor_stage|
-          next_items = []
-          current_items.each do |current_item|
-            results = processor_stage.execute_with_emit(context, current_item)
-            next_items.concat(results)
-          end
-          current_items = next_items
+      # Execute processors in sequence
+      @pipeline.stages[:processor].each do |processor_stage|
+        next_items = []
+        current_items.each do |current_item|
+          # Execute before hooks for this stage
+          @pipeline.send(:execute_stage_hooks, :before, processor_stage.name)
+
+          # Execute the processor
+          results = processor_stage.execute_with_emit(context, current_item)
+          next_items.concat(results)
+
+          # Execute after hooks for this stage
+          @pipeline.send(:execute_stage_hooks, :after, processor_stage.name)
         end
-
-        emitted_items = current_items
-      else
-        # No processors, just pass through
-        emitted_items = [item]
+        current_items = next_items
       end
 
-      emitted_items
+      # Execute consumers if any (they don't emit, but we should still run them)
+      unless @pipeline.stages[:consumer].empty?
+        current_items.each do |current_item|
+          @pipeline.stages[:consumer].each do |consumer_stage|
+            # Execute before hooks
+            @pipeline.send(:execute_stage_hooks, :before, consumer_stage.name)
+
+            # Execute consumer
+            consumer_stage.execute(context, current_item)
+
+            # Execute after hooks
+            @pipeline.send(:execute_stage_hooks, :after, consumer_stage.name)
+          end
+        end
+      end
+
+      # Return the items for the parent pipeline to continue processing
+      current_items
     end
   end
 end

@@ -23,7 +23,8 @@ class StrategyPerStageExample
   end
 
   # Light processor uses threads (default)
-  processor :validate, strategy: :threaded do |num|
+  # Route to both consumers explicitly (fan-out)
+  processor :validate, strategy: :threaded, to: [:heavy_save, :light_log] do |num|
     puts "[Validator:threaded] Validating #{num}"
     emit(num) if num > 0
   end
