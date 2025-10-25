@@ -96,6 +96,10 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
         processor :double do |num|
           emit(num * 2)
         end
+
+        # Reroute: generate -> double -> collect (instead of generate -> collect)
+        reroute_stage :generate, to: :double
+        reroute_stage :double, to: :collect
       end
     end
 
@@ -268,6 +272,10 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
         processor :double do |num|
           emit(num * 2)
         end
+
+        # Reroute: generate -> double -> collect (instead of generate -> collect)
+        reroute_stage :generate, to: :double
+        reroute_stage :double, to: :collect
       end
     end
 
@@ -278,6 +286,10 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
         processor :add_ten do |num|
           emit(num + 10)
         end
+
+        # Reroute: generate -> double -> add_ten -> collect
+        reroute_stage :double, to: :add_ten
+        reroute_stage :add_ten, to: :collect
       end
     end
 
@@ -334,6 +346,10 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
         processor :double do |num|
           emit(num * 2)
         end
+
+        # Reroute: generate -> double -> collect
+        reroute_stage :generate, to: :double
+        reroute_stage :double, to: :collect
       end
     end
 
@@ -342,6 +358,10 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
         processor :triple do |num|
           emit(num * 3)
         end
+
+        # Reroute: generate -> triple -> collect
+        reroute_stage :generate, to: :triple
+        reroute_stage :triple, to: :collect
       end
     end
 
@@ -384,8 +404,11 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
           items_to_publish.each { |item| emit(item) }
         end
 
-        fork_accumulate :publish do |item|
-          publish_item(item)
+        accumulator :batch
+
+        spawn_fork :publish do |batch|
+          # spawn_fork receives batches from accumulator
+          batch.each { |item| publish_item(item) }
         end
 
         def items_to_publish

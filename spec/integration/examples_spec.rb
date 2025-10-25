@@ -189,7 +189,9 @@ RSpec.describe 'Examples Integration' do
       example.run
 
       # All 10 items should be processed by both consumers (via explicit fan-out routing)
-      expect(example.fork_results.sort).to eq((1..10).to_a)
+      if Process.respond_to?(:fork)
+        expect(example.fork_results.sort).to eq((1..10).to_a)
+      end
       expect(example.thread_results.sort).to eq((1..10).to_a)
     end
   end

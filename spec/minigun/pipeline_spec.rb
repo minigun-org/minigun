@@ -22,9 +22,7 @@ RSpec.describe Minigun::Pipeline do
     end
 
     it 'initializes empty stages' do
-      expect(pipeline.stages[:producer]).to be_nil
-      expect(pipeline.stages[:processor]).to eq([])
-      expect(pipeline.stages[:consumer]).to eq([])
+      expect(pipeline.stages).to eq({})
     end
 
     it 'initializes a DAG for stage routing' do
@@ -35,19 +33,26 @@ RSpec.describe Minigun::Pipeline do
   describe '#add_stage' do
     it 'adds a producer stage' do
       pipeline.add_stage(:producer, :fetch) { "fetch data" }
-      expect(pipeline.stages[:producer]).to be_a(Minigun::ProducerStage)
-      expect(pipeline.stages[:producer].name).to eq(:fetch)
+      expect(pipeline.stages[:fetch]).to be_a(Minigun::AtomicStage)
+      expect(pipeline.stages[:fetch].name).to eq(:fetch)
+      expect(pipeline.stages[:fetch].producer?).to be true
     end
 
     it 'adds multiple processor stages' do
       pipeline.add_stage(:processor, :transform) { |item| item }
       pipeline.add_stage(:processor, :validate) { |item| item }
-      expect(pipeline.stages[:processor].size).to eq(2)
+
+      # Verify both stages were added by name
+      expect(pipeline.stages[:transform]).not_to be_nil
+      expect(pipeline.stages[:validate]).not_to be_nil
+      expect(pipeline.stages[:transform].name).to eq(:transform)
+      expect(pipeline.stages[:validate].name).to eq(:validate)
     end
 
     it 'adds a consumer stage' do
       pipeline.add_stage(:consumer, :save) { |item| puts item }
-      expect(pipeline.stages[:consumer].size).to eq(1)
+      expect(pipeline.stages[:save]).not_to be_nil
+      expect(pipeline.stages[:save].name).to eq(:save)
     end
 
     it 'handles stage routing with :to option' do

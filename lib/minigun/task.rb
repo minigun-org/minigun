@@ -63,10 +63,10 @@ module Minigun
         dsl.instance_eval(&block)
       end
 
-      # Add the pipeline stage to the implicit pipeline's processor list
-      @implicit_pipeline.stages[:processor] << pipeline_stage
+      # Add the pipeline stage to the implicit pipeline
+      @implicit_pipeline.stages[name] = pipeline_stage
       @implicit_pipeline.instance_variable_get(:@stage_order) << name
-      @implicit_pipeline.dag.instance_variable_set(:@nodes, @implicit_pipeline.instance_variable_get(:@stage_order).dup)
+      @implicit_pipeline.dag.add_node(name)
 
       # Extract routing if specified
       to_targets = options[:to]

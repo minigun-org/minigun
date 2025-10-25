@@ -12,24 +12,19 @@ module Minigun
       @strategy = options[:strategy] || :threaded
     end
 
-    # Return the stage type (overridden in subclasses)
-    def type
-      raise NotImplementedError, "Subclasses must implement #type"
-    end
-
     # Execute the stage with the given context and item
     # Returns emitted items for routing (if applicable)
     def execute(context, item = nil)
       raise NotImplementedError, "Subclasses must implement #execute"
     end
 
-    # Whether this stage should emit items (overridden in subclasses)
-    def emits?
+    # Whether this stage is a producer (no input)
+    def producer?
       false
     end
 
-    # Whether this stage is terminal (no downstream stages)
-    def terminal?
+    # Whether this stage is an accumulator (batches items)
+    def accumulator?
       false
     end
 
@@ -43,16 +38,20 @@ module Minigun
       @strategy
     end
 
+    # Whether this stage has a spawn strategy (fork, thread, ractor)
+    def has_spawn_strategy?
+      [:spawn_thread, :spawn_fork, :spawn_ractor].include?(@strategy)
+    end
+
     # Convert to hash (for backward compatibility)
     def to_h
-      { name: @name, type: type, options: @options }
+      { name: @name, options: @options }
     end
 
     # Allow hash-like access for backward compatibility
     def [](key)
       case key
       when :name then @name
-      when :type then type
       when :options then @options
       else nil
       end
@@ -60,6 +59,10 @@ module Minigun
   end
 
   # Atomic stages - leaf nodes that execute a single block
+  # Behavior is inferred from:
+  # - producer?() checks block arity == 0 (runs immediately, no input)
+  # - DAG.terminal?(name) checks if it's a consumer (doesn't emit)
+  # - Everything else is a processor (transforms items)
   class AtomicStage < Stage
     attr_reader :block
 
@@ -68,9 +71,33 @@ module Minigun
       @block = block
     end
 
-    # Execute the stage block with context and item
-    def execute(context, item)
-      context.instance_exec(item, &@block)
+    # Producer? - no block argument
+    def producer?
+      @block && (@block.arity == 0 || @block.arity == -1)
+    end
+
+    # Execute stage logic
+    def execute(context, item = nil)
+      return unless @block
+
+      if producer?
+        # Producer - no item argument
+        context.instance_eval(&@block)
+      else
+        # Processor/Consumer - has item argument
+        context.instance_exec(item, &@block)
+      end
+    end
+
+    # Execute and return emitted items (for non-terminal stages)
+    def execute_with_emit(context, item)
+      emitted_items = []
+      emit_proc = proc { |i| emitted_items << i }
+      context.define_singleton_method(:emit, &emit_proc)
+
+      execute(context, item)
+
+      emitted_items
     end
 
     # For backward compatibility
@@ -81,44 +108,6 @@ module Minigun
     def [](key)
       return @block if key == :block
       super
-    end
-  end
-
-  # Producer stage - generates items (no input)
-  class ProducerStage < AtomicStage
-    def type
-      :producer
-    end
-
-    def emits?
-      true
-    end
-
-    # Producers execute without items (they generate items)
-    def execute(context, _item = nil)
-      context.instance_eval(&@block)
-    end
-  end
-
-  # Processor stage - transforms items (input → output)
-  class ProcessorStage < AtomicStage
-    def type
-      :processor
-    end
-
-    def emits?
-      true
-    end
-
-    # Execute and return emitted items
-    def execute_with_emit(context, item)
-      emitted_items = []
-      emit_proc = proc { |i| emitted_items << i }
-      context.define_singleton_method(:emit, &emit_proc)
-
-      execute(context, item)
-
-      emitted_items
     end
   end
 
@@ -133,12 +122,8 @@ module Minigun
       @max_wait = options[:max_wait] || nil  # Future: time-based batching
     end
 
-    def type
-      :accumulator
-    end
-
-    def emits?
-      true  # Accumulator emits batches
+    def accumulator?
+      true
     end
 
     # Accumulator doesn't execute per-item - it batches
@@ -151,21 +136,6 @@ module Minigun
       else
         batch
       end
-    end
-  end
-
-  # Consumer stage - terminal stage that processes final items (no output)
-  class ConsumerStage < AtomicStage
-    def type
-      :consumer
-    end
-
-    def terminal?
-      true
-    end
-
-    def emits?
-      false
     end
   end
 
@@ -183,16 +153,7 @@ module Minigun
       @stages_to_add = []  # Queue of stages to add when pipeline is created
     end
 
-    def type
-      :pipeline
-    end
-
     def composite?
-      true
-    end
-
-    def emits?
-      # A pipeline emits if it has output connections
       true
     end
 
@@ -221,46 +182,24 @@ module Minigun
     def execute_with_emit(context, item)
       return [item] unless @pipeline
 
-      emitted_items = []
-
-      # Process the item through the nested pipeline's stages
-      # Start with the input item
+      # Process item through nested pipeline stages sequentially
       current_items = [item]
 
-      # Execute processors in sequence
-      @pipeline.stages[:processor].each do |processor_stage|
+      @pipeline.stage_order.each do |stage_name|
+        stage = @pipeline.find_stage(stage_name)
+        next unless stage
+        next if stage.producer?  # Skip producers in nested pipelines
+
+        break if current_items.empty?
+
         next_items = []
         current_items.each do |current_item|
-          # Execute before hooks for this stage
-          @pipeline.send(:execute_stage_hooks, :before, processor_stage.name)
-
-          # Execute the processor
-          results = processor_stage.execute_with_emit(context, current_item)
+          results = stage.execute_with_emit(context, current_item)
           next_items.concat(results)
-
-          # Execute after hooks for this stage
-          @pipeline.send(:execute_stage_hooks, :after, processor_stage.name)
         end
         current_items = next_items
       end
 
-      # Execute consumers if any (they don't emit, but we should still run them)
-      unless @pipeline.stages[:consumer].empty?
-        current_items.each do |current_item|
-          @pipeline.stages[:consumer].each do |consumer_stage|
-            # Execute before hooks
-            @pipeline.send(:execute_stage_hooks, :before, consumer_stage.name)
-
-            # Execute consumer
-            consumer_stage.execute(context, current_item)
-
-            # Execute after hooks
-            @pipeline.send(:execute_stage_hooks, :after, consumer_stage.name)
-          end
-        end
-      end
-
-      # Return the items for the parent pipeline to continue processing
       current_items
     end
   end

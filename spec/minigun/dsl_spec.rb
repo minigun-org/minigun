@@ -27,38 +27,37 @@ RSpec.describe Minigun::DSL do
 
     it 'allows defining a producer' do
       test_class.producer(:test_producer) { "producer code" }
-      expect(test_class._minigun_task.stages[:producer]).not_to be_nil
-      expect(test_class._minigun_task.stages[:producer][:name]).to eq(:test_producer)
+      stage = test_class._minigun_task.stages[:test_producer]
+      expect(stage).not_to be_nil
+      expect(stage.name).to eq(:test_producer)
+      expect(stage.producer?).to be true
     end
 
     it 'allows defining processors' do
-      test_class.processor(:test_processor) { "processor code" }
-      expect(test_class._minigun_task.stages[:processor]).to be_an(Array)
-      expect(test_class._minigun_task.stages[:processor].first[:name]).to eq(:test_processor)
+      test_class.processor(:test_processor) { |x| x }
+      # Processor is now an AtomicStage, check that it was added
+      task = test_class._minigun_task
+      all_stages = task.implicit_pipeline.stage_order.map { |name| task.implicit_pipeline.find_stage(name) }
+      processor = all_stages.find { |s| s.name == :test_processor }
+      expect(processor).not_to be_nil
+      expect(processor.producer?).to be false
     end
 
     it 'allows defining an accumulator' do
       test_class.accumulator(:test_accumulator) { "accumulator code" }
-      expect(test_class._minigun_task.stages[:accumulator]).not_to be_nil
-      expect(test_class._minigun_task.stages[:accumulator][:name]).to eq(:test_accumulator)
+      stage = test_class._minigun_task.stages[:test_accumulator]
+      expect(stage).not_to be_nil
+      expect(stage.name).to eq(:test_accumulator)
+      expect(stage.accumulator?).to be true
     end
 
     it 'allows defining a consumer' do
-      test_class.consumer(:test_consumer) { "consumer code" }
-      expect(test_class._minigun_task.stages[:consumer]).not_to be_empty
-      expect(test_class._minigun_task.stages[:consumer][0][:name]).to eq(:test_consumer)
-    end
-
-    it 'allows defining cow_fork as alias for consumer' do
-      test_class.cow_fork(:test_fork) { "fork code" }
-      expect(test_class._minigun_task.stages[:consumer]).not_to be_empty
-      expect(test_class._minigun_task.stages[:consumer][0][:name]).to eq(:test_fork)
-    end
-
-    it 'allows defining ipc_fork as alias for consumer' do
-      test_class.ipc_fork(:test_ipc) { "ipc code" }
-      expect(test_class._minigun_task.stages[:consumer]).not_to be_empty
-      expect(test_class._minigun_task.stages[:consumer][0][:name]).to eq(:test_ipc)
+      test_class.consumer(:test_consumer) { |x| x }  # Consumer takes an argument
+      # Consumer is now an AtomicStage, check that it was added
+      task = test_class._minigun_task
+      consumer = task.stages[:test_consumer]
+      expect(consumer).not_to be_nil
+      expect(consumer.producer?).to be false
     end
 
     it 'allows defining before_run hook' do
@@ -84,11 +83,16 @@ RSpec.describe Minigun::DSL do
     it 'allows defining pipeline block for grouping' do
       test_class.pipeline do
         producer(:grouped_producer) { "code" }
-        consumer(:grouped_consumer) { "code" }
+        consumer(:grouped_consumer) { |x| x }
       end
 
-      expect(test_class._minigun_task.stages[:producer][:name]).to eq(:grouped_producer)
-      expect(test_class._minigun_task.stages[:consumer][0][:name]).to eq(:grouped_consumer)
+      producer = test_class._minigun_task.stages[:grouped_producer]
+      consumer = test_class._minigun_task.stages[:grouped_consumer]
+
+      expect(producer).not_to be_nil
+      expect(producer.name).to eq(:grouped_producer)
+      expect(consumer).not_to be_nil
+      expect(consumer.name).to eq(:grouped_consumer)
     end
   end
 
@@ -149,12 +153,28 @@ RSpec.describe Minigun::DSL do
 
     it 'correctly configures all components' do
       task = test_class._minigun_task
+      pipeline = task.implicit_pipeline
 
       expect(task.config[:max_threads]).to eq(3)
       expect(task.config[:max_processes]).to eq(2)
-      expect(task.stages[:producer]).not_to be_nil
-      expect(task.stages[:processor].size).to eq(1)
-      expect(task.stages[:consumer]).not_to be_nil
+
+      # Check that stages were added by name
+      expect(pipeline.stages[:generate]).not_to be_nil
+      expect(pipeline.stages[:double]).not_to be_nil
+      expect(pipeline.stages[:collect]).not_to be_nil
+
+      # Verify stage properties based on their characteristics
+      gen_stage = pipeline.stages[:generate]
+      double_stage = pipeline.stages[:double]
+      collect_stage = pipeline.stages[:collect]
+
+      expect(gen_stage.producer?).to be true
+      expect(double_stage.producer?).to be false
+      expect(double_stage.accumulator?).to be false
+      expect(collect_stage.producer?).to be false
+
+      # Verify we have 3 stages total
+      expect(pipeline.stages.size).to eq(3)
       expect(task.hooks[:before_run].size).to eq(1)
       expect(task.hooks[:after_run].size).to eq(1)
     end

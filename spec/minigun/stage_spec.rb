@@ -4,11 +4,6 @@ require 'spec_helper'
 
 RSpec.describe Minigun::Stage do
   describe 'base class' do
-    it 'raises NotImplementedError for abstract type method' do
-      stage = described_class.new(name: :test)
-      expect { stage.type }.to raise_error(NotImplementedError)
-    end
-
     it 'raises NotImplementedError for abstract execute method' do
       stage = described_class.new(name: :test)
       expect { stage.execute(Object.new) }.to raise_error(NotImplementedError)
@@ -16,29 +11,14 @@ RSpec.describe Minigun::Stage do
   end
 end
 
-RSpec.describe Minigun::ProducerStage do
-  describe '#type' do
-    it 'returns :producer' do
-      stage = described_class.new(name: :test, block: proc {})
-      expect(stage.type).to eq(:producer)
-    end
-  end
+RSpec.describe Minigun::AtomicStage do
+  describe 'producer behavior (block arity 0)' do
+    let(:stage) { described_class.new(name: :test, block: proc {}) }
 
-  describe '#emits?' do
-    it 'returns true' do
-      stage = described_class.new(name: :test, block: proc {})
-      expect(stage.emits?).to be true
+    it 'is a producer' do
+      expect(stage.producer?).to be true
     end
-  end
 
-  describe '#terminal?' do
-    it 'returns false' do
-      stage = described_class.new(name: :test, block: proc {})
-      expect(stage.terminal?).to be false
-    end
-  end
-
-  describe '#execute' do
     it 'executes without an item argument' do
       result = nil
       stage = described_class.new(
@@ -52,25 +32,15 @@ RSpec.describe Minigun::ProducerStage do
       expect(result).to eq(42)
     end
   end
-end
 
-RSpec.describe Minigun::ProcessorStage do
-  describe '#type' do
-    it 'returns :processor' do
-      stage = described_class.new(name: :test, block: proc {})
-      expect(stage.type).to eq(:processor)
+  describe 'processor behavior (block arity 1)' do
+    let(:stage) { described_class.new(name: :test, block: proc { |_x| }) }
+
+    it 'is not a producer' do
+      expect(stage.producer?).to be false
     end
-  end
 
-  describe '#emits?' do
-    it 'returns true' do
-      stage = described_class.new(name: :test, block: proc {})
-      expect(stage.emits?).to be true
-    end
-  end
-
-  describe '#execute_with_emit' do
-    it 'returns emitted items' do
+    it 'executes with emit and returns emitted items' do
       stage = described_class.new(
         name: :test,
         block: proc do |item|
@@ -85,53 +55,40 @@ RSpec.describe Minigun::ProcessorStage do
       expect(emitted).to eq([10, 15])
     end
   end
-end
 
-RSpec.describe Minigun::ConsumerStage do
-  describe '#type' do
-    it 'returns :consumer' do
-      stage = described_class.new(name: :test, block: proc {})
-      expect(stage.type).to eq(:consumer)
+  describe 'consumer behavior (has strategy option)' do
+    let(:stage) { described_class.new(name: :test, block: proc { |_x| }, options: { strategy: :spawn_fork }) }
+
+    it 'is not a producer' do
+      expect(stage.producer?).to be false
     end
-  end
 
-  describe '#emits?' do
-    it 'returns false' do
-      stage = described_class.new(name: :test, block: proc {})
-      expect(stage.emits?).to be false
-    end
-  end
-
-  describe '#terminal?' do
-    it 'returns true' do
-      stage = described_class.new(name: :test, block: proc {})
-      expect(stage.terminal?).to be true
+    it 'has spawn strategy' do
+      expect(stage.has_spawn_strategy?).to be true
     end
   end
 end
 
 RSpec.describe Minigun::AccumulatorStage do
-  describe '#type' do
-    it 'returns :accumulator' do
-      stage = described_class.new(name: :test, block: proc {})
-      expect(stage.type).to eq(:accumulator)
-    end
+  it 'is a special batching stage' do
+    stage = described_class.new(name: :test, block: proc {})
+    expect(stage.max_size).to eq(100)  # default
   end
 end
 
 RSpec.describe 'Stage common behavior' do
-  let(:stage) { Minigun::ProcessorStage.new(name: :test, block: proc { |x| x * 2 }, options: { foo: 'bar' }) }
+  let(:stage) { Minigun::AtomicStage.new(name: :test, block: proc { |x| x * 2 }, options: { foo: 'bar' }) }
 
   describe '#initialize' do
     it 'creates a stage with required attributes' do
       expect(stage.name).to eq(:test)
-      expect(stage.type).to eq(:processor)
+      expect(stage.producer?).to be false
       expect(stage.block).to be_a(Proc)
       expect(stage.options).to eq({ foo: 'bar' })
     end
 
     it 'works without options' do
-      simple = Minigun::ConsumerStage.new(name: :simple, block: proc {})
+      simple = Minigun::AtomicStage.new(name: :simple, block: proc { |_x| })
       expect(simple.name).to eq(:simple)
       expect(simple.options).to eq({})
     end
@@ -140,7 +97,7 @@ RSpec.describe 'Stage common behavior' do
   describe '#execute' do
     it 'executes the block with given context and item' do
       result = nil
-      stage = Minigun::ProcessorStage.new(
+      stage = Minigun::AtomicStage.new(
         name: :test,
         block: proc { |item| result = item * 2 }
       )
@@ -155,7 +112,7 @@ RSpec.describe 'Stage common behavior' do
       context = Object.new
       context.instance_variable_set(:@value, 100)
 
-      stage = Minigun::ProcessorStage.new(
+      stage = Minigun::AtomicStage.new(
         name: :test,
         block: proc { |item| @value + item }
       )
@@ -167,8 +124,8 @@ RSpec.describe 'Stage common behavior' do
 
   describe '#to_h' do
     it 'converts to hash representation' do
-      block = proc {}
-      stage = Minigun::ProcessorStage.new(
+      block = proc { |_x| }
+      stage = Minigun::AtomicStage.new(
         name: :test,
         block: block,
         options: { opt: 'val' }
@@ -178,7 +135,6 @@ RSpec.describe 'Stage common behavior' do
 
       expect(hash).to eq({
         name: :test,
-        type: :processor,
         block: block,
         options: { opt: 'val' }
       })
@@ -187,21 +143,20 @@ RSpec.describe 'Stage common behavior' do
 
   describe '#[]' do
     it 'provides hash-like access to attributes' do
-      block = proc {}
-      stage = Minigun::ProcessorStage.new(
+      block = proc { |_x| }
+      stage = Minigun::AtomicStage.new(
         name: :test,
         block: block,
         options: { foo: 'bar' }
       )
 
       expect(stage[:name]).to eq(:test)
-      expect(stage[:type]).to eq(:processor)
       expect(stage[:block]).to eq(block)
       expect(stage[:options]).to eq({ foo: 'bar' })
     end
 
     it 'returns nil for unknown keys' do
-      stage = Minigun::ProcessorStage.new(name: :test, block: proc {})
+      stage = Minigun::AtomicStage.new(name: :test, block: proc { |_x| })
       expect(stage[:unknown]).to be_nil
     end
   end

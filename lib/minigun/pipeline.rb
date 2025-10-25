@@ -4,7 +4,7 @@ module Minigun
   # Pipeline represents a single data processing pipeline with stages
   # A Pipeline can be standalone or part of a multi-pipeline Task
   class Pipeline
-    attr_reader :name, :config, :stages, :hooks, :dag, :input_queue, :output_queues
+    attr_reader :name, :config, :stages, :hooks, :dag, :input_queue, :output_queues, :stage_order
 
     def initialize(name, config = {})
       @name = name
@@ -18,12 +18,7 @@ module Minigun
         use_ipc: config[:use_ipc] || false
       }
 
-      @stages = {
-        producer: nil,
-        processor: [],
-        accumulator: nil,
-        consumer: []
-      }
+      @stages = {}  # { stage_name => Stage }
 
       # Pipeline-level hooks (run once per pipeline)
       @hooks = {
@@ -68,13 +63,8 @@ module Minigun
     def dup
       new_pipeline = Pipeline.new(@name, @config.dup)
 
-      # Copy stages (they're already Stage objects, so we keep references)
-      new_pipeline.instance_variable_set(:@stages, {
-        producer: @stages[:producer],
-        processor: @stages[:processor].dup,
-        accumulator: @stages[:accumulator],
-        consumer: @stages[:consumer].dup
-      })
+      # Copy stages hash (shallow copy - stages themselves are shared)
+      new_pipeline.instance_variable_set(:@stages, @stages.dup)
 
       # Copy hooks (keep references to blocks)
       new_pipeline.instance_variable_set(:@hooks, {
@@ -92,9 +82,8 @@ module Minigun
         after_fork: @stage_hooks[:after_fork].transform_values(&:dup)
       })
 
-      # Create a fresh DAG (edges will be rebuilt based on new stage order)
-      new_dag = DAG.new
-      @stage_order.each { |stage_name| new_dag.add_node(stage_name) }
+      # Duplicate the DAG with all nodes and edges
+      new_dag = @dag.dup
       new_pipeline.instance_variable_set(:@dag, new_dag)
       new_pipeline.instance_variable_set(:@stage_order, @stage_order.dup)
 
@@ -103,21 +92,7 @@ module Minigun
 
     # Add a stage to this pipeline
     def add_stage(type, name, options = {}, &block)
-      # Insert processors before consumers (for inheritance support)
-      if type == :processor && !@stages[:consumer].empty?
-        # Find the first consumer in stage_order
-        first_consumer_idx = @stage_order.index { |s| @stages[:consumer].any? { |c| c.name == s } }
-        if first_consumer_idx
-          @stage_order.insert(first_consumer_idx, name)
-        else
-          @stage_order << name
-        end
-      else
-        @stage_order << name
-      end
-
-      # Rebuild DAG nodes to match stage_order
-      @dag.instance_variable_set(:@nodes, @stage_order.dup)
+      # We'll add to stage_order after we create the stage so we know what it is
 
       # Extract routing information
       to_targets = options.delete(:to)
@@ -144,28 +119,36 @@ module Minigun
 
       # Create appropriate stage subclass
       stage = case type
-              when :producer
-                ProducerStage.new(name: name, block: block, options: options)
-              when :processor
-                ProcessorStage.new(name: name, block: block, options: options)
+              when :stage, :producer, :processor, :consumer
+                AtomicStage.new(name: name, block: block, options: options)
               when :accumulator
                 AccumulatorStage.new(name: name, block: block, options: options)
-              when :consumer
-                ConsumerStage.new(name: name, block: block, options: options)
               else
                 raise Minigun::Error, "Unknown stage type: #{type}"
               end
 
-      # Store stage
-      case type
-      when :producer
-        @stages[:producer] = stage
-      when :processor
-        @stages[:processor] << stage
-      when :accumulator
-        @stages[:accumulator] = stage
-      when :consumer
-        @stages[:consumer] << stage
+      # Store stage by name
+      @stages[name] = stage
+
+      # Add to stage order and DAG
+      @stage_order << name
+      @dag.add_node(name)
+    end
+
+    # Reroute stages by modifying the DAG
+    # Example: reroute_stage :producer, to: :new_processor (instead of :consumer)
+    # This removes producer's old edges and adds new ones
+    def reroute_stage(from_stage, to:)
+      # Remove existing outgoing edges from this stage
+      old_targets = @dag.downstream(from_stage).dup
+      old_targets.each do |target|
+        @dag.instance_variable_get(:@edges)[from_stage].delete(target)
+        @dag.instance_variable_get(:@reverse_edges)[target].delete(from_stage)
+      end
+
+      # Add new edges
+      Array(to).each do |target|
+        @dag.add_edge(from_stage, target)
       end
     end
 
@@ -221,7 +204,8 @@ module Minigun
       # Run after_run hooks
       @hooks[:after_run].each { |h| context.instance_eval(&h) }
 
-      @accumulated_count
+      # Return produced count (or accumulated count if using accumulator)
+      @accumulated_count > 0 ? @accumulated_count : @produced_count.value
     end
 
     # Run this pipeline in a thread (for multi-pipeline execution)
@@ -234,13 +218,48 @@ module Minigun
       end
     end
 
+    def find_stage(name)
+      @stages[name]
+    end
+
+    def is_terminal_stage?(stage_name)
+      @dag.terminal?(stage_name)
+    end
+
+    def get_targets(stage_name)
+      targets = @dag.downstream(stage_name)
+
+      # If no targets and we have output queues, this is an output stage
+      # (Only non-terminal stages should output to queues - terminal stages consume)
+      if targets.empty? && !@output_queues.empty? && !is_terminal_stage?(stage_name)
+        # This item should be sent to output queues
+        return [:output]
+      end
+
+      targets
+    end
+
+    # Helper methods to find stages by characteristics
+    def find_producer
+      @stages.values.find { |stage| stage.producer? }
+    end
+
+    def find_accumulator
+      @stages.values.find { |stage| stage.accumulator? }
+    end
+
+    def find_consumers_with_spawn_strategies
+      spawn_strategies = [:spawn_thread, :spawn_fork, :spawn_ractor]
+      @stages.values.select { |stage| spawn_strategies.include?(stage.strategy) }
+    end
+
     private
 
     def start_producer
       queue = @queue
       produced_count = @produced_count
       in_flight_count = @in_flight_count
-      producer_stage = @stages[:producer]
+      producer_stage = find_producer
 
       # Handle both internal producer and input from upstream pipeline
       has_internal_producer = producer_stage && producer_stage.block
@@ -320,7 +339,7 @@ module Minigun
             target_stage = find_stage(target_name)
             next unless target_stage
 
-            if target_stage.type == :accumulator
+            if target_stage.accumulator?
               # Accumulator stage - batch items
               accumulator_buffers[target_name] << item
 
@@ -449,12 +468,41 @@ module Minigun
     def fork_consumer(batch_map, output_items)
       total_items = batch_map.values.sum(&:size)
 
-      if @config[:use_ipc] && Process.respond_to?(:fork)
-        fork_consumer_ipc(batch_map, output_items, total_items)
-      elsif Process.respond_to?(:fork)
-        fork_consumer_process(batch_map, output_items, total_items)
-      else
-        consume_in_threads(batch_map, output_items, total_items)
+      # Group consumers by strategy
+      strategy_groups = Hash.new { |h, k| h[k] = {} }
+
+      batch_map.each do |consumer_name, items|
+        # Get strategy from first item's stage (all items for a consumer have same strategy)
+        strategy = items.first[:stage].strategy
+        strategy_groups[strategy][consumer_name] = items
+      end
+
+      # Execute each strategy group
+      strategy_groups.each do |strategy, consumer_batch|
+        case strategy
+        when :spawn_fork
+          if Process.respond_to?(:fork)
+            fork_consumer_process(consumer_batch, output_items, total_items)
+          else
+            consume_in_threads(consumer_batch, output_items, total_items)
+          end
+        when :spawn_thread
+          consume_in_threads(consumer_batch, output_items, total_items)
+        when :spawn_ractor
+          consume_in_ractors(consumer_batch, output_items, total_items)
+        when :fork_ipc
+          if Process.respond_to?(:fork)
+            fork_consumer_ipc(consumer_batch, output_items, total_items)
+          else
+            consume_in_threads(consumer_batch, output_items, total_items)
+          end
+        when :ractor
+          consume_in_ractors(consumer_batch, output_items, total_items)
+        when :threaded, nil
+          consume_in_threads(consumer_batch, output_items, total_items)
+        else
+          raise Minigun::Error, "Unknown consumer strategy: #{strategy}"
+        end
       end
     end
 
@@ -502,7 +550,14 @@ module Minigun
     end
 
     def consume_in_threads(batch_map, output_items, total_items)
-      log_info "[Pipeline:#{@name}][Consumer] Processing #{total_items} items (no fork)"
+      log_info "[Pipeline:#{@name}][Consumer] Processing #{total_items} items (threaded)"
+      consume_batch(batch_map, output_items)
+    end
+
+    def consume_in_ractors(batch_map, output_items, total_items)
+      log_info "[Pipeline:#{@name}][Consumer] Processing #{total_items} items (ractors)"
+      # Ractor implementation - for now, fall back to threads
+      # TODO: Implement true ractor-based execution
       consume_batch(batch_map, output_items)
     end
 
@@ -585,21 +640,19 @@ module Minigun
     end
 
     def validate_spawn_strategies!
-      spawn_strategies = [:spawn_thread, :spawn_fork, :spawn_ractor]
+      spawn_consumers = find_consumers_with_spawn_strategies
 
-      @stages[:consumer].each do |consumer_stage|
-        next unless spawn_strategies.include?(consumer_stage.options[:strategy])
-
+      spawn_consumers.each do |consumer_stage|
         # Check if there's an accumulator before this consumer
         upstream_stages = @dag.upstream(consumer_stage.name)
         has_accumulator = upstream_stages.any? do |upstream_name|
           stage = find_stage(upstream_name)
-          stage && stage.type == :accumulator
+          stage && stage.accumulator?
         end
 
         unless has_accumulator
           raise Minigun::Error,
-            "[Pipeline:#{@name}] Consumer '#{consumer_stage.name}' uses strategy '#{consumer_stage.options[:strategy]}' " \
+            "[Pipeline:#{@name}] Consumer '#{consumer_stage.name}' uses strategy '#{consumer_stage.strategy}' " \
             "but has no preceding accumulator stage. Add an accumulator stage before this consumer."
         end
       end
@@ -607,40 +660,51 @@ module Minigun
 
     def fill_sequential_gaps_by_definition_order!
       @stage_order.each_with_index do |stage_name, index|
+        # Skip if already has downstream edges
         next if @dag.downstream(stage_name).any?
+        # Skip if this is the last stage
         next if index >= @stage_order.size - 1
-        next if is_consumer_stage?(stage_name)
 
         next_stage = @stage_order[index + 1]
+        
+        # Skip if this stage is part of a fan-out pattern
+        # Check if the next_stage is a sibling (i.e., shares the same upstream)
+        upstream_stages = @dag.upstream(stage_name)
+        if upstream_stages.any?
+          # Get all siblings (stages that share the same upstream)
+          siblings = upstream_stages.flat_map { |up| @dag.downstream(up) } - [stage_name]
+          
+          # If next_stage is a sibling, this is a fan-out pattern - don't add sequential edge
+          next if siblings.include?(next_stage)
+          
+          # If any sibling already routes to next_stage, this is also a fan-out pattern
+          next if siblings.any? { |sib| @dag.downstream(sib).include?(next_stage) }
+        end
+
+        # Don't add edge if it would create a cycle
+        # (i.e., next_stage is already upstream of stage_name)
+        next if would_create_cycle?(stage_name, next_stage)
+
         @dag.add_edge(stage_name, next_stage)
       end
     end
 
-    def is_consumer_stage?(stage_name)
-      stage = find_stage(stage_name)
-      stage && stage.is_a?(ConsumerStage)
-    end
+    def would_create_cycle?(from, to)
+      # Check if 'to' can already reach 'from' (which would create a cycle)
+      visited = Set.new
+      queue = [to]
 
-    def get_targets(stage_name)
-      targets = @dag.downstream(stage_name)
+      while queue.any?
+        current = queue.shift
+        next if visited.include?(current)
+        visited.add(current)
 
-      # If no targets and we have output queues, this is an output stage
-      if targets.empty? && !@output_queues.empty? && !is_consumer_stage?(stage_name)
-        # This item should be sent to output queues
-        return [:output]
+        return true if current == from
+
+        queue.concat(@dag.downstream(current))
       end
 
-      targets
-    end
-
-    def find_stage(name)
-      return @stages[:producer] if @stages[:producer] && @stages[:producer].name == name
-      return @stages[:accumulator] if @stages[:accumulator] && @stages[:accumulator].name == name
-
-      consumer = @stages[:consumer].find { |c| c.name == name }
-      return consumer if consumer
-
-      @stages[:processor].find { |s| s.name == name }
+      false
     end
 
     def log_info(msg)

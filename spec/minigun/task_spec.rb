@@ -15,10 +15,7 @@ RSpec.describe Minigun::Task do
     end
 
     it 'initializes empty stages' do
-      expect(task.stages[:producer]).to be_nil
-      expect(task.stages[:processor]).to eq([])
-      expect(task.stages[:accumulator]).to be_nil
-      expect(task.stages[:consumer]).to eq([])
+      expect(task.stages).to eq({})
     end
 
     it 'initializes empty hooks' do
@@ -41,37 +38,41 @@ RSpec.describe Minigun::Task do
       block = proc { "producer" }
       task.add_stage(:producer, :test_producer, &block)
 
-      expect(task.stages[:producer]).not_to be_nil
-      expect(task.stages[:producer][:name]).to eq(:test_producer)
-      expect(task.stages[:producer][:block]).to eq(block)
+      expect(task.stages[:test_producer]).not_to be_nil
+      expect(task.stages[:test_producer].name).to eq(:test_producer)
+      expect(task.stages[:test_producer].block).to eq(block)
+      expect(task.stages[:test_producer].producer?).to be true
     end
 
-    it 'adds processor stage to array' do
-      block1 = proc { "processor1" }
-      block2 = proc { "processor2" }
+    it 'adds processor stages' do
+      block1 = proc { |x| x }
+      block2 = proc { |x| x }
 
       task.add_stage(:processor, :proc1, &block1)
       task.add_stage(:processor, :proc2, &block2)
 
-      expect(task.stages[:processor].size).to eq(2)
-      expect(task.stages[:processor][0][:name]).to eq(:proc1)
-      expect(task.stages[:processor][1][:name]).to eq(:proc2)
+      # Verify both were added
+      expect(task.stages[:proc1]).not_to be_nil
+      expect(task.stages[:proc2]).not_to be_nil
+      expect(task.stages[:proc1].name).to eq(:proc1)
+      expect(task.stages[:proc2].name).to eq(:proc2)
     end
 
     it 'adds accumulator stage' do
       block = proc { "accumulator" }
       task.add_stage(:accumulator, :test_acc, &block)
 
-      expect(task.stages[:accumulator]).not_to be_nil
-      expect(task.stages[:accumulator][:name]).to eq(:test_acc)
+      expect(task.stages[:test_acc]).not_to be_nil
+      expect(task.stages[:test_acc].name).to eq(:test_acc)
+      expect(task.stages[:test_acc].accumulator?).to be true
     end
 
     it 'adds consumer stage' do
-      block = proc { "consumer" }
+      block = proc { |x| x }
       task.add_stage(:consumer, :test_consumer, &block)
 
-      expect(task.stages[:consumer]).not_to be_empty
-      expect(task.stages[:consumer][0][:name]).to eq(:test_consumer)
+      expect(task.stages[:test_consumer]).not_to be_nil
+      expect(task.stages[:test_consumer].name).to eq(:test_consumer)
     end
   end
 

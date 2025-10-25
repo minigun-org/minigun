@@ -118,7 +118,9 @@ RSpec.describe 'Stage-Specific Hooks' do
           3.times { |i| emit(i) }
         end
 
-        fork_accumulate :process do |num|
+        accumulator :batch
+
+        spawn_fork :process do |num|
           @mutex.synchronize { @events << :process_run }
         end
 

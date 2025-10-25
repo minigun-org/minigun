@@ -57,15 +57,6 @@ module Minigun
         _minigun_task.add_stage(:consumer, name, options, &block)
       end
 
-      # Fork aliases
-      def cow_fork(name = :consumer, options = {}, &block)
-        _minigun_task.add_stage(:consumer, name, options, &block)
-      end
-
-      def ipc_fork(name = :consumer, options = {}, &block)
-        _minigun_task.add_stage(:consumer, name, options, &block)
-      end
-
       # Hook methods
       def before_run(&block)
         _minigun_task.add_hook(:before_run, &block)
@@ -112,33 +103,34 @@ module Minigun
         @pipeline = pipeline
       end
 
-      def producer(name = :producer, options = {}, &block)
-        @pipeline.add_stage(:producer, name, options, &block)
+      # Main unified stage method
+      # Stage determines its own type based on block arity
+      def stage(name, options = {}, &block)
+        # Just pass generic :stage type - Pipeline will create AtomicStage which knows its own type
+        @pipeline.add_stage(:stage, name, options, &block)
       end
 
-      def processor(name, options = {}, &block)
-        @pipeline.add_stage(:processor, name, options, &block)
-      end
-
+      # Accumulator is special - kept explicit
       def accumulator(name = :accumulator, options = {}, &block)
         @pipeline.add_stage(:accumulator, name, options, &block)
       end
 
-      def consumer(name = :consumer, options = {}, &block)
-        @pipeline.add_stage(:consumer, name, options, &block)
-      end
+      # Aliases for backward compatibility (all use inference)
+      alias producer stage
+      alias processor stage
+      alias consumer stage
 
-      # Spawn strategies (require preceding accumulator stage)
+      # Convenience methods for spawn strategies
       def spawn_thread(name = :consumer, options = {}, &block)
-        @pipeline.add_stage(:consumer, name, options.merge(strategy: :spawn_thread), &block)
+        stage(name, options.merge(strategy: :spawn_thread), &block)
       end
 
       def spawn_fork(name = :consumer, options = {}, &block)
-        @pipeline.add_stage(:consumer, name, options.merge(strategy: :spawn_fork), &block)
+        stage(name, options.merge(strategy: :spawn_fork), &block)
       end
 
       def spawn_ractor(name = :consumer, options = {}, &block)
-        @pipeline.add_stage(:consumer, name, options.merge(strategy: :spawn_ractor), &block)
+        stage(name, options.merge(strategy: :spawn_ractor), &block)
       end
 
       def before_run(&block)
@@ -177,6 +169,11 @@ module Minigun
       def after(stage_name, &block)
         @pipeline.add_stage_hook(:after, stage_name, &block)
       end
+
+      # Routing
+      def reroute_stage(from_stage, to:)
+        @pipeline.reroute_stage(from_stage, to: to)
+      end
     end
 
     module ClassMethods
@@ -197,34 +194,34 @@ module Minigun
         _minigun_task.set_config(:max_retries, value)
       end
 
-      # Stage definition methods (for single-pipeline mode)
-      def producer(name = :producer, options = {}, &block)
-        _minigun_task.add_stage(:producer, name, options, &block)
+      # Main unified stage method (for single-pipeline mode)
+      # Stage determines its own type based on block arity
+      def stage(name, options = {}, &block)
+        # Just pass generic :stage type - Pipeline will create AtomicStage which knows its own type
+        _minigun_task.add_stage(:stage, name, options, &block)
       end
 
-      def processor(name, options = {}, &block)
-        _minigun_task.add_stage(:processor, name, options, &block)
-      end
-
+      # Accumulator is special - kept explicit
       def accumulator(name = :accumulator, options = {}, &block)
         _minigun_task.add_stage(:accumulator, name, options, &block)
       end
 
-      def consumer(name = :consumer, options = {}, &block)
-        _minigun_task.add_stage(:consumer, name, options, &block)
-      end
+      # Aliases for backward compatibility (all use inference)
+      alias producer stage
+      alias processor stage
+      alias consumer stage
 
-      # Spawn strategies (require preceding accumulator stage)
+      # Convenience methods for spawn strategies
       def spawn_thread(name = :consumer, options = {}, &block)
-        _minigun_task.add_stage(:consumer, name, options.merge(strategy: :spawn_thread), &block)
+        stage(name, options.merge(strategy: :spawn_thread), &block)
       end
 
       def spawn_fork(name = :consumer, options = {}, &block)
-        _minigun_task.add_stage(:consumer, name, options.merge(strategy: :spawn_fork), &block)
+        stage(name, options.merge(strategy: :spawn_fork), &block)
       end
 
       def spawn_ractor(name = :consumer, options = {}, &block)
-        _minigun_task.add_stage(:consumer, name, options.merge(strategy: :spawn_ractor), &block)
+        stage(name, options.merge(strategy: :spawn_ractor), &block)
       end
 
       # Hook methods
@@ -259,6 +256,11 @@ module Minigun
 
       def after(stage_name, &block)
         _minigun_task.implicit_pipeline.add_stage_hook(:after, stage_name, &block)
+      end
+
+      # Routing
+      def reroute_stage(from_stage, to:)
+        _minigun_task.implicit_pipeline.reroute_stage(from_stage, to: to)
       end
     end
 
