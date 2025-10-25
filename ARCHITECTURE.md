@@ -23,7 +23,7 @@ The mode is automatically detected based on usage:
 - **Single-Pipeline Mode**: If no named pipelines defined (`@pipelines.empty?`)
   - Runs `@implicit_pipeline` directly
   - All stage definitions go to `@implicit_pipeline`
-  
+
 - **Multi-Pipeline Mode**: If any named pipelines exist
   - Runs all pipelines in `@pipelines` with DAG orchestration
   - `@implicit_pipeline` is ignored
@@ -34,7 +34,7 @@ The mode is automatically detected based on usage:
 # Class-level stage definitions ALWAYS go to @implicit_pipeline
 class MyTask
   include Minigun::DSL
-  
+
   producer :fetch { ... }    # → task.implicit_pipeline.add_stage(...)
   consumer :save { ... }     # → task.implicit_pipeline.add_stage(...)
 end
@@ -42,7 +42,7 @@ end
 # Named pipeline blocks set stages on that specific pipeline
 class MyTask
   include Minigun::DSL
-  
+
   pipeline :extract do       # Creates @pipelines[:extract]
     producer :fetch { ... }  # → @pipelines[:extract].add_stage(...)
   end
@@ -208,7 +208,7 @@ end
 ```ruby
 class SimpleTask
   include Minigun::DSL
-  
+
   producer :fetch { emit(1) }
   consumer :save { |x| puts x }
 end
@@ -224,11 +224,11 @@ end
 ```ruby
 class ComplexTask
   include Minigun::DSL
-  
+
   pipeline :extract, to: :transform do
     producer :fetch { emit(1) }
   end
-  
+
   pipeline :transform do
     producer :input
     consumer :save { |x| puts x }
@@ -246,10 +246,10 @@ end
 
 The refactored architecture is:
 
-✅ **Cleaner** - No mode detection, explicit pipeline objects  
-✅ **Simpler** - Delegation is straightforward  
-✅ **Clearer** - Intent is obvious from code  
-✅ **Maintainable** - Less conditional logic  
+✅ **Cleaner** - No mode detection, explicit pipeline objects
+✅ **Simpler** - Delegation is straightforward
+✅ **Clearer** - Intent is obvious from code
+✅ **Maintainable** - Less conditional logic
 ✅ **Backward Compatible** - All tests pass (120/120)
 
 The key insight: **Use a dedicated `@implicit_pipeline` for delegation instead of complex mode detection.**

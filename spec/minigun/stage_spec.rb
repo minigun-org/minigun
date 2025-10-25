@@ -5,8 +5,13 @@ require 'spec_helper'
 RSpec.describe Minigun::Stage do
   describe 'base class' do
     it 'raises NotImplementedError for abstract type method' do
-      stage = described_class.new(name: :test, block: proc {})
+      stage = described_class.new(name: :test)
       expect { stage.type }.to raise_error(NotImplementedError)
+    end
+
+    it 'raises NotImplementedError for abstract execute method' do
+      stage = described_class.new(name: :test)
+      expect { stage.execute(Object.new) }.to raise_error(NotImplementedError)
     end
   end
 end

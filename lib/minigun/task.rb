@@ -19,7 +19,7 @@ module Minigun
 
       # Implicit pipeline for single-pipeline mode (backward compatibility)
       @implicit_pipeline = Pipeline.new(:default, @config)
-      
+
       # Named pipelines for multi-pipeline mode
       @pipelines = {}  # { pipeline_name => Pipeline }
       @pipeline_dag = DAG.new  # Pipeline-level routing
@@ -28,10 +28,10 @@ module Minigun
     # Set config value (applies to all pipelines)
     def set_config(key, value)
       @config[key] = value
-      
+
       # Update implicit pipeline config
       @implicit_pipeline.config[key] = value
-      
+
       # Update all named pipelines
       @pipelines.each_value do |pipeline|
         pipeline.config[key] = value
@@ -48,12 +48,37 @@ module Minigun
       @implicit_pipeline.add_hook(type, &block)
     end
 
+    # Add a nested pipeline as a stage within the implicit pipeline
+    def add_nested_pipeline(name, options = {}, &block)
+      # Create a PipelineStage and configure it
+      pipeline_stage = PipelineStage.new(name: name, options: options)
+      
+      # Add stages to the nested pipeline via block
+      if block_given?
+        dsl = Minigun::DSL::PipelineDSL.new(pipeline_stage)
+        dsl.instance_eval(&block)
+      end
+      
+      # Actually, let's just directly add it to the implicit pipeline
+      # The implicit pipeline's add_stage method will handle it
+      @implicit_pipeline.stages[:processor] << pipeline_stage
+      @implicit_pipeline.dag.add_node(name)
+      
+      # Extract routing if specified
+      to_targets = options[:to]
+      if to_targets
+        Array(to_targets).each { |target| @implicit_pipeline.dag.add_edge(name, target) }
+      end
+      
+      pipeline_stage
+    end
+
     # Define a named pipeline with routing
     def define_pipeline(name, options = {}, &block)
       # Create or get named pipeline
       pipeline = @pipelines[name] ||= Pipeline.new(name, @config)
       @pipeline_dag.add_node(name)
-      
+
       # Extract pipeline-level routing
       to_targets = options[:to]
       if to_targets
@@ -61,12 +86,12 @@ module Minigun
           @pipeline_dag.add_edge(name, target)
         end
       end
-      
+
       # Execute block in context of pipeline definition
       if block_given?
         yield pipeline
       end
-      
+
       pipeline
     end
 

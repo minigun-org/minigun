@@ -72,20 +72,25 @@ module Minigun
         _minigun_task.add_hook(:after_fork, &block)
       end
 
-      # Pipeline block - supports two modes:
-      # 1. pipeline do...end - Single pipeline mode (backward compatible, just grouping)
-      # 2. pipeline :name, to: :other do...end - Multi-pipeline mode with routing
+      # Pipeline block - supports three modes:
+      # 1. pipeline do...end - Grouping (backward compatible)
+      # 2. pipeline :name do...end - Nested pipeline (stage within implicit pipeline)
+      # 3. pipeline :name, to: :other - Multi-pipeline (top-level pipeline routing)
       def pipeline(name = nil, options = {}, &block)
         if name.nil?
           # Mode 1: No name, just eval block in class context (backward compatible)
           class_eval(&block)
-        else
-          # Mode 2: Named pipeline with routing
+        elsif options[:to] || _minigun_task.pipelines.any?
+          # Mode 3: Has routing or other pipelines exist → Multi-pipeline mode
           _minigun_task.define_pipeline(name, options) do |pipeline|
             # Create a DSL context for this specific pipeline
             pipeline_dsl = PipelineDSL.new(pipeline)
             pipeline_dsl.instance_eval(&block) if block_given?
           end
+        else
+          # Mode 2: Named but no routing → Nested pipeline stage in implicit pipeline
+          # Create a PipelineStage and add it to implicit pipeline
+          _minigun_task.add_nested_pipeline(name, options, &block)
         end
       end
     end
@@ -112,13 +117,21 @@ module Minigun
         @pipeline.add_stage(:consumer, name, options, &block)
       end
 
-      def cow_fork(name = :consumer, options = {}, &block)
-        @pipeline.add_stage(:consumer, name, options, &block)
+      def fork_accumulate(name = :consumer, options = {}, &block)
+        @pipeline.add_stage(:consumer, name, options.merge(strategy: :fork_accumulate), &block)
       end
 
-      def ipc_fork(name = :consumer, options = {}, &block)
-        @pipeline.add_stage(:consumer, name, options, &block)
+      def fork_ipc(name = :consumer, options = {}, &block)
+        @pipeline.add_stage(:consumer, name, options.merge(strategy: :fork_ipc), &block)
       end
+
+      def ractor_accumulate(name = :consumer, options = {}, &block)
+        @pipeline.add_stage(:consumer, name, options.merge(strategy: :ractor_accumulate), &block)
+      end
+
+      # Backward compatibility aliases
+      alias cow_fork fork_accumulate
+      alias ipc_fork fork_ipc
 
       def before_run(&block)
         @pipeline.add_hook(:before_run, &block)
@@ -172,14 +185,22 @@ module Minigun
         _minigun_task.add_stage(:consumer, name, options, &block)
       end
 
-      # Fork aliases
-      def cow_fork(name = :consumer, options = {}, &block)
-        _minigun_task.add_stage(:consumer, name, options, &block)
+      # Fork/Ractor strategies
+      def fork_accumulate(name = :consumer, options = {}, &block)
+        _minigun_task.add_stage(:consumer, name, options.merge(strategy: :fork_accumulate), &block)
       end
 
-      def ipc_fork(name = :consumer, options = {}, &block)
-        _minigun_task.add_stage(:consumer, name, options, &block)
+      def fork_ipc(name = :consumer, options = {}, &block)
+        _minigun_task.add_stage(:consumer, name, options.merge(strategy: :fork_ipc), &block)
       end
+
+      def ractor_accumulate(name = :consumer, options = {}, &block)
+        _minigun_task.add_stage(:consumer, name, options.merge(strategy: :ractor_accumulate), &block)
+      end
+
+      # Backward compatibility aliases
+      alias cow_fork fork_accumulate
+      alias ipc_fork fork_ipc
 
       # Hook methods
       def before_run(&block)
