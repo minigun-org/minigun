@@ -278,7 +278,7 @@ module Minigun
         if has_internal_producer
           # Internal producer generates items
           producer_name = producer_stage.name
-          stage_stats = @stats.for_stage(producer_name, is_non_terminal: true)
+          stage_stats = @stats.for_stage(producer_name, is_terminal: false)
           stage_stats.start!
 
           log_info "[Pipeline:#{@name}][Producer] Starting"
@@ -449,9 +449,9 @@ module Minigun
     end
 
     def execute_stage(stage, item)
-      # Non-terminal stages produce items for downstream stages
-      is_non_terminal = !@dag.terminal?(stage.name)
-      stage_stats = @stats.for_stage(stage.name, is_non_terminal: is_non_terminal)
+      # Terminal stages are final consumers
+      is_terminal = @dag.terminal?(stage.name)
+      stage_stats = @stats.for_stage(stage.name, is_terminal: is_terminal)
       stage_stats.start! unless stage_stats.start_time
       start_time = Time.now
 
@@ -610,7 +610,7 @@ module Minigun
             item = item_data[:item]
             stage = item_data[:stage]
             # Terminal consumers don't produce items
-            stage_stats = @stats.for_stage(stage.name, is_non_terminal: false)
+            stage_stats = @stats.for_stage(stage.name, is_terminal: true)
             stage_stats.start! unless stage_stats.start_time
             start_time = Time.now
 

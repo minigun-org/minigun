@@ -6,23 +6,21 @@ module Minigun
     attr_reader :stage_name, :start_time, :end_time
     attr_reader :items_produced, :items_consumed, :items_failed
 
-    # Latency tracking - sample at exponentially increasing intervals
-    INITIAL_SAMPLE_SIZE = 10
-    SAMPLE_GROWTH_FACTOR = 2
+    # Latency tracking - reservoir sampling for uniform distribution
+    RESERVOIR_SIZE = 1000
 
-    def initialize(stage_name, is_non_terminal: false)
+    def initialize(stage_name, is_terminal: false)
       @stage_name = stage_name
-      @is_non_terminal = is_non_terminal
+      @is_terminal = is_terminal
       @start_time = nil
       @end_time = nil
       @items_produced = 0
       @items_consumed = 0
       @items_failed = 0
 
-      # Latency tracking
+      # Latency tracking - reservoir sampling
       @latency_samples = []
-      @next_sample_at = INITIAL_SAMPLE_SIZE
-      @sample_interval = INITIAL_SAMPLE_SIZE
+      @latency_count = 0  # Total number of latency observations
       @mutex = Mutex.new
     end
 
@@ -49,15 +47,22 @@ module Minigun
       @mutex.synchronize { @items_failed += count }
     end
 
-    # Record latency for an item (in seconds)
+    # Record latency for an item (in seconds) using reservoir sampling
+    # This ensures uniform probability distribution across all items
     def record_latency(duration)
       @mutex.synchronize do
-        # Sample at exponentially increasing intervals
-        # Sample at: 10, 20, 40, 80, 160, 320, 640, 1280...
-        if total_items >= @next_sample_at
+        @latency_count += 1
+
+        if @latency_samples.size < RESERVOIR_SIZE
+          # Reservoir not full yet, just add the sample
           @latency_samples << duration
-          @sample_interval *= SAMPLE_GROWTH_FACTOR
-          @next_sample_at += @sample_interval
+        else
+          # Reservoir is full, randomly replace an existing sample
+          # Each item has probability RESERVOIR_SIZE / @latency_count of being kept
+          random_index = rand(@latency_count)
+          if random_index < RESERVOIR_SIZE
+            @latency_samples[random_index] = duration
+          end
         end
       end
     end
@@ -81,10 +86,10 @@ module Minigun
     end
 
     # Total items processed
-    # For non-terminal stages (produce items for downstream), count produced items
     # For terminal stages (final consumers), count consumed items
+    # For non-terminal stages (produce items for downstream), count produced items
     def total_items
-      @is_non_terminal ? @items_produced : @items_consumed
+      @is_terminal ? @items_consumed : @items_produced
     end
 
     # Success rate
@@ -144,7 +149,8 @@ module Minigun
             p90: (p90 * 1000).round(2),
             p95: (p95 * 1000).round(2),
             p99: (p99 * 1000).round(2),
-            samples: @latency_samples.size
+            samples: @latency_samples.size,
+            observations: @latency_count  # Total items measured
           }
         end
       end
@@ -184,8 +190,8 @@ module Minigun
     end
 
     # Get or create stats for a stage
-    def for_stage(stage_name, is_non_terminal: false)
-      @stage_stats[stage_name] ||= Stats.new(stage_name, is_non_terminal: is_non_terminal)
+    def for_stage(stage_name, is_terminal: false)
+      @stage_stats[stage_name] ||= Stats.new(stage_name, is_terminal: is_terminal)
     end
 
     # Mark pipeline as started
