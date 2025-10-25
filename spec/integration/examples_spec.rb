@@ -370,7 +370,9 @@ RSpec.describe 'Examples Integration' do
       '21_inline_hook_procs.rb',
       '22_reroute_stage.rb',
       '23_runner_features.rb',
-      '24_statistics_demo.rb'
+      '24_statistics_demo.rb',
+      '25_multiple_producers.rb',
+      '26_multi_pipeline_with_producers.rb'
     ]
 
     missing_tests = example_basenames - tested_examples

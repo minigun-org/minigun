@@ -253,6 +253,10 @@ module Minigun
       @stages.values.find { |stage| stage.producer? }
     end
 
+    def find_all_producers
+      @stages.values.select { |stage| stage.producer? }
+    end
+
     def find_accumulator
       @stages.values.find { |stage| stage.accumulator? }
     end
@@ -268,60 +272,81 @@ module Minigun
       queue = @queue
       produced_count = @produced_count
       in_flight_count = @in_flight_count
-      producer_stage = find_producer
+      producer_stages = find_all_producers
 
-      # Handle both internal producer and input from upstream pipeline
-      has_internal_producer = producer_stage && producer_stage.block
+      # Handle both internal producers and input from upstream pipeline
+      has_internal_producers = producer_stages.any? { |p| p.block }
       has_input_queue = @input_queue
 
       Thread.new do
-        if has_internal_producer
-          # Internal producer generates items
-          producer_name = producer_stage.name
-          stage_stats = @stats.for_stage(producer_name, is_terminal: false)
-          stage_stats.start!
+        producer_threads = []
 
-          log_info "[Pipeline:#{@name}][Producer] Starting"
+        if has_internal_producers
+          # Start each producer in its own thread
+          producers_with_blocks = producer_stages.select { |p| p.block }
+          log_info "[Pipeline:#{@name}][Producers] Starting #{producers_with_blocks.size} producer(s)"
 
-          # Execute before hooks for this producer
-          execute_stage_hooks(:before, producer_name)
+          producers_with_blocks.each do |producer_stage|
+            producer_threads << Thread.new do
+              producer_name = producer_stage.name
+              stage_stats = @stats.for_stage(producer_name, is_terminal: false)
+              stage_stats.start!
 
-          # Create emit method for producer
-          emit_proc = proc do |item|
-            in_flight_count.increment
-            queue << [item, producer_name]
-            produced_count.increment
-            stage_stats.increment_produced
+              log_info "[Pipeline:#{@name}][Producer:#{producer_name}] Starting"
+
+              begin
+                # Execute before hooks for this producer
+                execute_stage_hooks(:before, producer_name)
+
+                # Create emit method for this producer (thread-local context)
+                producer_context = @context.dup
+                emit_proc = proc do |item|
+                  in_flight_count.increment
+                  queue << [item, producer_name]
+                  produced_count.increment
+                  stage_stats.increment_produced
+                end
+
+                # Bind emit to this producer's context
+                producer_context.define_singleton_method(:emit, &emit_proc)
+
+                # Run producer block
+                producer_context.instance_eval(&producer_stage.block)
+
+                stage_stats.finish!
+                log_info "[Pipeline:#{@name}][Producer:#{producer_name}] Done. Produced #{stage_stats.items_produced} items"
+
+                # Execute after hooks for this producer
+                execute_stage_hooks(:after, producer_name)
+              rescue => e
+                stage_stats.finish!
+                log_info "[Pipeline:#{@name}][Producer:#{producer_name}] Error: #{e.message}"
+                # Don't propagate error - other producers should continue
+              end
+            end
           end
-
-          # Bind emit to context
-          @context.define_singleton_method(:emit, &emit_proc)
-
-          # Run producer block
-          @context.instance_eval(&producer_stage.block)
-
-          stage_stats.finish!
-          log_info "[Pipeline:#{@name}][Producer] Done. Produced #{produced_count.value} items"
-
-          # Execute after hooks for this producer
-          execute_stage_hooks(:after, producer_name)
         end
 
         if has_input_queue
           # Consume from input queue (upstream pipeline)
-          log_info "[Pipeline:#{@name}][Input] Waiting for upstream items"
+          producer_threads << Thread.new do
+            log_info "[Pipeline:#{@name}][Input] Waiting for upstream items"
 
-          loop do
-            item = @input_queue.pop
-            break if item == :END_OF_QUEUE
+            loop do
+              item = @input_queue.pop
+              break if item == :END_OF_QUEUE
 
-            in_flight_count.increment
-            queue << [item, :input]
-            produced_count.increment
+              in_flight_count.increment
+              queue << [item, :input]
+              produced_count.increment
+            end
+
+            log_info "[Pipeline:#{@name}][Input] Upstream finished"
           end
-
-          log_info "[Pipeline:#{@name}][Input] Upstream finished"
         end
+
+        # Wait for all producers to finish
+        producer_threads.each(&:join)
 
         # Wait for all items to be processed
         sleep 0.01 while in_flight_count.value > 0
@@ -661,11 +686,11 @@ module Minigun
     end
 
     def build_dag_routing!
-      if @dag.edges.values.all?(&:empty?)
-        @dag.build_sequential!
-      else
-        fill_sequential_gaps_by_definition_order!
-      end
+      # Handle multiple producers specially - they should all connect to first non-producer
+      handle_multiple_producers_routing!
+
+      # Fill any remaining sequential gaps (handles fan-out, siblings, cycles)
+      fill_sequential_gaps_by_definition_order!
 
       @dag.validate!
       validate_stages_exist!
@@ -705,7 +730,24 @@ module Minigun
       end
     end
 
+    def handle_multiple_producers_routing!
+      producers = @stage_order.select { |s| find_stage(s)&.producer? }
+      first_non_producer = @stage_order.find { |s| !find_stage(s)&.producer? }
+
+      if producers.size > 1 && first_non_producer
+        # Multiple producers should all connect to the first non-producer, not to each other
+        # BUT: only connect producers that don't already have explicit routing
+        producers.each do |producer_name|
+          # Skip if this producer already has explicit downstream edges
+          if @dag.downstream(producer_name).empty?
+            @dag.add_edge(producer_name, first_non_producer)
+          end
+        end
+      end
+    end
+
     def fill_sequential_gaps_by_definition_order!
+      # Then fill remaining sequential gaps
       @stage_order.each_with_index do |stage_name, index|
         # Skip if already has downstream edges
         next if @dag.downstream(stage_name).any?
