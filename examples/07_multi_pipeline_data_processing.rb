@@ -43,8 +43,6 @@ class DataProcessingPipeline
 
   # Pipeline 2: Validate - Splits valid/invalid data
   pipeline :validate, to: [:process_fast, :process_slow] do
-    producer :input
-
     processor :check_validity do |item|
       if item[:valid]
         emit(item)
@@ -74,8 +72,6 @@ class DataProcessingPipeline
 
   # Pipeline 3a: Fast Processing (for high-priority items)
   pipeline :process_fast do
-    producer :input
-
     processor :fast_transform do |item|
       puts "[Fast] Processing item #{item[:id]}"
       emit(item.merge(processed_by: :fast_lane))
@@ -90,8 +86,6 @@ class DataProcessingPipeline
 
   # Pipeline 3b: Slow Processing (for normal items)
   pipeline :process_slow do
-    producer :input
-
     processor :slow_transform do |item|
       puts "[Slow] Processing item #{item[:id]}"
       sleep 0.01  # Simulate slower processing

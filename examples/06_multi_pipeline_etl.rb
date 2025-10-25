@@ -35,8 +35,6 @@ class MultiPipelineETL
 
   # Pipeline 2: Transform - Cleans and transforms data
   pipeline :transform, to: [:load_db, :load_cache] do
-    producer :input # Receives from extract pipeline
-
     processor :clean do |item|
       puts "[Transform] Cleaning item #{item[:id]}"
       emit(item.merge(cleaned: true))
@@ -55,8 +53,6 @@ class MultiPipelineETL
 
   # Pipeline 3a: Load to Database
   pipeline :load_db do
-    producer :input # Receives from transform
-
     consumer :save_to_db do |item|
       puts "[Load:DB] Saving item #{item[:id]} to database"
       @mutex.synchronize { loaded_db << item }
@@ -65,8 +61,6 @@ class MultiPipelineETL
 
   # Pipeline 3b: Load to Cache (runs in parallel with load_db)
   pipeline :load_cache do
-    producer :input # Receives from transform
-
     consumer :save_to_cache do |item|
       puts "[Load:Cache] Caching item #{item[:id]}"
       @mutex.synchronize { loaded_cache << item }

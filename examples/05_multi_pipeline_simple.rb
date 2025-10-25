@@ -30,8 +30,6 @@ class SimplePipelineExample
 
   # Second pipeline doubles them
   pipeline :processor, to: :collector do
-    producer :input # Receives from generator
-
     processor :double do |num|
       doubled = num * 2
       puts "[Processor] #{num} * 2 = #{doubled}"
@@ -45,8 +43,6 @@ class SimplePipelineExample
 
   # Third pipeline collects results
   pipeline :collector do
-    producer :input # Receives from processor
-
     consumer :collect do |num|
       puts "[Collector] Storing: #{num}"
       @mutex.synchronize { results << num }

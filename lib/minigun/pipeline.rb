@@ -195,12 +195,14 @@ module Minigun
       # Start internal queue (for stage-to-stage communication)
       @queue = SizedQueue.new(@config[:max_processes] * @config[:max_threads] * 2)
 
-      # Start producer and accumulator threads
+      # Start producer, isolated pipelines, and accumulator threads
       producer_thread = start_producer
+      isolated_pipeline_threads = start_isolated_pipelines
       accumulator_thread = start_accumulator
 
       # Wait for completion
       producer_thread.join
+      isolated_pipeline_threads.each(&:join)
       accumulator_thread.join
       wait_all_consumers
 
@@ -337,7 +339,7 @@ module Minigun
               break if item == :END_OF_QUEUE
 
               in_flight_count.increment
-              queue << [item, :input]
+              queue << [item, :_input]
               produced_count.increment
             end
 
@@ -353,6 +355,33 @@ module Minigun
 
         # Signal end
         queue << :END_OF_QUEUE
+      end
+    end
+
+    def start_isolated_pipelines
+      # Find PipelineStages that have no upstream connections (isolated pipelines)
+      isolated_pipelines = @stages.values.select do |stage|
+        stage.is_a?(PipelineStage) && @dag.upstream(stage.name).empty?
+      end
+
+      return [] if isolated_pipelines.empty?
+
+      log_info "[Pipeline:#{@name}][Isolated] Starting #{isolated_pipelines.size} isolated pipeline(s)"
+
+      # Start each isolated pipeline in its own thread
+      isolated_pipelines.map do |pipeline_stage|
+        Thread.new do
+          log_info "[Pipeline:#{@name}][Isolated:#{pipeline_stage.name}] Starting"
+
+          begin
+            # Run the nested pipeline with the current context
+            pipeline_stage.pipeline.run(@context)
+
+            log_info "[Pipeline:#{@name}][Isolated:#{pipeline_stage.name}] Completed"
+          rescue => e
+            log_info "[Pipeline:#{@name}][Isolated:#{pipeline_stage.name}] Error: #{e.message}"
+          end
+        end
       end
     end
 
@@ -686,7 +715,7 @@ module Minigun
     end
 
     def build_dag_routing!
-      # If this pipeline receives input from upstream, add :input node and route it
+      # If this pipeline receives input from upstream, add :_input node and route it
       if @input_queue
         handle_input_queue_routing!
       end
@@ -705,7 +734,7 @@ module Minigun
 
     def validate_stages_exist!
       @dag.nodes.each do |node_name|
-        next if node_name == :input  # Special node for input queue
+        next if node_name == :_input  # Special internal node for input queue
 
         unless find_stage(node_name)
           raise Minigun::Error, "[Pipeline:#{@name}] Routing references non-existent stage '#{node_name}'"
@@ -736,23 +765,14 @@ module Minigun
     end
 
     def handle_input_queue_routing!
-      # Check if there's a stage named :input (placeholder for upstream items)
-      input_stage = find_stage(:input)
+      # Add :_input as an internal DAG node for items from upstream pipeline
+      @dag.add_node(:_input) unless @dag.nodes.include?(:_input)
 
-      if input_stage
-        # If there's an :input stage, items from upstream already route through it
-        # No additional routing needed - the :input stage will handle it
-        return
-      end
-
-      # No :input stage, so add :input as a DAG node for items from upstream pipeline
-      @dag.add_node(:input) unless @dag.nodes.include?(:input)
-
-      # Route :input to the first non-producer stage (same logic as multiple producers)
+      # Route :_input to the first non-producer stage (same logic as multiple producers)
       first_non_producer = @stage_order.find { |s| !find_stage(s)&.producer? }
 
       if first_non_producer
-        @dag.add_edge(:input, first_non_producer)
+        @dag.add_edge(:_input, first_non_producer)
       end
     end
 
@@ -781,6 +801,14 @@ module Minigun
         next if index >= @stage_order.size - 1
 
         next_stage = @stage_order[index + 1]
+
+        # Skip if BOTH current and next are PipelineStages (isolated pipelines)
+        # PipelineStages should only connect to each other via explicit to: routing
+        current_stage = find_stage(stage_name)
+        next_stage_obj = find_stage(next_stage)
+        if current_stage.is_a?(PipelineStage) && next_stage_obj.is_a?(PipelineStage)
+          next
+        end
 
         # Skip if this is a fan-out pattern (next_stage is a sibling)
         next if @dag.fan_out_siblings?(stage_name, next_stage)

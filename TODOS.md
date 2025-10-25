@@ -1,3 +1,12 @@
+from keyword in pipelines
+form keyword in stages
+pipeline routing to a stage inside another pipeline double nested
+emit_to_stage
+consume_from_stage
+produce as an alias to emit
+produce_to_stage
+
+
 move stats tracking from runner to task
 
 verbose logging of fork, etc
