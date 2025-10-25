@@ -1,9 +1,10 @@
 # frozen_string_literal: true
 
 module Minigun
-  # Task executes the producer→accumulator→consumer(fork) pipeline pattern
+  # Task orchestrates one or more pipelines
+  # Supports both single-pipeline (implicit) and multi-pipeline modes
   class Task
-    attr_reader :config, :stages, :hooks, :dag
+    attr_reader :config, :pipelines, :pipeline_dag, :current_pipeline
 
     def initialize
       @config = {
@@ -12,396 +13,162 @@ module Minigun
         max_retries: 3,
         accumulator_max_single: 2000,
         accumulator_max_all: 4000,
-        accumulator_check_interval: 100
+        accumulator_check_interval: 100,
+        use_ipc: false
       }
 
-      @stages = {
-        producer: nil,
-        processor: [],
-        accumulator: nil,
-        consumer: []  # Support multiple consumers
-      }
-
-      @hooks = {
-        before_run: [],
-        after_run: [],
-        before_fork: [],
-        after_fork: []
-      }
-
-      @dag = DAG.new  # Directed Acyclic Graph for stage routing
-      @stage_order = []  # Track order stages were defined
-
-      @produced_count = Concurrent::AtomicFixnum.new(0)
-      @in_flight_count = Concurrent::AtomicFixnum.new(0)  # Track items being processed
-      @accumulated_count = 0
-      @consumer_pids = []
+      @pipelines = {}  # { pipeline_name => Pipeline }
+      @pipeline_dag = DAG.new  # Pipeline-level routing
+      @current_pipeline = nil  # For implicit single-pipeline mode
+      @mode = :single  # :single or :multi
     end
 
-    # Set config value
+    # Set config value (applies to all pipelines)
     def set_config(key, value)
       @config[key] = value
     end
 
-    # Add a stage
-    def add_stage(type, name, options = {}, &block)
-      # Track stage definition order
-      @stage_order << name
-
-      # Add node to DAG
-      @dag.add_node(name)
-
-      # Extract routing information
-      to_targets = options.delete(:to)
-      if to_targets
-        Array(to_targets).each { |target| @dag.add_edge(name, target) }
+    # Get or create a pipeline by name
+    # If name is nil, use default pipeline for backward compatibility
+    def get_or_create_pipeline(name = nil)
+      if name.nil?
+        # Implicit single-pipeline mode
+        @mode = :single
+        name = :default
+      else
+        # Explicit multi-pipeline mode
+        @mode = :multi
       end
 
-      # Create appropriate stage subclass
-      stage = case type
-              when :producer
-                ProducerStage.new(name: name, block: block, options: options)
-              when :processor
-                ProcessorStage.new(name: name, block: block, options: options)
-              when :accumulator
-                AccumulatorStage.new(name: name, block: block, options: options)
-              when :consumer
-                ConsumerStage.new(name: name, block: block, options: options)
-              else
-                raise Minigun::Error, "Unknown stage type: #{type}"
-              end
-
-      # Store stage
-      case type
-      when :producer
-        @stages[:producer] = stage
-      when :processor
-        @stages[:processor] << stage
-      when :accumulator
-        @stages[:accumulator] = stage
-      when :consumer
-        @stages[:consumer] << stage
+      @pipelines[name] ||= begin
+        pipeline = Pipeline.new(name, @config)
+        @pipeline_dag.add_node(name)
+        pipeline
       end
+
+      @current_pipeline = @pipelines[name]
+      @current_pipeline
     end
 
-    # Add a hook
+    # Add a stage to the current pipeline (for backward compatibility)
+    def add_stage(type, stage_name, options = {}, &block)
+      pipeline = get_or_create_pipeline
+      pipeline.add_stage(type, stage_name, options, &block)
+    end
+
+    # Add a hook to the current pipeline (for backward compatibility)
     def add_hook(type, &block)
-      @hooks[type] ||= []
-      @hooks[type] << block
+      pipeline = get_or_create_pipeline
+      pipeline.add_hook(type, &block)
     end
 
-    # Run the pipeline
+    # Define a named pipeline with routing
+    def define_pipeline(name, options = {}, &block)
+      @mode = :multi
+
+      pipeline = get_or_create_pipeline(name)
+
+      # Extract pipeline-level routing
+      to_targets = options[:to]
+      if to_targets
+        Array(to_targets).each do |target|
+          @pipeline_dag.add_edge(name, target)
+        end
+      end
+
+      # Execute block in context of pipeline definition
+      if block_given?
+        yield pipeline
+      end
+
+      pipeline
+    end
+
+    # Run the task (single or multi-pipeline)
     def run(context)
-      @context = context
-      @job_start = Time.now
+      if @mode == :single
+        run_single_pipeline(context)
+      else
+        run_multi_pipeline(context)
+      end
+    end
 
-      log_info "Starting Minigun pipeline"
+    # Access stages for backward compatibility
+    def stages
+      get_or_create_pipeline.stages
+    end
 
-      # Build and validate DAG routing
-      build_dag_routing!
+    # Access hooks for backward compatibility
+    def hooks
+      get_or_create_pipeline.hooks
+    end
 
-      # Run before_run hooks
-      @hooks[:before_run].each { |h| context.instance_eval(&h) }
-
-      # Start producer and accumulator threads
-      @queue = SizedQueue.new(@config[:max_processes] * @config[:max_threads] * 2)
-
-      producer_thread = start_producer
-      accumulator_thread = start_accumulator
-
-      # Wait for completion
-      producer_thread.join
-      accumulator_thread.join
-      wait_all_consumers
-
-      @job_end = Time.now
-
-      log_info "Finished in #{(@job_end - @job_start).round(2)}s"
-      log_info "Produced: #{@produced_count.value}, Accumulated: #{@accumulated_count}"
-
-      # Run after_run hooks
-      @hooks[:after_run].each { |h| context.instance_eval(&h) }
-
-      @accumulated_count
+    # Access DAG for backward compatibility (stage-level DAG)
+    def dag
+      get_or_create_pipeline.dag
     end
 
     private
 
-    def start_producer
-      queue = @queue
-      produced_count = @produced_count
-      in_flight_count = @in_flight_count
-      producer_stage = @stages[:producer]
-      producer_name = producer_stage.name
-
-      Thread.new do
-        log_info "[Producer] Starting"
-
-        # Create emit method for producer
-        emit_proc = proc do |item|
-          in_flight_count.increment  # Track in-flight items
-          queue << [item, producer_name]
-          produced_count.increment
-        end
-
-        # Bind emit to context
-        @context.define_singleton_method(:emit, &emit_proc)
-
-        # Run producer block
-        @context.instance_eval(&producer_stage.block)
-
-        log_info "[Producer] Done. Produced #{produced_count.value} items"
-
-        # Wait for all items to be processed
-        sleep 0.01 while in_flight_count.value > 0
-
-        # Now signal end
-        queue << :END_OF_QUEUE
-      end
+    def run_single_pipeline(context)
+      # Backward compatible: run single pipeline directly
+      pipeline = get_or_create_pipeline
+      pipeline.run(context)
     end
 
-    def start_accumulator
-      Thread.new do
-        log_info "[Accumulator] Starting"
+    def run_multi_pipeline(context)
+      log_info "Starting multi-pipeline task with #{@pipelines.size} pipelines"
 
-        # Track items by consumer name for batching
-        consumer_queues = Hash.new { |h, k| h[k] = [] }
-        check_counter = 0
+      # Build pipeline routing
+      build_pipeline_routing!
 
-        loop do
-          item_data = @queue.pop
-          break if item_data == :END_OF_QUEUE
+      # Create inter-pipeline queues
+      setup_inter_pipeline_queues
 
-          # item_data is [item, source_stage_name]
-          item, source_stage = item_data
-
-          # Get routing targets for this source
-          targets = get_targets(source_stage)
-
-          # Decrement for the consumed item (once per item, not per target)
-          @in_flight_count.decrement
-
-          # Process through each target
-          targets.each do |target_name|
-            target_stage = find_stage(target_name)
-            next unless target_stage
-
-            # Check if this is a terminal stage (consumer)
-            if @dag.terminal?(target_name)
-              # Accumulate by consumer name for later batch processing
-              consumer_queues[target_name] << { item: item, stage: target_stage }
-              check_counter += 1
-
-              # Check thresholds
-              if check_counter % @config[:accumulator_check_interval] == 0
-                check_and_fork(consumer_queues)
-              end
-            else
-              # It's a processor - execute and route outputs
-              emitted_items = execute_stage(target_stage, item)
-
-              # Increment for each emitted item and put in queue
-              emitted_items.each do |emitted_item|
-                @in_flight_count.increment
-                @queue << [emitted_item, target_name]
-              end
-            end
-          end
-        end
-
-        # Process remaining
-        fork_consumer(consumer_queues) unless consumer_queues.empty?
-
-        @accumulated_count = consumer_queues.values.sum(&:size)
-
-        log_info "[Accumulator] Done. Accumulated #{@accumulated_count} items"
+      # Start all pipelines in threads
+      threads = @pipelines.map do |name, pipeline|
+        pipeline.run_in_thread(context)
       end
+
+      # Wait for all pipelines to complete
+      threads.each(&:join)
+
+      log_info "Multi-pipeline task completed"
     end
 
-    # Execute a stage and return emitted items
-    def execute_stage(stage, item)
-      if stage.respond_to?(:execute_with_emit)
-        stage.execute_with_emit(@context, item)
-      else
-        stage.execute(@context, item)
-        []
+    def build_pipeline_routing!
+      # If no explicit routing, build sequential pipeline connections
+      if @pipeline_dag.edges.values.all?(&:empty?)
+        @pipeline_dag.build_sequential!
       end
+
+      @pipeline_dag.validate!
+
+      log_info "Pipeline DAG: #{@pipeline_dag.nodes.join(' -> ')}"
     end
 
-    def check_and_fork(accumulator_map)
-      # Check single queue threshold
-      accumulator_map.each do |key, items|
-        if items.size >= @config[:accumulator_max_single]
-          fork_consumer({ key => accumulator_map.delete(key) })
+    def setup_inter_pipeline_queues
+      # Create queues between connected pipelines
+      @pipeline_dag.edges.each do |from_name, to_names|
+        from_pipeline = @pipelines[from_name]
+
+        to_names.each do |to_name|
+          to_pipeline = @pipelines[to_name]
+
+          # Create a queue for communication
+          queue = SizedQueue.new(1000)  # Reasonable buffer size
+
+          # Connect pipelines
+          from_pipeline.add_output_queue(to_name, queue)
+          to_pipeline.input_queue = queue
+
+          log_info "Connected pipeline #{from_name} -> #{to_name}"
         end
       end
-
-      # Check total threshold
-      total = accumulator_map.values.sum(&:size)
-      if total >= @config[:accumulator_max_all]
-        fork_consumer(accumulator_map.dup)
-        accumulator_map.clear
-      end
-    end
-
-    def fork_consumer(batch_map)
-      total_items = batch_map.values.sum(&:size)
-
-      # Check if fork is supported
-      if Process.respond_to?(:fork)
-        fork_consumer_process(batch_map, total_items)
-      else
-        # Fallback to threading on Windows
-        consume_in_threads(batch_map, total_items)
-      end
-    end
-
-    def fork_consumer_process(batch_map, total_items)
-      wait_for_consumer_slot
-
-      log_info "[Fork] Forking to process #{total_items} items"
-
-      # Run before_fork hooks
-      @hooks[:before_fork].each { |h| @context.instance_eval(&h) }
-
-      # Trigger GC before fork
-      GC.start if @consumer_pids.empty? || @consumer_pids.size % 4 == 0
-
-      pid = fork do
-        # In child process
-        @pid = Process.pid
-
-        # Run after_fork hooks
-        @hooks[:after_fork].each { |h| @context.instance_eval(&h) }
-
-        log_info "[Consumer:#{@pid}] Started"
-
-        # Process items
-        consume_batch(batch_map)
-
-        log_info "[Consumer:#{@pid}] Done"
-
-        exit! 0
-      end
-
-      @consumer_pids << pid
-    end
-
-    def consume_in_threads(batch_map, total_items)
-      log_info "[Consumer] Processing #{total_items} items (no fork)"
-      consume_batch(batch_map)
-    end
-
-    def consume_batch(batch_map)
-      # Process items with thread pool
-      thread_pool = Concurrent::FixedThreadPool.new(@config[:max_threads])
-      processed = Concurrent::AtomicFixnum.new(0)
-
-      batch_map.each do |_consumer_name, item_data_array|
-        item_data_array.each do |item_data|
-          Concurrent::Future.execute(executor: thread_pool) do
-            item = item_data[:item]
-            stage = item_data[:stage]
-            stage.execute(@context, item)
-            processed.increment
-          end
-        end
-      end
-
-      # Shutdown pool
-      thread_pool.shutdown
-      thread_pool.wait_for_termination(30)
-
-      log_info "[Consumer] Processed #{processed.value} items"
-    end
-
-    def wait_for_consumer_slot
-      return if @consumer_pids.size < @config[:max_processes]
-
-      # Wait for one to finish
-      pid = Process.wait
-      @consumer_pids.delete(pid)
-    rescue Errno::ECHILD
-      # No children
-    end
-
-    def wait_all_consumers
-      @consumer_pids.each do |pid|
-        Process.wait(pid)
-      rescue Errno::ECHILD
-        # Already exited
-      end
-      @consumer_pids.clear
     end
 
     def log_info(msg)
       Minigun.logger.info(msg)
     end
-
-    # Build and validate DAG routing
-    def build_dag_routing!
-      # If no explicit routing was defined, build sequential connections
-      if @dag.edges.values.all?(&:empty?)
-        @dag.build_sequential!
-      else
-        # Fill in sequential gaps based on stage definition order
-        fill_sequential_gaps_by_definition_order!
-      end
-
-      # Validate the DAG
-      @dag.validate!
-
-      # Validate that all nodes in DAG have corresponding stages
-      validate_stages_exist!
-
-      log_info "DAG: #{@dag}"
-    end
-
-    # Validate that all DAG nodes have corresponding stage definitions
-    def validate_stages_exist!
-      @dag.nodes.each do |node_name|
-        unless find_stage(node_name)
-          raise Minigun::Error, "Routing references non-existent stage '#{node_name}'"
-        end
-      end
-    end
-
-    # Fill sequential gaps using the order stages were defined, not DAG node order
-    def fill_sequential_gaps_by_definition_order!
-      @stage_order.each_with_index do |stage_name, index|
-        # Skip if already has downstream, or if it's the last stage
-        next if @dag.downstream(stage_name).any?
-        next if index >= @stage_order.size - 1
-
-        # Don't connect consumers to anything (they're always terminal nodes)
-        next if is_consumer_stage?(stage_name)
-
-        next_stage = @stage_order[index + 1]
-        @dag.add_edge(stage_name, next_stage)
-      end
-    end
-
-    # Check if a stage is a consumer
-    def is_consumer_stage?(stage_name)
-      stage = find_stage(stage_name)
-      stage && stage.is_a?(ConsumerStage)
-    end
-
-    # Get all stages that should receive items from a given stage
-    def get_targets(stage_name)
-      @dag.downstream(stage_name)
-    end
-
-    # Find a stage by name
-    def find_stage(name)
-      return @stages[:producer] if @stages[:producer] && @stages[:producer].name == name
-      return @stages[:accumulator] if @stages[:accumulator] && @stages[:accumulator].name == name
-
-      consumer = @stages[:consumer].find { |c| c.name == name }
-      return consumer if consumer
-
-      @stages[:processor].find { |s| s.name == name }
-    end
   end
 end
-

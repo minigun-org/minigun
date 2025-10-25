@@ -72,9 +72,130 @@ module Minigun
         _minigun_task.add_hook(:after_fork, &block)
       end
 
-      # Pipeline block (optional - just for grouping stages)
-      def pipeline(&block)
-        class_eval(&block)
+      # Pipeline block - supports two modes:
+      # 1. pipeline do...end - Single pipeline mode (backward compatible, just grouping)
+      # 2. pipeline :name, to: :other do...end - Multi-pipeline mode with routing
+      def pipeline(name = nil, options = {}, &block)
+        if name.nil?
+          # Mode 1: No name, just eval block in class context (backward compatible)
+          class_eval(&block)
+        else
+          # Mode 2: Named pipeline with routing
+          _minigun_task.define_pipeline(name, options) do |pipeline|
+            # Create a DSL context for this specific pipeline
+            pipeline_dsl = PipelineDSL.new(pipeline)
+            pipeline_dsl.instance_eval(&block) if block_given?
+          end
+        end
+      end
+    end
+
+    # DSL context for defining stages within a named pipeline
+    class PipelineDSL
+      def initialize(pipeline)
+        @pipeline = pipeline
+      end
+
+      def producer(name = :producer, options = {}, &block)
+        @pipeline.add_stage(:producer, name, options, &block)
+      end
+
+      def processor(name, options = {}, &block)
+        @pipeline.add_stage(:processor, name, options, &block)
+      end
+
+      def accumulator(name = :accumulator, options = {}, &block)
+        @pipeline.add_stage(:accumulator, name, options, &block)
+      end
+
+      def consumer(name = :consumer, options = {}, &block)
+        @pipeline.add_stage(:consumer, name, options, &block)
+      end
+
+      def cow_fork(name = :consumer, options = {}, &block)
+        @pipeline.add_stage(:consumer, name, options, &block)
+      end
+
+      def ipc_fork(name = :consumer, options = {}, &block)
+        @pipeline.add_stage(:consumer, name, options, &block)
+      end
+
+      def before_run(&block)
+        @pipeline.add_hook(:before_run, &block)
+      end
+
+      def after_run(&block)
+        @pipeline.add_hook(:after_run, &block)
+      end
+
+      def before_fork(&block)
+        @pipeline.add_hook(:before_fork, &block)
+      end
+
+      def after_fork(&block)
+        @pipeline.add_hook(:after_fork, &block)
+      end
+    end
+
+    module ClassMethods
+      def _minigun_task
+        @_minigun_task
+      end
+
+      # Configuration methods
+      def max_threads(value)
+        _minigun_task.set_config(:max_threads, value)
+      end
+
+      def max_processes(value)
+        _minigun_task.set_config(:max_processes, value)
+      end
+
+      def max_retries(value)
+        _minigun_task.set_config(:max_retries, value)
+      end
+
+      # Stage definition methods (for single-pipeline mode)
+      def producer(name = :producer, options = {}, &block)
+        _minigun_task.add_stage(:producer, name, options, &block)
+      end
+
+      def processor(name, options = {}, &block)
+        _minigun_task.add_stage(:processor, name, options, &block)
+      end
+
+      def accumulator(name = :accumulator, options = {}, &block)
+        _minigun_task.add_stage(:accumulator, name, options, &block)
+      end
+
+      def consumer(name = :consumer, options = {}, &block)
+        _minigun_task.add_stage(:consumer, name, options, &block)
+      end
+
+      # Fork aliases
+      def cow_fork(name = :consumer, options = {}, &block)
+        _minigun_task.add_stage(:consumer, name, options, &block)
+      end
+
+      def ipc_fork(name = :consumer, options = {}, &block)
+        _minigun_task.add_stage(:consumer, name, options, &block)
+      end
+
+      # Hook methods
+      def before_run(&block)
+        _minigun_task.add_hook(:before_run, &block)
+      end
+
+      def after_run(&block)
+        _minigun_task.add_hook(:after_run, &block)
+      end
+
+      def before_fork(&block)
+        _minigun_task.add_hook(:before_fork, &block)
+      end
+
+      def after_fork(&block)
+        _minigun_task.add_hook(:after_fork, &block)
       end
     end
 

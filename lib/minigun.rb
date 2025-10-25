@@ -19,6 +19,7 @@ end
 require_relative 'minigun/version'
 require_relative 'minigun/stage'
 require_relative 'minigun/dag'
+require_relative 'minigun/pipeline'
 require_relative 'minigun/task'
 require_relative 'minigun/dsl'
 

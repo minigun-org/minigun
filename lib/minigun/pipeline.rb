@@ -1,0 +1,465 @@
+# frozen_string_literal: true
+
+module Minigun
+  # Pipeline represents a single data processing pipeline with stages
+  # A Pipeline can be standalone or part of a multi-pipeline Task
+  class Pipeline
+    attr_reader :name, :config, :stages, :hooks, :dag, :input_queue, :output_queues
+
+    def initialize(name, config = {})
+      @name = name
+      @config = {
+        max_threads: config[:max_threads] || 5,
+        max_processes: config[:max_processes] || 2,
+        max_retries: config[:max_retries] || 3,
+        accumulator_max_single: config[:accumulator_max_single] || 2000,
+        accumulator_max_all: config[:accumulator_max_all] || 4000,
+        accumulator_check_interval: config[:accumulator_check_interval] || 100,
+        use_ipc: config[:use_ipc] || false
+      }
+
+      @stages = {
+        producer: nil,
+        processor: [],
+        accumulator: nil,
+        consumer: []
+      }
+
+      @hooks = {
+        before_run: [],
+        after_run: [],
+        before_fork: [],
+        after_fork: []
+      }
+
+      @dag = DAG.new
+      @stage_order = []
+
+      @produced_count = Concurrent::AtomicFixnum.new(0)
+      @in_flight_count = Concurrent::AtomicFixnum.new(0)
+      @accumulated_count = 0
+      @consumer_pids = []
+
+      # For multi-pipeline communication
+      @input_queue = nil
+      @output_queues = {}  # { pipeline_name => queue }
+    end
+
+    # Set an input queue for receiving items from upstream pipelines
+    def input_queue=(queue)
+      @input_queue = queue
+    end
+
+    # Add an output queue for sending items to a downstream pipeline
+    def add_output_queue(pipeline_name, queue)
+      @output_queues[pipeline_name] = queue
+    end
+
+    # Add a stage to this pipeline
+    def add_stage(type, name, options = {}, &block)
+      @stage_order << name
+      @dag.add_node(name)
+
+      # Extract routing information
+      to_targets = options.delete(:to)
+      if to_targets
+        Array(to_targets).each { |target| @dag.add_edge(name, target) }
+      end
+
+      # Create appropriate stage subclass
+      stage = case type
+              when :producer
+                ProducerStage.new(name: name, block: block, options: options)
+              when :processor
+                ProcessorStage.new(name: name, block: block, options: options)
+              when :accumulator
+                AccumulatorStage.new(name: name, block: block, options: options)
+              when :consumer
+                ConsumerStage.new(name: name, block: block, options: options)
+              else
+                raise Minigun::Error, "Unknown stage type: #{type}"
+              end
+
+      # Store stage
+      case type
+      when :producer
+        @stages[:producer] = stage
+      when :processor
+        @stages[:processor] << stage
+      when :accumulator
+        @stages[:accumulator] = stage
+      when :consumer
+        @stages[:consumer] << stage
+      end
+    end
+
+    # Add a hook to this pipeline
+    def add_hook(type, &block)
+      @hooks[type] ||= []
+      @hooks[type] << block
+    end
+
+    # Run this pipeline
+    def run(context)
+      @context = context
+      @job_start = Time.now
+
+      log_info "[Pipeline:#{@name}] Starting"
+
+      # Build and validate DAG routing
+      build_dag_routing!
+
+      # Run before_run hooks
+      @hooks[:before_run].each { |h| context.instance_eval(&h) }
+
+      # Start internal queue (for stage-to-stage communication)
+      @queue = SizedQueue.new(@config[:max_processes] * @config[:max_threads] * 2)
+
+      # Start producer and accumulator threads
+      producer_thread = start_producer
+      accumulator_thread = start_accumulator
+
+      # Wait for completion
+      producer_thread.join
+      accumulator_thread.join
+      wait_all_consumers
+
+      @job_end = Time.now
+
+      log_info "[Pipeline:#{@name}] Finished in #{(@job_end - @job_start).round(2)}s"
+      log_info "[Pipeline:#{@name}] Produced: #{@produced_count.value}, Accumulated: #{@accumulated_count}"
+
+      # Run after_run hooks
+      @hooks[:after_run].each { |h| context.instance_eval(&h) }
+
+      @accumulated_count
+    end
+
+    # Run this pipeline in a thread (for multi-pipeline execution)
+    def run_in_thread(context)
+      Thread.new do
+        run(context)
+      rescue => e
+        log_error "[Pipeline:#{@name}] Error: #{e.message}"
+        log_error e.backtrace.join("\n")
+      end
+    end
+
+    private
+
+    def start_producer
+      queue = @queue
+      produced_count = @produced_count
+      in_flight_count = @in_flight_count
+      producer_stage = @stages[:producer]
+
+      # Handle both internal producer and input from upstream pipeline
+      has_internal_producer = producer_stage && producer_stage.block
+      has_input_queue = @input_queue
+
+      Thread.new do
+        if has_internal_producer
+          # Internal producer generates items
+          producer_name = producer_stage.name
+          log_info "[Pipeline:#{@name}][Producer] Starting"
+
+          # Create emit method for producer
+          emit_proc = proc do |item|
+            in_flight_count.increment
+            queue << [item, producer_name]
+            produced_count.increment
+          end
+
+          # Bind emit to context
+          @context.define_singleton_method(:emit, &emit_proc)
+
+          # Run producer block
+          @context.instance_eval(&producer_stage.block)
+
+          log_info "[Pipeline:#{@name}][Producer] Done. Produced #{produced_count.value} items"
+        end
+
+        if has_input_queue
+          # Consume from input queue (upstream pipeline)
+          log_info "[Pipeline:#{@name}][Input] Waiting for upstream items"
+
+          loop do
+            item = @input_queue.pop
+            break if item == :END_OF_QUEUE
+
+            in_flight_count.increment
+            queue << [item, :input]
+            produced_count.increment
+          end
+
+          log_info "[Pipeline:#{@name}][Input] Upstream finished"
+        end
+
+        # Wait for all items to be processed
+        sleep 0.01 while in_flight_count.value > 0
+
+        # Signal end
+        queue << :END_OF_QUEUE
+      end
+    end
+
+    def start_accumulator
+      Thread.new do
+        log_info "[Pipeline:#{@name}][Accumulator] Starting"
+
+        consumer_queues = Hash.new { |h, k| h[k] = [] }
+        output_items = []  # Track items to send to downstream pipelines
+        check_counter = 0
+
+        loop do
+          item_data = @queue.pop
+          break if item_data == :END_OF_QUEUE
+
+          item, source_stage = item_data
+          targets = get_targets(source_stage)
+
+          @in_flight_count.decrement
+
+          targets.each do |target_name|
+            target_stage = find_stage(target_name)
+            next unless target_stage
+
+            if @dag.terminal?(target_name)
+              # Terminal stage - accumulate for batch processing
+              consumer_queues[target_name] << { item: item, stage: target_stage, output_items: output_items }
+              check_counter += 1
+
+              if check_counter % @config[:accumulator_check_interval] == 0
+                check_and_fork(consumer_queues, output_items)
+              end
+            else
+              # Processor - execute and route outputs
+              emitted_items = execute_stage(target_stage, item)
+
+              emitted_items.each do |emitted_item|
+                @in_flight_count.increment
+                @queue << [emitted_item, target_name]
+              end
+            end
+          end
+        end
+
+        # Process remaining items
+        fork_consumer(consumer_queues, output_items) unless consumer_queues.empty?
+
+        @accumulated_count = consumer_queues.values.sum(&:size)
+
+        # Send items to output queues if this pipeline has downstream pipelines
+        send_to_output_queues(output_items)
+
+        log_info "[Pipeline:#{@name}][Accumulator] Done. Accumulated #{@accumulated_count} items"
+      end
+    end
+
+    # Send completed items to downstream pipelines
+    def send_to_output_queues(output_items)
+      return if @output_queues.empty?
+
+      log_info "[Pipeline:#{@name}] Sending #{output_items.size} items to downstream pipelines"
+
+      @output_queues.each do |pipeline_name, queue|
+        output_items.each do |item|
+          queue << item
+        end
+        queue << :END_OF_QUEUE
+        log_info "[Pipeline:#{@name}] Sent #{output_items.size} items + END_OF_QUEUE to #{pipeline_name}"
+      end
+    end
+
+    def execute_stage(stage, item)
+      if stage.respond_to?(:execute_with_emit)
+        stage.execute_with_emit(@context, item)
+      else
+        stage.execute(@context, item)
+        []
+      end
+    end
+
+    def check_and_fork(accumulator_map, output_items)
+      accumulator_map.each do |key, items|
+        if items.size >= @config[:accumulator_max_single]
+          fork_consumer({ key => accumulator_map.delete(key) }, output_items)
+        end
+      end
+
+      total = accumulator_map.values.sum(&:size)
+      if total >= @config[:accumulator_max_all]
+        fork_consumer(accumulator_map.dup, output_items)
+        accumulator_map.clear
+      end
+    end
+
+    def fork_consumer(batch_map, output_items)
+      total_items = batch_map.values.sum(&:size)
+
+      if @config[:use_ipc] && Process.respond_to?(:fork)
+        fork_consumer_ipc(batch_map, output_items, total_items)
+      elsif Process.respond_to?(:fork)
+        fork_consumer_process(batch_map, output_items, total_items)
+      else
+        consume_in_threads(batch_map, output_items, total_items)
+      end
+    end
+
+    def fork_consumer_process(batch_map, output_items, total_items)
+      wait_for_consumer_slot
+
+      log_info "[Pipeline:#{@name}][Fork] Forking to process #{total_items} items"
+
+      @hooks[:before_fork].each { |h| @context.instance_eval(&h) }
+
+      GC.start if @consumer_pids.empty? || @consumer_pids.size % 4 == 0
+
+      pid = fork do
+        @pid = Process.pid
+        @hooks[:after_fork].each { |h| @context.instance_eval(&h) }
+
+        log_info "[Pipeline:#{@name}][Consumer:#{@pid}] Started"
+        consume_batch(batch_map, output_items)
+        log_info "[Pipeline:#{@name}][Consumer:#{@pid}] Done"
+
+        exit! 0
+      end
+
+      @consumer_pids << pid
+    end
+
+    def fork_consumer_ipc(batch_map, output_items, total_items)
+      # IPC implementation - similar to fork but with serialized communication
+      # For now, delegate to regular fork
+      fork_consumer_process(batch_map, output_items, total_items)
+    end
+
+    def consume_in_threads(batch_map, output_items, total_items)
+      log_info "[Pipeline:#{@name}][Consumer] Processing #{total_items} items (no fork)"
+      consume_batch(batch_map, output_items)
+    end
+
+    def consume_batch(batch_map, output_items)
+      thread_pool = Concurrent::FixedThreadPool.new(@config[:max_threads])
+      processed = Concurrent::AtomicFixnum.new(0)
+      mutex = Mutex.new
+
+      # Check if we have downstream pipelines
+      has_downstream = !@output_queues.empty?
+
+      batch_map.each do |_consumer_name, item_data_array|
+        item_data_array.each do |item_data|
+          Concurrent::Future.execute(executor: thread_pool) do
+            item = item_data[:item]
+            stage = item_data[:stage]
+
+            if has_downstream
+              # Create emit method for consumer to send to downstream pipelines
+              emit_proc = proc do |emitted_item|
+                mutex.synchronize { output_items << emitted_item }
+              end
+              @context.define_singleton_method(:emit, &emit_proc)
+            end
+
+            stage.execute(@context, item)
+            processed.increment
+          end
+        end
+      end
+
+      thread_pool.shutdown
+      thread_pool.wait_for_termination(30)
+
+      log_info "[Pipeline:#{@name}][Consumer] Processed #{processed.value} items"
+    end
+
+    def wait_for_consumer_slot
+      return if @consumer_pids.size < @config[:max_processes]
+
+      pid = Process.wait
+      @consumer_pids.delete(pid)
+    rescue Errno::ECHILD
+      # No children
+    end
+
+    def wait_all_consumers
+      @consumer_pids.each do |pid|
+        Process.wait(pid)
+      rescue Errno::ECHILD
+        # Already exited
+      end
+      @consumer_pids.clear
+    end
+
+    def build_dag_routing!
+      if @dag.edges.values.all?(&:empty?)
+        @dag.build_sequential!
+      else
+        fill_sequential_gaps_by_definition_order!
+      end
+
+      @dag.validate!
+      validate_stages_exist!
+
+      log_info "[Pipeline:#{@name}] DAG: #{@dag.nodes.join(' -> ')}"
+    end
+
+    def validate_stages_exist!
+      @dag.nodes.each do |node_name|
+        next if node_name == :input  # Special node for input queue
+
+        unless find_stage(node_name)
+          raise Minigun::Error, "[Pipeline:#{@name}] Routing references non-existent stage '#{node_name}'"
+        end
+      end
+    end
+
+    def fill_sequential_gaps_by_definition_order!
+      @stage_order.each_with_index do |stage_name, index|
+        next if @dag.downstream(stage_name).any?
+        next if index >= @stage_order.size - 1
+        next if is_consumer_stage?(stage_name)
+
+        next_stage = @stage_order[index + 1]
+        @dag.add_edge(stage_name, next_stage)
+      end
+    end
+
+    def is_consumer_stage?(stage_name)
+      stage = find_stage(stage_name)
+      stage && stage.is_a?(ConsumerStage)
+    end
+
+    def get_targets(stage_name)
+      targets = @dag.downstream(stage_name)
+
+      # If no targets and we have output queues, this is an output stage
+      if targets.empty? && !@output_queues.empty? && !is_consumer_stage?(stage_name)
+        # This item should be sent to output queues
+        return [:output]
+      end
+
+      targets
+    end
+
+    def find_stage(name)
+      return @stages[:producer] if @stages[:producer] && @stages[:producer].name == name
+      return @stages[:accumulator] if @stages[:accumulator] && @stages[:accumulator].name == name
+
+      consumer = @stages[:consumer].find { |c| c.name == name }
+      return consumer if consumer
+
+      @stages[:processor].find { |s| s.name == name }
+    end
+
+    def log_info(msg)
+      Minigun.logger.info(msg)
+    end
+
+    def log_error(msg)
+      Minigun.logger.error(msg)
+    end
+  end
+end
+
