@@ -87,7 +87,7 @@ if __FILE__ == $0
 
   # Get statistics
   task = example.class._minigun_task
-  pipeline = task.implicit_pipeline
+  pipeline = task.root_pipeline
   stats = pipeline.stats
 
   puts "\n📊 Producer Statistics:"

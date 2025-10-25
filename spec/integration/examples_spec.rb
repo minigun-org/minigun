@@ -532,7 +532,7 @@ RSpec.describe 'Examples Integration' do
 
       # Access stats
       task = demo.class._minigun_task
-      pipeline = task.implicit_pipeline
+      pipeline = task.root_pipeline
       stats = pipeline.stats
 
       # Verify stats are collected

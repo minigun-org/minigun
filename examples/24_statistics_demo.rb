@@ -36,7 +36,7 @@ if __FILE__ == $0
 
   # Access the stats
   task = demo.class._minigun_task
-  pipeline = task.implicit_pipeline
+  pipeline = task.root_pipeline
   stats = pipeline.stats
 
   puts "\n📊 Pipeline Statistics:"

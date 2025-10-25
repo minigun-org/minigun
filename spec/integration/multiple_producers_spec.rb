@@ -120,7 +120,7 @@ RSpec.describe 'Multiple Producers' do
 
       # Get stats
       task = instance.class._minigun_task
-      pipeline = task.implicit_pipeline
+      pipeline = task.root_pipeline
       stats = pipeline.stats
 
       # Should have stats for both producers

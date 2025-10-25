@@ -53,10 +53,10 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
 
     it 'child has a copy of parent pipeline (stages)' do
       # Pipelines are duplicated, not shared
-      expect(child_class._minigun_task.implicit_pipeline).not_to be(parent_class._minigun_task.implicit_pipeline)
+      expect(child_class._minigun_task.root_pipeline).not_to be(parent_class._minigun_task.root_pipeline)
 
       # But they should have the same stages
-      expect(child_class._minigun_task.implicit_pipeline.stages[:producer]&.name).to eq(parent_class._minigun_task.implicit_pipeline.stages[:producer]&.name)
+      expect(child_class._minigun_task.root_pipeline.stages[:producer]&.name).to eq(parent_class._minigun_task.root_pipeline.stages[:producer]&.name)
     end
 
     it 'child inherits parent config' do

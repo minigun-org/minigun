@@ -25,7 +25,7 @@ module Minigun
       log_job_started
 
       # Run before_run hooks
-      @task.implicit_pipeline.hooks[:before_run].each do |hook|
+      @task.root_pipeline.hooks[:before_run].each do |hook|
         @context.instance_eval(&hook)
       end
 
@@ -43,7 +43,7 @@ module Minigun
       @job_end = Time.now
 
       # Run after_run hooks
-      @task.implicit_pipeline.hooks[:after_run].each do |hook|
+      @task.root_pipeline.hooks[:after_run].each do |hook|
         @context.instance_eval(&hook)
       end
 
@@ -57,7 +57,7 @@ module Minigun
 
     def run_single_pipeline
       # Pass job_id to pipeline for logging
-      pipeline = @task.implicit_pipeline
+      pipeline = @task.root_pipeline
       pipeline.instance_variable_set(:@job_id, @job_id)
       result = pipeline.run(@context)
 

@@ -37,7 +37,7 @@ RSpec.describe Minigun::DSL do
       test_class.processor(:test_processor) { |x| x }
       # Processor is now an AtomicStage, check that it was added
       task = test_class._minigun_task
-      all_stages = task.implicit_pipeline.stage_order.map { |name| task.implicit_pipeline.find_stage(name) }
+      all_stages = task.root_pipeline.stage_order.map { |name| task.root_pipeline.find_stage(name) }
       processor = all_stages.find { |s| s.name == :test_processor }
       expect(processor).not_to be_nil
       expect(processor.producer?).to be false
@@ -153,7 +153,7 @@ RSpec.describe Minigun::DSL do
 
     it 'correctly configures all components' do
       task = test_class._minigun_task
-      pipeline = task.implicit_pipeline
+      pipeline = task.root_pipeline
 
       expect(task.config[:max_threads]).to eq(3)
       expect(task.config[:max_processes]).to eq(2)

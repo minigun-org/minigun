@@ -17,7 +17,7 @@ module Minigun
         # Create a new task and copy the parent's configuration and pipelines
         new_task = Minigun::Task.new
         new_task.instance_variable_set(:@config, parent_task.config.dup)
-        new_task.instance_variable_set(:@implicit_pipeline, parent_task.implicit_pipeline.dup) # Duplicate the pipeline
+        new_task.instance_variable_set(:@root_pipeline, parent_task.root_pipeline.dup) # Duplicate the pipeline
         subclass.instance_variable_set(:@_minigun_task, new_task)
       end
     end
@@ -235,7 +235,7 @@ module Minigun
 
       def before_fork(stage_name = nil, &block)
         if stage_name
-          _minigun_task.implicit_pipeline.add_stage_hook(:before_fork, stage_name, &block)
+          _minigun_task.root_pipeline.add_stage_hook(:before_fork, stage_name, &block)
         else
           _minigun_task.add_hook(:before_fork, &block)
         end
@@ -243,7 +243,7 @@ module Minigun
 
       def after_fork(stage_name = nil, &block)
         if stage_name
-          _minigun_task.implicit_pipeline.add_stage_hook(:after_fork, stage_name, &block)
+          _minigun_task.root_pipeline.add_stage_hook(:after_fork, stage_name, &block)
         else
           _minigun_task.add_hook(:after_fork, &block)
         end
@@ -251,16 +251,16 @@ module Minigun
 
       # Stage-specific hooks (Option 2)
       def before(stage_name, &block)
-        _minigun_task.implicit_pipeline.add_stage_hook(:before, stage_name, &block)
+        _minigun_task.root_pipeline.add_stage_hook(:before, stage_name, &block)
       end
 
       def after(stage_name, &block)
-        _minigun_task.implicit_pipeline.add_stage_hook(:after, stage_name, &block)
+        _minigun_task.root_pipeline.add_stage_hook(:after, stage_name, &block)
       end
 
       # Routing
       def reroute_stage(from_stage, to:)
-        _minigun_task.implicit_pipeline.reroute_stage(from_stage, to: to)
+        _minigun_task.root_pipeline.reroute_stage(from_stage, to: to)
       end
     end
 

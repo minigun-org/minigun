@@ -1,3 +1,18 @@
+ADD to README:
+- stages route to each other sequentially, unless you add :to or :from keywords
+- execute in paralle, and do NOT route to each other, unless unless you add :to or :from keywords.
+
+
+      if has_multi_pipeline?
+        # Multi-pipeline mode: run all named pipelines
+        run_multi_pipeline(context)
+      else
+        # Single-pipeline mode: run root pipeline
+        @root_pipeline.run(context)
+      end
+      
+
+
 from keyword in pipelines (connects pipelines)
 from keyword in stages
 ensure that to and from don't create circular deps, but allow it to be somewhat liberal

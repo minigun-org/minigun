@@ -4,7 +4,7 @@ module Minigun
   # Task orchestrates one or more pipelines
   # Supports both single-pipeline (implicit) and multi-pipeline modes
   class Task
-    attr_reader :config, :pipelines, :pipeline_dag, :implicit_pipeline
+    attr_reader :config, :root_pipeline
 
     def initialize
       @config = {
@@ -17,35 +17,42 @@ module Minigun
         use_ipc: false
       }
 
-      # Implicit pipeline for single-pipeline mode (backward compatibility)
-      @implicit_pipeline = Pipeline.new(:default, @config)
-
-      # Named pipelines for multi-pipeline mode
-      @pipelines = {}  # { pipeline_name => Pipeline }
-      @pipeline_dag = DAG.new  # Pipeline-level routing
+      # Root pipeline - all stages and nested pipelines live here
+      @root_pipeline = Pipeline.new(:default, @config)
     end
 
     # Set config value (applies to all pipelines)
     def set_config(key, value)
       @config[key] = value
 
-      # Update implicit pipeline config
-      @implicit_pipeline.config[key] = value
+      # Update root pipeline config
+      @root_pipeline.config[key] = value
 
-      # Update all named pipelines
-      @pipelines.each_value do |pipeline|
+      # Update all nested pipelines
+      pipelines.each_value do |pipeline|
         pipeline.config[key] = value
       end
+    end
+    
+    # Get all named pipelines (PipelineStage objects in root_pipeline)
+    def pipelines
+      @root_pipeline.stages.select { |_name, stage| stage.is_a?(PipelineStage) }
+                           .transform_values(&:pipeline)
+    end
+    
+    # Get the DAG for pipeline-level routing
+    def pipeline_dag
+      @root_pipeline.dag
     end
 
     # Add a stage to the implicit pipeline (for backward compatibility)
     def add_stage(type, stage_name, options = {}, &block)
-      @implicit_pipeline.add_stage(type, stage_name, options, &block)
+      @root_pipeline.add_stage(type, stage_name, options, &block)
     end
 
     # Add a hook to the implicit pipeline (for backward compatibility)
     def add_hook(type, &block)
-      @implicit_pipeline.add_hook(type, &block)
+      @root_pipeline.add_hook(type, &block)
     end
 
     # Add a nested pipeline as a stage within the implicit pipeline
@@ -64,51 +71,52 @@ module Minigun
       end
 
       # Add the pipeline stage to the implicit pipeline
-      @implicit_pipeline.stages[name] = pipeline_stage
-      @implicit_pipeline.instance_variable_get(:@stage_order) << name
-      @implicit_pipeline.dag.add_node(name)
+      @root_pipeline.stages[name] = pipeline_stage
+      @root_pipeline.instance_variable_get(:@stage_order) << name
+      @root_pipeline.dag.add_node(name)
 
       # Extract routing if specified
       to_targets = options[:to]
       if to_targets
-        Array(to_targets).each { |target| @implicit_pipeline.dag.add_edge(name, target) }
+        Array(to_targets).each { |target| @root_pipeline.dag.add_edge(name, target) }
       end
 
       pipeline_stage
     end
 
     # Define a named pipeline with routing
+    # Pipelines are just PipelineStage objects in root_pipeline
     def define_pipeline(name, options = {}, &block)
-      # Check if this was previously defined as a nested pipeline and promote it
-      pipeline = promote_nested_to_multi_pipeline(name)
+      # Check if already exists
+      if @root_pipeline.stages.key?(name)
+        pipeline_stage = @root_pipeline.stages[name]
+        unless pipeline_stage.is_a?(PipelineStage)
+          raise Minigun::Error, "Stage #{name} already exists as a non-pipeline stage"
+        end
+        pipeline = pipeline_stage.pipeline
+      else
+        # Create new PipelineStage and add to root_pipeline
+        pipeline_stage = PipelineStage.new(name: name, options: options)
+        pipeline = Pipeline.new(name, @config)
+        pipeline_stage.pipeline = pipeline
+        
+        @root_pipeline.stages[name] = pipeline_stage
+        @root_pipeline.instance_variable_get(:@stage_order) << name
+        @root_pipeline.dag.add_node(name)
+      end
 
-      # Create or get named pipeline
-      pipeline ||= @pipelines[name] ||= Pipeline.new(name, @config)
-      @pipeline_dag.add_node(name)
-
-      # Extract pipeline-level routing
+      # Handle routing in root_pipeline DAG
       to_targets = options[:to]
       if to_targets
         Array(to_targets).each do |target|
-          # Promote target if it's a nested pipeline
-          target_pipeline = promote_nested_to_multi_pipeline(target)
-          # Or create placeholder if needed
-          target_pipeline ||= @pipelines[target] ||= Pipeline.new(target, @config)
-          @pipeline_dag.add_node(target)
-          @pipeline_dag.add_edge(name, target)
+          @root_pipeline.dag.add_edge(name, target)
         end
       end
 
-      # Extract reverse routing (from:)
       from_sources = options[:from]
       if from_sources
         Array(from_sources).each do |source|
-          # Promote source if it's a nested pipeline
-          source_pipeline = promote_nested_to_multi_pipeline(source)
-          # Or create placeholder if needed
-          source_pipeline ||= @pipelines[source] ||= Pipeline.new(source, @config)
-          @pipeline_dag.add_node(source)
-          @pipeline_dag.add_edge(source, name)
+          @root_pipeline.dag.add_edge(source, name)
         end
       end
 
@@ -116,27 +124,6 @@ module Minigun
       if block_given?
         yield pipeline
       end
-
-      pipeline
-    end
-
-    # Promote a nested pipeline stage to a proper multi-pipeline
-    def promote_nested_to_multi_pipeline(name)
-      # Check if this exists as a nested pipeline in the implicit pipeline
-      nested_stage = @implicit_pipeline.stages[name]
-      return nil unless nested_stage.is_a?(PipelineStage)
-
-      # Get the pipeline from the nested stage
-      pipeline = nested_stage.pipeline
-      return nil unless pipeline
-
-      # Move it to @pipelines
-      @pipelines[name] = pipeline
-
-      # Remove from implicit pipeline
-      @implicit_pipeline.stages.delete(name)
-      @implicit_pipeline.instance_variable_get(:@stage_order).delete(name)
-      @implicit_pipeline.dag.instance_variable_get(:@nodes).delete(name)
 
       pipeline
     end
@@ -151,34 +138,40 @@ module Minigun
     # Direct pipeline execution without Runner overhead
     # Use this for testing or embedding in other systems
     def perform(context)
-      if @pipelines.empty?
-        # Single-pipeline mode: run implicit pipeline
-        @implicit_pipeline.run(context)
-      else
+      if has_multi_pipeline?
         # Multi-pipeline mode: run all named pipelines
         run_multi_pipeline(context)
+      else
+        # Single-pipeline mode: run root pipeline
+        @root_pipeline.run(context)
       end
+    end
+    
+    # Check if we have multiple pipelines defined
+    def has_multi_pipeline?
+      @root_pipeline.stages.any? { |_name, stage| stage.is_a?(PipelineStage) }
     end
 
     # Access stages for backward compatibility
     def stages
-      @implicit_pipeline.stages
+      @root_pipeline.stages
     end
 
     # Access hooks for backward compatibility
     def hooks
-      @implicit_pipeline.hooks
+      @root_pipeline.hooks
     end
 
     # Access DAG for backward compatibility (stage-level DAG)
     def dag
-      @implicit_pipeline.dag
+      @root_pipeline.dag
     end
 
     private
 
     def run_multi_pipeline(context)
-      log_info "Starting multi-pipeline task with #{@pipelines.size} pipelines"
+      pipeline_list = pipelines
+      log_info "Starting multi-pipeline task with #{pipeline_list.size} pipelines"
 
       # Build pipeline routing
       build_pipeline_routing!
@@ -187,7 +180,7 @@ module Minigun
       setup_inter_pipeline_queues
 
       # Start all pipelines in threads
-      threads = @pipelines.map do |name, pipeline|
+      threads = pipeline_list.map do |name, pipeline|
         pipeline.run_in_thread(context)
       end
 
@@ -198,23 +191,40 @@ module Minigun
     end
 
     def build_pipeline_routing!
+      pipeline_list = pipelines
+      
+      # Build a pipeline-only DAG (not root_pipeline's DAG which includes all stages)
+      @pipeline_only_dag = DAG.new
+      pipeline_list.keys.each { |name| @pipeline_only_dag.add_node(name) }
+      
+      # Copy edges between pipelines from root DAG
+      @root_pipeline.dag.edges.each do |from, tos|
+        next unless pipeline_list.key?(from)
+        tos.each do |to|
+          next unless pipeline_list.key?(to)
+          @pipeline_only_dag.add_edge(from, to)
+        end
+      end
+      
       # If no explicit routing, build sequential pipeline connections
-      if @pipeline_dag.edges.values.all?(&:empty?)
-        @pipeline_dag.build_sequential!
+      if @pipeline_only_dag.edges.values.all?(&:empty?)
+        @pipeline_only_dag.build_sequential!
       end
 
-      @pipeline_dag.validate!
+      @pipeline_only_dag.validate!
 
-      log_info "Pipeline DAG: #{@pipeline_dag.nodes.join(' -> ')}"
+      log_info "Pipeline DAG: #{@pipeline_only_dag.nodes.join(' -> ')}"
     end
 
     def setup_inter_pipeline_queues
+      pipeline_list = pipelines
+      
       # Create queues between connected pipelines
-      @pipeline_dag.edges.each do |from_name, to_names|
-        from_pipeline = @pipelines[from_name]
+      @pipeline_only_dag.edges.each do |from_name, to_names|
+        from_pipeline = pipeline_list[from_name]
 
         to_names.each do |to_name|
-          to_pipeline = @pipelines[to_name]
+          to_pipeline = pipeline_list[to_name]
 
           # Create a queue for communication
           queue = SizedQueue.new(1000)  # Reasonable buffer size
