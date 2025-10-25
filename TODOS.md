@@ -1,6 +1,19 @@
-from keyword in pipelines
-form keyword in stages
+from keyword in pipelines (connects pipelines)
+from keyword in stages
+ensure that to and from don't create circular deps, but allow it to be somewhat liberal
+
+
+pipeline to stage
+stage to pipeline
+pipeline from stage
+stage from pipeline
+
+    def promote_nested_to_multi_pipeline(name) <-- this is weird
+
+ipc, process, etc. for childs in dag
+
 pipeline routing to a stage inside another pipeline double nested
+
 emit_to_stage
 consume_from_stage
 produce as an alias to emit

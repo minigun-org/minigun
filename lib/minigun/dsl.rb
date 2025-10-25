@@ -82,7 +82,7 @@ module Minigun
         if name.nil?
           # Mode 1: No name, just eval block in class context (backward compatible)
           class_eval(&block)
-        elsif options[:to] || _minigun_task.pipelines.any?
+        elsif options[:to] || options[:from] || _minigun_task.pipelines.any?
           # Mode 3: Has routing or other pipelines exist → Multi-pipeline mode
           _minigun_task.define_pipeline(name, options) do |pipeline|
             # Create a DSL context for this specific pipeline

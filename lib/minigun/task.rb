@@ -79,15 +79,36 @@ module Minigun
 
     # Define a named pipeline with routing
     def define_pipeline(name, options = {}, &block)
+      # Check if this was previously defined as a nested pipeline and promote it
+      pipeline = promote_nested_to_multi_pipeline(name)
+
       # Create or get named pipeline
-      pipeline = @pipelines[name] ||= Pipeline.new(name, @config)
+      pipeline ||= @pipelines[name] ||= Pipeline.new(name, @config)
       @pipeline_dag.add_node(name)
 
       # Extract pipeline-level routing
       to_targets = options[:to]
       if to_targets
         Array(to_targets).each do |target|
+          # Promote target if it's a nested pipeline
+          target_pipeline = promote_nested_to_multi_pipeline(target)
+          # Or create placeholder if needed
+          target_pipeline ||= @pipelines[target] ||= Pipeline.new(target, @config)
+          @pipeline_dag.add_node(target)
           @pipeline_dag.add_edge(name, target)
+        end
+      end
+
+      # Extract reverse routing (from:)
+      from_sources = options[:from]
+      if from_sources
+        Array(from_sources).each do |source|
+          # Promote source if it's a nested pipeline
+          source_pipeline = promote_nested_to_multi_pipeline(source)
+          # Or create placeholder if needed
+          source_pipeline ||= @pipelines[source] ||= Pipeline.new(source, @config)
+          @pipeline_dag.add_node(source)
+          @pipeline_dag.add_edge(source, name)
         end
       end
 
@@ -95,6 +116,27 @@ module Minigun
       if block_given?
         yield pipeline
       end
+
+      pipeline
+    end
+
+    # Promote a nested pipeline stage to a proper multi-pipeline
+    def promote_nested_to_multi_pipeline(name)
+      # Check if this exists as a nested pipeline in the implicit pipeline
+      nested_stage = @implicit_pipeline.stages[name]
+      return nil unless nested_stage.is_a?(PipelineStage)
+
+      # Get the pipeline from the nested stage
+      pipeline = nested_stage.pipeline
+      return nil unless pipeline
+
+      # Move it to @pipelines
+      @pipelines[name] = pipeline
+
+      # Remove from implicit pipeline
+      @implicit_pipeline.stages.delete(name)
+      @implicit_pipeline.instance_variable_get(:@stage_order).delete(name)
+      @implicit_pipeline.dag.instance_variable_get(:@nodes).delete(name)
 
       pipeline
     end

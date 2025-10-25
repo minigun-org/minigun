@@ -39,6 +39,11 @@ module Minigun
       add_node(from)
       add_node(to)
 
+      # Check for circular dependencies
+      if would_create_cycle?(from, to)
+        raise Minigun::Error, "Circular dependency detected: adding edge #{from} -> #{to} would create a cycle"
+      end
+
       @edges[from] << to unless @edges[from].include?(to)
       @reverse_edges[to] << from unless @reverse_edges[to].include?(from)
     end

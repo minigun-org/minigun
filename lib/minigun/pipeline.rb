@@ -48,13 +48,28 @@ module Minigun
       @stats = nil  # Will be initialized in run()
 
       # For multi-pipeline communication
-      @input_queue = nil
+      @input_queues = []  # Array of input queues from upstream pipelines
       @output_queues = {}  # { pipeline_name => queue }
     end
 
-    # Set an input queue for receiving items from upstream pipelines
+    # Set an input queue for receiving items from upstream pipelines (backward compatibility)
     def input_queue=(queue)
-      @input_queue = queue
+      @input_queues << queue unless @input_queues.include?(queue)
+    end
+
+    # Get the input queues (returns array)
+    def input_queues
+      @input_queues
+    end
+
+    # Get the first input queue (backward compatibility)
+    def input_queue
+      @input_queues.first
+    end
+
+    # Add an input queue for receiving items from upstream pipelines
+    def add_input_queue(queue)
+      @input_queues << queue unless @input_queues.include?(queue)
     end
 
     # Add an output queue for sending items to a downstream pipeline
@@ -101,6 +116,12 @@ module Minigun
       to_targets = options.delete(:to)
       if to_targets
         Array(to_targets).each { |target| @dag.add_edge(name, target) }
+      end
+
+      # Extract reverse routing (from:)
+      from_sources = options.delete(:from)
+      if from_sources
+        Array(from_sources).each { |source| @dag.add_edge(source, name) }
       end
 
       # Extract inline hook procs (Option 3)
@@ -278,7 +299,7 @@ module Minigun
 
       # Handle both internal producers and input from upstream pipeline
       has_internal_producers = producer_stages.any? { |p| p.block }
-      has_input_queue = @input_queue
+      has_input_queues = @input_queues.any?
 
       Thread.new do
         producer_threads = []
@@ -329,21 +350,23 @@ module Minigun
           end
         end
 
-        if has_input_queue
-          # Consume from input queue (upstream pipeline)
-          producer_threads << Thread.new do
-            log_info "[Pipeline:#{@name}][Input] Waiting for upstream items"
+        if has_input_queues
+          # Consume from input queues (upstream pipelines)
+          @input_queues.each_with_index do |input_queue, idx|
+            producer_threads << Thread.new do
+              log_info "[Pipeline:#{@name}][Input-#{idx}] Waiting for upstream items"
 
-            loop do
-              item = @input_queue.pop
-              break if item == :END_OF_QUEUE
+              loop do
+                item = input_queue.pop
+                break if item == :END_OF_QUEUE
 
-              in_flight_count.increment
-              queue << [item, :_input]
-              produced_count.increment
+                in_flight_count.increment
+                queue << [item, :_input]
+                produced_count.increment
+              end
+
+              log_info "[Pipeline:#{@name}][Input-#{idx}] Upstream finished"
             end
-
-            log_info "[Pipeline:#{@name}][Input] Upstream finished"
           end
         end
 
@@ -716,7 +739,7 @@ module Minigun
 
     def build_dag_routing!
       # If this pipeline receives input from upstream, add :_input node and route it
-      if @input_queue
+      if @input_queues.any?
         handle_input_queue_routing!
       end
 
