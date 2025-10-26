@@ -18,35 +18,37 @@ RSpec.describe 'Stage-Specific Hooks' do
           @events = []
         end
 
-        producer :generate do
-          @events << :producer_run
-          emit(1)
-          emit(2)
-        end
+        pipeline do
+          producer :generate do
+            @events << :producer_run
+            emit(1)
+            emit(2)
+          end
 
-        before :generate do
-          @events << :before_generate
-        end
+          before :generate do
+            @events << :before_generate
+          end
 
-        after :generate do
-          @events << :after_generate
-        end
+          after :generate do
+            @events << :after_generate
+          end
 
-        processor :transform do |num|
-          @events << :processor_run
-          emit(num * 2)
-        end
+          processor :transform do |num|
+            @events << :processor_run
+            emit(num * 2)
+          end
 
-        before :transform do
-          @events << :before_transform
-        end
+          before :transform do
+            @events << :before_transform
+          end
 
-        after :transform do
-          @events << :after_transform
-        end
+          after :transform do
+            @events << :after_transform
+          end
 
-        consumer :collect do |num|
-          @events << :consumer_run
+          consumer :collect do |num|
+            @events << :consumer_run
+          end
         end
       end
     end
@@ -76,15 +78,17 @@ RSpec.describe 'Stage-Specific Hooks' do
           @events = []
         end
 
-        producer :generate,
-                 before: -> { @events << :before_inline },
-                 after: -> { @events << :after_inline } do
-          @events << :producer_run
-          emit(1)
-        end
+        pipeline do
+          producer :generate,
+                   before: -> { @events << :before_inline },
+                   after: -> { @events << :after_inline } do
+            @events << :producer_run
+            emit(1)
+          end
 
-        consumer :collect do |num|
-          @events << :collected
+          consumer :collect do |num|
+            @events << :collected
+          end
         end
       end
     end
@@ -114,22 +118,24 @@ RSpec.describe 'Stage-Specific Hooks' do
           @mutex = Mutex.new
         end
 
-        producer :generate do
-          3.times { |i| emit(i) }
-        end
+        pipeline do
+          producer :generate do
+            3.times { |i| emit(i) }
+          end
 
-        accumulator :batch
+          accumulator :batch
 
-        spawn_fork :process do |num|
-          @mutex.synchronize { @events << :process_run }
-        end
+          spawn_fork :process do |num|
+            @mutex.synchronize { @events << :process_run }
+          end
 
-        before_fork :process do
-          @events << :before_fork_process
-        end
+          before_fork :process do
+            @events << :before_fork_process
+          end
 
-        after_fork :process do
-          @events << :after_fork_process
+          after_fork :process do
+            @events << :after_fork_process
+          end
         end
       end
     end
@@ -157,29 +163,31 @@ RSpec.describe 'Stage-Specific Hooks' do
           @events = []
         end
 
-        before_run do
-          @events << :before_run_pipeline
-        end
+        pipeline do
+          before_run do
+            @events << :before_run_pipeline
+          end
 
-        after_run do
-          @events << :after_run_pipeline
-        end
+          after_run do
+            @events << :after_run_pipeline
+          end
 
-        producer :generate do
-          @events << :producer_run
-          emit(1)
-        end
+          producer :generate do
+            @events << :producer_run
+            emit(1)
+          end
 
-        before :generate do
-          @events << :before_generate_stage
-        end
+          before :generate do
+            @events << :before_generate_stage
+          end
 
-        after :generate do
-          @events << :after_generate_stage
-        end
+          after :generate do
+            @events << :after_generate_stage
+          end
 
-        consumer :collect do |num|
-          @events << :collect_run
+          consumer :collect do |num|
+            @events << :collect_run
+          end
         end
       end
     end
@@ -208,28 +216,30 @@ RSpec.describe 'Stage-Specific Hooks' do
           @events = []
         end
 
-        producer :generate do
-          @events << :producer_run
-          emit(1)
-        end
+        pipeline do
+          producer :generate do
+            @events << :producer_run
+            emit(1)
+          end
 
-        before :generate do
-          @events << :before_1
-        end
+          before :generate do
+            @events << :before_1
+          end
 
-        before :generate do
-          @events << :before_2
-        end
+          before :generate do
+            @events << :before_2
+          end
 
-        after :generate do
-          @events << :after_1
-        end
+          after :generate do
+            @events << :after_1
+          end
 
-        after :generate do
-          @events << :after_2
-        end
+          after :generate do
+            @events << :after_2
+          end
 
-        consumer :collect do |num|
+          consumer :collect do |num|
+          end
         end
       end
     end
