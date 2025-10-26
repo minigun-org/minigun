@@ -14,9 +14,6 @@ module Minigun
         max_threads: config[:max_threads] || 5,
         max_processes: config[:max_processes] || 2,
         max_retries: config[:max_retries] || 3,
-        accumulator_max_single: config[:accumulator_max_single] || 2000,
-        accumulator_max_all: config[:accumulator_max_all] || 4000,
-        accumulator_check_interval: config[:accumulator_check_interval] || 100,
         use_ipc: config[:use_ipc] || false
       }
 
@@ -416,10 +413,7 @@ module Minigun
       Thread.new do
         log_info "[Pipeline:#{@name}][Accumulator] Starting"
 
-        accumulator_buffers = Hash.new { |h, k| h[k] = [] }  # Buffers for accumulator stages
-        consumer_batches = Hash.new { |h, k| h[k] = [] }     # Batched items for consumers
         output_items = []  # Track items to send to downstream pipelines
-        check_counter = 0
 
         loop do
           item_data = @queue.pop
@@ -434,54 +428,11 @@ module Minigun
             target_stage = find_stage(target_name)
             next unless target_stage
 
-            if target_stage.accumulator?
-              # Accumulator stage - batch items
-              accumulator_buffers[target_name] << item
-
-              # Check if we've reached the batch size
-              if accumulator_buffers[target_name].size >= target_stage.max_size
-                batch = accumulator_buffers[target_name].dup
-                accumulator_buffers[target_name].clear
-
-                # Execute accumulator logic if any (e.g., grouping)
-                processed_batch = target_stage.execute(@context, batch)
-
-                # Send batch to downstream stages
-                downstream_targets = @dag.downstream(target_name)
-                downstream_targets.each do |downstream_name|
-                  downstream_stage = find_stage(downstream_name)
-
-                  if @dag.terminal?(downstream_name)
-                    # Terminal stage - add to consumer batches
-                    consumer_batches[downstream_name] << { item: processed_batch, stage: downstream_stage }
-                  else
-                    # Non-terminal - re-queue for further processing
-                    @in_flight_count.increment
-                    @queue << [processed_batch, target_name]
-                  end
-                end
-              end
-            elsif @dag.terminal?(target_name)
-              # Terminal stage (consumer)
-              # Check if this consumer has an accumulator before it
-              upstream = @dag.upstream(target_name)
-              has_accumulator_upstream = upstream.any? { |up| find_stage(up)&.accumulator? }
-
-              if has_accumulator_upstream
-                # Has accumulator upstream - batch the items
-                consumer_batches[target_name] << { item: item, stage: target_stage }
-                check_counter += 1
-
-                # Periodically check if we should execute consumer batches
-                if check_counter % @config[:accumulator_check_interval] == 0
-                  check_and_execute_consumers(consumer_batches, output_items)
-                end
-              else
-                # No accumulator upstream - execute immediately
-                execute_consumers({ target_name => [{ item: item, stage: target_stage }] }, output_items)
-              end
+            if @dag.terminal?(target_name)
+              # Terminal stage (consumer) - execute immediately
+              execute_consumers({ target_name => [{ item: item, stage: target_stage }] }, output_items)
             else
-              # Processor or Pipeline - execute and route outputs
+              # Processor, Accumulator, or Pipeline - execute and route outputs
               emitted_items = execute_stage(target_stage, item)
 
               emitted_items.each do |emitted_item|
@@ -492,52 +443,42 @@ module Minigun
           end
         end
 
-        # Process remaining batches in accumulators
-        accumulator_buffers.each do |accum_name, items|
-          next if items.empty?
+        # Flush all accumulators to emit any remaining items
+        @stages.each_value do |stage|
+          next unless stage.accumulator?
 
-          accum_stage = find_stage(accum_name)
-          processed_batch = accum_stage.execute(@context, items)
+          flushed_items = stage.flush(@context)
+          flushed_items.each do |batch|
+            # Send batch to downstream stages
+            downstream_targets = @dag.downstream(stage.name)
+            downstream_targets.each do |downstream_name|
+              downstream_stage = find_stage(downstream_name)
 
-          # Send final batch to downstream
-          downstream_targets = @dag.downstream(accum_name)
-          downstream_targets.each do |downstream_name|
-            downstream_stage = find_stage(downstream_name)
-
-            if @dag.terminal?(downstream_name)
-              consumer_batches[downstream_name] << { item: processed_batch, stage: downstream_stage }
+              if @dag.terminal?(downstream_name)
+                # Execute consumer immediately
+                execute_consumers({ downstream_name => [{ item: batch, stage: downstream_stage }] }, output_items)
+              else
+                # Process through downstream stage
+                next_items = execute_stage(downstream_stage, batch)
+                next_items.each do |next_item|
+                  # Find final consumers
+                  final_targets = @dag.downstream(downstream_name)
+                  final_targets.each do |final_name|
+                    final_stage = find_stage(final_name)
+                    if @dag.terminal?(final_name)
+                      execute_consumers({ final_name => [{ item: next_item, stage: final_stage }] }, output_items)
+                    end
+                  end
+                end
+              end
             end
           end
-        end
-
-        # Execute all remaining consumer batches using StageExecutor
-        unless consumer_batches.empty?
-          execute_consumers(consumer_batches, output_items)
         end
 
         # Send items to output queues if this pipeline has downstream pipelines
         send_to_output_queues(output_items)
 
         log_info "[Pipeline:#{@name}][Accumulator] Done"
-      end
-    end
-
-    # Check if consumer batches should be executed (based on size thresholds)
-    def check_and_execute_consumers(consumer_batches, output_items)
-      # Check if any single consumer batch is too large
-      consumer_batches.each do |consumer_name, items|
-        if items.size >= @config[:accumulator_max_single]
-          # Execute just this consumer batch
-          execute_consumers({ consumer_name => consumer_batches.delete(consumer_name) }, output_items)
-        end
-      end
-
-      # Check if total items across all consumers is too large
-      total = consumer_batches.values.sum(&:size)
-      if total >= @config[:accumulator_max_all]
-        # Execute all consumer batches and clear
-        execute_consumers(consumer_batches.dup, output_items)
-        consumer_batches.clear
       end
     end
 

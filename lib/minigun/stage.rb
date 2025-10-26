@@ -114,21 +114,61 @@ module Minigun
       super
       @max_size = options[:max_size] || 100
       @max_wait = options[:max_wait] || nil  # Future: time-based batching
+      @buffer = []
+      @mutex = Mutex.new
     end
 
     def accumulator?
       true
     end
 
-    # Accumulator doesn't execute per-item - it batches
-    # The batching logic happens in Pipeline
-    def execute(context, batch)
-      # If there's custom logic, execute it
-      # Otherwise just pass through the batch
-      if @block
-        context.instance_exec(batch, &@block)
+    # Process items one at a time, buffering internally
+    # Returns an array (with batch) if buffer is full, empty array otherwise
+    def execute_with_emit(context, item)
+      batch_to_emit = nil
+
+      @mutex.synchronize do
+        @buffer << item
+
+        if @buffer.size >= @max_size
+          batch_to_emit = @buffer.dup
+          @buffer.clear
+        end
+      end
+
+      if batch_to_emit
+        # Process the batch with custom logic if provided
+        processed_batch = if @block
+          context.instance_exec(batch_to_emit, &@block)
+        else
+          batch_to_emit
+        end
+        [processed_batch]
       else
-        batch
+        []
+      end
+    end
+
+    # Called at end of pipeline to flush remaining items
+    def flush(context)
+      batch_to_emit = nil
+
+      @mutex.synchronize do
+        if @buffer.any?
+          batch_to_emit = @buffer.dup
+          @buffer.clear
+        end
+      end
+
+      if batch_to_emit
+        processed_batch = if @block
+          context.instance_exec(batch_to_emit, &@block)
+        else
+          batch_to_emit
+        end
+        [processed_batch]
+      else
+        []
       end
     end
   end
