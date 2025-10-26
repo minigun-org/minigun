@@ -9,7 +9,6 @@ module Minigun
     def initialize(name:, options: {})
       @name = name
       @options = options
-      @strategy = options[:strategy] || :threaded
     end
 
     # Execute the stage with the given context and item
@@ -33,14 +32,9 @@ module Minigun
       false
     end
 
-    # Get execution strategy
-    def strategy
-      @strategy
-    end
-
-    # Whether this stage has a spawn strategy (fork, thread, ractor)
-    def has_spawn_strategy?
-      [:spawn_thread, :spawn_fork, :spawn_ractor].include?(@strategy)
+    # Get execution context configuration for this stage
+    def execution_context
+      @options[:_execution_context]
     end
 
     # Convert to hash (for backward compatibility)

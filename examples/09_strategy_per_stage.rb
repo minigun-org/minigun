@@ -33,23 +33,27 @@ class StrategyPerStageExample
     accumulator :batch, max_size: 3, to: [:heavy_save, :light_log]
 
     # Heavy consumer spawns forks per batch (COW fork pattern)
-    spawn_fork :heavy_save do |batch|
-      puts "[HeavySave:spawn_fork:#{Process.pid}] Processing batch of #{batch.size}"
-      sleep 0.01  # Simulate heavy work
-      batch.each { |num| @mutex.synchronize { fork_results << num } }
+    process_per_batch(max: 2) do
+      consumer :heavy_save do |batch|
+        puts "[HeavySave:process_per_batch:#{Process.pid}] Processing batch of #{batch.size}"
+        sleep 0.01  # Simulate heavy work
+        batch.each { |num| @mutex.synchronize { fork_results << num } }
+      end
     end
 
     # Light consumer uses threads (stream mode, no batching needed)
-    consumer :light_log, strategy: :threaded do |batch|
-      puts "[LightLog:threaded] Logging batch of #{batch.size}"
-      batch.each { |num| @mutex.synchronize { thread_results << num } }
+    threads(5) do
+      consumer :light_log do |batch|
+        puts "[LightLog:threads] Logging batch of #{batch.size}"
+        batch.each { |num| @mutex.synchronize { thread_results << num } }
+      end
     end
   end
 end
 
 if __FILE__ == $0
   puts "=== Strategy Per Stage Example ===\n\n"
-  puts "Producer → Validator → Batch (accumulator) → [HeavySave (spawn_fork), LightLog (threaded)]\n\n"
+  puts "Producer → Validator → Batch (accumulator) → [HeavySave (process_per_batch), LightLog (threads)]\n\n"
 
   example = StrategyPerStageExample.new
   example.run

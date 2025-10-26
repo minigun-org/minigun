@@ -41,11 +41,6 @@ module Minigun
       @dag = DAG.new
       @stage_order = []
 
-      @produced_count = Concurrent::AtomicFixnum.new(0)
-      @in_flight_count = Concurrent::AtomicFixnum.new(0)
-      @accumulated_count = 0
-      @consumer_pids = []
-
       # Statistics tracking
       @stats = nil  # Will be initialized in run()
 
@@ -112,8 +107,6 @@ module Minigun
 
     # Add a stage to this pipeline
     def add_stage(type, name, options = {}, &block)
-      # We'll add to stage_order after we create the stage so we know what it is
-
       # Extract routing information
       to_targets = options.delete(:to)
       if to_targets
@@ -162,8 +155,6 @@ module Minigun
     end
 
     # Reroute stages by modifying the DAG
-    # Example: reroute_stage :producer, to: :new_processor (instead of :consumer)
-    # This removes producer's old edges and adds new ones
     def reroute_stage(from_stage, to:)
       # Remove existing outgoing edges from this stage
       old_targets = @dag.downstream(from_stage).dup
@@ -215,26 +206,27 @@ module Minigun
       # Run before_run hooks
       @hooks[:before_run].each { |h| context.instance_eval(&h) }
 
-      # Just run normally - PipelineStages will execute like any other stage
-      run_normal_pipeline(context)
+      # Execute the pipeline
+      run_pipeline(context)
 
       @job_end = Time.now
       @stats.finish!
 
       log_info "#{log_prefix} Finished in #{(@job_end - @job_start).round(2)}s"
-      log_info "#{log_prefix} Produced: #{@produced_count.value}, Accumulated: #{@accumulated_count}"
 
       # Run after_run hooks
       @hooks[:after_run].each { |h| context.instance_eval(&h) }
 
-      # Return produced count (or accumulated count if using accumulator)
-      @accumulated_count > 0 ? @accumulated_count : @produced_count.value
+      # Return produced count
+      @stats.total_produced
     end
 
-    # Normal pipeline execution (all stages treated uniformly)
-    def run_normal_pipeline(context)
+    # Main pipeline execution logic
+    def run_pipeline(context)
       # Start internal queue (for stage-to-stage communication)
-      @queue = SizedQueue.new(@config[:max_processes] * @config[:max_threads] * 2)
+      @queue = SizedQueue.new([(@config[:max_processes] * @config[:max_threads] * 2), 100].max)
+      @in_flight_count = Concurrent::AtomicFixnum.new(0)
+      @produced_count = Concurrent::AtomicFixnum.new(0)
 
       # Start producer and accumulator threads
       producer_thread = start_producer
@@ -243,9 +235,7 @@ module Minigun
       # Wait for completion
       producer_thread.join
       accumulator_thread.join
-      wait_all_consumers
     end
-
 
     def find_stage(name)
       @stages[name]
@@ -259,9 +249,7 @@ module Minigun
       targets = @dag.downstream(stage_name)
 
       # If no targets and we have output queues, this is an output stage
-      # (Only non-terminal stages should output to queues - terminal stages consume)
       if targets.empty? && !@output_queues.empty? && !is_terminal_stage?(stage_name)
-        # This item should be sent to output queues
         return [:output]
       end
 
@@ -274,7 +262,6 @@ module Minigun
     end
 
     def find_all_producers
-      # Include both AtomicStage producers and PipelineStages with no upstream
       @stages.values.select do |stage|
         if stage.is_a?(PipelineStage)
           # PipelineStage is a producer if it has no upstream
@@ -287,11 +274,6 @@ module Minigun
 
     def find_accumulator
       @stages.values.find { |stage| stage.accumulator? }
-    end
-
-    def find_consumers_with_spawn_strategies
-      spawn_strategies = [:spawn_thread, :spawn_fork, :spawn_ractor]
-      @stages.values.select { |stage| spawn_strategies.include?(stage.strategy) }
     end
 
     private
@@ -430,13 +412,12 @@ module Minigun
       end
     end
 
-
     def start_accumulator
       Thread.new do
         log_info "[Pipeline:#{@name}][Accumulator] Starting"
 
-        consumer_queues = Hash.new { |h, k| h[k] = [] }
         accumulator_buffers = Hash.new { |h, k| h[k] = [] }  # Buffers for accumulator stages
+        consumer_batches = Hash.new { |h, k| h[k] = [] }     # Batched items for consumers
         output_items = []  # Track items to send to downstream pipelines
         check_counter = 0
 
@@ -465,30 +446,39 @@ module Minigun
                 # Execute accumulator logic if any (e.g., grouping)
                 processed_batch = target_stage.execute(@context, batch)
 
-                # Send batch directly to downstream consumers (don't re-queue)
+                # Send batch to downstream stages
                 downstream_targets = @dag.downstream(target_name)
                 downstream_targets.each do |downstream_name|
                   downstream_stage = find_stage(downstream_name)
 
                   if @dag.terminal?(downstream_name)
-                    # Add batch to consumer queue
-                    consumer_queues[downstream_name] << { item: processed_batch, stage: downstream_stage, output_items: output_items }
+                    # Terminal stage - add to consumer batches
+                    consumer_batches[downstream_name] << { item: processed_batch, stage: downstream_stage }
                   else
                     # Non-terminal - re-queue for further processing
                     @in_flight_count.increment
                     @queue << [processed_batch, target_name]
                   end
                 end
-
-                @accumulated_count += batch.size
               end
             elsif @dag.terminal?(target_name)
-              # Terminal stage (consumer) - accumulate for batch processing
-              consumer_queues[target_name] << { item: item, stage: target_stage, output_items: output_items }
-              check_counter += 1
+              # Terminal stage (consumer)
+              # Check if this consumer has an accumulator before it
+              upstream = @dag.upstream(target_name)
+              has_accumulator_upstream = upstream.any? { |up| find_stage(up)&.accumulator? }
 
-              if check_counter % @config[:accumulator_check_interval] == 0
-                check_and_fork(consumer_queues, output_items)
+              if has_accumulator_upstream
+                # Has accumulator upstream - batch the items
+                consumer_batches[target_name] << { item: item, stage: target_stage }
+                check_counter += 1
+
+                # Periodically check if we should execute consumer batches
+                if check_counter % @config[:accumulator_check_interval] == 0
+                  check_and_execute_consumers(consumer_batches, output_items)
+                end
+              else
+                # No accumulator upstream - execute immediately
+                execute_consumers({ target_name => [{ item: item, stage: target_stage }] }, output_items)
               end
             else
               # Processor or Pipeline - execute and route outputs
@@ -515,21 +505,51 @@ module Minigun
             downstream_stage = find_stage(downstream_name)
 
             if @dag.terminal?(downstream_name)
-              # Add to consumer queue
-              consumer_queues[downstream_name] << { item: processed_batch, stage: downstream_stage, output_items: output_items }
+              consumer_batches[downstream_name] << { item: processed_batch, stage: downstream_stage }
             end
           end
-
-          @accumulated_count += items.size
         end
 
-        # Process remaining consumer items
-        fork_consumer(consumer_queues, output_items) unless consumer_queues.empty?
+        # Execute all remaining consumer batches using StageExecutor
+        unless consumer_batches.empty?
+          execute_consumers(consumer_batches, output_items)
+        end
 
         # Send items to output queues if this pipeline has downstream pipelines
         send_to_output_queues(output_items)
 
-        log_info "[Pipeline:#{@name}][Accumulator] Done. Accumulated #{@accumulated_count} items"
+        log_info "[Pipeline:#{@name}][Accumulator] Done"
+      end
+    end
+
+    # Check if consumer batches should be executed (based on size thresholds)
+    def check_and_execute_consumers(consumer_batches, output_items)
+      # Check if any single consumer batch is too large
+      consumer_batches.each do |consumer_name, items|
+        if items.size >= @config[:accumulator_max_single]
+          # Execute just this consumer batch
+          execute_consumers({ consumer_name => consumer_batches.delete(consumer_name) }, output_items)
+        end
+      end
+
+      # Check if total items across all consumers is too large
+      total = consumer_batches.values.sum(&:size)
+      if total >= @config[:accumulator_max_all]
+        # Execute all consumer batches and clear
+        execute_consumers(consumer_batches.dup, output_items)
+        consumer_batches.clear
+      end
+    end
+
+    # Execute consumers using the new execution context system
+    def execute_consumers(consumer_batches, output_items)
+      require_relative 'execution/stage_executor'
+      executor = Execution::StageExecutor.new(self, @config)
+
+      begin
+        executor.execute_batch(consumer_batches, output_items, @context, @stats, @stage_hooks)
+      ensure
+        executor.shutdown
       end
     end
 
@@ -581,185 +601,6 @@ module Minigun
       result
     end
 
-    def check_and_fork(accumulator_map, output_items)
-      accumulator_map.each do |key, items|
-        if items.size >= @config[:accumulator_max_single]
-          fork_consumer({ key => accumulator_map.delete(key) }, output_items)
-        end
-      end
-
-      total = accumulator_map.values.sum(&:size)
-      if total >= @config[:accumulator_max_all]
-        fork_consumer(accumulator_map.dup, output_items)
-        accumulator_map.clear
-      end
-    end
-
-    def fork_consumer(batch_map, output_items)
-      total_items = batch_map.values.sum(&:size)
-
-      # Group consumers by strategy
-      strategy_groups = Hash.new { |h, k| h[k] = {} }
-
-      batch_map.each do |consumer_name, items|
-        # Get strategy from first item's stage (all items for a consumer have same strategy)
-        strategy = items.first[:stage].strategy
-        strategy_groups[strategy][consumer_name] = items
-      end
-
-      # Execute each strategy group
-      strategy_groups.each do |strategy, consumer_batch|
-        case strategy
-        when :spawn_fork
-          if Process.respond_to?(:fork)
-            fork_consumer_process(consumer_batch, output_items, total_items)
-          else
-            consume_in_threads(consumer_batch, output_items, total_items)
-          end
-        when :spawn_thread
-          consume_in_threads(consumer_batch, output_items, total_items)
-        when :spawn_ractor
-          consume_in_ractors(consumer_batch, output_items, total_items)
-        when :fork_ipc
-          if Process.respond_to?(:fork)
-            fork_consumer_ipc(consumer_batch, output_items, total_items)
-          else
-            consume_in_threads(consumer_batch, output_items, total_items)
-          end
-        when :ractor
-          consume_in_ractors(consumer_batch, output_items, total_items)
-        when :threaded, nil
-          consume_in_threads(consumer_batch, output_items, total_items)
-        else
-          raise Minigun::Error, "Unknown consumer strategy: #{strategy}"
-        end
-      end
-    end
-
-    def fork_consumer_process(batch_map, output_items, total_items)
-      wait_for_consumer_slot
-
-      log_info "[Pipeline:#{@name}][Fork] Forking to process #{total_items} items"
-
-      # Execute pipeline-level before_fork hooks
-      @hooks[:before_fork].each { |h| @context.instance_eval(&h) }
-
-      # Execute stage-specific before_fork hooks for all consumer stages in this batch
-      consumer_stages = batch_map.values.flat_map { |items| items.map { |i| i[:stage] } }.uniq
-      consumer_stages.each do |stage|
-        execute_stage_hooks(:before_fork, stage.name)
-      end
-
-      GC.start if @consumer_pids.empty? || @consumer_pids.size % 4 == 0
-
-      pid = fork do
-        @pid = Process.pid
-
-        # Set process title for easier identification in ps/top
-        if Process.respond_to?(:setproctitle)
-          Process.setproctitle("minigun-#{@name}-consumer-#{@pid}")
-        end
-
-        # Execute pipeline-level after_fork hooks
-        @hooks[:after_fork].each { |h| @context.instance_eval(&h) }
-
-        # Execute stage-specific after_fork hooks for all consumer stages in this batch
-        consumer_stages.each do |stage|
-          execute_stage_hooks(:after_fork, stage.name)
-        end
-
-        log_info "[Pipeline:#{@name}][Consumer:#{@pid}] Started"
-        consume_batch(batch_map, output_items)
-        log_info "[Pipeline:#{@name}][Consumer:#{@pid}] Done"
-
-        exit! 0
-      end
-
-      @consumer_pids << pid
-    end
-
-    def fork_consumer_ipc(batch_map, output_items, total_items)
-      # IPC implementation - similar to fork but with serialized communication
-      # For now, delegate to regular fork
-      fork_consumer_process(batch_map, output_items, total_items)
-    end
-
-    def consume_in_threads(batch_map, output_items, total_items)
-      log_info "[Pipeline:#{@name}][Consumer] Processing #{total_items} items (threaded)"
-      consume_batch(batch_map, output_items)
-    end
-
-    def consume_in_ractors(batch_map, output_items, total_items)
-      log_info "[Pipeline:#{@name}][Consumer] Processing #{total_items} items (ractors)"
-      # Ractor implementation - for now, fall back to threads
-      # TODO: Implement true ractor-based execution
-      consume_batch(batch_map, output_items)
-    end
-
-    def consume_batch(batch_map, output_items)
-      thread_pool = Concurrent::FixedThreadPool.new(@config[:max_threads])
-      processed = Concurrent::AtomicFixnum.new(0)
-      mutex = Mutex.new
-
-      # Check if we have downstream pipelines
-      has_downstream = !@output_queues.empty?
-
-      batch_map.each do |_consumer_name, item_data_array|
-        item_data_array.each do |item_data|
-          Concurrent::Future.execute(executor: thread_pool) do
-            item = item_data[:item]
-            stage = item_data[:stage]
-            # Terminal consumers don't produce items
-            stage_stats = @stats.for_stage(stage.name, is_terminal: true)
-            stage_stats.start! unless stage_stats.start_time
-            start_time = Time.now
-
-            if has_downstream
-              # Create emit method for consumer to send to downstream pipelines
-              emit_proc = proc do |emitted_item|
-                mutex.synchronize { output_items << emitted_item }
-              end
-              @context.define_singleton_method(:emit, &emit_proc)
-            end
-
-            stage.execute(@context, item)
-
-            # Track consumption
-            stage_stats.increment_consumed
-
-            # Record latency
-            duration = Time.now - start_time
-            stage_stats.record_latency(duration)
-
-            processed.increment
-          end
-        end
-      end
-
-      thread_pool.shutdown
-      thread_pool.wait_for_termination(30)
-
-      log_info "[Pipeline:#{@name}][Consumer] Processed #{processed.value} items"
-    end
-
-    def wait_for_consumer_slot
-      return if @consumer_pids.size < @config[:max_processes]
-
-      pid = Process.wait
-      @consumer_pids.delete(pid)
-    rescue Errno::ECHILD
-      # No children
-    end
-
-    def wait_all_consumers
-      @consumer_pids.each do |pid|
-        Process.wait(pid)
-      rescue Errno::ECHILD
-        # Already exited
-      end
-      @consumer_pids.clear
-    end
-
     def build_dag_routing!
       # If this pipeline receives input from upstream, add :_input node and route it
       if @input_queues.any?
@@ -784,28 +625,6 @@ module Minigun
 
         unless find_stage(node_name)
           raise Minigun::Error, "[Pipeline:#{@name}] Routing references non-existent stage '#{node_name}'"
-        end
-      end
-
-      # Validate spawn strategies require preceding accumulator
-      validate_spawn_strategies!
-    end
-
-    def validate_spawn_strategies!
-      spawn_consumers = find_consumers_with_spawn_strategies
-
-      spawn_consumers.each do |consumer_stage|
-        # Check if there's an accumulator before this consumer
-        upstream_stages = @dag.upstream(consumer_stage.name)
-        has_accumulator = upstream_stages.any? do |upstream_name|
-          stage = find_stage(upstream_name)
-          stage && stage.accumulator?
-        end
-
-        unless has_accumulator
-          raise Minigun::Error,
-            "[Pipeline:#{@name}] Consumer '#{consumer_stage.name}' uses strategy '#{consumer_stage.strategy}' " \
-            "but has no preceding accumulator stage. Add an accumulator stage before this consumer."
         end
       end
     end
@@ -851,7 +670,6 @@ module Minigun
         next_stage = @stage_order[index + 1]
 
         # Skip if BOTH current and next are PipelineStages (isolated pipelines)
-        # PipelineStages should only connect to each other via explicit to: routing
         current_stage = find_stage(stage_name)
         next_stage_obj = find_stage(next_stage)
         if current_stage.is_a?(PipelineStage) && next_stage_obj.is_a?(PipelineStage)
@@ -862,7 +680,6 @@ module Minigun
         next if @dag.fan_out_siblings?(stage_name, next_stage)
 
         # Skip if any sibling already routes to next_stage
-        # (indicates a converging pattern after fan-out)
         siblings = @dag.siblings(stage_name)
         next if siblings.any? { |sib| @dag.downstream(sib).include?(next_stage) }
 
@@ -890,4 +707,3 @@ module Minigun
     end
   end
 end
-

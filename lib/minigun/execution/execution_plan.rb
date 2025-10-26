@@ -96,24 +96,15 @@ module Minigun
       end
 
       def context_type_for(stage)
-        # Check stage's strategy
-        case stage.strategy
-        when :threaded
-          :thread
-        when :fork_ipc
-          :fork
-        when :ractor
-          :ractor
-        when :spawn_thread
-          :thread  # But after accumulator
-        when :spawn_fork
-          :fork
-        when :spawn_ractor
-          :ractor
-        else
-          # Default based on config
-          @config[:default_context] || :thread
+        # Check stage's execution context
+        exec_ctx = stage.execution_context
+
+        if exec_ctx
+          return exec_ctx[:type] || :thread
         end
+
+        # Default based on config
+        @config[:default_context] || :thread
       end
 
       def determine_affinity(stage, upstream_stages)
@@ -134,8 +125,8 @@ module Minigun
         # Don't colocate with accumulators (they batch items)
         return nil if upstream_stage.accumulator?
 
-        # Don't colocate if stage has explicit non-default strategy
-        return nil if stage.strategy != :threaded
+        # Don't colocate if stage has explicit execution context
+        return nil if stage.execution_context
 
         # Don't colocate with PipelineStages (they run independently)
         return nil if upstream_stage.is_a?(Minigun::PipelineStage)

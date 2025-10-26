@@ -99,18 +99,20 @@ class StatisticsGatheringExample
       @stats[:consumer_duration] = @stats[:consumer_end] - @stats[:consumer_start]
     end
 
-    before_fork :save_results do
-      @stats[:forks_created] += 1
-    end
+    process_per_batch(max: 2) do
+      before_fork :save_results do
+        @stats[:forks_created] += 1
+      end
 
-    after_fork :save_results do
-      @stats[:child_processes] << Process.pid
-    end
+      after_fork :save_results do
+        @stats[:child_processes] << Process.pid
+      end
 
-    spawn_fork :save_results do |batch|
-      batch.each do |item|
-        @results << item
-        @stats[:consumer_count] += 1
+      consumer :save_results do |batch|
+        batch.each do |item|
+          @results << item
+          @stats[:consumer_count] += 1
+        end
       end
     end
   end

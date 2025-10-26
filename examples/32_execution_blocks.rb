@@ -23,29 +23,29 @@ puts "=" * 60
 
 class ThreadPoolExample
   include Minigun::DSL
-  
+
   attr_reader :results
-  
+
   def initialize
     @results = []
     @mutex = Mutex.new
   end
-  
+
   pipeline do
     producer :gen do
       10.times { |i| emit(i) }
     end
-    
+
     # All stages within threads block use thread pool of 5
     threads(5) do
       processor :double do |item|
         emit(item * 2)
       end
-      
+
       processor :add_ten do |item|
         emit(item + 10)
       end
-      
+
       consumer :collect do |item|
         @mutex.synchronize { @results << item }
       end
@@ -65,29 +65,29 @@ puts "=" * 60
 
 class BatchProcessExample
   include Minigun::DSL
-  
+
   attr_reader :processed
-  
+
   def initialize
     @processed = []
     @mutex = Mutex.new
   end
-  
+
   pipeline do
     producer :gen do
       100.times { |i| emit(i) }
     end
-    
+
     threads(10) do
       processor :download do |item|
         # Simulate I/O-bound work
         emit({ id: item, data: "data-#{item}" })
       end
     end
-    
+
     # Accumulate into batches of 20
     batch 20
-    
+
     # Spawn a new process for each batch (max 4 concurrent)
     process_per_batch(max: 4) do
       consumer :process_batch do |batch|
@@ -112,29 +112,29 @@ puts "=" * 60
 
 class NestedContextExample
   include Minigun::DSL
-  
+
   attr_reader :results
-  
+
   def initialize
     @results = []
     @mutex = Mutex.new
   end
-  
+
   pipeline do
     producer :gen do
       50.times { |i| emit(i) }
     end
-    
+
     # Outer: thread pool for I/O work
     threads(20) do
       processor :fetch do |item|
         # Simulate fetch
         emit(item * 2)
       end
-      
+
       # Batch within thread context
       batch 10
-      
+
       # Inner: process per batch for CPU work
       process_per_batch(max: 3) do
         processor :compute do |batch|
@@ -142,7 +142,7 @@ class NestedContextExample
           batch.map { |x| x ** 2 }
         end
       end
-      
+
       # Back to thread context after process_per_batch
       consumer :save do |results|
         @mutex.synchronize { @results.concat(results) }
@@ -163,34 +163,34 @@ puts "=" * 60
 
 class NamedContextExample
   include Minigun::DSL
-  
+
   attr_reader :io_results, :cpu_results
-  
+
   def initialize
     @io_results = []
     @cpu_results = []
     @mutex = Mutex.new
   end
-  
+
   pipeline do
     # Define named contexts
     execution_context :io_pool, :threads, 50
     execution_context :cpu_pool, :processes, 4
-    
+
     producer :gen do
       20.times { |i| emit(i) }
     end
-    
+
     # Use named context
     processor :download, execution_context: :io_pool do |item|
       emit({ id: item, data: "downloaded" })
     end
-    
+
     # Use different named context
     processor :compute, execution_context: :cpu_pool do |item|
       emit(item[:data].upcase)
     end
-    
+
     consumer :collect do |item|
       @mutex.synchronize { @cpu_results << item }
     end
@@ -209,36 +209,36 @@ puts "=" * 60
 
 class ComplexPipeline
   include Minigun::DSL
-  
+
   attr_reader :saved_count
-  
+
   def initialize
     @saved_count = 0
     @mutex = Mutex.new
   end
-  
+
   pipeline do
     # Generate URLs
     producer :generate_urls do
       100.times { |i| emit("https://example.com/page-#{i}") }
     end
-    
+
     # Download in parallel with threads (I/O-bound)
     threads(50) do
       processor :download do |url|
         # Simulate HTTP request
         emit({ url: url, html: "<html>content</html>", size: 1024 })
       end
-      
+
       processor :extract do |page|
         # Extract data from HTML
         emit({ url: page[:url], title: "Page", links: 10 })
       end
     end
-    
+
     # Batch for efficient processing
     batch 20
-    
+
     # Parse in separate processes (CPU-bound)
     process_per_batch(max: 4) do
       processor :parse_batch do |batch|
@@ -252,7 +252,7 @@ class ComplexPipeline
         end
       end
     end
-    
+
     # Save results (back to threads)
     threads(10) do
       consumer :save_to_db do |results|
@@ -274,21 +274,21 @@ puts "=" * 60
 
 class ThreadPerBatchExample
   include Minigun::DSL
-  
+
   attr_reader :batch_count
-  
+
   def initialize
     @batch_count = 0
     @mutex = Mutex.new
   end
-  
+
   pipeline do
     producer :gen do
       50.times { |i| emit(i) }
     end
-    
+
     batch 10
-    
+
     # Spawn a new thread for each batch
     thread_per_batch(max: 5) do
       consumer :process do |batch|
@@ -308,50 +308,50 @@ puts "=" * 60
 puts "Summary"
 puts "=" * 60
 puts <<~SUMMARY
-  
+
   Execution Block Syntax:
-  
+
   1. Thread Pools:
      threads(N) do ... end
      - Reuses N threads for all stages in block
      - Good for I/O-bound work
-  
+
   2. Process Pools:
      processes(N) do ... end
      - Reuses N processes for all stages in block
      - Good for CPU-bound work with isolation
-  
+
   3. Ractor Pools:
      ractors(N) do ... end
      - Reuses N ractors for all stages in block
      - True parallelism (Ruby 3.0+)
-  
+
   4. Batching:
      batch N
      - Accumulates N items before passing to next stage
-  
+
   5. Per-Batch Spawning:
      process_per_batch(max: N) do ... end
      - Spawns new process for each batch
      - Max N concurrent processes
      - Copy-on-write optimization
-  
+
      thread_per_batch(max: N) do ... end
      - Spawns new thread for each batch
      - Max N concurrent threads
-  
+
   6. Named Contexts:
      execution_context :name, :threads, N
      processor :stage, execution_context: :name
      - Define reusable named contexts
      - Assign to specific stages
-  
+
   7. Nesting:
      - Contexts can nest naturally
      - Inner contexts override outer contexts
      - Batch creates accumulator stage
      - Clean, composable design
-  
+
   Benefits:
   ✓ Clear intent (what, not how)
   ✓ Composable blocks

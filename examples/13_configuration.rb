@@ -12,7 +12,7 @@ class ConfigurationExample
   # Higher = more parallelism, but also more memory/CPU
   max_threads 10
 
-  # Maximum number of forked processes (for spawn_fork strategy with accumulator)
+  # Maximum number of forked processes (for process_per_batch execution)
   # Higher = more parallel batch processing
   max_processes 4
 
@@ -62,7 +62,7 @@ if __FILE__ == $0
 
   puts "Available Configuration Options:"
   puts "  max_threads(n)    - Thread pool size for concurrent processing"
-  puts "  max_processes(n)  - Max forked processes (spawn_fork strategy)"
+  puts "  max_processes(n)  - Max forked processes (process_per_batch execution)"
   puts "  max_retries(n)    - Max retry attempts for failed operations"
   puts "\n"
 
@@ -92,7 +92,7 @@ if __FILE__ == $0
   puts "\n=== Configuration Tips ===\n"
   puts "• max_threads: Set higher for I/O-bound work (network, database)"
   puts "• max_threads: Set lower for CPU-bound work to avoid context switching"
-  puts "• max_processes: Useful with spawn_fork for memory-intensive batches"
+  puts "• max_processes: Useful with process_per_batch for memory-intensive batches"
   puts "• max_processes: Each process is a separate OS process (more isolation)"
   puts "• Balance threads vs processes based on your workload characteristics"
   puts "\n✓ Configuration example complete!"

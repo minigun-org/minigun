@@ -141,26 +141,125 @@ module Minigun
       end
     end
 
+    # Execution context stack management
+    def _execution_context_stack
+      @_execution_context_stack ||= []
+    end
+
+    def _named_contexts
+      @_named_contexts ||= {}
+    end
+
+    def _current_execution_context
+      _execution_context_stack.last
+    end
+
+    # Execution block methods - create execution contexts
+    def threads(pool_size, &block)
+      context = { type: :threads, pool_size: pool_size, mode: :pool }
+      _with_execution_context(context, &block)
+    end
+
+    def processes(pool_size, &block)
+      context = { type: :processes, pool_size: pool_size, mode: :pool }
+      _with_execution_context(context, &block)
+    end
+
+    def ractors(pool_size, &block)
+      context = { type: :ractors, pool_size: pool_size, mode: :pool }
+      _with_execution_context(context, &block)
+    end
+
+    def thread_per_batch(max:, &block)
+      context = { type: :threads, max: max, mode: :per_batch }
+      _with_execution_context(context, &block)
+    end
+
+    def process_per_batch(max:, &block)
+      context = { type: :processes, max: max, mode: :per_batch }
+      _with_execution_context(context, &block)
+    end
+
+    def ractor_per_batch(max:, &block)
+      context = { type: :ractors, max: max, mode: :per_batch }
+      _with_execution_context(context, &block)
+    end
+
+    # Batching shorthand - creates an accumulator stage
+    def batch(size)
+      # Generate unique name for batch stage
+      batch_num = (@_batch_counter ||= 0)
+      @_batch_counter += 1
+      accumulator(:"_batch_#{batch_num}", max_size: size)
+    end
+
+    # Named execution context definition
+    def execution_context(name, type, size_or_max)
+      _named_contexts[name] = {
+        type: type,
+        pool_size: size_or_max,
+        mode: :pool
+      }
+    end
+
+    private
+
+    def _with_execution_context(context, &block)
+      _execution_context_stack.push(context)
+      begin
+        instance_eval(&block)
+      ensure
+        _execution_context_stack.pop
+      end
+    end
+
+    public
+
     # Stage definition methods (instance-level)
     def producer(name = :producer, options = {}, &block)
+      options = _apply_execution_context(options)
       self.class._minigun_task.add_stage(:producer, name, options, &block)
     end
 
     def processor(name, options = {}, &block)
+      options = _apply_execution_context(options)
       self.class._minigun_task.add_stage(:processor, name, options, &block)
     end
 
     def consumer(name = :consumer, options = {}, &block)
+      options = _apply_execution_context(options)
       self.class._minigun_task.add_stage(:consumer, name, options, &block)
     end
 
     def accumulator(name = :accumulator, options = {}, &block)
+      options = _apply_execution_context(options)
       self.class._minigun_task.add_stage(:accumulator, name, options, &block)
     end
 
     def stage(name, options = {}, &block)
+      options = _apply_execution_context(options)
       self.class._minigun_task.add_stage(:stage, name, options, &block)
     end
+
+    private
+
+    def _apply_execution_context(options)
+      # If stage explicitly specifies an execution_context, use it
+      if options[:execution_context]
+        context_name = options[:execution_context]
+        if _named_contexts[context_name]
+          options[:_execution_context] = _named_contexts[context_name]
+        else
+          raise ArgumentError, "Unknown execution context: #{context_name}"
+        end
+      elsif _current_execution_context
+        # Use current context from stack
+        options[:_execution_context] = _current_execution_context
+      end
+      options
+    end
+
+    public
 
     # Convenience methods for spawn strategies
     def spawn_thread(name = :consumer, options = {}, &block)
@@ -223,17 +322,117 @@ module Minigun
       def initialize(pipeline, context = nil)
         @pipeline = pipeline
         @context = context
+        @_execution_context_stack = []
+        @_named_contexts = {}
+        @_batch_counter = 0
       end
+
+      # Execution context stack management
+      def _execution_context_stack
+        @_execution_context_stack
+      end
+
+      def _named_contexts
+        @_named_contexts
+      end
+
+      def _current_execution_context
+        _execution_context_stack.last
+      end
+
+      # Execution block methods
+      def threads(pool_size, &block)
+        context = { type: :threads, pool_size: pool_size, mode: :pool }
+        _with_execution_context(context, &block)
+      end
+
+      def processes(pool_size, &block)
+        context = { type: :processes, pool_size: pool_size, mode: :pool }
+        _with_execution_context(context, &block)
+      end
+
+      def ractors(pool_size, &block)
+        context = { type: :ractors, pool_size: pool_size, mode: :pool }
+        _with_execution_context(context, &block)
+      end
+
+      def thread_per_batch(max:, &block)
+        context = { type: :threads, max: max, mode: :per_batch }
+        _with_execution_context(context, &block)
+      end
+
+      def process_per_batch(max:, &block)
+        context = { type: :processes, max: max, mode: :per_batch }
+        _with_execution_context(context, &block)
+      end
+
+      def ractor_per_batch(max:, &block)
+        context = { type: :ractors, max: max, mode: :per_batch }
+        _with_execution_context(context, &block)
+      end
+
+      # Batching shorthand
+      def batch(size)
+        batch_num = @_batch_counter
+        @_batch_counter += 1
+        accumulator(:"_batch_#{batch_num}", max_size: size)
+      end
+
+      # Named execution context definition
+      def execution_context(name, type, size_or_max)
+        _named_contexts[name] = {
+          type: type,
+          pool_size: size_or_max,
+          mode: :pool
+        }
+      end
+
+      private
+
+      def _with_execution_context(context, &block)
+        _execution_context_stack.push(context)
+        begin
+          instance_eval(&block)
+        ensure
+          _execution_context_stack.pop
+        end
+      end
+
+      def _apply_execution_context(options)
+        # If @context exists (instance context), check its named contexts first
+        if options[:execution_context]
+          context_name = options[:execution_context]
+          named_ctx = if @context && @context.respond_to?(:_named_contexts)
+                       @context._named_contexts[context_name]
+                     else
+                       _named_contexts[context_name]
+                     end
+
+          if named_ctx
+            options[:_execution_context] = named_ctx
+          else
+            raise ArgumentError, "Unknown execution context: #{context_name}"
+          end
+        elsif _current_execution_context
+          # Use current context from stack
+          options[:_execution_context] = _current_execution_context
+        end
+        options
+      end
+
+      public
 
       # Main unified stage method
       # Stage determines its own type based on block arity
       def stage(name, options = {}, &block)
+        options = _apply_execution_context(options)
         # Just pass generic :stage type - Pipeline will create AtomicStage which knows its own type
         @pipeline.add_stage(:stage, name, options, &block)
       end
 
       # Accumulator is special - kept explicit
       def accumulator(name = :accumulator, options = {}, &block)
+        options = _apply_execution_context(options)
         @pipeline.add_stage(:accumulator, name, options, &block)
       end
 

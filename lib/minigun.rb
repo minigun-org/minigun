@@ -17,7 +17,6 @@ module Minigun
 end
 
 require_relative 'minigun/version'
-require_relative 'minigun/execution_strategy'
 require_relative 'minigun/execution/context'
 require_relative 'minigun/execution/context_pool'
 require_relative 'minigun/execution/execution_plan'

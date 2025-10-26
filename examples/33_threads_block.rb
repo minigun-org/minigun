@@ -13,19 +13,19 @@ puts "=" * 60
 
 class WebScraper
   include Minigun::DSL
-  
+
   attr_reader :pages
-  
+
   def initialize
     @pages = []
     @mutex = Mutex.new
   end
-  
+
   pipeline do
     producer :generate_urls do
       20.times { |i| emit("https://example.com/page-#{i}") }
     end
-    
+
     # All stages in this block use a pool of 10 threads
     threads(10) do
       processor :download do |url|
@@ -33,12 +33,12 @@ class WebScraper
         sleep 0.01
         emit({ url: url, html: "<html>...</html>", fetched_at: Time.now })
       end
-      
+
       processor :extract_links do |page|
         # Extract data
         emit({ url: page[:url], links: 5, title: "Page" })
       end
-      
+
       consumer :store do |page|
         @mutex.synchronize { @pages << page }
       end

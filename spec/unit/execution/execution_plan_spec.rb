@@ -103,9 +103,13 @@ RSpec.describe Minigun::Execution::ExecutionPlan do
       expect(plan.affinity_for(:sink)).to be_nil
     end
 
-    it 'respects explicit strategy on stages' do
+    it 'respects explicit execution context on stages' do
       producer = Minigun::AtomicStage.new(name: :source, block: proc { emit(1) })
-      processor = Minigun::AtomicStage.new(name: :heavy, block: proc { |i| emit(i * 2) }, options: { strategy: :fork_ipc })
+      processor = Minigun::AtomicStage.new(
+        name: :heavy,
+        block: proc { |i| emit(i * 2) },
+        options: { _execution_context: { type: :processes, mode: :pool, pool_size: 2 } }
+      )
 
       stages[:source] = producer
       stages[:heavy] = processor
@@ -116,9 +120,9 @@ RSpec.describe Minigun::Execution::ExecutionPlan do
 
       plan.plan!
 
-      # heavy has explicit fork strategy
-      expect(plan.context_for(:heavy)).to eq(:fork)
-      # Should NOT be colocated due to explicit strategy
+      # heavy has explicit execution context
+      expect(plan.context_for(:heavy)).to eq(:processes)
+      # Should NOT be colocated due to explicit execution context
       expect(plan.affinity_for(:heavy)).to be_nil
     end
   end
@@ -129,21 +133,37 @@ RSpec.describe Minigun::Execution::ExecutionPlan do
     end
 
     it 'returns assigned context after planning' do
-      producer = Minigun::AtomicStage.new(name: :source, block: proc { emit(1) }, options: { strategy: :ractor })
+      producer = Minigun::AtomicStage.new(
+        name: :source,
+        block: proc { emit(1) },
+        options: { _execution_context: { type: :ractors, mode: :pool, pool_size: 4 } }
+      )
       stages[:source] = producer
       dag.add_node(:source)
 
       plan.plan!
 
-      expect(plan.context_for(:source)).to eq(:ractor)
+      expect(plan.context_for(:source)).to eq(:ractors)
     end
   end
 
   describe '#context_types' do
     it 'returns unique context types used' do
-      prod1 = Minigun::AtomicStage.new(name: :source1, block: proc { emit(1) }, options: { strategy: :threaded })
-      prod2 = Minigun::AtomicStage.new(name: :source2, block: proc { emit(2) }, options: { strategy: :fork_ipc })
-      prod3 = Minigun::AtomicStage.new(name: :source3, block: proc { emit(3) }, options: { strategy: :threaded })
+      prod1 = Minigun::AtomicStage.new(
+        name: :source1,
+        block: proc { emit(1) },
+        options: { _execution_context: { type: :threads, mode: :pool, pool_size: 5 } }
+      )
+      prod2 = Minigun::AtomicStage.new(
+        name: :source2,
+        block: proc { emit(2) },
+        options: { _execution_context: { type: :processes, mode: :pool, pool_size: 2 } }
+      )
+      prod3 = Minigun::AtomicStage.new(
+        name: :source3,
+        block: proc { emit(3) },
+        options: { _execution_context: { type: :threads, mode: :pool, pool_size: 5 } }
+      )
 
       stages[:source1] = prod1
       stages[:source2] = prod2
@@ -156,7 +176,7 @@ RSpec.describe Minigun::Execution::ExecutionPlan do
       plan.plan!
 
       types = plan.context_types
-      expect(types).to include(:thread, :fork)
+      expect(types).to include(:threads, :processes)
       expect(types.size).to eq(2)
     end
   end
@@ -242,45 +262,69 @@ RSpec.describe Minigun::Execution::ExecutionPlan do
     end
   end
 
-  describe 'strategy mapping' do
-    it 'maps threaded strategy to thread context' do
-      stage = Minigun::AtomicStage.new(name: :test, block: proc {}, options: { strategy: :threaded })
+  describe 'execution context mapping' do
+    it 'maps thread execution context' do
+      stage = Minigun::AtomicStage.new(
+        name: :test,
+        block: proc {},
+        options: { _execution_context: { type: :threads, mode: :pool, pool_size: 5 } }
+      )
       stages[:test] = stage
       dag.add_node(:test)
 
       plan.plan!
 
-      expect(plan.context_for(:test)).to eq(:thread)
+      expect(plan.context_for(:test)).to eq(:threads)
     end
 
-    it 'maps fork_ipc strategy to fork context' do
-      stage = Minigun::AtomicStage.new(name: :test, block: proc {}, options: { strategy: :fork_ipc })
+    it 'maps process execution context' do
+      stage = Minigun::AtomicStage.new(
+        name: :test,
+        block: proc {},
+        options: { _execution_context: { type: :processes, mode: :per_batch, max: 2 } }
+      )
       stages[:test] = stage
       dag.add_node(:test)
 
       plan.plan!
 
-      expect(plan.context_for(:test)).to eq(:fork)
+      expect(plan.context_for(:test)).to eq(:processes)
     end
 
-    it 'maps ractor strategy to ractor context' do
-      stage = Minigun::AtomicStage.new(name: :test, block: proc {}, options: { strategy: :ractor })
+    it 'maps ractor execution context' do
+      stage = Minigun::AtomicStage.new(
+        name: :test,
+        block: proc {},
+        options: { _execution_context: { type: :ractors, mode: :pool, pool_size: 4 } }
+      )
       stages[:test] = stage
       dag.add_node(:test)
 
       plan.plan!
 
-      expect(plan.context_for(:test)).to eq(:ractor)
+      expect(plan.context_for(:test)).to eq(:ractors)
     end
 
-    it 'maps spawn strategies to appropriate contexts' do
-      spawn_thread = Minigun::AtomicStage.new(name: :st, block: proc {}, options: { strategy: :spawn_thread })
-      spawn_fork = Minigun::AtomicStage.new(name: :sf, block: proc {}, options: { strategy: :spawn_fork })
-      spawn_ractor = Minigun::AtomicStage.new(name: :sr, block: proc {}, options: { strategy: :spawn_ractor })
+    it 'maps different execution context types' do
+      thread_stage = Minigun::AtomicStage.new(
+        name: :st,
+        block: proc {},
+        options: { _execution_context: { type: :threads, mode: :pool, pool_size: 5 } }
+      )
+      process_stage = Minigun::AtomicStage.new(
+        name: :sf,
+        block: proc {},
+        options: { _execution_context: { type: :processes, mode: :per_batch, max: 2 } }
+      )
+      ractor_stage = Minigun::AtomicStage.new(
+        name: :sr,
+        block: proc {},
+        options: { _execution_context: { type: :ractors, mode: :pool, pool_size: 4 } }
+      )
 
-      stages[:st] = spawn_thread
-      stages[:sf] = spawn_fork
-      stages[:sr] = spawn_ractor
+      stages[:st] = thread_stage
+      stages[:sf] = process_stage
+      stages[:sr] = ractor_stage
 
       dag.add_node(:st)
       dag.add_node(:sf)
@@ -288,9 +332,9 @@ RSpec.describe Minigun::Execution::ExecutionPlan do
 
       plan.plan!
 
-      expect(plan.context_for(:st)).to eq(:thread)
-      expect(plan.context_for(:sf)).to eq(:fork)
-      expect(plan.context_for(:sr)).to eq(:ractor)
+      expect(plan.context_for(:st)).to eq(:threads)
+      expect(plan.context_for(:sf)).to eq(:processes)
+      expect(plan.context_for(:sr)).to eq(:ractors)
     end
   end
 

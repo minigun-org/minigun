@@ -13,9 +13,9 @@ puts "=" * 60
 
 class ComprehensivePipeline
   include Minigun::DSL
-  
+
   attr_reader :stats
-  
+
   def initialize(
     download_threads: 50,
     parse_processes: 4,
@@ -26,7 +26,7 @@ class ComprehensivePipeline
     @parse_processes = parse_processes
     @batch_size = batch_size
     @upload_threads = upload_threads
-    
+
     @stats = {
       downloaded: 0,
       parsed: 0,
@@ -35,43 +35,43 @@ class ComprehensivePipeline
     }
     @mutex = Mutex.new
   end
-  
+
   pipeline do
     # Define named contexts for specific use
     execution_context :db_pool, :threads, 5
     execution_context :cache_pool, :threads, 10
-    
+
     # Generate work items
     producer :generate_urls do
       200.times { |i| emit({ id: i, url: "https://api.example.com/item-#{i}" }) }
     end
-    
+
     # Check cache first (small dedicated pool)
     processor :check_cache, execution_context: :cache_pool do |item|
       # Simulate cache lookup
       item[:cached] = false
       emit(item)
     end
-    
+
     # Download phase: I/O-bound, use thread pool
     threads(@download_threads) do
       processor :download do |item|
         @mutex.synchronize { @stats[:downloaded] += 1 }
-        
+
         # Simulate HTTP request
         item[:data] = "response-#{item[:id]}"
         emit(item)
       end
-      
+
       processor :extract_metadata do |item|
         item[:metadata] = { size: 1024, type: 'json' }
         emit(item)
       end
     end
-    
+
     # Batch for efficient processing
     batch @batch_size
-    
+
     # Parse phase: CPU-bound, use process per batch
     process_per_batch(max: @parse_processes) do
       processor :parse_batch do |batch|
@@ -79,7 +79,7 @@ class ComprehensivePipeline
           @stats[:parsed] += batch.size
           @stats[:parse_pids] << Process.pid
         end
-        
+
         # CPU-intensive parsing
         batch.map do |item|
           {
@@ -90,13 +90,13 @@ class ComprehensivePipeline
         end
       end
     end
-    
+
     # Save to database (dedicated small pool)
     processor :save_to_db, execution_context: :db_pool do |results|
       # Simulate database write
       emit(results)
     end
-    
+
     # Upload phase: I/O-bound, use thread pool
     threads(@upload_threads) do
       consumer :upload_to_s3 do |results|
@@ -149,37 +149,37 @@ puts "\n" + "=" * 60
 puts "Summary of Refactor 2 Features"
 puts "=" * 60
 puts <<~SUMMARY
-  
+
   ✓ Execution Blocks:
     - threads(N) do ... end
     - processes(N) do ... end
     - ractors(N) do ... end
-  
+
   ✓ Per-Batch Spawning:
     - thread_per_batch(max: N) do ... end
     - process_per_batch(max: N) do ... end
     - ractor_per_batch(max: N) do ... end
-  
+
   ✓ Batching:
     - batch N (creates accumulator stage)
     - Multiple batch stages per pipeline
     - Runtime-configurable sizes
-  
+
   ✓ Named Contexts:
     - execution_context :name, :type, size
     - processor :stage, execution_context: :name
     - Reusable, declarative
-  
+
   ✓ Nesting:
     - Natural context inheritance
     - Inner contexts override outer
     - Batching works within any context
-  
+
   ✓ Configuration:
     - Instance variables (@threads, @batch_size)
     - Runtime-configurable
     - Environment-aware
-  
+
   Benefits:
   ✓ Clear intent (what work, what context)
   ✓ No strategy: options needed

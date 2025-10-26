@@ -63,7 +63,8 @@ class InlineHookExample
     accumulator :batch, max_size: 5
 
     # Inline fork hooks for consumers
-    spawn_fork :save_data,
+    process_per_batch(max: 2) do
+      consumer :save_data,
                before: -> { @timer[:save_start] = Time.now },
                after: -> { @timer[:save_end] = Time.now },
                before_fork: -> {
@@ -74,7 +75,8 @@ class InlineHookExample
                  @events << :after_fork
                  puts "Forked! Child PID: #{Process.pid}"
                } do |batch|
-      batch.each { |num| @results << num }
+        batch.each { |num| @results << num }
+      end
     end
   end
 end

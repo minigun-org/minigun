@@ -14,31 +14,31 @@ puts "=" * 60
 
 class ThreadPerBatchExample
   include Minigun::DSL
-  
+
   attr_reader :batch_threads, :results
-  
+
   def initialize
     @batch_threads = []
     @results = []
     @mutex = Mutex.new
   end
-  
+
   pipeline do
     producer :gen do
       100.times { |i| emit(i) }
     end
-    
+
     batch 20
-    
+
     # Spawn a new thread for each batch
     thread_per_batch(max: 5) do
       consumer :process_batch do |batch|
         thread_id = Thread.current.object_id
-        
+
         @mutex.synchronize do
           @batch_threads << thread_id
         end
-        
+
         # Process batch in its own thread
         processed = batch.map { |x| x * 2 }
         @mutex.synchronize { @results.concat(processed) }
@@ -65,33 +65,33 @@ puts "=" * 60
 
 class MixedThreading
   include Minigun::DSL
-  
+
   attr_reader :results
-  
+
   def initialize
     @results = []
     @mutex = Mutex.new
   end
-  
+
   pipeline do
     producer :gen do
       50.times { |i| emit(i) }
     end
-    
+
     # Thread pool for individual items
     threads(10) do
       processor :fetch do |item|
         emit(item * 2)
       end
-      
+
       processor :validate do |item|
         emit(item)
       end
     end
-    
+
     # Batch for efficient processing
     batch 10
-    
+
     # Spawn thread per batch for batch-level work
     thread_per_batch(max: 3) do
       consumer :process_batch do |batch|

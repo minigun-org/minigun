@@ -56,15 +56,21 @@ RSpec.describe Minigun::AtomicStage do
     end
   end
 
-  describe 'consumer behavior (has strategy option)' do
-    let(:stage) { described_class.new(name: :test, block: proc { |_x| }, options: { strategy: :spawn_fork }) }
+  describe 'consumer behavior (has execution context)' do
+    let(:stage) do
+      described_class.new(
+        name: :test,
+        block: proc { |_x| },
+        options: { _execution_context: { type: :processes, mode: :per_batch, max: 2 } }
+      )
+    end
 
     it 'is not a producer' do
       expect(stage.producer?).to be false
     end
 
-    it 'has spawn strategy' do
-      expect(stage.has_spawn_strategy?).to be true
+    it 'has execution context' do
+      expect(stage.execution_context).to eq({ type: :processes, mode: :per_batch, max: 2 })
     end
   end
 end

@@ -109,25 +109,27 @@ class ErrorHandlingExample
       @process_errors = []
     end
 
-    after_fork :save_results do
-      # Report errors from this child process
-      if @process_errors&.any?
-        puts "Child process #{Process.pid} had #{@process_errors.size} errors"
+    process_per_batch(max: 2) do
+      after_fork :save_results do
+        # Report errors from this child process
+        if @process_errors&.any?
+          puts "Child process #{Process.pid} had #{@process_errors.size} errors"
+        end
       end
-    end
 
-    spawn_fork :save_results do |batch|
-      batch.each do |item|
-        begin
-          # Simulate save that might fail
-          if item[:id] == 15
-            raise "Database connection lost"
+      consumer :save_results do |batch|
+        batch.each do |item|
+          begin
+            # Simulate save that might fail
+            if item[:id] == 15
+              raise "Database connection lost"
+            end
+
+            @results << item
+          rescue => e
+            (@process_errors ||= []) << { item: item, error: e.message }
+            @errors << { stage: :save_results, item: item, error: e.message }
           end
-
-          @results << item
-        rescue => e
-          (@process_errors ||= []) << { item: item, error: e.message }
-          @errors << { stage: :save_results, item: item, error: e.message }
         end
       end
     end

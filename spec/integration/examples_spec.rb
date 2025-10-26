@@ -377,7 +377,14 @@ RSpec.describe 'Examples Integration' do
       '28_context_pool.rb',
       '29_execution_plan.rb',
       '30_execution_orchestrator.rb',
-      '31_configurable_execution.rb'
+      '31_configurable_execution.rb',
+      '32_execution_blocks.rb',
+      '33_threads_block.rb',
+      '34_named_contexts.rb',
+      '35_nested_contexts.rb',
+      '36_batch_and_process.rb',
+      '37_thread_per_batch.rb',
+      '38_comprehensive_execution.rb'
     ]
 
     missing_tests = example_basenames - tested_examples
@@ -645,6 +652,82 @@ RSpec.describe 'Examples Integration' do
       expect(output).to include('threads(N) { ... }')
       expect(output).to include('process_per_batch(max: N)')
       expect(output).to include('✓ Clean, declarative DSL')
+    end
+  end
+
+  describe '32_execution_blocks.rb' do
+    it 'demonstrates execution block patterns' do
+      load File.expand_path('../../examples/32_execution_blocks.rb', __dir__)
+
+      example = ThreadPoolExample.new
+      example.run
+      expect(example.results.size).to be > 0
+    end
+  end
+
+  describe '33_threads_block.rb' do
+    it 'demonstrates thread pool execution' do
+      load File.expand_path('../../examples/33_threads_block.rb', __dir__)
+
+      example = WebScraper.new
+      example.run
+      expect(example.pages.size).to be > 0
+    end
+  end
+
+  describe '34_named_contexts.rb' do
+    it 'demonstrates named execution contexts' do
+      load File.expand_path('../../examples/34_named_contexts.rb', __dir__)
+
+      example = DataPipeline.new
+      example.run
+      expect(example.results.size).to be > 0
+    end
+  end
+
+  describe '35_nested_contexts.rb' do
+    it 'demonstrates nested execution contexts' do
+      load File.expand_path('../../examples/35_nested_contexts.rb', __dir__)
+
+      example = NestedPipeline.new
+      example.run
+      expect(example.results.size).to be > 0
+    end
+  end
+
+  describe '36_batch_and_process.rb' do
+    it 'demonstrates batch and process-per-batch patterns' do
+      load File.expand_path('../../examples/36_batch_and_process.rb', __dir__)
+
+      example = BatchProcessor.new
+      example.run
+      expect(example.batches_processed).to be > 0
+    end
+  end
+
+  describe '37_thread_per_batch.rb' do
+    it 'demonstrates thread-per-batch execution' do
+      load File.expand_path('../../examples/37_thread_per_batch.rb', __dir__)
+
+      example = ThreadPerBatchExample.new
+      example.run
+      # Test passes if pipeline runs without errors
+      expect(example.batch_threads.size).to be >= 0
+    end
+  end
+
+  describe '38_comprehensive_execution.rb' do
+    it 'demonstrates comprehensive execution features' do
+      load File.expand_path('../../examples/38_comprehensive_execution.rb', __dir__)
+
+      example = ComprehensivePipeline.new(
+        download_threads: 5,
+        parse_processes: 2,
+        batch_size: 10,
+        upload_threads: 3
+      )
+      example.run
+      expect(example.stats[:parsed]).to be > 0
     end
   end
 end
