@@ -376,7 +376,8 @@ RSpec.describe 'Examples Integration' do
       '27_execution_contexts.rb',
       '28_context_pool.rb',
       '29_execution_plan.rb',
-      '30_execution_orchestrator.rb'
+      '30_execution_orchestrator.rb',
+      '31_configurable_execution.rb'
     ]
 
     missing_tests = example_basenames - tested_examples
@@ -625,6 +626,25 @@ RSpec.describe 'Examples Integration' do
       expect(output).to include('Configuration Impact')
       expect(output).to include('Strategy-to-Context Mapping')
       expect(output).to include('✓ Manages complete execution lifecycle')
+    end
+  end
+
+  describe '31_configurable_execution.rb' do
+    it 'demonstrates configurable execution contexts' do
+      # Run the example
+      output = `ruby #{File.expand_path('../../examples/31_configurable_execution.rb', __dir__)} 2>&1`
+
+      expect($?.exitstatus).to eq(0)
+      expect(output).to include('Configurable Execution Contexts')
+      expect(output).to include('Basic Configurable Thread Pool')
+      expect(output).to include('Configurable Process-Per-Batch')
+      expect(output).to include('Environment-Based Configuration')
+      expect(output).to include('Dynamic Configuration Methods')
+      expect(output).to include('Configuration Object Pattern')
+      expect(output).to include('Runtime Configuration')
+      expect(output).to include('threads(N) { ... }')
+      expect(output).to include('process_per_batch(max: N)')
+      expect(output).to include('✓ Clean, declarative DSL')
     end
   end
 end

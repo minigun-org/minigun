@@ -21,21 +21,21 @@ puts "=" * 60
 
 class ConfigurableDownloader
   include Minigun::DSL
-  
+
   attr_reader :results
-  
+
   def initialize(threads: 10, batch_size: 100)
     @threads = threads
     @batch_size = batch_size
     @results = []
     @mutex = Mutex.new
   end
-  
+
   pipeline do
     producer :gen_urls do
       50.times { |i| emit("https://example.com/#{i}") }
     end
-    
+
     # Use instance variable for thread count
     threads(@threads) do
       processor :download do |url|
@@ -44,10 +44,10 @@ class ConfigurableDownloader
         emit({ url: url, data: "content-#{url}" })
       end
     end
-    
+
     # Batch before saving
     batch @batch_size
-    
+
     consumer :save do |batch|
       @mutex.synchronize do
         @results.concat(batch)
@@ -74,9 +74,9 @@ puts "=" * 60
 
 class DataProcessor
   include Minigun::DSL
-  
+
   attr_reader :processed_count
-  
+
   def initialize(threads: 50, processes: 4, batch_size: 1000)
     @threads = threads
     @processes = processes
@@ -84,12 +84,12 @@ class DataProcessor
     @processed_count = 0
     @mutex = Mutex.new
   end
-  
+
   pipeline do
     producer :generate do
       5000.times { |i| emit(i) }
     end
-    
+
     # Parallel download with thread pool
     threads(@threads) do
       processor :download do |item|
@@ -97,10 +97,10 @@ class DataProcessor
         emit({ id: item, data: "data-#{item}" })
       end
     end
-    
+
     # Batch for efficient processing
     batch @batch_size
-    
+
     # CPU-intensive processing per batch with process isolation
     process_per_batch(max: @processes) do
       processor :parse do |batch|
@@ -108,7 +108,7 @@ class DataProcessor
         batch.map { |item| item[:data].upcase }
       end
     end
-    
+
     consumer :save do |results|
       @mutex.synchronize do
         @processed_count += results.size
@@ -135,11 +135,11 @@ puts "=" * 60
 
 class SmartPipeline
   include Minigun::DSL
-  
+
   def initialize
     # Configure based on environment
     @env = ENV['RACK_ENV'] || 'development'
-    
+
     case @env
     when 'production'
       @threads = 100
@@ -155,26 +155,26 @@ class SmartPipeline
       @batch_size = 100
     end
   end
-  
+
   pipeline do
     producer :source do
       100.times { |i| emit(i) }
     end
-    
+
     threads(@threads) do
       processor :work do |item|
         emit(item * 2)
       end
     end
-    
+
     batch @batch_size
-    
+
     process_per_batch(max: @processes) do
       processor :heavy_work do |batch|
         batch.map { |x| x ** 2 }
       end
     end
-    
+
     consumer :sink do |results|
       # Save results
     end
@@ -196,13 +196,13 @@ puts "=" * 60
 
 class AdaptivePipeline
   include Minigun::DSL
-  
+
   attr_accessor :concurrency_level
-  
+
   def initialize(concurrency: :medium)
     @concurrency_level = concurrency
   end
-  
+
   def thread_count
     case @concurrency_level
     when :low then 10
@@ -211,7 +211,7 @@ class AdaptivePipeline
     else 50
     end
   end
-  
+
   def process_count
     case @concurrency_level
     when :low then 2
@@ -220,7 +220,7 @@ class AdaptivePipeline
     else 4
     end
   end
-  
+
   def batch_size
     case @concurrency_level
     when :low then 100
@@ -229,26 +229,26 @@ class AdaptivePipeline
     else 1000
     end
   end
-  
+
   pipeline do
     producer :gen do
       1000.times { |i| emit(i) }
     end
-    
+
     threads(thread_count) do
       processor :fetch do |item|
         emit({ id: item, data: "fetched" })
       end
     end
-    
+
     batch batch_size
-    
+
     process_per_batch(max: process_count) do
       processor :process do |batch|
         batch.map { |x| x[:data].upcase }
       end
     end
-    
+
     consumer :store do |results|
       # Store
     end
@@ -271,13 +271,13 @@ puts "=" * 60
 
 class PipelineConfig
   attr_accessor :thread_pool_size, :process_pool_size, :batch_size
-  
+
   def initialize
     @thread_pool_size = 50
     @process_pool_size = 4
     @batch_size = 1000
   end
-  
+
   def self.from_yaml(file)
     # Could load from YAML/JSON/ENV
     new
@@ -286,30 +286,30 @@ end
 
 class ConfigurablePipeline
   include Minigun::DSL
-  
+
   def initialize(config: PipelineConfig.new)
     @config = config
   end
-  
+
   pipeline do
     producer :source do
       10.times { |i| emit(i) }
     end
-    
+
     threads(@config.thread_pool_size) do
       processor :download do |item|
         emit(item * 2)
       end
     end
-    
+
     batch @config.batch_size
-    
+
     process_per_batch(max: @config.process_pool_size) do
       processor :parse do |batch|
         batch.map { |x| x + 100 }
       end
     end
-    
+
     consumer :save do |results|
       # Save
     end
@@ -333,24 +333,24 @@ puts "=" * 60
 puts "Summary"
 puts "=" * 60
 puts <<~SUMMARY
-  
+
   Configurable Execution Contexts enable:
-  
+
   1. Runtime Configuration:
      - Thread pool sizes determined at initialization
      - Batch sizes based on data volume
      - Process limits based on available resources
-  
+
   2. Environment Awareness:
      - Different settings for dev/staging/prod
      - Adapt to available CPU/memory
      - Scale based on workload
-  
+
   3. Dynamic Behavior:
      - Use instance variables (@threads, @batch_size)
      - Call methods (thread_count, batch_size)
      - Access configuration objects (@config.setting)
-  
+
   4. Patterns Supported:
      - threads(N) { ... }           # Thread pool
      - processes(N) { ... }          # Process pool (future)
@@ -359,13 +359,13 @@ puts <<~SUMMARY
      - process_per_batch(max: N)    # Spawn process per batch
      - thread_per_batch(max: N)     # Spawn thread per batch (future)
      - ractor_per_batch(max: N)     # Spawn ractor per batch (future)
-  
+
   5. Use Cases:
      - Web scraping with configurable parallelism
      - ETL pipelines with environment-specific settings
      - Data processing with adaptive resource usage
      - Multi-tenant systems with per-tenant limits
-  
+
   ✓ All configuration happens at initialization
   ✓ Pipeline definition uses instance context
   ✓ Full access to instance variables and methods
