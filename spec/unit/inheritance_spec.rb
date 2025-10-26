@@ -433,9 +433,11 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
 
           accumulator :batch
 
-          spawn_fork :publish do |batch|
-            # spawn_fork receives batches from accumulator
-            batch.each { |item| publish_item(item) }
+          process_per_batch(max: 1) do
+            consumer :publish do |batch|
+              # process_per_batch receives batches from accumulator
+              batch.each { |item| publish_item(item) }
+            end
           end
         end
 

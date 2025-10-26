@@ -125,8 +125,10 @@ RSpec.describe 'Stage-Specific Hooks' do
 
           accumulator :batch
 
-          spawn_fork :process do |num|
-            @mutex.synchronize { @events << :process_run }
+          process_per_batch(max: 1) do
+            consumer :process do |num|
+              @mutex.synchronize { @events << :process_run }
+            end
           end
 
           before_fork :process do

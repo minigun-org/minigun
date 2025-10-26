@@ -223,29 +223,14 @@ module Minigun
         # Just pass generic :stage type - Pipeline will create AtomicStage which knows its own type
         @pipeline.add_stage(:stage, name, options, &block)
       end
+      alias producer stage
+      alias processor stage # TODO: rename to producer_consumer?
+      alias consumer stage
 
       # Accumulator is special - kept explicit
       def accumulator(name = :accumulator, options = {}, &block)
         options = _apply_execution_context(options)
         @pipeline.add_stage(:accumulator, name, options, &block)
-      end
-
-      # Aliases for backward compatibility (all use inference)
-      alias producer stage
-      alias processor stage
-      alias consumer stage
-
-      # Convenience methods for spawn strategies
-      def spawn_thread(name = :consumer, options = {}, &block)
-        stage(name, options.merge(strategy: :spawn_thread), &block)
-      end
-
-      def spawn_fork(name = :consumer, options = {}, &block)
-        stage(name, options.merge(strategy: :spawn_fork), &block)
-      end
-
-      def spawn_ractor(name = :consumer, options = {}, &block)
-        stage(name, options.merge(strategy: :spawn_ractor), &block)
       end
 
       def before_run(&block)
