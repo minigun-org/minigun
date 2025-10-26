@@ -342,7 +342,7 @@ RSpec.describe 'emit_to_stage' do
               end
             end
           end
-          
+
           after_run do
             # Read fork results from temp file (only once!)
             unless @fork_results_read

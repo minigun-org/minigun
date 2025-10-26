@@ -29,8 +29,9 @@ module Minigun
     end
 
     # Get execution context configuration for this stage
+    # Defaults to inline execution if not specified
     def execution_context
-      @options[:_execution_context]
+      @options[:_execution_context] || { type: :inline, mode: :inline }
     end
 
     # Convert to hash (for backward compatibility)

@@ -80,58 +80,116 @@ module Minigun
 
     # Fork-based execution (process)
     class ForkContext < Context
+      def initialize(name)
+        super(name)
+        require_relative 'ipc_transport'
+        @transport = IPCTransport.new(name: name)
+      end
+
       def execute(&block)
-        @reader, @writer = IO.pipe
+        @transport.create_pipes
 
-        @pid = fork do
-          @reader.close
-
-          # Set process title
+        pid = fork do
+          @transport.close_parent_pipes
           Process.setproctitle("minigun:#{@name}") if Process.respond_to?(:setproctitle)
 
           begin
             result = block.call
-            Marshal.dump(result, @writer)
+            @transport.send_result(result)
           rescue => e
-            Marshal.dump({ error: e }, @writer)
+            @transport.send_error(e)
           ensure
-            @writer.close
+            @transport.close_all_pipes
           end
         end
 
-        @writer.close
+        @transport.set_pid(pid)
+        @transport.close_child_pipes
         self
       end
 
       def join
-        return nil unless @pid
-
-        Process.wait(@pid)
-        result = Marshal.load(@reader) rescue nil
-        @reader.close
-        @pid = nil
-
-        if result.is_a?(Hash) && result[:error]
-          raise result[:error]
-        end
-
+        result = @transport.receive_result
+        @transport.wait
+        @transport.close_all_pipes
         result
       end
 
       def alive?
-        return false unless @pid
-        Process.waitpid(@pid, Process::WNOHANG).nil?
-      rescue Errno::ECHILD
-        false
+        @transport.alive?
       end
 
       def terminate
-        return unless @pid
-        Process.kill('TERM', @pid)
-        join
-      rescue Errno::ESRCH, Errno::ECHILD
-        # Already dead
-        @pid = nil
+        @transport.terminate
+        @transport.close_all_pipes
+      end
+    end
+
+    # Process Pool execution (IPC) - PERSISTENT WORKERS
+    # Uses IPCTransport for bidirectional communication with long-lived worker
+    class ProcessPoolContext < Context
+      def initialize(name)
+        super(name)
+        require_relative 'ipc_transport'
+        @transport = IPCTransport.new(name: "worker-#{name}")
+      end
+
+      # Spawn a persistent worker process
+      def spawn_worker
+        return if @transport.pid  # Already spawned
+
+        @transport.create_pipes
+
+        pid = fork do
+          @transport.close_parent_pipes
+          Process.setproctitle("minigun:worker:#{@name}") if Process.respond_to?(:setproctitle)
+
+          # Worker loop: receive items, process, send results
+          loop do
+            begin
+              data = @transport.receive_from_parent
+              break if data == :SHUTDOWN || data.nil?
+
+              # Execute the block (data is a Proc)
+              result = data.call if data.is_a?(Proc)
+              @transport.send_result(result)
+            rescue => e
+              @transport.send_error(e)
+            end
+          end
+
+          @transport.close_all_pipes
+        end
+
+        @transport.set_pid(pid)
+        @transport.close_child_pipes
+      end
+
+      # Execute a block in the worker process (send via IPC)
+      def execute(&block)
+        spawn_worker unless @transport.pid
+        @transport.send_to_child(block)
+        self
+      end
+
+      # Wait for and return result from worker
+      def join
+        @transport.receive_result
+      end
+
+      def alive?
+        @transport.alive?
+      end
+
+      def terminate
+        begin
+          @transport.send_to_child(:SHUTDOWN) if @transport.alive?
+        rescue
+          # Pipe may be closed, ignore
+        end
+        
+        @transport.terminate
+        @transport.close_all_pipes
       end
     end
 
@@ -183,11 +241,13 @@ module Minigun
       case type
       when :inline
         InlineContext.new(name)
-      when :thread
+      when :thread, :threads
         ThreadContext.new(name)
-      when :fork
+      when :fork, :forks  # COW fork (one-time use, process_per_batch)
         ForkContext.new(name)
-      when :ractor
+      when :process, :processes  # IPC process pool (persistent workers, processes(N))
+        ProcessPoolContext.new(name)
+      when :ractor, :ractors
         RactorContext.new(name)
       else
         raise ArgumentError, "Unknown context type: #{type}"

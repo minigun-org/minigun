@@ -13,6 +13,10 @@ module Minigun
         @pipeline = pipeline
         @config = config
         @context_pools = {}
+        @user_context = pipeline.instance_variable_get(:@context)
+        @stats = pipeline.instance_variable_get(:@stats)
+        @stage_hooks = pipeline.instance_variable_get(:@stage_hooks)
+        @output_items = []
       end
 
       # Execute a batch of items through stages with proper execution contexts
@@ -38,35 +42,30 @@ module Minigun
         @context_pools.clear
       end
 
-      private
-
-      def group_by_execution_context(batch_map)
-        groups = Hash.new { |h, k| h[k] = [] }
-
-        batch_map.each do |_consumer_name, item_data_array|
-          item_data_array.each do |item_data|
-            stage = item_data[:stage]
-            exec_ctx = stage.execution_context || default_context
-            groups[exec_ctx] << item_data
-          end
-        end
-
-        groups
-      end
-
+      # Public method - execute items with their execution context
+      # Returns array of emitted items
       def execute_with_context(exec_ctx, stage_items)
-        return execute_inline(stage_items) if exec_ctx.nil?
-
+        # Clear output items
+        @output_items.clear
+        
+        # All stages have an execution context (never nil)
         case exec_ctx[:mode]
         when :pool
           execute_with_pool(exec_ctx, stage_items)
         when :per_batch
           execute_per_batch(exec_ctx, stage_items)
+        when :inline
+          execute_inline(stage_items)
         else
-          # Default: inline execution
+          # Fallback to inline if mode is unknown
           execute_inline(stage_items)
         end
+        
+        # Return the collected output items
+        @output_items.dup
       end
+
+      private
 
       # Execute with a pool of reusable execution contexts (threads/processes/ractors)
       def execute_with_pool(exec_ctx, stage_items)
@@ -121,50 +120,80 @@ module Minigun
         end
 
         # For process pools, we need IPC for results
-        # Use ForkContext with proper transport
-        pool = get_or_create_pool(:fork, pool_size)
+        # Use ForkContext (processes type) with proper transport
+        pool = get_or_create_pool(:processes, pool_size)
         contexts = []
-        results = []
+        all_results = []
 
         stage_items.each do |item_data|
           # Wait for available slot
           while pool.at_capacity?
             contexts.each do |ctx|
               unless ctx.alive?
-                results << ctx.join
+                child_results = ctx.join
+                all_results.concat(child_results) if child_results.is_a?(Array)
               end
             end
             contexts.delete_if { |ctx| !ctx.alive? }
             sleep 0.01
           end
 
-          # Execute before_fork hooks once
+          # Execute before_fork hooks in parent
           execute_fork_hooks(:before_fork, item_data[:stage])
 
-          ctx = pool.acquire("consumer")
+          ctx = pool.acquire("worker-#{item_data[:stage].name}")
           contexts << ctx
+
+          # Capture data needed in child process
+          item = item_data[:item]
+          stage = item_data[:stage]
+          user_context = @user_context
+          stage_hooks = @stage_hooks
 
           # Execute in forked process with IPC
           ctx.execute do
-            # Execute after_fork hooks in child
-            execute_fork_hooks(:after_fork, item_data[:stage])
+            begin
+              # Execute after_fork hooks in child
+              after_hooks = stage_hooks.dig(:after_fork, stage.name) || []
+              after_hooks.each { |h| user_context.instance_exec(&h) }
 
-            # Execute the stage and capture results
-            execute_stage_item(item_data, nil)
+              # Capture emitted items in child process
+              child_output_items = []
 
-            # Return nil for terminal consumers (no results to send back)
-            nil
+              # Execute before hooks
+              before_hooks = stage_hooks.dig(:before, stage.name) || []
+              before_hooks.each { |h| user_context.instance_exec(&h) }
+
+              # Execute the stage and capture emissions
+              emitted_items = stage.execute_with_emit(user_context, item)
+
+              # Execute after hooks
+              after_hooks_stage = stage_hooks.dig(:after, stage.name) || []
+              after_hooks_stage.each { |h| user_context.instance_exec(&h) }
+
+              # Return emitted items for IPC
+              emitted_items
+            rescue => e
+              # Return error info
+              { error: e.message, backtrace: e.backtrace.first(5) }
+            end
           end
         end
 
         # Wait for all processes and collect results
         contexts.each do |ctx|
-          result = ctx.join
-          results << result if result
+          child_results = ctx.join
+          if child_results.is_a?(Hash) && child_results[:error]
+            Minigun.logger.error "[ProcessPool] Child process error: #{child_results[:error]}"
+            child_results[:backtrace]&.each { |line| Minigun.logger.error line }
+          elsif child_results.is_a?(Array)
+            all_results.concat(child_results)
+          end
           pool.release(ctx)
         end
 
-        results
+        # Add results to output_items
+        all_results.each { |result| @output_items << result }
       end
 
       def execute_with_ractor_pool(pool_size, stage_items)
@@ -281,10 +310,42 @@ module Minigun
 
       # Inline execution - no concurrency
       def execute_inline(stage_items)
-        mutex = Mutex.new
-
         stage_items.each do |item_data|
-          execute_stage_item(item_data, mutex)
+          stage = item_data[:stage]
+          item = item_data[:item]
+          
+          # Get stats
+          is_terminal = @pipeline.instance_variable_get(:@dag).terminal?(stage.name)
+          stage_stats = @stats.for_stage(stage.name, is_terminal: is_terminal)
+          stage_stats.start! unless stage_stats.start_time
+          start_time = Time.now
+
+          # Execute before hooks
+          @pipeline.send(:execute_stage_hooks, :before, stage.name)
+
+          # Track consumption
+          stage_stats.increment_consumed
+
+          # Execute the stage with emit support
+          result = if stage.respond_to?(:execute_with_emit)
+            stage.execute_with_emit(@user_context, item)
+          else
+            stage.execute(@user_context, item)
+            []
+          end
+
+          # Track production
+          stage_stats.increment_produced(result.size)
+
+          # Record latency
+          duration = Time.now - start_time
+          stage_stats.record_latency(duration)
+
+          # Execute after hooks
+          @pipeline.send(:execute_stage_hooks, :after, stage.name)
+
+          # Add results to output
+          result.each { |r| @output_items << r }
         end
       end
 

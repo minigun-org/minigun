@@ -388,7 +388,12 @@ RSpec.describe 'Examples Integration' do
       '41_message_router.rb',
       '43_etl_pipeline.rb',
       '44_custom_batching.rb',
-      '45_emit_to_stage_cross_context.rb'
+      '45_emit_to_stage_cross_context.rb',
+      '46_simple_process_pool.rb',
+      '47_chained_process_pools.rb',
+      '48_mixed_threading_processes.rb',
+      '49_complex_ipc_topology.rb',
+      '50_extreme_ipc_stress_test.rb'
     ]
 
     missing_tests = example_basenames - tested_examples
