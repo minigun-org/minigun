@@ -34,11 +34,9 @@ module Minigun
         return execute_stage_item({ item: item, stage: stage }) if exec_ctx.nil?
 
         case exec_ctx[:mode]
-        when :pool
+        when :pool, :per_batch
+          # Both :pool and :per_batch use pools, just different config
           execute_single_item_with_pool(exec_ctx, stage, item)
-        when :per_batch
-          # Per-batch mode still needs the item executed immediately
-          execute_stage_item({ item: item, stage: stage })
         else
           # Default: inline execution
           execute_stage_item({ item: item, stage: stage })
@@ -50,14 +48,14 @@ module Minigun
       # Execute a single item using a REUSED thread/process pool
       def execute_single_item_with_pool(exec_ctx, stage, item)
         type = exec_ctx[:type]
-        pool_size = exec_ctx[:pool_size] || default_pool_size(type)
-        
+        pool_size = exec_ctx[:pool_size] || exec_ctx[:max] || default_pool_size(type)
+
         # Normalize type (:threads -> :thread, :processes -> :fork)
         pool_type = normalize_pool_type(type)
-        
+
         # Get or create LONG-LIVED pool (reused across all items for this stage)
         pool = get_or_create_pool(pool_type, pool_size)
-        
+
         case type
         when :threads
           execute_item_with_thread_pool(pool, stage, item)
@@ -69,7 +67,7 @@ module Minigun
           execute_item_with_thread_pool(pool, stage, item)
         end
       end
-      
+
       # Normalize execution strategy type to pool type
       def normalize_pool_type(type)
         case type
@@ -95,16 +93,16 @@ module Minigun
             ctx = pool.acquire("worker")
           end
         end
-        
+
         # Execute in thread
         result = nil
         ctx.execute do
           result = execute_stage_item({ item: item, stage: stage })
         end
-        
+
         ctx.join
         pool.release(ctx)
-        
+
         result || []
       end
 
@@ -114,7 +112,7 @@ module Minigun
           warn "[Minigun] Process forking not available, falling back to inline"
           return execute_stage_item({ item: item, stage: stage })
         end
-        
+
         # Wait for available process slot
         ctx = nil
         while ctx.nil?
@@ -124,19 +122,19 @@ module Minigun
             ctx = pool.acquire("worker")
           end
         end
-        
+
         # Execute before_fork hooks
         execute_fork_hooks(:before_fork, stage)
-        
+
         # Execute in forked process
         ctx.execute do
           execute_fork_hooks(:after_fork, stage)
           execute_stage_item({ item: item, stage: stage })
         end
-        
+
         result = ctx.join
         pool.release(ctx)
-        
+
         result || []
       end
 
@@ -146,7 +144,7 @@ module Minigun
           warn "[Minigun] Ractors not available, falling back to thread pool"
           return execute_item_with_thread_pool(pool, stage, item)
         end
-        
+
         # For now, fall back to threads
         execute_item_with_thread_pool(pool, stage, item)
       end

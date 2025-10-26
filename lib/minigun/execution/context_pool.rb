@@ -28,7 +28,7 @@ module Minigun
       def release(context)
         @mutex.synchronize do
           @active_contexts.delete(context)
-          
+
           # Only reuse inline contexts (no concurrency concerns)
           # Threads/processes are always fresh to prevent state pollution
           if @type == :inline && @available_contexts.size < @max_size
