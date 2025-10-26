@@ -70,6 +70,8 @@ module Minigun
       base.class_eval do
         # Create a single task instance for the class
         @_minigun_task = Minigun::Task.new
+        # Reset pipeline blocks to prevent accumulation across load calls
+        @_pipeline_definition_blocks = []
       end
 
       # When a subclass is created, duplicate the parent's task

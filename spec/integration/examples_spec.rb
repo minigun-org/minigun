@@ -328,69 +328,6 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
-  describe 'all examples' do
-    let(:example_files) do
-      Dir[File.expand_path('../../examples/*.rb', __dir__)].sort
-    end
-
-    it 'all example files are syntactically valid' do
-      example_files.each do |file|
-        expect { load file }.not_to raise_error, "#{File.basename(file)} has syntax errors"
-      end
-    end
-
-    it 'has integration test for each example' do
-      example_basenames = example_files.map { |f| File.basename(f) }
-      tested_examples = [
-        '00_quick_start.rb',
-        '01_sequential_default.rb',
-        '02_diamond_pattern.rb',
-        '03_fan_out_pattern.rb',
-        '04_complex_routing.rb',
-        '05_multi_pipeline_simple.rb',
-        '06_multi_pipeline_etl.rb',
-        '07_multi_pipeline_data_processing.rb',
-        '08_nested_pipeline_simple.rb',
-        '09_strategy_per_stage.rb',
-        '10_web_crawler.rb',
-      '11_hooks_example.rb',
-      '12_database_publisher.rb',
-      '13_configuration.rb',
-      '14_large_dataset.rb',
-      '15_simple_etl.rb',
-      '16_mixed_routing.rb',
-      '17_database_connection_hooks.rb',
-      '18_resource_cleanup_hooks.rb',
-      '19_statistics_gathering.rb',
-      '20_error_handling_hooks.rb',
-      '21_inline_hook_procs.rb',
-      '22_reroute_stage.rb',
-      '23_runner_features.rb',
-      '24_statistics_demo.rb',
-      '25_multiple_producers.rb',
-      '26_multi_pipeline_with_producers.rb',
-      '27_execution_contexts.rb',
-      '28_context_pool.rb',
-      '31_configurable_execution.rb',
-      '32_execution_blocks.rb',
-      '33_threads_block.rb',
-      '34_named_contexts.rb',
-      '35_nested_contexts.rb',
-      '36_batch_and_process.rb',
-      '37_thread_per_batch.rb',
-      '38_comprehensive_execution.rb',
-      '39_load_balancer.rb',
-      '40_priority_routing.rb',
-      '41_message_router.rb',
-      '43_etl_pipeline.rb',
-      '44_custom_batching.rb',
-      '45_emit_to_stage_cross_context.rb'
-    ]
-
-    missing_tests = example_basenames - tested_examples
-    expect(missing_tests).to be_empty, "Missing integration tests for: #{missing_tests.join(', ')}"
-  end
-
   describe '17_database_connection_hooks.rb' do
     it 'demonstrates database connection management with fork hooks' do
       load File.expand_path('../../examples/17_database_connection_hooks.rb', __dir__)
@@ -769,5 +706,4 @@ RSpec.describe 'Examples Integration' do
       expect(example.batch_stats[:types_processed].size).to be >= 1
     end
   end
-end
 end

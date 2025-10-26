@@ -49,7 +49,6 @@ class MixedRoutingExample
 
     # Consumer: Receives from both path_a (explicit) and transform (explicit)
     consumer :collect do |num|
-      puts "[Collect] Received: #{num}"
       @mutex.synchronize { final << num }
     end
   end
