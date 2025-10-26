@@ -372,7 +372,11 @@ RSpec.describe 'Examples Integration' do
       '23_runner_features.rb',
       '24_statistics_demo.rb',
       '25_multiple_producers.rb',
-      '26_multi_pipeline_with_producers.rb'
+      '26_multi_pipeline_with_producers.rb',
+      '27_execution_contexts.rb',
+      '28_context_pool.rb',
+      '29_execution_plan.rb',
+      '30_execution_orchestrator.rb'
     ]
 
     missing_tests = example_basenames - tested_examples
@@ -551,6 +555,76 @@ RSpec.describe 'Examples Integration' do
       stages = stats.stages_in_order
       expect(stages.size).to eq(3)
       expect(stages.map(&:stage_name)).to eq([:generate, :process, :collect])
+    end
+  end
+
+  describe '27_execution_contexts.rb' do
+    it 'demonstrates execution context types' do
+      # Run the example
+      output = `ruby #{File.expand_path('../../examples/27_execution_contexts.rb', __dir__)} 2>&1`
+      
+      expect($?.exitstatus).to eq(0)
+      expect(output).to include('Execution Context Examples')
+      expect(output).to include('InlineContext')
+      expect(output).to include('ThreadContext')
+      expect(output).to include('RactorContext')
+      expect(output).to include('Parallel Execution')
+      expect(output).to include('Error Handling and Propagation')
+      expect(output).to include('Context Termination')
+      expect(output).to include('✓ Unified API for all concurrency models')
+    end
+  end
+
+  describe '28_context_pool.rb' do
+    it 'demonstrates context pool resource management' do
+      # Run the example
+      output = `ruby #{File.expand_path('../../examples/28_context_pool.rb', __dir__)} 2>&1`
+      
+      expect($?.exitstatus).to eq(0)
+      expect(output).to include('Context Pool Examples')
+      expect(output).to include('Basic Context Pool')
+      expect(output).to include('Pool Capacity Management')
+      expect(output).to include('Pooled Parallel Execution')
+      expect(output).to include('Context Reuse')
+      expect(output).to include('Bulk Operations')
+      expect(output).to include('Emergency Termination')
+      expect(output).to include('Real-World: Batch Processing')
+      expect(output).to include('✓ Prevents resource exhaustion')
+    end
+  end
+
+  describe '29_execution_plan.rb' do
+    it 'demonstrates execution plan and affinity analysis' do
+      # Run the example
+      output = `ruby #{File.expand_path('../../examples/29_execution_plan.rb', __dir__)} 2>&1`
+      
+      expect($?.exitstatus).to eq(0)
+      expect(output).to include('Execution Plan Examples')
+      expect(output).to include('Sequential Pipeline (Affinity Analysis)')
+      expect(output).to include('Fan-Out Pipeline')
+      expect(output).to include('Pipeline with Accumulator')
+      expect(output).to include('Explicit Strategy Override')
+      expect(output).to include('Context Type Analysis')
+      expect(output).to include('Affinity Groups')
+      expect(output).to include('Colocated Stage Checking')
+      expect(output).to include('✓ Optimizes for data locality when beneficial')
+    end
+  end
+
+  describe '30_execution_orchestrator.rb' do
+    it 'demonstrates execution orchestrator coordination' do
+      # Run the example
+      output = `ruby #{File.expand_path('../../examples/30_execution_orchestrator.rb', __dir__)} 2>&1`
+      
+      expect($?.exitstatus).to eq(0)
+      expect(output).to include('Execution Orchestrator Examples')
+      expect(output).to include('Basic Orchestrator Usage')
+      expect(output).to include('Orchestrator with Context Pools')
+      expect(output).to include('Orchestrator Plan Analysis')
+      expect(output).to include('Resource Management')
+      expect(output).to include('Configuration Impact')
+      expect(output).to include('Strategy-to-Context Mapping')
+      expect(output).to include('✓ Manages complete execution lifecycle')
     end
   end
 end
