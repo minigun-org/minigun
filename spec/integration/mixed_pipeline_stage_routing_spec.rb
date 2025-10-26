@@ -15,8 +15,18 @@ RSpec.describe 'Mixed Pipeline and Stage Routing' do
           @mutex = Mutex.new
         end
 
-        # Pipeline that produces items
         pipeline do
+          # Stage that receives from pipeline
+          processor :process do |item|
+            emit(item + 1)
+          end
+
+          consumer :collect do |item|
+            @mutex.synchronize { @results << item }
+          end
+        end
+
+        # Pipeline that produces items
         pipeline :source, to: :process do
           producer :gen do
             3.times { |i| emit(i) }
@@ -25,16 +35,6 @@ RSpec.describe 'Mixed Pipeline and Stage Routing' do
           consumer :forward do |item|
             emit(item * 10)
           end
-        end
-        end
-
-        # Stage that receives from pipeline
-        processor :process do |item|
-          emit(item + 1)
-        end
-
-        consumer :collect do |item|
-          @mutex.synchronize { @results << item }
         end
       end
 
@@ -102,6 +102,16 @@ RSpec.describe 'Mixed Pipeline and Stage Routing' do
           @mutex = Mutex.new
         end
 
+        pipeline do
+          processor :merge_stage do |item|
+            emit(item * 100)
+          end
+
+          consumer :collect do |item|
+            @mutex.synchronize { @results << item }
+          end
+        end
+
         pipeline :source_a, to: :merge_stage do
           producer :gen do
             emit(1)
@@ -120,14 +130,6 @@ RSpec.describe 'Mixed Pipeline and Stage Routing' do
           consumer :fwd do |item|
             emit(item)
           end
-        end
-
-        processor :merge_stage do |item|
-          emit(item * 100)
-        end
-
-        consumer :collect do |item|
-          @mutex.synchronize { @results << item }
         end
       end
 
@@ -149,6 +151,22 @@ RSpec.describe 'Mixed Pipeline and Stage Routing' do
           @mutex = Mutex.new
         end
 
+        pipeline do
+          processor :stage_x do |item|
+            @mutex.synchronize { @results_x << item * 10 }
+            emit(item * 10)
+          end
+
+          processor :stage_y do |item|
+            @mutex.synchronize { @results_y << item * 20 }
+            emit(item * 20)
+          end
+
+          consumer :collect do |item|
+            # Final collection
+          end
+        end
+
         pipeline :source_a, to: [:stage_x, :stage_y] do
           producer :gen do
             emit(1)
@@ -167,20 +185,6 @@ RSpec.describe 'Mixed Pipeline and Stage Routing' do
           consumer :fwd do |item|
             emit(item)
           end
-        end
-
-        processor :stage_x do |item|
-          @mutex.synchronize { @results_x << item * 10 }
-          emit(item * 10)
-        end
-
-        processor :stage_y do |item|
-          @mutex.synchronize { @results_y << item * 20 }
-          emit(item * 20)
-        end
-
-        consumer :collect do |item|
-          # Final collection
         end
       end
 
@@ -204,13 +208,15 @@ RSpec.describe 'Mixed Pipeline and Stage Routing' do
           @mutex = Mutex.new
         end
 
-        producer :source do
-          3.times { |i| emit(i) }
-        end
+        pipeline do
+          producer :source do
+            3.times { |i| emit(i) }
+          end
 
-        # Stage routes to pipeline
-        processor :transform, to: :receiver do |item|
-          emit(item * 10)
+          # Stage routes to pipeline
+          processor :transform, to: :receiver do |item|
+            emit(item * 10)
+          end
         end
 
         pipeline :receiver do
@@ -242,13 +248,15 @@ RSpec.describe 'Mixed Pipeline and Stage Routing' do
           @mutex = Mutex.new
         end
 
-        producer :source do
-          2.times { |i| emit(i) }
-        end
+        pipeline do
+          producer :source do
+            2.times { |i| emit(i) }
+          end
 
-        # Stage routes to two pipelines
-        processor :split, to: [:pipe_a, :pipe_b] do |item|
-          emit(item * 10)
+          # Stage routes to two pipelines
+          processor :split, to: [:pipe_a, :pipe_b] do |item|
+            emit(item * 10)
+          end
         end
 
         pipeline :pipe_a do
@@ -290,20 +298,22 @@ RSpec.describe 'Mixed Pipeline and Stage Routing' do
           @mutex = Mutex.new
         end
 
-        producer :source_a do
-          emit(1)
-        end
+        pipeline do
+          producer :source_a do
+            emit(1)
+          end
 
-        processor :stage_a, to: :receiver do |item|
-          emit(item * 10)
-        end
+          processor :stage_a, to: :receiver do |item|
+            emit(item * 10)
+          end
 
-        producer :source_b do
-          emit(2)
-        end
+          producer :source_b do
+            emit(2)
+          end
 
-        processor :stage_b, to: :receiver do |item|
-          emit(item * 20)
+          processor :stage_b, to: :receiver do |item|
+            emit(item * 20)
+          end
         end
 
         pipeline :receiver do
@@ -335,20 +345,22 @@ RSpec.describe 'Mixed Pipeline and Stage Routing' do
           @mutex = Mutex.new
         end
 
-        producer :source_a do
-          emit(1)
-        end
+        pipeline do
+          producer :source_a do
+            emit(1)
+          end
 
-        processor :stage_a, to: [:pipe_x, :pipe_y] do |item|
-          emit(item * 10)
-        end
+          processor :stage_a, to: [:pipe_x, :pipe_y] do |item|
+            emit(item * 10)
+          end
 
-        producer :source_b do
-          emit(2)
-        end
+          producer :source_b do
+            emit(2)
+          end
 
-        processor :stage_b, to: [:pipe_x, :pipe_y] do |item|
-          emit(item * 20)
+          processor :stage_b, to: [:pipe_x, :pipe_y] do |item|
+            emit(item * 20)
+          end
         end
 
         pipeline :pipe_x do
@@ -392,12 +404,14 @@ RSpec.describe 'Mixed Pipeline and Stage Routing' do
           @mutex = Mutex.new
         end
 
-        producer :source do
-          3.times { |i| emit(i) }
-        end
+        pipeline do
+          producer :source do
+            3.times { |i| emit(i) }
+          end
 
-        processor :transform do |item|
-          emit(item * 10)
+          processor :transform do |item|
+            emit(item * 10)
+          end
         end
 
         # Pipeline receives from stage using from:
@@ -429,20 +443,22 @@ RSpec.describe 'Mixed Pipeline and Stage Routing' do
           @mutex = Mutex.new
         end
 
-        producer :source_a do
-          emit(1)
-        end
+        pipeline do
+          producer :source_a do
+            emit(1)
+          end
 
-        processor :stage_a do |item|
-          emit(item * 10)
-        end
+          processor :stage_a do |item|
+            emit(item * 10)
+          end
 
-        producer :source_b do
-          emit(2)
-        end
+          producer :source_b do
+            emit(2)
+          end
 
-        processor :stage_b do |item|
-          emit(item * 20)
+          processor :stage_b do |item|
+            emit(item * 20)
+          end
         end
 
         # Pipeline receives from multiple stages
@@ -475,12 +491,14 @@ RSpec.describe 'Mixed Pipeline and Stage Routing' do
           @mutex = Mutex.new
         end
 
-        producer :source do
-          2.times { |i| emit(i) }
-        end
+        pipeline do
+          producer :source do
+            2.times { |i| emit(i) }
+          end
 
-        processor :broadcaster do |item|
-          emit(item * 10)
+          processor :broadcaster do |item|
+            emit(item * 10)
+          end
         end
 
         # Multiple pipelines receive from same stage
@@ -524,20 +542,22 @@ RSpec.describe 'Mixed Pipeline and Stage Routing' do
           @mutex = Mutex.new
         end
 
-        producer :source_a do
-          emit(1)
-        end
+        pipeline do
+          producer :source_a do
+            emit(1)
+          end
 
-        processor :stage_a do |item|
-          emit(item * 10)
-        end
+          processor :stage_a do |item|
+            emit(item * 10)
+          end
 
-        producer :source_b do
-          emit(2)
-        end
+          producer :source_b do
+            emit(2)
+          end
 
-        processor :stage_b do |item|
-          emit(item * 20)
+          processor :stage_b do |item|
+            emit(item * 20)
+          end
         end
 
         # Multiple pipelines receive from multiple stages
@@ -582,6 +602,17 @@ RSpec.describe 'Mixed Pipeline and Stage Routing' do
           @mutex = Mutex.new
         end
 
+        pipeline do
+          # Stage receives from pipeline using from:
+          processor :transform, from: :source do |item|
+            emit(item + 1)
+          end
+
+          consumer :collect do |item|
+            @mutex.synchronize { @results << item }
+          end
+        end
+
         pipeline :source do
           producer :gen do
             3.times { |i| emit(i) }
@@ -590,15 +621,6 @@ RSpec.describe 'Mixed Pipeline and Stage Routing' do
           consumer :forward do |item|
             emit(item * 10)
           end
-        end
-
-        # Stage receives from pipeline using from:
-        processor :transform, from: :source do |item|
-          emit(item + 1)
-        end
-
-        consumer :collect do |item|
-          @mutex.synchronize { @results << item }
         end
       end
 
@@ -617,6 +639,17 @@ RSpec.describe 'Mixed Pipeline and Stage Routing' do
         def initialize
           @results = []
           @mutex = Mutex.new
+        end
+
+        pipeline do
+          # Stage receives from multiple pipelines
+          processor :merge, from: [:source_a, :source_b] do |item|
+            emit(item + 1000)
+          end
+
+          consumer :collect do |item|
+            @mutex.synchronize { @results << item }
+          end
         end
 
         pipeline :source_a do
@@ -638,15 +671,6 @@ RSpec.describe 'Mixed Pipeline and Stage Routing' do
             emit(item * 20)
           end
         end
-
-        # Stage receives from multiple pipelines
-        processor :merge, from: [:source_a, :source_b] do |item|
-          emit(item + 1000)
-        end
-
-        consumer :collect do |item|
-          @mutex.synchronize { @results << item }
-        end
       end
 
       instance = test_class.new
@@ -667,6 +691,23 @@ RSpec.describe 'Mixed Pipeline and Stage Routing' do
           @mutex = Mutex.new
         end
 
+        pipeline do
+          # Multiple stages receive from same pipeline
+          processor :stage_a, from: :source do |item|
+            @mutex.synchronize { @results_a << item + 100 }
+            emit(item + 100)
+          end
+
+          processor :stage_b, from: :source do |item|
+            @mutex.synchronize { @results_b << item + 200 }
+            emit(item + 200)
+          end
+
+          consumer :collect do |item|
+            # Final collection
+          end
+        end
+
         pipeline :source do
           producer :gen do
             2.times { |i| emit(i) }
@@ -675,21 +716,6 @@ RSpec.describe 'Mixed Pipeline and Stage Routing' do
           consumer :forward do |item|
             emit(item * 10)
           end
-        end
-
-        # Multiple stages receive from same pipeline
-        processor :stage_a, from: :source do |item|
-          @mutex.synchronize { @results_a << item + 100 }
-          emit(item + 100)
-        end
-
-        processor :stage_b, from: :source do |item|
-          @mutex.synchronize { @results_b << item + 200 }
-          emit(item + 200)
-        end
-
-        consumer :collect do |item|
-          # Final collection
         end
       end
 
@@ -712,6 +738,23 @@ RSpec.describe 'Mixed Pipeline and Stage Routing' do
           @mutex = Mutex.new
         end
 
+        pipeline do
+          # Multiple stages receive from multiple pipelines
+          processor :stage_x, from: [:source_a, :source_b] do |item|
+            @mutex.synchronize { @results_x << item + 100 }
+            emit(item + 100)
+          end
+
+          processor :stage_y, from: [:source_a, :source_b] do |item|
+            @mutex.synchronize { @results_y << item + 200 }
+            emit(item + 200)
+          end
+
+          consumer :collect do |item|
+            # Final collection
+          end
+        end
+
         pipeline :source_a do
           producer :gen do
             emit(1)
@@ -730,21 +773,6 @@ RSpec.describe 'Mixed Pipeline and Stage Routing' do
           consumer :fwd do |item|
             emit(item * 20)
           end
-        end
-
-        # Multiple stages receive from multiple pipelines
-        processor :stage_x, from: [:source_a, :source_b] do |item|
-          @mutex.synchronize { @results_x << item + 100 }
-          emit(item + 100)
-        end
-
-        processor :stage_y, from: [:source_a, :source_b] do |item|
-          @mutex.synchronize { @results_y << item + 200 }
-          emit(item + 200)
-        end
-
-        consumer :collect do |item|
-          # Final collection
         end
       end
 
