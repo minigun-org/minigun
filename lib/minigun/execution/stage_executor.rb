@@ -13,10 +13,17 @@ module Minigun
         @pipeline = pipeline
         @config = config
         @context_pools = {}
+
+        # Get context from pipeline
+        @user_context = @pipeline.instance_variable_get(:@context)
+        @stats = @pipeline.instance_variable_get(:@stats)
+        @stage_hooks = @pipeline.instance_variable_get(:@stage_hooks)
+        @output_items = []
       end
 
       # Execute a batch of items through stages with proper execution contexts
       def execute_batch(batch_map, output_items, context, stats, stage_hooks)
+        # Update instance variables for this batch
         @stats = stats
         @stage_hooks = stage_hooks
         @output_items = output_items
@@ -38,6 +45,23 @@ module Minigun
         @context_pools.clear
       end
 
+      def execute_with_context(exec_ctx, stage_items)
+        return execute_inline(stage_items) if exec_ctx.nil?
+
+        case exec_ctx[:mode]
+        when :pool
+          execute_with_pool(exec_ctx, stage_items)
+        when :per_batch
+          execute_per_batch(exec_ctx, stage_items)
+        else
+          # Default: inline execution
+          execute_inline(stage_items)
+        end
+      ensure
+        # Always clean up context pools
+        shutdown
+      end
+
       private
 
       def group_by_execution_context(batch_map)
@@ -52,20 +76,6 @@ module Minigun
         end
 
         groups
-      end
-
-      def execute_with_context(exec_ctx, stage_items)
-        return execute_inline(stage_items) if exec_ctx.nil?
-
-        case exec_ctx[:mode]
-        when :pool
-          execute_with_pool(exec_ctx, stage_items)
-        when :per_batch
-          execute_per_batch(exec_ctx, stage_items)
-        else
-          # Default: inline execution
-          execute_inline(stage_items)
-        end
       end
 
       # Execute with a pool of reusable execution contexts (threads/processes/ractors)
@@ -103,7 +113,7 @@ module Minigun
           contexts << ctx
 
           ctx.execute do
-            execute_stage_item(item_data, mutex)
+            execute_stage_item(item_data)
           end
         end
 
@@ -112,6 +122,8 @@ module Minigun
           ctx.join
           pool.release(ctx)
         end
+
+        []
       end
 
       def execute_with_process_pool(pool_size, stage_items)
@@ -150,7 +162,7 @@ module Minigun
             execute_fork_hooks(:after_fork, item_data[:stage])
 
             # Execute the stage and capture results
-            execute_stage_item(item_data, nil)
+            execute_stage_item(item_data)
 
             # Return nil for terminal consumers (no results to send back)
             nil
@@ -213,12 +225,14 @@ module Minigun
           contexts << ctx
 
           ctx.execute do
-            execute_stage_item(item_data, mutex)
+            execute_stage_item(item_data)
           end
         end
 
         # Wait for all threads to complete
         contexts.each(&:join)
+
+        []
       end
 
       def execute_per_batch_processes(stage_items, max_concurrent)
@@ -256,7 +270,7 @@ module Minigun
             execute_fork_hooks(:after_fork, item_data[:stage])
 
             # Execute the stage item (no mutex needed - isolated process)
-            execute_stage_item(item_data, nil)
+            execute_stage_item(item_data)
 
             # Return nil (terminal consumers don't emit)
             nil
@@ -265,6 +279,8 @@ module Minigun
 
         # Wait for all child processes
         contexts.each(&:join)
+
+        []
       end
 
       def execute_per_batch_ractors(stage_items, max_concurrent)
@@ -281,53 +297,55 @@ module Minigun
 
       # Inline execution - no concurrency
       def execute_inline(stage_items)
-        mutex = Mutex.new
+        results = []
 
         stage_items.each do |item_data|
-          execute_stage_item(item_data, mutex)
+          item_results = execute_stage_item(item_data)
+          results.concat(item_results) if item_results
         end
+
+        results
       end
 
-      def execute_stage_item(item_data, mutex)
+      def execute_stage_item(item_data)
         item = item_data[:item]
         stage = item_data[:stage]
-        stage_stats = @stats.for_stage(stage.name, is_terminal: true)
+
+        # Check if stage is terminal
+        is_terminal = @pipeline.instance_variable_get(:@dag).terminal?(stage.name)
+        stage_stats = @stats.for_stage(stage.name, is_terminal: is_terminal)
         stage_stats.start! unless stage_stats.start_time
         start_time = Time.now
 
         # Execute before hooks for this stage
-        hooks = @stage_hooks.dig(:before, stage.name) || []
-        hooks.each { |h| @user_context.instance_exec(&h) }
+        @pipeline.send(:execute_stage_hooks, :before, stage.name)
 
-        # If this stage has downstream pipelines, create emit method
-        has_downstream = !@pipeline.instance_variable_get(:@output_queues).empty?
-        if has_downstream
-          emit_proc = proc do |emitted_item|
-            if mutex
-              mutex.synchronize { @output_items << emitted_item }
-            else
-              @output_items << emitted_item
-            end
-          end
-          @user_context.define_singleton_method(:emit, &emit_proc)
-        end
+        # Track consumption of input item
+        stage_stats.increment_consumed
 
         # Execute the stage
-        stage.execute(@user_context, item)
+        result = if stage.respond_to?(:execute_with_emit)
+          stage.execute_with_emit(@user_context, item)
+        else
+          stage.execute(@user_context, item)
+          []
+        end
 
-        # Track consumption
-        stage_stats.increment_consumed
+        # Track production of output items
+        stage_stats.increment_produced(result.size)
 
         # Record latency
         duration = Time.now - start_time
         stage_stats.record_latency(duration)
 
         # Execute after hooks for this stage
-        hooks = @stage_hooks.dig(:after, stage.name) || []
-        hooks.each { |h| @user_context.instance_exec(&h) }
+        @pipeline.send(:execute_stage_hooks, :after, stage.name)
+
+        result
       rescue => e
         Minigun.logger.error "[Pipeline:#{@pipeline.name}][Stage:#{stage.name}] Error: #{e.message}"
         Minigun.logger.error e.backtrace.join("\n")
+        []
       end
 
       def execute_fork_hooks(hook_type, stage)
