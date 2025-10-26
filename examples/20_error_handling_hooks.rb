@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../lib/minigun'
+require 'tempfile'
 
 # Example: Error Handling and Recovery with Hooks
 # Demonstrates error detection and handling patterns
@@ -18,6 +19,12 @@ class ErrorHandlingExample
     @retry_counts = Hash.new(0)
     @failed_items = []
     @circuit_breaker_open = false
+    @temp_file = Tempfile.new(['minigun_error_results', '.json'])
+    @temp_file.close
+  end
+
+  def cleanup
+    File.unlink(@temp_file.path) if @temp_file && File.exist?(@temp_file.path)
   end
 
   pipeline do
@@ -125,12 +132,24 @@ class ErrorHandlingExample
               raise "Database connection lost"
             end
 
-            @results << item
+            # Write to temp file (fork-safe)
+            File.open(@temp_file.path, 'a') do |f|
+              f.flock(File::LOCK_EX)
+              f.puts(item.to_json)
+              f.flock(File::LOCK_UN)
+            end
           rescue => e
             (@process_errors ||= []) << { item: item, error: e.message }
             @errors << { stage: :save_results, item: item, error: e.message }
           end
         end
+      end
+    end
+
+    after_run do
+      # Read fork results from temp file
+      if File.exist?(@temp_file.path)
+        @results = File.readlines(@temp_file.path).map { |line| JSON.parse(line.strip) }
       end
     end
   end
@@ -140,30 +159,34 @@ if __FILE__ == $PROGRAM_NAME
   puts "=== Error Handling Example ===\n\n"
 
   example = ErrorHandlingExample.new
-  example.run
+  begin
+    example.run
 
-  puts "\n=== Results ==="
-  puts "Successfully processed: #{example.results.size} items"
-  puts "Total errors:          #{example.errors.size}"
+    puts "\n=== Results ==="
+    puts "Successfully processed: #{example.results.size} items"
+    puts "Total errors:          #{example.errors.size}"
 
-  if example.errors.any?
-    puts "\n=== Error Details ==="
-    example.errors.group_by { |e| e[:stage] }.each do |stage, errors|
-      puts "\n#{stage}:"
-      errors.each do |err|
-        puts "  - Item #{err[:item][:id]}: #{err[:error]}"
-        puts "    (#{err[:retries]} retries)" if err[:retries]
+    if example.errors.any?
+      puts "\n=== Error Details ==="
+      example.errors.group_by { |e| e[:stage] }.each do |stage, errors|
+        puts "\n#{stage}:"
+        errors.each do |err|
+          puts "  - Item #{err[:item][:id]}: #{err[:error]}"
+          puts "    (#{err[:retries]} retries)" if err[:retries]
+        end
       end
     end
-  end
 
-  if example.retry_counts.any?
-    puts "\n=== Retry Statistics ==="
-    example.retry_counts.each do |id, count|
-      puts "  Item #{id}: #{count} attempts" if count > 1
+    if example.retry_counts.any?
+      puts "\n=== Retry Statistics ==="
+      example.retry_counts.each do |id, count|
+        puts "  Item #{id}: #{count} attempts" if count > 1
+      end
     end
-  end
 
-  puts "\n✓ Error handling example complete!"
+    puts "\n✓ Error handling example complete!"
+  ensure
+    example.cleanup
+  end
 end
 

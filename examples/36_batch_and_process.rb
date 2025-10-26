@@ -7,6 +7,7 @@
 # for Copy-on-Write optimization
 
 require_relative '../lib/minigun'
+require 'tempfile'
 
 puts "=" * 60
 puts "Batch + Process Per Batch Pattern"
@@ -21,6 +22,12 @@ class BatchProcessor
     @batches_processed = 0
     @unique_pids = []
     @mutex = Mutex.new
+    @temp_file = Tempfile.new(['minigun_batch_count', '.txt'])
+    @temp_file.close
+  end
+
+  def cleanup
+    File.unlink(@temp_file.path) if @temp_file && File.exist?(@temp_file.path)
   end
 
   pipeline do
@@ -37,13 +44,22 @@ class BatchProcessor
       consumer :process_in_isolation do |batch|
         pid = Process.pid
 
-        @mutex.synchronize do
-          @batches_processed += 1
-          @unique_pids << pid unless @unique_pids.include?(pid)
+        # Write to temp file (fork-safe)
+        File.open(@temp_file.path, 'a') do |f|
+          f.flock(File::LOCK_EX)
+          f.puts("1")  # Count one batch
+          f.flock(File::LOCK_UN)
         end
 
         # Simulate CPU-intensive work
         batch.each { |item| item ** 2 }
+      end
+    end
+    
+    after_run do
+      # Read fork results from temp file
+      if File.exist?(@temp_file.path)
+        @batches_processed = File.readlines(@temp_file.path).size
       end
     end
   end

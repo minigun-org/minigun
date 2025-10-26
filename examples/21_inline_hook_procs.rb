@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../lib/minigun'
+require 'tempfile'
 
 # Example: Inline Hook Procs (Option 3)
 # Demonstrates concise hook syntax for simple operations
@@ -16,6 +17,12 @@ class InlineHookExample
     @results = []
     @events = []
     @timer = {}
+    @temp_file = Tempfile.new(['minigun_inline_results', '.txt'])
+    @temp_file.close
+  end
+
+  def cleanup
+    File.unlink(@temp_file.path) if @temp_file && File.exist?(@temp_file.path)
   end
 
   pipeline do
@@ -75,7 +82,19 @@ class InlineHookExample
                  @events << :after_fork
                  puts "Forked! Child PID: #{Process.pid}"
                } do |batch|
-        batch.each { |num| @results << num }
+        # Write to temp file (fork-safe)
+        File.open(@temp_file.path, 'a') do |f|
+          f.flock(File::LOCK_EX)
+          batch.each { |num| f.puts(num) }
+          f.flock(File::LOCK_UN)
+        end
+      end
+    end
+    
+    after_run do
+      # Read fork results from temp file
+      if File.exist?(@temp_file.path)
+        @results = File.readlines(@temp_file.path).map { |line| line.strip.to_i }
       end
     end
   end
@@ -85,23 +104,27 @@ if __FILE__ == $PROGRAM_NAME
   puts "=== Inline Hook Procs Example ===\n\n"
 
   example = InlineHookExample.new
-  example.run
+  begin
+    example.run
 
-  puts "\n=== Results ==="
-  puts "Processed: #{example.results.size} items"
-  puts "Results: #{example.results.sort.inspect}"
+    puts "\n=== Results ==="
+    puts "Processed: #{example.results.size} items"
+    puts "Results: #{example.results.sort.inspect}"
 
-  puts "\n=== Events ==="
-  example.events.each { |event| puts "  - #{event}" }
+    puts "\n=== Events ==="
+    example.events.each { |event| puts "  - #{event}" }
 
-  puts "\n=== Timing ==="
-  if example.timer[:fetch_start] && example.timer[:fetch_end]
-    puts "Fetch duration: #{(example.timer[:fetch_end] - example.timer[:fetch_start]).round(3)}s"
+    puts "\n=== Timing ==="
+    if example.timer[:fetch_start] && example.timer[:fetch_end]
+      puts "Fetch duration: #{(example.timer[:fetch_end] - example.timer[:fetch_start]).round(3)}s"
+    end
+    if example.timer[:save_start] && example.timer[:save_end]
+      puts "Save duration:  #{(example.timer[:save_end] - example.timer[:save_start]).round(3)}s"
+    end
+
+    puts "\n✓ Inline hook procs example complete!"
+  ensure
+    example.cleanup
   end
-  if example.timer[:save_start] && example.timer[:save_end]
-    puts "Save duration:  #{(example.timer[:save_end] - example.timer[:save_start]).round(3)}s"
-  end
-
-  puts "\n✓ Inline hook procs example complete!"
 end
 

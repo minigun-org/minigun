@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../lib/minigun'
+require 'tempfile'
 
 # Example: Statistics Gathering with Hooks
 # Demonstrates tracking metrics at each stage
@@ -31,6 +32,15 @@ class StatisticsGatheringExample
       child_processes: []
     }
     @results = []
+    @temp_pids_file = Tempfile.new(['minigun_pids', '.txt'])
+    @temp_pids_file.close
+    @temp_results_file = Tempfile.new(['minigun_results', '.txt'])
+    @temp_results_file.close
+  end
+
+  def cleanup
+    File.unlink(@temp_pids_file.path) if @temp_pids_file && File.exist?(@temp_pids_file.path)
+    File.unlink(@temp_results_file.path) if @temp_results_file && File.exist?(@temp_results_file.path)
   end
 
   pipeline do
@@ -105,14 +115,32 @@ class StatisticsGatheringExample
       end
 
       after_fork :save_results do
-        @stats[:child_processes] << Process.pid
+        # Write PID to temp file (fork-safe)
+        File.open(@temp_pids_file.path, 'a') do |f|
+          f.flock(File::LOCK_EX)
+          f.puts(Process.pid)
+          f.flock(File::LOCK_UN)
+        end
       end
 
       consumer :save_results do |batch|
-        batch.each do |item|
-          @results << item
-          @stats[:consumer_count] += 1
+        # Write results to temp file (fork-safe)
+        File.open(@temp_results_file.path, 'a') do |f|
+          f.flock(File::LOCK_EX)
+          batch.each { |item| f.puts(item.to_json) }
+          f.flock(File::LOCK_UN)
         end
+      end
+    end
+
+    after_run do
+      # Read fork results from temp files
+      if File.exist?(@temp_pids_file.path)
+        @stats[:child_processes] = File.readlines(@temp_pids_file.path).map { |line| line.strip.to_i }.uniq
+      end
+      if File.exist?(@temp_results_file.path)
+        @results = File.readlines(@temp_results_file.path).map { |line| JSON.parse(line.strip) }
+        @stats[:consumer_count] = @results.size
       end
     end
   end
@@ -122,7 +150,8 @@ if __FILE__ == $PROGRAM_NAME
   puts "=== Statistics Gathering Example ===\n\n"
 
   example = StatisticsGatheringExample.new
-  example.run
+  begin
+    example.run
 
   puts "\n=== Pipeline Statistics ==="
   puts "Total Duration:      #{example.stats[:total_duration]&.round(3)}s"
@@ -155,5 +184,8 @@ if __FILE__ == $PROGRAM_NAME
   puts "Final Results:       #{example.results.size} items saved"
   puts ""
   puts "✓ Statistics gathering example complete!"
+  ensure
+    example.cleanup
+  end
 end
 

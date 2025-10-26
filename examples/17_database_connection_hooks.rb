@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../lib/minigun'
+require 'tempfile'
 
 # Example: Database Connection Management with Fork Hooks
 # Demonstrates proper disconnect/reconnect pattern for forked processes
@@ -16,6 +17,25 @@ class DatabaseConnectionExample
     @results = []
     @connection_events = []
     @db_connected = false
+    @temp_file = Tempfile.new(['minigun_db_results', '.txt'])
+    @temp_file.close
+    @temp_events_file = Tempfile.new(['minigun_db_events', '.txt'])
+    @temp_events_file.close
+  end
+
+  def cleanup
+    File.unlink(@temp_file.path) if @temp_file && File.exist?(@temp_file.path)
+    File.unlink(@temp_events_file.path) if @temp_events_file && File.exist?(@temp_events_file.path)
+  end
+
+  def log_event(event)
+    @connection_events << event
+    # Also write to temp file for fork-safe logging
+    File.open(@temp_events_file.path, 'a') do |f|
+      f.flock(File::LOCK_EX)
+      f.puts(event)
+      f.flock(File::LOCK_UN)
+    end
   end
 
   pipeline do
@@ -32,6 +52,12 @@ class DatabaseConnectionExample
     # Reconnect after forking (child process)
     after_fork do
       reconnect_in_child_process
+      # Log to temp file (child process can't mutate parent's array)
+      File.open(@temp_events_file.path, 'a') do |f|
+        f.flock(File::LOCK_EX)
+        f.puts("Reconnected to database in child (PID #{Process.pid})")
+        f.flock(File::LOCK_UN)
+      end
     end
 
     # Clean up after everything completes
@@ -55,8 +81,25 @@ class DatabaseConnectionExample
           @connection_events << "Processing user #{user_id} in PID #{Process.pid}"
           # Simulate database write
           result = save_to_database(user_id)
-          @results << result
+
+          # Write to temp file (fork-safe)
+          File.open(@temp_file.path, 'a') do |f|
+            f.flock(File::LOCK_EX)
+            f.puts(result)
+            f.flock(File::LOCK_UN)
+          end
         end
+      end
+    end
+
+    after_run do
+      # Read fork results from temp files
+      if File.exist?(@temp_file.path)
+        @results = File.readlines(@temp_file.path).map(&:strip)
+      end
+      if File.exist?(@temp_events_file.path)
+        fork_events = File.readlines(@temp_events_file.path).map(&:strip)
+        @connection_events.concat(fork_events)
       end
     end
   end
@@ -93,12 +136,16 @@ if __FILE__ == $PROGRAM_NAME
   puts "=== Database Connection Management Example ===\n\n"
 
   example = DatabaseConnectionExample.new
-  example.run
+  begin
+    example.run
 
-  puts "\n=== Results ==="
-  puts "Processed: #{example.results.size} users"
-  puts "\n=== Connection Events ==="
-  example.connection_events.each { |event| puts "  #{event}" }
-  puts "\n✓ Database connection example complete!"
+    puts "\n=== Results ==="
+    puts "Processed: #{example.results.size} users"
+    puts "\n=== Connection Events ==="
+    example.connection_events.each { |event| puts "  #{event}" }
+    puts "\n✓ Database connection example complete!"
+  ensure
+    example.cleanup
+  end
 end
 

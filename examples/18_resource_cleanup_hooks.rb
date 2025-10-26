@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../lib/minigun'
+require 'tempfile'
 
 # Example: Resource Management with Stage Hooks
 # Demonstrates setup/cleanup for external resources
@@ -17,6 +18,15 @@ class ResourceCleanupExample
     @resource_events = []
     @file_handle = nil
     @api_client = nil
+    @temp_file = Tempfile.new(['minigun_resource_results', '.txt'])
+    @temp_file.close
+    @temp_events_file = Tempfile.new(['minigun_resource_events', '.txt'])
+    @temp_events_file.close
+  end
+
+  def cleanup
+    File.unlink(@temp_file.path) if @temp_file && File.exist?(@temp_file.path)
+    File.unlink(@temp_events_file.path) if @temp_events_file && File.exist?(@temp_events_file.path)
   end
 
   pipeline do
@@ -67,11 +77,32 @@ class ResourceCleanupExample
 
       # Reopen connections after forking
       after_fork :save_to_db do
-        @resource_events << "Reopening connections in child process"
+        # Log to temp file (child process can't mutate parent's array)
+        File.open(@temp_events_file.path, 'a') do |f|
+          f.flock(File::LOCK_EX)
+          f.puts("Reopening connections in child process")
+          f.flock(File::LOCK_UN)
+        end
       end
 
       consumer :save_to_db do |batch|
-        batch.each { |record| @results << record }
+        # Write to temp file (fork-safe)
+        File.open(@temp_file.path, 'a') do |f|
+          f.flock(File::LOCK_EX)
+          batch.each { |record| f.puts(record) }
+          f.flock(File::LOCK_UN)
+        end
+      end
+    end
+
+    after_run do
+      # Read fork results from temp files
+      if File.exist?(@temp_file.path)
+        @results = File.readlines(@temp_file.path).map(&:strip)
+      end
+      if File.exist?(@temp_events_file.path)
+        fork_events = File.readlines(@temp_events_file.path).map(&:strip)
+        @resource_events.concat(fork_events)
       end
     end
   end
@@ -107,16 +138,20 @@ if __FILE__ == $PROGRAM_NAME
   puts "=== Resource Cleanup Example ===\n\n"
 
   example = ResourceCleanupExample.new
-  example.run
+  begin
+    example.run
 
-  puts "\n=== Results ==="
-  puts "Processed: #{example.results.size} records"
+    puts "\n=== Results ==="
+    puts "Processed: #{example.results.size} records"
 
-  puts "\n=== Resource Events ==="
-  example.resource_events.each_with_index do |event, i|
-    puts "  #{i + 1}. #{event}"
+    puts "\n=== Resource Events ==="
+    example.resource_events.each_with_index do |event, i|
+      puts "  #{i + 1}. #{event}"
+    end
+
+    puts "\n✓ Resource cleanup example complete!"
+  ensure
+    example.cleanup
   end
-
-  puts "\n✓ Resource cleanup example complete!"
 end
 

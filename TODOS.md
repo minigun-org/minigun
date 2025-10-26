@@ -3,6 +3,16 @@ ADD to README:
 - execute in paralle, and do NOT route to each other, unless unless you add :to or :from keywords.
 
 
+- config
+- hooks
+- readme
+- ractors
+
+==================================
+
+
+
+
 multi-parents --> how do we know end of queues?
 
 

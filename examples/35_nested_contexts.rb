@@ -7,6 +7,7 @@
 # inner context for CPU work, with batching in between
 
 require_relative '../lib/minigun'
+require 'tempfile'
 
 puts "=" * 60
 puts "Nested Execution Contexts"
@@ -21,6 +22,15 @@ class NestedPipeline
     @batch_pids = []
     @results = []
     @mutex = Mutex.new
+    @temp_results_file = Tempfile.new(['minigun_nested_results', '.txt'])
+    @temp_results_file.close
+    @temp_pids_file = Tempfile.new(['minigun_nested_pids', '.txt'])
+    @temp_pids_file.close
+  end
+
+  def cleanup
+    File.unlink(@temp_results_file.path) if @temp_results_file && File.exist?(@temp_results_file.path)
+    File.unlink(@temp_pids_file.path) if @temp_pids_file && File.exist?(@temp_pids_file.path)
   end
 
   pipeline do
@@ -46,33 +56,55 @@ class NestedPipeline
       # Inner context: process per batch for CPU work
       process_per_batch(max: 4) do
         consumer :process_batch do |batch|
-          # CPU-intensive work in isolated process
-          @mutex.synchronize do
-            @batch_pids << Process.pid
+          # Write PID to temp file (fork-safe)
+          File.open(@temp_pids_file.path, 'a') do |f|
+            f.flock(File::LOCK_EX)
+            f.puts(Process.pid)
+            f.flock(File::LOCK_UN)
           end
 
           processed = batch.map { |item| item[:data].upcase }
-          @mutex.synchronize { @results.concat(processed) }
+          
+          # Write results to temp file (fork-safe)
+          File.open(@temp_results_file.path, 'a') do |f|
+            f.flock(File::LOCK_EX)
+            processed.each { |item| f.puts(item) }
+            f.flock(File::LOCK_UN)
+          end
         end
       end
 
       # Note: stages here would be back in thread context
       # But we end after process_per_batch in this example
     end
+    
+    after_run do
+      # Read fork results from temp files
+      if File.exist?(@temp_pids_file.path)
+        @batch_pids = File.readlines(@temp_pids_file.path).map { |line| line.strip.to_i }
+      end
+      if File.exist?(@temp_results_file.path)
+        @results = File.readlines(@temp_results_file.path).map(&:strip)
+      end
+    end
   end
 end
 
 pipeline = NestedPipeline.new
-pipeline.run
+begin
+  pipeline.run
 
-puts "\nResults:"
-puts "  Processed: #{pipeline.results.size} items"
-puts "  Batches: #{pipeline.batch_pids.size}"
-puts "  Unique PIDs: #{pipeline.batch_pids.uniq.size}"
-puts "\n✓ Outer threads(50) for I/O stages"
-puts "✓ batch 20 accumulates items"
-puts "✓ Inner process_per_batch(max: 4) for CPU work"
-puts "✓ Proper context inheritance and isolation"
+  puts "\nResults:"
+  puts "  Processed: #{pipeline.results.size} items"
+  puts "  Batches: #{pipeline.batch_pids.size}"
+  puts "  Unique PIDs: #{pipeline.batch_pids.uniq.size}"
+  puts "\n✓ Outer threads(50) for I/O stages"
+  puts "✓ batch 20 accumulates items"
+  puts "✓ Inner process_per_batch(max: 4) for CPU work"
+  puts "✓ Proper context inheritance and isolation"
+ensure
+  pipeline.cleanup
+end
 
 puts "\n" + "=" * 60
 puts "Example 2: Deep Nesting"
