@@ -57,12 +57,6 @@ module Minigun
     # Thread-based execution
     class ThreadContext < Context
       def execute(&block)
-        # CRITICAL: Ensure any previous thread is done before starting a new one
-        # This prevents closure interference when contexts are reused from pool
-        if @thread&.alive?
-          @thread.join
-        end
-        
         @thread = Thread.new do
           Thread.current.name = @name if Thread.current.respond_to?(:name=)
           block.call

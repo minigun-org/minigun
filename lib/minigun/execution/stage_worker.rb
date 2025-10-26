@@ -135,10 +135,9 @@ module Minigun
             next
           end
 
-          # Execute the stage
+          # Execute the stage (single item, no batch)
           item = msg  # msg is unwrapped data
-          item_data = { item: item, stage: @stage }
-          results = @executor.execute_with_context(@stage.execution_context, [item_data])
+          results = @executor.execute_item(@stage, item)
 
           # Route results to downstream stages
           route_results(results, dag, runtime_edges, stage_input_queues)

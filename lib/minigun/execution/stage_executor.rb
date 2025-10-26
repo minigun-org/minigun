@@ -28,280 +28,129 @@ module Minigun
         @context_pools.clear
       end
 
-      def execute_with_context(exec_ctx, stage_items)
-        return execute_inline(stage_items) if exec_ctx.nil?
-
-        # Clear output items from previous call (since executor is reused)
-        @output_items.clear if @output_items
+      # Execute a SINGLE item (called once per item from stage worker)
+      def execute_item(stage, item)
+        exec_ctx = stage.execution_context
+        return execute_stage_item({ item: item, stage: stage }) if exec_ctx.nil?
 
         case exec_ctx[:mode]
         when :pool
-          execute_with_pool(exec_ctx, stage_items)
+          execute_single_item_with_pool(exec_ctx, stage, item)
         when :per_batch
-          execute_per_batch(exec_ctx, stage_items)
+          # Per-batch mode still needs the item executed immediately
+          execute_stage_item({ item: item, stage: stage })
         else
           # Default: inline execution
-          execute_inline(stage_items)
+          execute_stage_item({ item: item, stage: stage })
         end
       end
 
       private
 
-      # Execute with a pool of reusable execution contexts (threads/processes/ractors)
-      def execute_with_pool(exec_ctx, stage_items)
+      # Execute a single item using a REUSED thread/process pool
+      def execute_single_item_with_pool(exec_ctx, stage, item)
         type = exec_ctx[:type]
         pool_size = exec_ctx[:pool_size] || default_pool_size(type)
-
+        
+        # Normalize type (:threads -> :thread, :processes -> :fork)
+        pool_type = normalize_pool_type(type)
+        
+        # Get or create LONG-LIVED pool (reused across all items for this stage)
+        pool = get_or_create_pool(pool_type, pool_size)
+        
         case type
         when :threads
-          execute_with_thread_pool(pool_size, stage_items)
+          execute_item_with_thread_pool(pool, stage, item)
         when :processes
-          execute_with_process_pool(pool_size, stage_items)
+          execute_item_with_process_pool(pool, stage, item)
         when :ractors
-          execute_with_ractor_pool(pool_size, stage_items)
+          execute_item_with_ractor_pool(pool, stage, item)
         else
-          execute_with_thread_pool(pool_size, stage_items)
+          execute_item_with_thread_pool(pool, stage, item)
+        end
+      end
+      
+      # Normalize execution strategy type to pool type
+      def normalize_pool_type(type)
+        case type
+        when :threads
+          :thread
+        when :processes
+          :fork
+        when :ractors
+          :ractor
+        else
+          :thread
         end
       end
 
-      def execute_with_thread_pool(pool_size, stage_items)
-        # Create a FRESH pool for each call to avoid closure interference
-        # (Threads from reused contexts can capture old closure variables)
-        pool = ContextPool.new(type: :thread, max_size: pool_size)
-        active_contexts = []
-        results = []
-        mutex = Mutex.new
-
-        stage_items.each do |item_data|
-          # Wait for available slot by cleaning up finished threads
-          while pool.at_capacity?
-            # Find and cleanup finished contexts
-            finished = []
-            active_contexts.each do |ctx|
-              unless ctx.alive?
-                ctx.join  # Ensure thread is fully finished
-                pool.release(ctx)
-                finished << ctx
-              end
-            end
-            finished.each { |ctx| active_contexts.delete(ctx) }
-
-            # Sleep only if still at capacity after cleanup
-            sleep 0.01 if pool.at_capacity?
-          end
-
-          # Acquire a context from the pool
-          ctx = pool.acquire("worker")
-          active_contexts << ctx
-
-          ctx.execute do
-            item_results = execute_stage_item(item_data)
-            if item_results
-              mutex.synchronize do
-                results.concat(item_results)
-              end
-            end
-          end
-        end
-
-        # Wait for all remaining contexts to complete
-        active_contexts.each do |ctx|
-          ctx.join
-          pool.release(ctx)
-        end
-
-        # Terminate the pool to ensure no lingering threads
-        pool.terminate_all
-
-        results
-      end
-
-      def execute_with_process_pool(pool_size, stage_items)
-        unless Process.respond_to?(:fork)
-          warn "[Minigun] Process forking not available, falling back to threads"
-          return execute_with_thread_pool(pool_size, stage_items)
-        end
-
-        # For process pools, we need IPC for results
-        # Use ForkContext with proper transport
-        pool = get_or_create_pool(:fork, pool_size)
-        contexts = []
-        results = []
-
-        stage_items.each do |item_data|
-          # Wait for available slot
-          while pool.at_capacity?
-            contexts.each do |ctx|
-              unless ctx.alive?
-                results << ctx.join
-              end
-            end
-            contexts.delete_if { |ctx| !ctx.alive? }
+      # Execute one item using the thread pool
+      def execute_item_with_thread_pool(pool, stage, item)
+        # Wait for available thread
+        ctx = nil
+        while ctx.nil?
+          if pool.at_capacity?
             sleep 0.01
-          end
-
-          # Execute before_fork hooks once
-          execute_fork_hooks(:before_fork, item_data[:stage])
-
-          ctx = pool.acquire("consumer")
-          contexts << ctx
-
-          # Execute in forked process with IPC
-          ctx.execute do
-            # Execute after_fork hooks in child
-            execute_fork_hooks(:after_fork, item_data[:stage])
-
-            # Execute the stage and capture results
-            result = execute_stage_item(item_data)
-            stage = item_data[:stage]
-            is_terminal = @pipeline.instance_variable_get(:@dag).terminal?(stage.name)
-
-            # Only return results for non-terminal stages (processors/accumulators)
-            # Terminal stages (consumers) don't emit downstream
-            if is_terminal
-              nil
-            else
-              result
-            end
+          else
+            ctx = pool.acquire("worker")
           end
         end
-
-        # Wait for all processes and collect results
-        contexts.each do |ctx|
-          result = ctx.join
-          results.concat(result) if result && result.is_a?(Array)
-          pool.release(ctx)
+        
+        # Execute in thread
+        result = nil
+        ctx.execute do
+          result = execute_stage_item({ item: item, stage: stage })
         end
-
-        results
+        
+        ctx.join
+        pool.release(ctx)
+        
+        result || []
       end
 
-      def execute_with_ractor_pool(pool_size, stage_items)
+      # Execute one item using the process pool
+      def execute_item_with_process_pool(pool, stage, item)
+        unless Process.respond_to?(:fork)
+          warn "[Minigun] Process forking not available, falling back to inline"
+          return execute_stage_item({ item: item, stage: stage })
+        end
+        
+        # Wait for available process slot
+        ctx = nil
+        while ctx.nil?
+          if pool.at_capacity?
+            sleep 0.01
+          else
+            ctx = pool.acquire("worker")
+          end
+        end
+        
+        # Execute before_fork hooks
+        execute_fork_hooks(:before_fork, stage)
+        
+        # Execute in forked process
+        ctx.execute do
+          execute_fork_hooks(:after_fork, stage)
+          execute_stage_item({ item: item, stage: stage })
+        end
+        
+        result = ctx.join
+        pool.release(ctx)
+        
+        result || []
+      end
+
+      # Execute one item using the ractor pool
+      def execute_item_with_ractor_pool(pool, stage, item)
         unless defined?(::Ractor)
           warn "[Minigun] Ractors not available, falling back to thread pool"
-          return execute_with_thread_pool(pool_size, stage_items)
+          return execute_item_with_thread_pool(pool, stage, item)
         end
-
-        # Ractors have restrictions on shared objects
+        
         # For now, fall back to threads
-        # TODO: Implement true ractor execution with proper message passing
-        execute_with_thread_pool(pool_size, stage_items)
+        execute_item_with_thread_pool(pool, stage, item)
       end
 
-      # Execute per-batch: spawn a new thread/process/ractor for each batch
-      # This is the Copy-on-Write pattern for processes
-      def execute_per_batch(exec_ctx, stage_items)
-        type = exec_ctx[:type]
-        max_concurrent = exec_ctx[:max] || 4
-
-        case type
-        when :threads
-          execute_per_batch_threads(stage_items, max_concurrent)
-        when :processes
-          execute_per_batch_processes(stage_items, max_concurrent)
-        when :ractors
-          execute_per_batch_ractors(stage_items, max_concurrent)
-        else
-          execute_per_batch_threads(stage_items, max_concurrent)
-        end
-      end
-
-      def execute_per_batch_threads(stage_items, max_concurrent)
-        contexts = []
-        mutex = Mutex.new
-
-        stage_items.each do |item_data|
-          # Wait if we're at max concurrency
-          while contexts.count(&:alive?) >= max_concurrent
-            contexts.delete_if { |ctx| !ctx.alive? }
-            sleep 0.01
-          end
-
-          # Create new thread context for this batch
-          ctx = ThreadContext.new("batch-#{contexts.size}")
-          contexts << ctx
-
-          ctx.execute do
-            execute_stage_item(item_data)
-          end
-        end
-
-        # Wait for all threads to complete
-        contexts.each(&:join)
-
-        []
-      end
-
-      def execute_per_batch_processes(stage_items, max_concurrent)
-        unless Process.respond_to?(:fork)
-          warn "[Minigun] Process forking not available, falling back to threads"
-          return execute_per_batch_threads(stage_items, max_concurrent)
-        end
-
-        # Execute before_fork hooks once before any forking (for all stages)
-        stage_items.each do |item_data|
-          execute_fork_hooks(:before_fork, item_data[:stage])
-        end
-
-        # Trigger GC to maximize Copy-on-Write benefits
-        GC.start
-
-        contexts = []
-        stage_items.each do |item_data|
-          # Wait if we're at max concurrency
-          while contexts.count(&:alive?) >= max_concurrent
-            contexts.each do |ctx|
-              ctx.join unless ctx.alive?
-            end
-            contexts.delete_if { |ctx| !ctx.alive? }
-            sleep 0.01
-          end
-
-          # Create new fork context for this batch (Copy-on-Write)
-          ctx = ForkContext.new("batch-#{contexts.size}")
-          contexts << ctx
-
-          ctx.execute do
-            # Execute after_fork hooks in child process
-            execute_fork_hooks(:after_fork, item_data[:stage])
-
-            # Execute the stage item (no mutex needed - isolated process)
-            execute_stage_item(item_data)
-
-            # Return nil (terminal consumers don't emit)
-            nil
-          end
-        end
-
-        # Wait for all child processes
-        contexts.each(&:join)
-
-        []
-      end
-
-      def execute_per_batch_ractors(stage_items, max_concurrent)
-        unless defined?(::Ractor)
-          warn "[Minigun] Ractors not available, falling back to threads"
-          return execute_per_batch_threads(stage_items, max_concurrent)
-        end
-
-        # Ractors require careful handling of shared state
-        # For now, fall back to threads
-        # TODO: Implement proper ractor execution
-        execute_per_batch_threads(stage_items, max_concurrent)
-      end
-
-      # Inline execution - no concurrency
-      def execute_inline(stage_items)
-        results = []
-
-        stage_items.each do |item_data|
-          item_results = execute_stage_item(item_data)
-          results.concat(item_results) if item_results
-        end
-
-        results
-      end
 
       def execute_stage_item(item_data)
         item = item_data[:item]

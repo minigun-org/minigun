@@ -24,13 +24,13 @@ module Minigun
         end
       end
 
-      # Return context to pool (for reuse)
+      # Return context to pool (reuse inline, fresh threads/processes)
       def release(context)
         @mutex.synchronize do
           @active_contexts.delete(context)
-
-          # Only reuse inline contexts (no cleanup needed)
-          # Threads/forks/ractors should be recreated
+          
+          # Only reuse inline contexts (no concurrency concerns)
+          # Threads/processes are always fresh to prevent state pollution
           if @type == :inline && @available_contexts.size < @max_size
             @available_contexts << context
           end
