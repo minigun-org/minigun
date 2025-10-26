@@ -19,14 +19,14 @@
 def execute_with_emit(context, item)
   emitted_items = []
   emit_targets = []
-  
+
   context.define_singleton_method(:emit) { |i| emitted_items << i }
-  context.define_singleton_method(:emit_to_stage) { |target_stage, i| 
+  context.define_singleton_method(:emit_to_stage) { |target_stage, i|
     emit_targets << { item: i, target: target_stage }
   }
-  
+
   execute(context, item)
-  
+
   # Return mixed format if there are targeted emits
   emit_targets.any? ? (emitted_items + emit_targets) : emitted_items
 end
@@ -37,7 +37,7 @@ end
 - Added explicit target detection and routing logic:
   ```ruby
   item, source_stage, explicit_target = item_data
-  
+
   targets = if explicit_target
               [explicit_target]  # Use explicit target
             else
@@ -83,7 +83,7 @@ end
 stage :type_batcher do |item|
   @batches ||= Hash.new { |h, k| h[k] = [] }
   @batches[item[:type]] << item
-  
+
   if @batches[item[:type]].size >= batch_size
     batch = @batches[item[:type]].dup
     @batches[item[:type]].clear

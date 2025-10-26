@@ -68,7 +68,7 @@ class CustomBatchingExample
         # Route to type-specific sender using emit_to_stage
         target_stage = :"#{type}_sender"
         puts "  ✓ Batch ready! Routing #{batch.size} #{type} emails to #{target_stage}"
-        
+
         # Use emit_to_stage for direct routing to the target consumer
         emit_to_stage(target_stage, { type: type, batch: batch })
       end

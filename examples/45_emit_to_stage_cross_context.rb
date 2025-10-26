@@ -58,11 +58,11 @@ class CrossContextRoutingExample
                      end
 
       puts "  🔀 Routing task #{task[:id]} (#{task[:type]}) → #{target_stage}"
-      
+
       # Use emit_to_stage to route to specific consumer
       # Each consumer runs in a different execution context
       emit_to_stage(target_stage, task)
-      
+
       # Track routing
       @mutex.synchronize do
         case target_stage

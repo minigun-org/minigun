@@ -225,13 +225,13 @@ module Minigun
       @in_flight_count = Concurrent::AtomicFixnum.new(0)
       @produced_count = Concurrent::AtomicFixnum.new(0)
 
-      # Start producer and accumulator threads
+      # Start producer and dispatcher threads
       producer_thread = start_producer
-      accumulator_thread = start_accumulator
+      dispatcher_thread = start_dispatcher
 
       # Wait for completion
       producer_thread.join
-      accumulator_thread.join
+      dispatcher_thread.join
     end
 
     def find_stage(name)
@@ -286,100 +286,11 @@ module Minigun
         producer_threads = []
 
         if has_internal_producers
-          # Separate AtomicStage producers and PipelineStage producers
-          atomic_producers = producer_stages.select { |p| p.is_a?(AtomicStage) && p.block }
-          pipeline_producers = producer_stages.select { |p| p.is_a?(PipelineStage) }
+          log_info "[Pipeline:#{@name}][Producers] Starting #{producer_stages.size} producer(s)"
 
-          log_info "[Pipeline:#{@name}][Producers] Starting #{atomic_producers.size} atomic producer(s) and #{pipeline_producers.size} pipeline producer(s)"
-
-          # Start atomic producers
-          atomic_producers.each do |producer_stage|
-            producer_threads << Thread.new do
-              producer_name = producer_stage.name
-              stage_stats = @stats.for_stage(producer_name, is_terminal: false)
-              stage_stats.start!
-
-              log_info "[Pipeline:#{@name}][Producer:#{producer_name}] Starting"
-
-              begin
-                # Execute before hooks for this producer
-                execute_stage_hooks(:before, producer_name)
-
-                # Create emit method for this producer (thread-local context)
-                producer_context = @context.dup
-                emit_proc = proc do |item|
-                  in_flight_count.increment
-                  queue << [item, producer_name, nil]  # nil = no explicit target
-                  produced_count.increment
-                  stage_stats.increment_produced
-                end
-
-                # Bind emit to this producer's context
-                producer_context.define_singleton_method(:emit, &emit_proc)
-
-                # Bind emit_to_stage for targeted routing
-                producer_context.define_singleton_method(:emit_to_stage) do |target_stage, item|
-                  in_flight_count.increment
-                  queue << [item, producer_name, target_stage]  # explicit target
-                  produced_count.increment
-                  stage_stats.increment_produced
-                end
-
-                # Run producer block
-                producer_context.instance_eval(&producer_stage.block)
-
-                stage_stats.finish!
-                log_info "[Pipeline:#{@name}][Producer:#{producer_name}] Done. Produced #{stage_stats.items_produced} items"
-
-                # Execute after hooks for this producer
-                execute_stage_hooks(:after, producer_name)
-              rescue => e
-                stage_stats.finish!
-                log_info "[Pipeline:#{@name}][Producer:#{producer_name}] Error: #{e.message}"
-                # Don't propagate error - other producers should continue
-              end
-            end
-          end
-
-          # Start pipeline producers
-          pipeline_producers.each do |pipeline_stage|
-            producer_threads << Thread.new do
-              producer_name = pipeline_stage.name
-              stage_stats = @stats.for_stage(producer_name, is_terminal: false)
-              stage_stats.start!
-
-              log_info "[Pipeline:#{@name}][PipelineProducer:#{producer_name}] Starting"
-
-              begin
-                # Run the nested pipeline and capture its output
-                emitted_items = []
-                emit_mutex = Mutex.new
-
-                producer_context = @context.dup
-                producer_context.define_singleton_method(:emit) do |item|
-                  emit_mutex.synchronize { emitted_items << item }
-                end
-
-                # Run the pipeline
-                pipeline_stage.pipeline.instance_variable_set(:@job_id, @job_id)
-                pipeline_stage.pipeline.run(producer_context)
-
-                # Emit all items into the queue
-                emitted_items.each do |item|
-                  in_flight_count.increment
-                  queue << [item, producer_name]
-                  produced_count.increment
-                  stage_stats.increment_produced
-                end
-
-                stage_stats.finish!
-                log_info "[Pipeline:#{@name}][PipelineProducer:#{producer_name}] Done. Produced #{stage_stats.items_produced} items"
-              rescue => e
-                stage_stats.finish!
-                log_error "[Pipeline:#{@name}][PipelineProducer:#{producer_name}] Error: #{e.message}"
-                log_error e.backtrace.join("\n")
-              end
-            end
+          # Start all producers (atomic and pipeline)
+          producer_stages.each do |producer_stage|
+            producer_threads << start_producer_thread(producer_stage, queue, in_flight_count, produced_count)
           end
         end
 
@@ -414,9 +325,81 @@ module Minigun
       end
     end
 
-    def start_accumulator
+    # Start a single producer thread (handles both atomic and pipeline producers)
+    def start_producer_thread(producer_stage, queue, in_flight_count, produced_count)
       Thread.new do
-        log_info "[Pipeline:#{@name}][Accumulator] Starting"
+        producer_name = producer_stage.name
+        stage_stats = @stats.for_stage(producer_name, is_terminal: false)
+        stage_stats.start!
+
+        is_pipeline = producer_stage.is_a?(PipelineStage)
+        log_info "[Pipeline:#{@name}][Producer:#{producer_name}] Starting #{is_pipeline ? '(nested pipeline)' : ''}"
+
+        begin
+          # Execute before hooks for this producer
+          execute_stage_hooks(:before, producer_name) unless is_pipeline
+
+          # Create producer context with emit methods
+          producer_context = @context.dup
+
+          if is_pipeline
+            # Pipeline producers: collect items, then emit all at once
+            emitted_items = []
+            emit_mutex = Mutex.new
+
+            producer_context.define_singleton_method(:emit) do |item|
+              emit_mutex.synchronize { emitted_items << item }
+            end
+
+            # Run the nested pipeline
+            producer_stage.pipeline.instance_variable_set(:@job_id, @job_id)
+            producer_stage.pipeline.run(producer_context)
+
+            # Emit all collected items into the queue
+            emitted_items.each do |item|
+              in_flight_count.increment
+              queue << [item, producer_name, nil]
+              produced_count.increment
+              stage_stats.increment_produced
+            end
+          else
+            # Atomic producers: emit directly to queue as they produce
+            producer_context.define_singleton_method(:emit) do |item|
+              in_flight_count.increment
+              queue << [item, producer_name, nil]
+              produced_count.increment
+              stage_stats.increment_produced
+            end
+
+            producer_context.define_singleton_method(:emit_to_stage) do |target_stage, item|
+              in_flight_count.increment
+              queue << [item, producer_name, target_stage]
+              produced_count.increment
+              stage_stats.increment_produced
+            end
+
+            # Run producer block
+            producer_context.instance_eval(&producer_stage.block)
+          end
+
+          stage_stats.finish!
+          log_info "[Pipeline:#{@name}][Producer:#{producer_name}] Done. Produced #{stage_stats.items_produced} items"
+
+          # Execute after hooks for this producer
+          execute_stage_hooks(:after, producer_name) unless is_pipeline
+        rescue => e
+          stage_stats.finish!
+          log_error "[Pipeline:#{@name}][Producer:#{producer_name}] Error: #{e.message}"
+          log_error e.backtrace.join("\n") if is_pipeline
+          # Don't propagate error - other producers should continue
+        end
+      end
+    end
+
+    # Main event loop: processes items from queue and routes them to target stages
+    def start_dispatcher
+      Thread.new do
+        log_info "[Pipeline:#{@name}][Dispatcher] Starting"
 
         output_items = []  # Track items to send to downstream pipelines
 
@@ -425,7 +408,7 @@ module Minigun
           break if item_data == :END_OF_QUEUE
 
           item, source_stage, explicit_target = item_data
-          
+
           # Use explicit target if provided, otherwise use DAG routing
           targets = if explicit_target
                       [explicit_target]
@@ -437,13 +420,13 @@ module Minigun
 
           targets.each do |target_name|
             target_stage = find_stage(target_name)
-            
+
             # Validate that explicit target exists
             if explicit_target && !target_stage
               log_error "[Pipeline:#{@name}] emit_to_stage: Unknown target stage '#{target_name}'"
               next
             end
-            
+
             next unless target_stage
 
             if @dag.terminal?(target_name)
@@ -504,7 +487,7 @@ module Minigun
         # Send items to output queues if this pipeline has downstream pipelines
         send_to_output_queues(output_items)
 
-        log_info "[Pipeline:#{@name}][Accumulator] Done"
+        log_info "[Pipeline:#{@name}][Dispatcher] Done"
       end
     end
 
