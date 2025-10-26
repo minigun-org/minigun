@@ -2,6 +2,10 @@ ADD to README:
 - stages route to each other sequentially, unless you add :to or :from keywords
 - execute in paralle, and do NOT route to each other, unless unless you add :to or :from keywords.
 
+==================
+
+use IDs instead of names
+
 ===============================
 
 OK. wait, what if we changed it so:

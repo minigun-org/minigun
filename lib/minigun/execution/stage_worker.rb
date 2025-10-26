@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
-require_relative 'stage_executor'
+require_relative 'executor'
 
 module Minigun
   module Execution
     # Owns the entire stage worker lifecycle: reading from input queue, executing items, routing results
-    # This is the main worker loop that was previously embedded in Pipeline#start_stage_worker
+    # Manages executors for concurrent execution strategies
     class StageWorker
       attr_reader :stage_name, :stage, :thread
 
@@ -14,7 +14,14 @@ module Minigun
         @stage_name = stage_name
         @stage = stage
         @config = config
-        @executor = StageExecutor.new(pipeline, config)
+
+        # Get context from pipeline for stage execution
+        @user_context = @pipeline.instance_variable_get(:@context)
+        @stats = @pipeline.instance_variable_get(:@stats)
+        @stage_hooks = @pipeline.instance_variable_get(:@stage_hooks)
+
+        # Create executor for this stage based on its execution context
+        @executor = create_executor_for_stage
       end
 
       # Start the worker thread
@@ -69,7 +76,7 @@ module Minigun
 
         log_info "Done"
       ensure
-        @executor.shutdown
+        @executor&.shutdown
       end
 
       # Router stage: routes items without executing them
@@ -137,7 +144,7 @@ module Minigun
 
           # Execute the stage (single item, no batch)
           item = msg  # msg is unwrapped data
-          results = @executor.execute_item(@stage, item)
+          results = execute_item(@stage, item)
 
           # Route results to downstream stages
           route_results(results, dag, runtime_edges, stage_input_queues)
@@ -191,6 +198,51 @@ module Minigun
 
         all_targets.each do |target|
           stage_input_queues[target] << Message.end_signal(source: @stage_name)
+        end
+      end
+
+      # Create executor for this stage based on its execution context
+      def create_executor_for_stage
+        exec_ctx = @stage.execution_context
+        return InlineExecutor.new if exec_ctx.nil?
+
+        type = normalize_type(exec_ctx[:type])
+        pool_size = exec_ctx[:pool_size] || exec_ctx[:max] || default_pool_size(exec_ctx[:type])
+
+        Execution.create_executor(type: type, max_size: pool_size)
+      end
+
+      # Execute a single item for this stage
+      def execute_item(stage, item)
+        @executor.execute_stage_item(
+          stage: stage,
+          item: item,
+          user_context: @user_context,
+          stats: @stats,
+          pipeline: @pipeline
+        )
+      end
+
+      # Normalize execution strategy type names
+      def normalize_type(type)
+        case type
+        when :threads then :thread
+        when :processes then :fork
+        when :ractors then :ractor
+        else type
+        end
+      end
+
+      def default_pool_size(type)
+        case type
+        when :threads
+          @config[:max_threads] || 5
+        when :processes
+          @config[:max_processes] || 2
+        when :ractors
+          @config[:max_ractors] || 4
+        else
+          5
         end
       end
 
