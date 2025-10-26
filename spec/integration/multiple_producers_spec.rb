@@ -16,21 +16,21 @@ RSpec.describe 'Multiple Producers' do
         end
 
         pipeline do
-        producer :source_a do
-          5.times do |i|
-            emit("A#{i}")
+          producer :source_a do
+            5.times do |i|
+              emit("A#{i}")
+            end
           end
-        end
-        end
 
-        producer :source_b do
-          5.times do |i|
-            emit("B#{i}")
+          producer :source_b do
+            5.times do |i|
+              emit("B#{i}")
+            end
           end
-        end
 
-        consumer :collect do |item|
-          @mutex.synchronize { @results << item }
+          consumer :collect do |item|
+            @mutex.synchronize { @results << item }
+          end
         end
       end
 
@@ -55,32 +55,34 @@ RSpec.describe 'Multiple Producers' do
           @mutex = Mutex.new
         end
 
-        producer :source_x, to: :process_x do
-          3.times do |i|
-            emit(i)
+        pipeline do
+          producer :source_x, to: :process_x do
+            3.times do |i|
+              emit(i)
+            end
           end
-        end
 
-        producer :source_y, to: :process_y do
-          3.times do |i|
-            emit(i + 100)
+          producer :source_y, to: :process_y do
+            3.times do |i|
+              emit(i + 100)
+            end
           end
-        end
 
-        processor :process_x, to: :collect_x do |item|
-          emit(item * 10)
-        end
+          processor :process_x, to: :collect_x do |item|
+            emit(item * 10)
+          end
 
-        processor :process_y, to: :collect_y do |item|
-          emit(item * 2)
-        end
+          processor :process_y, to: :collect_y do |item|
+            emit(item * 2)
+          end
 
-        consumer :collect_x do |item|
-          @mutex.synchronize { @results_x << item }
-        end
+          consumer :collect_x do |item|
+            @mutex.synchronize { @results_x << item }
+          end
 
-        consumer :collect_y do |item|
-          @mutex.synchronize { @results_y << item }
+          consumer :collect_y do |item|
+            @mutex.synchronize { @results_y << item }
+          end
         end
       end
 
@@ -104,16 +106,18 @@ RSpec.describe 'Multiple Producers' do
           @results = []
         end
 
-        producer :fast_producer do
-          10.times { |i| emit(i) }
-        end
+        pipeline do
+          producer :fast_producer do
+            10.times { |i| emit(i) }
+          end
 
-        producer :slow_producer do
-          5.times { |i| emit(i + 100) }
-        end
+          producer :slow_producer do
+            5.times { |i| emit(i + 100) }
+          end
 
-        consumer :collect do |item|
-          @results << item
+          consumer :collect do |item|
+            @results << item
+          end
         end
       end
 
@@ -150,16 +154,18 @@ RSpec.describe 'Multiple Producers' do
           @mutex = Mutex.new
         end
 
-        producer :good_producer do
-          3.times { |i| emit(i) }
-        end
+        pipeline do
+          producer :good_producer do
+            3.times { |i| emit(i) }
+          end
 
-        producer :bad_producer do
-          raise StandardError, "Producer error"
-        end
+          producer :bad_producer do
+            raise StandardError, "Producer error"
+          end
 
-        consumer :collect do |item|
-          @mutex.synchronize { @results << item }
+          consumer :collect do |item|
+            @mutex.synchronize { @results << item }
+          end
         end
       end
 
@@ -184,12 +190,14 @@ RSpec.describe 'Multiple Producers' do
           @results = []
         end
 
-        producer :source do
-          5.times { |i| emit(i) }
-        end
+        pipeline do
+          producer :source do
+            5.times { |i| emit(i) }
+          end
 
-        consumer :collect do |item|
-          @results << item
+          consumer :collect do |item|
+            @results << item
+          end
         end
       end
 
