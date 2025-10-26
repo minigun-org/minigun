@@ -81,12 +81,12 @@ class ComprehensivePipeline
         end
 
         # CPU-intensive parsing
-        batch.map do |item|
-          {
+        batch.each do |item|
+          emit({
             id: item[:id],
             parsed: item[:data].upcase,
             metadata: item[:metadata]
-          }
+          })
         end
       end
     end
