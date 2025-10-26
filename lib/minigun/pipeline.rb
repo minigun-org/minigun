@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'set'
+require_relative 'execution/stage_worker'
 
 module Minigun
   # Pipeline represents a single data processing pipeline with stages
@@ -330,147 +331,8 @@ module Minigun
 
     # Start a worker thread for a non-producer stage
     def start_stage_worker(stage_name, stage)
-      Thread.new do
-        log_info "[Pipeline:#{@name}][Worker:#{stage_name}] Starting"
-
-        # Get input queue for this stage
-        input_queue = @stage_input_queues[stage_name]
-
-        unless input_queue
-          log_info "[Pipeline:#{@name}][Worker:#{stage_name}] No input queue, exiting"
-          next
-        end
-
-        # Track sources: we know DAG upstream at start, discover dynamic sources at runtime
-        # We exit when all known sources have sent END
-        dag_upstream = @dag.upstream(stage_name)
-        sources_expected = Set.new(dag_upstream)  # Start with DAG upstream
-        sources_done = Set.new
-        runtime_edges = @runtime_edges
-        stage_input_queues = @stage_input_queues
-
-        # If no DAG upstream and stage is a regular consumer/processor (not a producer or PipelineStage),
-        # something is wrong - exit immediately to prevent hanging
-        if sources_expected.empty? && !stage.producer? && !stage.is_a?(PipelineStage)
-          log_info "[Pipeline:#{@name}][Worker:#{stage_name}] No upstream sources, exiting"
-          next
-        end
-
-        # For routers, route according to strategy (broadcast or round-robin)
-        if stage.respond_to?(:router?) && stage.router?
-          target_queues = stage.targets.map { |target| stage_input_queues[target] }
-
-          if stage.round_robin?
-            # Round-robin load balancing
-            round_robin_index = 0
-
-            loop do
-              msg = input_queue.pop
-
-              # Handle END signal
-              if msg.is_a?(Message) && msg.end_of_stream?
-                sources_expected << msg.source  # Discover dynamic source
-                sources_done << msg.source
-                break if sources_done == sources_expected
-                next
-              end
-
-              # Round-robin to downstream stages
-              # Don't track in runtime_edges - router targets are known statically
-              target = stage.targets[round_robin_index]
-              target_queues[round_robin_index] << msg
-              round_robin_index = (round_robin_index + 1) % target_queues.size
-            end
-          else
-            # Broadcast (default)
-            loop do
-              msg = input_queue.pop
-
-              # Handle END signal
-              if msg.is_a?(Message) && msg.end_of_stream?
-                sources_expected << msg.source  # Discover dynamic source
-                sources_done << msg.source
-                break if sources_done == sources_expected
-                next
-              end
-
-              # Broadcast to all downstream stages (fan-out semantics)
-              # Don't track in runtime_edges - router targets are known statically
-              stage.targets.each do |target|
-                stage_input_queues[target] << msg
-              end
-            end
-          end
-
-          # Broadcast END to ALL router targets (even for round-robin)
-          # All targets need to know when upstream is complete
-          stage.targets.each do |target|
-            stage_input_queues[target] << Message.end_signal(source: stage_name)
-          end
-        else
-          # Regular stage processing
-          loop do
-            msg = input_queue.pop
-
-            # Handle END signal
-            if msg.is_a?(Message) && msg.end_of_stream?
-              sources_expected << msg.source  # Discover dynamic source
-              sources_done << msg.source
-              break if sources_done == sources_expected
-              next
-            end
-
-            # Execute the stage
-            item = msg  # msg is unwrapped data
-            results = execute_stage(stage, item)
-
-            # Route results to downstream stages and track edges
-            results.each do |result|
-              if result.is_a?(Hash) && result.key?(:item) && result.key?(:target)
-                # Targeted emit via emit_to_stage - route DIRECTLY to target's input queue
-                target_stage = result[:target]
-                output_queue = stage_input_queues[target_stage]
-                if output_queue
-                  runtime_edges[stage_name].add(target_stage)
-                  output_queue << result[:item]
-                end
-              else
-                # Regular emit - uses DAG routing to all downstream
-                # Don't track in runtime_edges - DAG already knows these connections
-                downstream = @dag.downstream(stage_name)
-                downstream.each do |downstream_stage|
-                  output_queue = stage_input_queues[downstream_stage]
-                  output_queue << result if output_queue
-                end
-              end
-            end
-          end
-
-          # Flush accumulator stages before sending END signals
-          if stage.respond_to?(:flush)
-            flushed_items = stage.flush(@context)
-            flushed_items.each do |batch|
-              # Route flushed batches to downstream stages
-              downstream = @dag.downstream(stage_name)
-              downstream.each do |downstream_stage|
-                output_queue = stage_input_queues[downstream_stage]
-                output_queue << batch if output_queue
-              end
-            end
-          end
-
-          # Send END to ALL connections: DAG downstream + dynamic emit_to_stage targets
-          dag_downstream = @dag.downstream(stage_name)
-          dynamic_targets = runtime_edges[stage_name].to_a
-          all_targets = (dag_downstream + dynamic_targets).uniq
-
-          all_targets.each do |target|
-            stage_input_queues[target] << Message.end_signal(source: stage_name)
-          end
-        end
-
-        log_info "[Pipeline:#{@name}][Worker:#{stage_name}] Done"
-      end
+      worker = Execution::StageWorker.new(self, stage_name, stage, @config)
+      worker.start
     end
 
     # Start a single producer thread (handles both atomic and pipeline producers)
@@ -569,18 +431,15 @@ module Minigun
       end
     end
 
-    def execute_stage(stage, item)
-      executor = Execution::StageExecutor.new(self, @config)
-      item_data = { item: item, stage: stage }
-      executor.execute_with_context(stage.execution_context, [item_data])
-    end
-
     def build_dag_routing!
       # Handle multiple producers specially - they should all connect to first non-producer
+      puts "[DAG BUILD] BEFORE handle_multiple_producers: edges=#{@dag.edges.map {|k,v| "#{k}->#{v.to_a.join(',')}"}.join(' | ')}"
       handle_multiple_producers_routing!
+      puts "[DAG BUILD] AFTER handle_multiple_producers: edges=#{@dag.edges.map {|k,v| "#{k}->#{v.to_a.join(',')}"}.join(' | ')}"
 
       # Fill any remaining sequential gaps (handles fan-out, siblings, cycles)
       fill_sequential_gaps_by_definition_order!
+      puts "[DAG BUILD] AFTER fill_sequential_gaps: edges=#{@dag.edges.map {|k,v| "#{k}->#{v.to_a.join(',')}"}.join(' | ')}"
 
       @dag.validate!
       validate_stages_exist!

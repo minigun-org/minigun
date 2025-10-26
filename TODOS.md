@@ -16,6 +16,12 @@ OK. wait, what if we changed it so:
 configurable queue length
 
 
+=========================
+
+result.is_a?(Hash) && result.key?(:item) && result.key?(:target)
+
+--> tmake this a signal
+
 ====================================
 
 weighted routing (load balancing)

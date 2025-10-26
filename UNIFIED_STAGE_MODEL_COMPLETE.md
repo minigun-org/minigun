@@ -148,3 +148,4 @@ No performance degradation - PipelineStages as consumers execute inline (no thre
 
 **Bottom Line:** Pipelines ARE stages. Stages can produce, process, or consume. Everything uses the same DAG and execution model. Simple. Elegant. Complete. 🚀
 
+

@@ -31,6 +31,9 @@ module Minigun
       def execute_with_context(exec_ctx, stage_items)
         return execute_inline(stage_items) if exec_ctx.nil?
 
+        # Clear output items from previous call (since executor is reused)
+        @output_items.clear if @output_items
+
         case exec_ctx[:mode]
         when :pool
           execute_with_pool(exec_ctx, stage_items)
@@ -40,9 +43,6 @@ module Minigun
           # Default: inline execution
           execute_inline(stage_items)
         end
-      ensure
-        # Always clean up context pools
-        shutdown
       end
 
       private
@@ -65,8 +65,9 @@ module Minigun
       end
 
       def execute_with_thread_pool(pool_size, stage_items)
-        # Use ThreadContext with a pool
-        pool = get_or_create_pool(:thread, pool_size)
+        # Create a FRESH pool for each call to avoid closure interference
+        # (Threads from reused contexts can capture old closure variables)
+        pool = ContextPool.new(type: :thread, max_size: pool_size)
         active_contexts = []
         results = []
         mutex = Mutex.new
@@ -75,24 +76,31 @@ module Minigun
           # Wait for available slot by cleaning up finished threads
           while pool.at_capacity?
             # Find and cleanup finished contexts
-            finished = active_contexts.select { |ctx| !ctx.alive? }
-            finished.each do |ctx|
-              ctx.join
-              pool.release(ctx)
-              active_contexts.delete(ctx)
+            finished = []
+            active_contexts.each do |ctx|
+              unless ctx.alive?
+                ctx.join  # Ensure thread is fully finished
+                pool.release(ctx)
+                finished << ctx
+              end
             end
+            finished.each { |ctx| active_contexts.delete(ctx) }
 
             # Sleep only if still at capacity after cleanup
             sleep 0.01 if pool.at_capacity?
           end
 
-          # Create and execute in thread context
-          ctx = pool.acquire("consumer")
+          # Acquire a context from the pool
+          ctx = pool.acquire("worker")
           active_contexts << ctx
 
           ctx.execute do
             item_results = execute_stage_item(item_data)
-            mutex.synchronize { results.concat(item_results) } if item_results
+            if item_results
+              mutex.synchronize do
+                results.concat(item_results)
+              end
+            end
           end
         end
 
@@ -101,6 +109,9 @@ module Minigun
           ctx.join
           pool.release(ctx)
         end
+
+        # Terminate the pool to ensure no lingering threads
+        pool.terminate_all
 
         results
       end
