@@ -6,7 +6,7 @@
 
 #### Core Specs - ALL PASSING ✅
 - ✅ `spec/unit/stage_hooks_spec.rb` - 5/5 tests passing
-- ✅ `spec/unit/stage_hooks_advanced_spec.rb` - 7/7 tests passing  
+- ✅ `spec/unit/stage_hooks_advanced_spec.rb` - 7/7 tests passing
 - ✅ `spec/integration/circular_dependency_spec.rb` - 10/10 tests passing
 - ✅ `spec/integration/from_keyword_spec.rb` - 6/6 tests passing
 - ✅ `spec/integration/isolated_pipelines_spec.rb` - 3/3 tests passing
@@ -28,7 +28,7 @@
 2. **`spec/integration/examples_spec.rb`** - 3 failures
    - May need example file adjustments
 
-3. **`spec/unit/execution/context_spec.rb`** - 2 failures  
+3. **`spec/unit/execution/context_spec.rb`** - 2 failures
    - Ractor-related test (pending investigation)
 
 4. **Other** - 1 failure (pending investigation)
@@ -46,16 +46,16 @@
 # ✅ CORRECT - New Required Pattern
 class MyPipeline
   include Minigun::DSL
-  
+
   def initialize
     @config = load_config
   end
-  
+
   pipeline do
     producer :source do
       emit(@config[:data])
     end
-    
+
     consumer :sink do |item|
       puts item
     end
@@ -65,14 +65,14 @@ end
 # ✅ ALSO CORRECT - Named Pipelines
 class MultiPipeline
   include Minigun::DSL
-  
+
   pipeline do
     # Default pipeline stages
     processor :transform do |item|
       emit(item * 2)
     end
   end
-  
+
   pipeline :source, to: :transform do
     producer :gen do
       emit(1)
@@ -83,7 +83,7 @@ end
 
 ### Commits
 1. `07beaf3` - Fix stage_hooks_spec.rb - all 5 tests passing
-2. `a423087` - Fix circular_dependency_spec.rb - all 10 tests passing  
+2. `a423087` - Fix circular_dependency_spec.rb - all 10 tests passing
 3. `edb8af7` - Fix DSL: simplify named pipeline handling + fix from_keyword and isolated_pipelines specs
 4. `92eb9a7` - Fix stage_hooks_advanced_spec.rb - all 7 tests passing
 5. `bc4a361` - Fix multiple_producers_spec.rb - all 5 tests passing

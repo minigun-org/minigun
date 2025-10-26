@@ -237,16 +237,18 @@ class ConfiguredPipeline
   max_threads 10
   max_processes 4
 
-  producer :gen do
-    emit(1)
-  end
+  pipeline do
+    producer :gen do
+      emit(1)
+    end
 
-  processor :work, to: :save do |item|
-    emit(item)
-  end
+    processor :work, to: :save do |item|
+      emit(item)
+    end
 
-  consumer :save do |item|
-    # Save
+    consumer :save do |item|
+      # Save
+    end
   end
 end
 

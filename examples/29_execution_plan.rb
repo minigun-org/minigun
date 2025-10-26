@@ -191,24 +191,26 @@ puts "-" * 50
 class MixedPipeline
   include Minigun::DSL
 
-  producer :source do
-    emit(1)
-  end
+  pipeline do
+    producer :source do
+      emit(1)
+    end
 
-  processor :thread_work, strategy: :threaded, to: :fork_work do |item|
-    emit(item)
-  end
+    processor :thread_work, strategy: :threaded, to: :fork_work do |item|
+      emit(item)
+    end
 
-  processor :fork_work, strategy: :fork_ipc, to: :ractor_work do |item|
-    emit(item)
-  end
+    processor :fork_work, strategy: :fork_ipc, to: :ractor_work do |item|
+      emit(item)
+    end
 
-  processor :ractor_work, strategy: :ractor, to: :output do |item|
-    emit(item)
-  end
+    processor :ractor_work, strategy: :ractor, to: :output do |item|
+      emit(item)
+    end
 
-  consumer :output do |item|
-    # Done
+    consumer :output do |item|
+      # Done
+    end
   end
 end
 
@@ -241,24 +243,26 @@ puts "-" * 50
 class GroupedPipeline
   include Minigun::DSL
 
-  producer :gen do
-    emit(1)
-  end
+  pipeline do
+    producer :gen do
+      emit(1)
+    end
 
-  processor :step1, to: :step2 do |item|
-    emit(item)
-  end
+    processor :step1, to: :step2 do |item|
+      emit(item)
+    end
 
-  processor :step2, to: :step3 do |item|
-    emit(item)
-  end
+    processor :step2, to: :step3 do |item|
+      emit(item)
+    end
 
-  processor :step3, to: :output do |item|
-    emit(item)
-  end
+    processor :step3, to: :output do |item|
+      emit(item)
+    end
 
-  consumer :output do |item|
-    # Done
+    consumer :output do |item|
+      # Done
+    end
   end
 end
 
