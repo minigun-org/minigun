@@ -15,44 +15,44 @@ class HooksExample
     @results = []
   end
 
-  # Hook: Called before the pipeline starts
-  before_run do
-    puts "[Hook] before_run - Setting up resources..."
-    events << :before_run
-
-    # Example: Open database connections, initialize caches, etc.
-    @start_time = Time.now
-  end
-
-  # Hook: Called after the pipeline completes
-  after_run do
-    puts "[Hook] after_run - Cleaning up resources..."
-    events << :after_run
-
-    # Example: Close database connections, write final logs, etc.
-    duration = Time.now - @start_time
-    puts "[Hook] Pipeline completed in #{duration.round(3)}s"
-  end
-
-  # Hook: Called before forking a process (COW fork strategy)
-  before_fork do
-    puts "[Hook] before_fork - Preparing to fork..."
-    events << :before_fork
-
-    # Example: Close database connections before fork to avoid shared sockets
-    # Important for COW forking to prevent connection issues
-  end
-
-  # Hook: Called after forking a process (in the child process)
-  after_fork do
-    puts "[Hook] after_fork (child process: #{Process.pid})"
-    events << :after_fork
-
-    # Example: Reopen database connections in child process
-    # Each forked process needs its own connection
-  end
-
   pipeline do
+    # Hook: Called before the pipeline starts
+    before_run do
+      puts "[Hook] before_run - Setting up resources..."
+      events << :before_run
+
+      # Example: Open database connections, initialize caches, etc.
+      @start_time = Time.now
+    end
+
+    # Hook: Called after the pipeline completes
+    after_run do
+      puts "[Hook] after_run - Cleaning up resources..."
+      events << :after_run
+
+      # Example: Close database connections, write final logs, etc.
+      duration = Time.now - @start_time
+      puts "[Hook] Pipeline completed in #{duration.round(3)}s"
+    end
+
+    # Hook: Called before forking a process (COW fork strategy)
+    before_fork do
+      puts "[Hook] before_fork - Preparing to fork..."
+      events << :before_fork
+
+      # Example: Close database connections before fork to avoid shared sockets
+      # Important for COW forking to prevent connection issues
+    end
+
+    # Hook: Called after forking a process (in the child process)
+    after_fork do
+      puts "[Hook] after_fork (child process: #{Process.pid})"
+      events << :after_fork
+
+      # Example: Reopen database connections in child process
+      # Each forked process needs its own connection
+    end
+
     producer :generate do
       puts "[Producer] Generating 5 items..."
       5.times { |i| emit(i + 1) }

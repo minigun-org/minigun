@@ -17,31 +17,33 @@ class StrategyPerStageExample
     @mutex = Mutex.new
   end
 
-  producer :generate do
-    puts "[Producer] Generating 10 items"
-    10.times { |i| emit(i + 1) }
-  end
+  pipeline do
+    producer :generate do
+      puts "[Producer] Generating 10 items"
+      10.times { |i| emit(i + 1) }
+    end
 
-  # Light processor uses threads (default)
-  processor :validate, to: :batch do |num|
-    puts "[Validator] Validating #{num}"
-    emit(num) if num > 0
-  end
+    # Light processor uses threads (default)
+    processor :validate, to: :batch do |num|
+      puts "[Validator] Validating #{num}"
+      emit(num) if num > 0
+    end
 
-  # Accumulator batches items before spawning workers
-  accumulator :batch, max_size: 3, to: [:heavy_save, :light_log]
+    # Accumulator batches items before spawning workers
+    accumulator :batch, max_size: 3, to: [:heavy_save, :light_log]
 
-  # Heavy consumer spawns forks per batch (COW fork pattern)
-  spawn_fork :heavy_save do |batch|
-    puts "[HeavySave:spawn_fork:#{Process.pid}] Processing batch of #{batch.size}"
-    sleep 0.01  # Simulate heavy work
-    batch.each { |num| @mutex.synchronize { fork_results << num } }
-  end
+    # Heavy consumer spawns forks per batch (COW fork pattern)
+    spawn_fork :heavy_save do |batch|
+      puts "[HeavySave:spawn_fork:#{Process.pid}] Processing batch of #{batch.size}"
+      sleep 0.01  # Simulate heavy work
+      batch.each { |num| @mutex.synchronize { fork_results << num } }
+    end
 
-  # Light consumer uses threads (stream mode, no batching needed)
-  consumer :light_log, strategy: :threaded do |batch|
-    puts "[LightLog:threaded] Logging batch of #{batch.size}"
-    batch.each { |num| @mutex.synchronize { thread_results << num } }
+    # Light consumer uses threads (stream mode, no batching needed)
+    consumer :light_log, strategy: :threaded do |batch|
+      puts "[LightLog:threaded] Logging batch of #{batch.size}"
+      batch.each { |num| @mutex.synchronize { thread_results << num } }
+    end
   end
 end
 

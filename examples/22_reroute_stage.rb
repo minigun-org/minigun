@@ -14,40 +14,46 @@ class RerouteBaseExample
     @results = []
   end
 
-  producer :generate do
-    puts "[Producer] Generating 5 items"
-    5.times { |i| emit(i + 1) }
-  end
+  pipeline do
+    producer :generate do
+      puts "[Producer] Generating 5 items"
+      5.times { |i| emit(i + 1) }
+    end
 
-  processor :double do |num|
-    result = num * 2
-    puts "[Double] #{num} * 2 = #{result}"
-    emit(result)
-  end
+    processor :double do |num|
+      result = num * 2
+      puts "[Double] #{num} * 2 = #{result}"
+      emit(result)
+    end
 
-  consumer :collect do |num|
-    puts "[Collect] Received: #{num}"
-    @results << num
+    consumer :collect do |num|
+      puts "[Collect] Received: #{num}"
+      @results << num
+    end
   end
 end
 
 # Child class that reroutes to skip the doubling
 class RerouteSkipExample < RerouteBaseExample
-  # Override routing to skip the double stage
-  reroute_stage :generate, to: :collect
+  pipeline do
+    # Override routing to skip the double stage
+    reroute_stage :generate, to: :collect
+  end
 end
 
 # Child class that inserts a new stage
 class RerouteInsertExample < RerouteBaseExample
-  processor :triple do |num|
-    result = num * 3
-    puts "[Triple] #{num} * 3 = #{result}"
-    emit(result)
-  end
+  pipeline do
+    processor :triple do |num|
+      result = num * 3
+      puts "[Triple] #{num} * 3 = #{result}"
+      emit(result)
+    end
 
-  # Reroute to insert triple between double and collect
-  reroute_stage :double, to: :triple
-  reroute_stage :triple, to: :collect
+    # Reroute to insert triple between double and collect
+    reroute_stage :double, to: :triple
+    reroute_stage :triple, to: :collect
+  end
 end
 
 if __FILE__ == $0

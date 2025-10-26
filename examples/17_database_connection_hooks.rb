@@ -18,42 +18,44 @@ class DatabaseConnectionExample
     @db_connected = false
   end
 
-  # Simulate database connection
-  before_run do
-    connect_to_database
-  end
+  pipeline do
+    # Simulate database connection
+    before_run do
+      connect_to_database
+    end
 
-  # Disconnect before forking (parent process)
-  before_fork do
-    disconnect_from_database
-  end
+    # Disconnect before forking (parent process)
+    before_fork do
+      disconnect_from_database
+    end
 
-  # Reconnect after forking (child process)
-  after_fork do
-    reconnect_in_child_process
-  end
+    # Reconnect after forking (child process)
+    after_fork do
+      reconnect_in_child_process
+    end
 
-  # Clean up after everything completes
-  after_run do
-    final_disconnect
-  end
+    # Clean up after everything completes
+    after_run do
+      final_disconnect
+    end
 
-  producer :fetch_user_ids do
-    @connection_events << "Producer using DB connection"
-    # Simulate fetching IDs from database
-    (1..10).each { |id| emit(id) }
-  end
+    producer :fetch_user_ids do
+      @connection_events << "Producer using DB connection"
+      # Simulate fetching IDs from database
+      (1..10).each { |id| emit(id) }
+    end
 
-  # Accumulator batches items
-  accumulator :batch, max_size: 5
+    # Accumulator batches items
+    accumulator :batch, max_size: 5
 
-  # Use spawn_fork to process batches
-  spawn_fork :process_users do |batch|
-    batch.each do |user_id|
-      @connection_events << "Processing user #{user_id} in PID #{Process.pid}"
-      # Simulate database write
-      result = save_to_database(user_id)
-      @results << result
+    # Use spawn_fork to process batches
+    spawn_fork :process_users do |batch|
+      batch.each do |user_id|
+        @connection_events << "Processing user #{user_id} in PID #{Process.pid}"
+        # Simulate database write
+        result = save_to_database(user_id)
+        @results << result
+      end
     end
   end
 

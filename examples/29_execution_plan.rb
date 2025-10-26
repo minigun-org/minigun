@@ -15,16 +15,18 @@ puts "-" * 50
 class SimplePipeline
   include Minigun::DSL
 
-  producer :source do
-    3.times { |i| emit(i + 1) }
-  end
+  pipeline do
+    producer :source do
+      3.times { |i| emit(i + 1) }
+    end
 
-  processor :double, to: :output do |item|
-    emit(item * 2)
-  end
+    processor :double, to: :output do |item|
+      emit(item * 2)
+    end
 
-  consumer :output do |item|
-    # Collect
+    consumer :output do |item|
+      # Collect
+    end
   end
 end
 
@@ -63,20 +65,22 @@ puts "-" * 50
 class FanOutPipeline
   include Minigun::DSL
 
-  producer :source_a do
-    emit("A")
-  end
+  pipeline do
+    producer :source_a do
+      emit("A")
+    end
 
-  producer :source_b do
-    emit("B")
-  end
+    producer :source_b do
+      emit("B")
+    end
 
-  processor :merge, from: [:source_a, :source_b], to: :output do |item|
-    emit(item)
-  end
+    processor :merge, from: [:source_a, :source_b], to: :output do |item|
+      emit(item)
+    end
 
-  consumer :output do |item|
-    # Collect
+    consumer :output do |item|
+      # Collect
+    end
   end
 end
 
@@ -105,18 +109,20 @@ puts "-" * 50
 class AccumulatorPipeline
   include Minigun::DSL
 
-  producer :source do
-    5.times { |i| emit(i) }
-  end
+  pipeline do
+    producer :source do
+      5.times { |i| emit(i) }
+    end
 
-  processor :transform, to: :batch do |item|
-    emit(item * 2)
-  end
+    processor :transform, to: :batch do |item|
+      emit(item * 2)
+    end
 
-  accumulator :batch, max_size: 3, to: :consume
+    accumulator :batch, max_size: 3, to: :consume
 
-  consumer :consume do |batch|
-    # Process batch
+    consumer :consume do |batch|
+      # Process batch
+    end
   end
 end
 
@@ -145,17 +151,19 @@ puts "-" * 50
 class StrategyPipeline
   include Minigun::DSL
 
-  producer :source do
-    emit(1)
-  end
+  pipeline do
+    producer :source do
+      emit(1)
+    end
 
-  # Explicit fork strategy
-  processor :heavy, strategy: :fork_ipc, to: :output do |item|
-    emit(item * 2)
-  end
+    # Explicit fork strategy
+    processor :heavy, strategy: :fork_ipc, to: :output do |item|
+      emit(item * 2)
+    end
 
-  consumer :output do |item|
-    # Collect
+    consumer :output do |item|
+      # Collect
+    end
   end
 end
 

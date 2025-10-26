@@ -15,32 +15,34 @@ class NestedPipelineExample
     @mutex = Mutex.new
   end
 
-  # Main pipeline contains a nested sub-pipeline
-  producer :start do
-    puts "[Main] Generating numbers 1-5"
-    5.times { |i| emit(i + 1) }
-  end
-
-  # Nested sub-pipeline for transformation
-  pipeline :transform_sub do
-    # This pipeline receives items from parent
-    processor :double do |num|
-      result = num * 2
-      puts "[SubPipeline] #{num} * 2 = #{result}"
-      emit(result)
+  pipeline do
+    # Main pipeline contains a nested sub-pipeline
+    producer :start do
+      puts "[Main] Generating numbers 1-5"
+      5.times { |i| emit(i + 1) }
     end
 
-    processor :add_ten do |num|
-      result = num + 10
-      puts "[SubPipeline] #{result - 10} + 10 = #{result}"
-      emit(result)
-    end
-  end
+    # Nested sub-pipeline for transformation
+    pipeline :transform_sub do
+      # This pipeline receives items from parent
+      processor :double do |num|
+        result = num * 2
+        puts "[SubPipeline] #{num} * 2 = #{result}"
+        emit(result)
+      end
 
-  # Final consumer collects results
-  consumer :collect do |num|
-    puts "[Main] Collecting: #{num}"
-    @mutex.synchronize { results << num }
+      processor :add_ten do |num|
+        result = num + 10
+        puts "[SubPipeline] #{result - 10} + 10 = #{result}"
+        emit(result)
+      end
+    end
+
+    # Final consumer collects results
+    consumer :collect do |num|
+      puts "[Main] Collecting: #{num}"
+      @mutex.synchronize { results << num }
+    end
   end
 end
 

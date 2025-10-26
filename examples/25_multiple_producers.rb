@@ -15,47 +15,49 @@ class MultipleProducersExample
     @mutex = Mutex.new
   end
 
-  # Producer 1: Fetch from API
-  producer :api_source do
-    puts "[API Source] Fetching from REST API..."
-    5.times do |i|
-      emit({ source: 'api', id: i, data: "API record #{i}" })
+  pipeline do
+    # Producer 1: Fetch from API
+    producer :api_source do
+      puts "[API Source] Fetching from REST API..."
+      5.times do |i|
+        emit({ source: 'api', id: i, data: "API record #{i}" })
+      end
+      puts "[API Source] Fetched 5 records"
     end
-    puts "[API Source] Fetched 5 records"
-  end
 
-  # Producer 2: Read from database
-  producer :db_source do
-    puts "[DB Source] Querying database..."
-    3.times do |i|
-      emit({ source: 'database', id: i + 100, data: "DB record #{i}" })
+    # Producer 2: Read from database
+    producer :db_source do
+      puts "[DB Source] Querying database..."
+      3.times do |i|
+        emit({ source: 'database', id: i + 100, data: "DB record #{i}" })
+      end
+      puts "[DB Source] Queried 3 records"
     end
-    puts "[DB Source] Queried 3 records"
-  end
 
-  # Producer 3: Read from file
-  producer :file_source do
-    puts "[File Source] Reading from file..."
-    4.times do |i|
-      emit({ source: 'file', id: i + 200, data: "File record #{i}" })
+    # Producer 3: Read from file
+    producer :file_source do
+      puts "[File Source] Reading from file..."
+      4.times do |i|
+        emit({ source: 'file', id: i + 200, data: "File record #{i}" })
+      end
+      puts "[File Source] Read 4 records"
     end
-    puts "[File Source] Read 4 records"
-  end
 
-  # Shared processor - enriches all records
-  processor :enrich do |record|
-    enriched = record.merge(
-      timestamp: Time.now.to_i,
-      processed: true
-    )
-    emit(enriched)
-  end
+    # Shared processor - enriches all records
+    processor :enrich do |record|
+      enriched = record.merge(
+        timestamp: Time.now.to_i,
+        processed: true
+      )
+      emit(enriched)
+    end
 
-  # Single consumer collects all records
-  consumer :collect do |record|
-    @mutex.synchronize do
-      @results << record
-      puts "[Collect] Stored: #{record[:source]} - #{record[:data]}"
+    # Single consumer collects all records
+    consumer :collect do |record|
+      @mutex.synchronize do
+        @results << record
+        puts "[Collect] Stored: #{record[:source]} - #{record[:data]}"
+      end
     end
   end
 end

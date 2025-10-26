@@ -18,62 +18,64 @@ class InlineHookExample
     @timer = {}
   end
 
-  # Traditional pipeline-level hooks
-  before_run do
-    @events << :pipeline_start
-  end
-
-  after_run do
-    @events << :pipeline_end
-  end
-
-  # Inline hooks for simple operations
-  producer :fetch_data,
-           before: -> { @timer[:fetch_start] = Time.now },
-           after: -> { @timer[:fetch_end] = Time.now } do
-    @events << :fetching
-    10.times { |i| emit(i) }
-  end
-
-  # Inline hooks with multiple operations
-  processor :validate,
-            before: -> {
-              @events << :validate_start
-              @validation_count = 0
-            },
-            after: -> {
-              @events << :validate_end
-              puts "Validated #{@validation_count} items"
-            } do |num|
-    @validation_count += 1
-    if num > 0
-      emit(num)
+  pipeline do
+    # Traditional pipeline-level hooks
+    before_run do
+      @events << :pipeline_start
     end
-  end
 
-  # Inline hooks for processors
-  processor :transform,
-            before: -> { @events << :transform_start },
-            after: -> { @events << :transform_end } do |num|
-    emit(num * 2)
-  end
+    after_run do
+      @events << :pipeline_end
+    end
 
-  # Accumulator batches items
-  accumulator :batch, max_size: 5
+    # Inline hooks for simple operations
+    producer :fetch_data,
+             before: -> { @timer[:fetch_start] = Time.now },
+             after: -> { @timer[:fetch_end] = Time.now } do
+      @events << :fetching
+      10.times { |i| emit(i) }
+    end
 
-  # Inline fork hooks for consumers
-  spawn_fork :save_data,
-             before: -> { @timer[:save_start] = Time.now },
-             after: -> { @timer[:save_end] = Time.now },
-             before_fork: -> {
-               @events << :before_fork
-               puts "About to fork..."
-             },
-             after_fork: -> {
-               @events << :after_fork
-               puts "Forked! Child PID: #{Process.pid}"
-             } do |batch|
-    batch.each { |num| @results << num }
+    # Inline hooks with multiple operations
+    processor :validate,
+              before: -> {
+                @events << :validate_start
+                @validation_count = 0
+              },
+              after: -> {
+                @events << :validate_end
+                puts "Validated #{@validation_count} items"
+              } do |num|
+      @validation_count += 1
+      if num > 0
+        emit(num)
+      end
+    end
+
+    # Inline hooks for processors
+    processor :transform,
+              before: -> { @events << :transform_start },
+              after: -> { @events << :transform_end } do |num|
+      emit(num * 2)
+    end
+
+    # Accumulator batches items
+    accumulator :batch, max_size: 5
+
+    # Inline fork hooks for consumers
+    spawn_fork :save_data,
+               before: -> { @timer[:save_start] = Time.now },
+               after: -> { @timer[:save_end] = Time.now },
+               before_fork: -> {
+                 @events << :before_fork
+                 puts "About to fork..."
+               },
+               after_fork: -> {
+                 @events << :after_fork
+                 puts "Forked! Child PID: #{Process.pid}"
+               } do |batch|
+      batch.each { |num| @results << num }
+    end
   end
 end
 

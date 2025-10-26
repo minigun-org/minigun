@@ -21,17 +21,19 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
           @results = []
         end
 
-        producer :generate do
-          emit(1)
-          emit(2)
-        end
+        pipeline do
+          producer :generate do
+            emit(1)
+            emit(2)
+          end
 
-        processor :transform do |num|
-          emit(num * 2)
-        end
+          processor :transform do |num|
+            emit(num * 2)
+          end
 
-        consumer :collect do |num|
-          @results << num
+          consumer :collect do |num|
+            @results << num
+          end
         end
       end
     end
@@ -80,26 +82,30 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
           @results = []
         end
 
-        producer :generate do
-          emit(1)
-          emit(2)
-        end
+        pipeline do
+          producer :generate do
+            emit(1)
+            emit(2)
+          end
 
-        consumer :collect do |num|
-          @results << num
+          consumer :collect do |num|
+            @results << num
+          end
         end
       end
     end
 
     let(:child_class) do
       Class.new(parent_class) do
-        processor :double do |num|
-          emit(num * 2)
-        end
+        pipeline do
+          processor :double do |num|
+            emit(num * 2)
+          end
 
-        # Reroute: generate -> double -> collect (instead of generate -> collect)
-        reroute_stage :generate, to: :double
-        reroute_stage :double, to: :collect
+          # Reroute: generate -> double -> collect (instead of generate -> collect)
+          reroute_stage :generate, to: :double
+          reroute_stage :double, to: :collect
+        end
       end
     end
 
@@ -131,24 +137,26 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
           @events = []
         end
 
-        before_run do
-          @events << :parent_before_run
-        end
+        pipeline do
+          before_run do
+            @events << :parent_before_run
+          end
 
-        after_run do
-          @events << :parent_after_run
-        end
+          after_run do
+            @events << :parent_after_run
+          end
 
-        producer :generate do
-          @events << :generate
-          emit(1)
-        end
+          producer :generate do
+            @events << :generate
+            emit(1)
+          end
 
-        after :generate do
-          @events << :parent_after_generate
-        end
+          after :generate do
+            @events << :parent_after_generate
+          end
 
-        consumer :collect do |num|
+          consumer :collect do |num|
+          end
         end
       end
     end
@@ -178,24 +186,28 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
           @events = []
         end
 
-        producer :generate do
-          @events << :generate
-          emit(1)
-        end
+        pipeline do
+          producer :generate do
+            @events << :generate
+            emit(1)
+          end
 
-        consumer :collect do |num|
+          consumer :collect do |num|
+          end
         end
       end
     end
 
     let(:child_class) do
       Class.new(parent_class) do
-        before_run do
-          @events << :child_before_run
-        end
+        pipeline do
+          before_run do
+            @events << :child_before_run
+          end
 
-        after :generate do
-          @events << :child_after_generate
+          after :generate do
+            @events << :child_after_generate
+          end
         end
       end
     end
@@ -217,11 +229,13 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
         max_threads 5
         max_processes 2
 
-        producer :generate do
-          emit(1)
-        end
+        pipeline do
+          producer :generate do
+            emit(1)
+          end
 
-        consumer :collect do |num|
+          consumer :collect do |num|
+          end
         end
       end
     end
@@ -255,12 +269,14 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
           @results = []
         end
 
-        producer :generate do
-          emit(1)
-        end
+        pipeline do
+          producer :generate do
+            emit(1)
+          end
 
-        consumer :collect do |num|
-          @results << num
+          consumer :collect do |num|
+            @results << num
+          end
         end
       end
     end
@@ -269,13 +285,15 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
       Class.new(grandparent_class) do
         max_threads 20
 
-        processor :double do |num|
-          emit(num * 2)
-        end
+        pipeline do
+          processor :double do |num|
+            emit(num * 2)
+          end
 
-        # Reroute: generate -> double -> collect (instead of generate -> collect)
-        reroute_stage :generate, to: :double
-        reroute_stage :double, to: :collect
+          # Reroute: generate -> double -> collect (instead of generate -> collect)
+          reroute_stage :generate, to: :double
+          reroute_stage :double, to: :collect
+        end
       end
     end
 
@@ -283,13 +301,15 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
       Class.new(parent_class) do
         max_threads 30
 
-        processor :add_ten do |num|
-          emit(num + 10)
-        end
+        pipeline do
+          processor :add_ten do |num|
+            emit(num + 10)
+          end
 
-        # Reroute: generate -> double -> add_ten -> collect
-        reroute_stage :double, to: :add_ten
-        reroute_stage :add_ten, to: :collect
+          # Reroute: generate -> double -> add_ten -> collect
+          reroute_stage :double, to: :add_ten
+          reroute_stage :add_ten, to: :collect
+        end
       end
     end
 
@@ -331,37 +351,43 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
           @results = []
         end
 
-        producer :generate do
-          emit(10)
-        end
+        pipeline do
+          producer :generate do
+            emit(10)
+          end
 
-        consumer :collect do |num|
-          @results << num
+          consumer :collect do |num|
+            @results << num
+          end
         end
       end
     end
 
     let(:child_a) do
       Class.new(parent_class) do
-        processor :double do |num|
-          emit(num * 2)
-        end
+        pipeline do
+          processor :double do |num|
+            emit(num * 2)
+          end
 
-        # Reroute: generate -> double -> collect
-        reroute_stage :generate, to: :double
-        reroute_stage :double, to: :collect
+          # Reroute: generate -> double -> collect
+          reroute_stage :generate, to: :double
+          reroute_stage :double, to: :collect
+        end
       end
     end
 
     let(:child_b) do
       Class.new(parent_class) do
-        processor :triple do |num|
-          emit(num * 3)
-        end
+        pipeline do
+          processor :triple do |num|
+            emit(num * 3)
+          end
 
-        # Reroute: generate -> triple -> collect
-        reroute_stage :generate, to: :triple
-        reroute_stage :triple, to: :collect
+          # Reroute: generate -> triple -> collect
+          reroute_stage :generate, to: :triple
+          reroute_stage :triple, to: :collect
+        end
       end
     end
 
@@ -392,23 +418,25 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
           @disconnected = false
         end
 
-        before_fork do
-          disconnect_db
-        end
+        pipeline do
+          before_fork do
+            disconnect_db
+          end
 
-        after_fork do
-          connect_db
-        end
+          after_fork do
+            connect_db
+          end
 
-        producer :fetch_ids do
-          items_to_publish.each { |item| emit(item) }
-        end
+          producer :fetch_ids do
+            items_to_publish.each { |item| emit(item) }
+          end
 
-        accumulator :batch
+          accumulator :batch
 
-        spawn_fork :publish do |batch|
-          # spawn_fork receives batches from accumulator
-          batch.each { |item| publish_item(item) }
+          spawn_fork :publish do |batch|
+            # spawn_fork receives batches from accumulator
+            batch.each { |item| publish_item(item) }
+          end
         end
 
         def items_to_publish

@@ -33,83 +33,85 @@ class StatisticsGatheringExample
     @results = []
   end
 
-  # Track overall pipeline timing
-  before_run do
-    @stats[:pipeline_start] = Time.now
-  end
-
-  after_run do
-    @stats[:pipeline_end] = Time.now
-    @stats[:total_duration] = @stats[:pipeline_end] - @stats[:pipeline_start]
-  end
-
-  # Track producer statistics
-  before :generate_data do
-    @stats[:producer_start] = Time.now
-  end
-
-  after :generate_data do
-    @stats[:producer_end] = Time.now
-    @stats[:producer_duration] = @stats[:producer_end] - @stats[:producer_start]
-  end
-
-  producer :generate_data do
-    100.times do |i|
-      emit({ id: i, value: rand(100) })
-      @stats[:producer_count] += 1
+  pipeline do
+    # Track overall pipeline timing
+    before_run do
+      @stats[:pipeline_start] = Time.now
     end
-  end
 
-  # Track validation statistics
-  before :validate do
-    @stats[:validator_start] = Time.now
-  end
-
-  after :validate do
-    @stats[:validator_end] = Time.now
-    @stats[:validator_duration] = @stats[:validator_end] - @stats[:validator_start]
-  end
-
-  processor :validate do |item|
-    if item[:value] > 50
-      @stats[:validator_passed] += 1
-      emit(item)
-    else
-      @stats[:validator_failed] += 1
-      # Don't emit - filter out
+    after_run do
+      @stats[:pipeline_end] = Time.now
+      @stats[:total_duration] = @stats[:pipeline_end] - @stats[:pipeline_start]
     end
-  end
 
-  processor :transform do |item|
-    @stats[:transformer_count] += 1
-    emit(item.merge(transformed: true, doubled: item[:value] * 2))
-  end
+    # Track producer statistics
+    before :generate_data do
+      @stats[:producer_start] = Time.now
+    end
 
-  # Accumulator batches items
-  accumulator :batch, max_size: 25
+    after :generate_data do
+      @stats[:producer_end] = Time.now
+      @stats[:producer_duration] = @stats[:producer_end] - @stats[:producer_start]
+    end
 
-  # Track consumer statistics and forks
-  before :save_results do
-    @stats[:consumer_start] = Time.now
-  end
+    producer :generate_data do
+      100.times do |i|
+        emit({ id: i, value: rand(100) })
+        @stats[:producer_count] += 1
+      end
+    end
 
-  after :save_results do
-    @stats[:consumer_end] = Time.now
-    @stats[:consumer_duration] = @stats[:consumer_end] - @stats[:consumer_start]
-  end
+    # Track validation statistics
+    before :validate do
+      @stats[:validator_start] = Time.now
+    end
 
-  before_fork :save_results do
-    @stats[:forks_created] += 1
-  end
+    after :validate do
+      @stats[:validator_end] = Time.now
+      @stats[:validator_duration] = @stats[:validator_end] - @stats[:validator_start]
+    end
 
-  after_fork :save_results do
-    @stats[:child_processes] << Process.pid
-  end
+    processor :validate do |item|
+      if item[:value] > 50
+        @stats[:validator_passed] += 1
+        emit(item)
+      else
+        @stats[:validator_failed] += 1
+        # Don't emit - filter out
+      end
+    end
 
-  spawn_fork :save_results do |batch|
-    batch.each do |item|
-      @results << item
-      @stats[:consumer_count] += 1
+    processor :transform do |item|
+      @stats[:transformer_count] += 1
+      emit(item.merge(transformed: true, doubled: item[:value] * 2))
+    end
+
+    # Accumulator batches items
+    accumulator :batch, max_size: 25
+
+    # Track consumer statistics and forks
+    before :save_results do
+      @stats[:consumer_start] = Time.now
+    end
+
+    after :save_results do
+      @stats[:consumer_end] = Time.now
+      @stats[:consumer_duration] = @stats[:consumer_end] - @stats[:consumer_start]
+    end
+
+    before_fork :save_results do
+      @stats[:forks_created] += 1
+    end
+
+    after_fork :save_results do
+      @stats[:child_processes] << Process.pid
+    end
+
+    spawn_fork :save_results do |batch|
+      batch.each do |item|
+        @results << item
+        @stats[:consumer_count] += 1
+      end
     end
   end
 end

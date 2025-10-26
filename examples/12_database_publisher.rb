@@ -75,21 +75,21 @@ class DatabasePublisher
     puts "[Publish] Published customer #{enriched_data[:id]} to service"
   end
 
-  before_run do
-    @start_time = Time.now
-    puts "[Lifecycle] Starting database publisher..."
-    puts "[Lifecycle] Target model: #{@model_class.name}"
-  end
-
-  after_run do
-    duration = Time.now - @start_time
-    puts "[Lifecycle] Publishing complete!"
-    puts "[Lifecycle] Duration: #{duration.round(2)}s"
-    puts "[Lifecycle] Published #{@published_ids.size} records"
-    puts "[Lifecycle] Average: #{(@published_ids.size / duration).round(2)} records/sec"
-  end
-
   pipeline do
+    before_run do
+      @start_time = Time.now
+      puts "[Lifecycle] Starting database publisher..."
+      puts "[Lifecycle] Target model: #{@model_class.name}"
+    end
+
+    after_run do
+      duration = Time.now - @start_time
+      puts "[Lifecycle] Publishing complete!"
+      puts "[Lifecycle] Duration: #{duration.round(2)}s"
+      puts "[Lifecycle] Published #{@published_ids.size} records"
+      puts "[Lifecycle] Average: #{(@published_ids.size / duration).round(2)} records/sec"
+    end
+
     # Stage 1: Fetch customer IDs from database
     producer :fetch_customers do
       puts "[Producer] Fetching customers from #{@model_class.name}..."

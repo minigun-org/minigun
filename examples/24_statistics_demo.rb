@@ -13,18 +13,20 @@ class StatisticsDemo
     @results = []
   end
 
-  producer :generate do
-    puts "[Producer] Generating 20 items"
-    20.times { |i| emit(i + 1) }
-  end
+  pipeline do
+    producer :generate do
+      puts "[Producer] Generating 20 items"
+      20.times { |i| emit(i + 1) }
+    end
 
-  processor :process, to: :collect do |num|
-    sleep(0.001) if num % 5 == 0  # Small delay every 5th item
-    emit(num * 2)
-  end
+    processor :process, to: :collect do |num|
+      sleep(0.001) if num % 5 == 0  # Small delay every 5th item
+      emit(num * 2)
+    end
 
-  consumer :collect do |num|
-    @results << num
+    consumer :collect do |num|
+      @results << num
+    end
   end
 end
 

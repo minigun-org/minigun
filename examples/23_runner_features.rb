@@ -18,26 +18,28 @@ class RunnerFeaturesExample
     @results = []
   end
 
-  producer :generate do
-    puts "[Producer] Generating 10 items"
-    10.times { |i| emit(i + 1) }
-  end
+  pipeline do
+    producer :generate do
+      puts "[Producer] Generating 10 items"
+      10.times { |i| emit(i + 1) }
+    end
 
-  processor :double do |num|
-    result = num * 2
-    puts "[Processor] #{num} * 2 = #{result}"
-    emit(result)
-  end
+    processor :double do |num|
+      result = num * 2
+      puts "[Processor] #{num} * 2 = #{result}"
+      emit(result)
+    end
 
-  # Use accumulator + spawn_fork to see process title in action
-  accumulator :batch, max_size: 5
+    # Use accumulator + spawn_fork to see process title in action
+    accumulator :batch, max_size: 5
 
-  spawn_fork :process do |batch|
-    # On Unix systems, run 'ps aux | grep minigun' while this is running
-    # You'll see: "minigun-default-consumer-12345"
-    puts "[Fork:#{Process.pid}] Processing batch of #{batch.size} items"
-    sleep 0.5  # Keep process alive briefly so you can see it in ps
-    batch.each { |num| @results << num }
+    spawn_fork :process do |batch|
+      # On Unix systems, run 'ps aux | grep minigun' while this is running
+      # You'll see: "minigun-default-consumer-12345"
+      puts "[Fork:#{Process.pid}] Processing batch of #{batch.size} items"
+      sleep 0.5  # Keep process alive briefly so you can see it in ps
+      batch.each { |num| @results << num }
+    end
   end
 end
 

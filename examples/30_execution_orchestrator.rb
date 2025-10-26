@@ -22,20 +22,22 @@ class BasicPipeline
     @mutex = Mutex.new
   end
 
-  producer :source do
-    puts "  [Producer] Generating 5 items"
-    5.times { |i| emit(i + 1) }
-  end
+  pipeline do
+    producer :source do
+      puts "  [Producer] Generating 5 items"
+      5.times { |i| emit(i + 1) }
+    end
 
-  processor :double, to: :collect do |item|
-    result = item * 2
-    puts "  [Processor] #{item} * 2 = #{result}"
-    emit(result)
-  end
+    processor :double, to: :collect do |item|
+      result = item * 2
+      puts "  [Processor] #{item} * 2 = #{result}"
+      emit(result)
+    end
 
-  consumer :collect do |item|
-    @mutex.synchronize { @results << item }
-    puts "  [Consumer] Collected: #{item}"
+    consumer :collect do |item|
+      @mutex.synchronize { @results << item }
+      puts "  [Consumer] Collected: #{item}"
+    end
   end
 end
 
@@ -79,20 +81,22 @@ class PooledPipeline
     @mutex = Mutex.new
   end
 
-  producer :gen do
-    puts "  [Gen] Producing 10 items"
-    10.times { |i| emit(i + 1) }
-  end
+  pipeline do
+    producer :gen do
+      puts "  [Gen] Producing 10 items"
+      10.times { |i| emit(i + 1) }
+    end
 
-  processor :work, to: :save do |item|
-    # Simulate work
-    sleep 0.01
-    @mutex.synchronize { @processed << item }
-    emit(item)
-  end
+    processor :work, to: :save do |item|
+      # Simulate work
+      sleep 0.01
+      @mutex.synchronize { @processed << item }
+      emit(item)
+    end
 
-  consumer :save do |item|
-    # Save result
+    consumer :save do |item|
+      # Save result
+    end
   end
 end
 
@@ -122,24 +126,26 @@ puts "-" * 50
 class AnalyzedPipeline
   include Minigun::DSL
 
-  producer :source_a do
-    emit("A")
-  end
+  pipeline do
+    producer :source_a do
+      emit("A")
+    end
 
-  producer :source_b do
-    emit("B")
-  end
+    producer :source_b do
+      emit("B")
+    end
 
-  processor :merge, from: [:source_a, :source_b], to: :transform do |item|
-    emit(item)
-  end
+    processor :merge, from: [:source_a, :source_b], to: :transform do |item|
+      emit(item)
+    end
 
-  processor :transform, to: :output do |item|
-    emit(item.downcase)
-  end
+    processor :transform, to: :output do |item|
+      emit(item.downcase)
+    end
 
-  consumer :output do |item|
-    # Collect
+    consumer :output do |item|
+      # Collect
+    end
   end
 end
 
