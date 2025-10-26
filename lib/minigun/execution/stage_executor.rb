@@ -21,23 +21,6 @@ module Minigun
         @output_items = []
       end
 
-      # Execute a batch of items through stages with proper execution contexts
-      def execute_batch(batch_map, output_items, context, stats, stage_hooks)
-        # Update instance variables for this batch
-        @stats = stats
-        @stage_hooks = stage_hooks
-        @output_items = output_items
-        @user_context = context
-
-        # Group stages by their execution context
-        context_groups = group_by_execution_context(batch_map)
-
-        # Execute each group with its appropriate execution context
-        context_groups.each do |exec_ctx, stage_items|
-          execute_with_context(exec_ctx, stage_items)
-        end
-      end
-
       def shutdown
         @context_pools.each_value do |pool|
           pool.terminate_all
@@ -64,20 +47,6 @@ module Minigun
 
       private
 
-      def group_by_execution_context(batch_map)
-        groups = Hash.new { |h, k| h[k] = [] }
-
-        batch_map.each do |_consumer_name, item_data_array|
-          item_data_array.each do |item_data|
-            stage = item_data[:stage]
-            exec_ctx = stage.execution_context || default_context
-            groups[exec_ctx] << item_data
-          end
-        end
-
-        groups
-      end
-
       # Execute with a pool of reusable execution contexts (threads/processes/ractors)
       def execute_with_pool(exec_ctx, stage_items)
         type = exec_ctx[:type]
@@ -98,32 +67,42 @@ module Minigun
       def execute_with_thread_pool(pool_size, stage_items)
         # Use ThreadContext with a pool
         pool = get_or_create_pool(:thread, pool_size)
-        contexts = []
+        active_contexts = []
+        results = []
         mutex = Mutex.new
 
         stage_items.each do |item_data|
-          # Wait for available slot
+          # Wait for available slot by cleaning up finished threads
           while pool.at_capacity?
-            contexts.delete_if { |ctx| !ctx.alive? }
-            sleep 0.01
+            # Find and cleanup finished contexts
+            finished = active_contexts.select { |ctx| !ctx.alive? }
+            finished.each do |ctx|
+              ctx.join
+              pool.release(ctx)
+              active_contexts.delete(ctx)
+            end
+
+            # Sleep only if still at capacity after cleanup
+            sleep 0.01 if pool.at_capacity?
           end
 
           # Create and execute in thread context
           ctx = pool.acquire("consumer")
-          contexts << ctx
+          active_contexts << ctx
 
           ctx.execute do
-            execute_stage_item(item_data)
+            item_results = execute_stage_item(item_data)
+            mutex.synchronize { results.concat(item_results) } if item_results
           end
         end
 
-        # Wait for all contexts to complete
-        contexts.each do |ctx|
+        # Wait for all remaining contexts to complete
+        active_contexts.each do |ctx|
           ctx.join
           pool.release(ctx)
         end
 
-        []
+        results
       end
 
       def execute_with_process_pool(pool_size, stage_items)
@@ -162,17 +141,24 @@ module Minigun
             execute_fork_hooks(:after_fork, item_data[:stage])
 
             # Execute the stage and capture results
-            execute_stage_item(item_data)
+            result = execute_stage_item(item_data)
+            stage = item_data[:stage]
+            is_terminal = @pipeline.instance_variable_get(:@dag).terminal?(stage.name)
 
-            # Return nil for terminal consumers (no results to send back)
-            nil
+            # Only return results for non-terminal stages (processors/accumulators)
+            # Terminal stages (consumers) don't emit downstream
+            if is_terminal
+              nil
+            else
+              result
+            end
           end
         end
 
         # Wait for all processes and collect results
         contexts.each do |ctx|
           result = ctx.join
-          results << result if result
+          results.concat(result) if result && result.is_a?(Array)
           pool.release(ctx)
         end
 
@@ -241,8 +227,6 @@ module Minigun
           return execute_per_batch_threads(stage_items, max_concurrent)
         end
 
-        contexts = []
-
         # Execute before_fork hooks once before any forking (for all stages)
         stage_items.each do |item_data|
           execute_fork_hooks(:before_fork, item_data[:stage])
@@ -251,6 +235,7 @@ module Minigun
         # Trigger GC to maximize Copy-on-Write benefits
         GC.start
 
+        contexts = []
         stage_items.each do |item_data|
           # Wait if we're at max concurrency
           while contexts.count(&:alive?) >= max_concurrent

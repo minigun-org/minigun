@@ -404,21 +404,22 @@ module Minigun
         output_items = []  # Track items to send to downstream pipelines
 
         loop do
-          item_data = @queue.pop
-          break if item_data == :END_OF_QUEUE
+          begin
+            item_data = @queue.pop
+            break if item_data == :END_OF_QUEUE
 
-          item, source_stage, explicit_target = item_data
+            item, source_stage, explicit_target = item_data
 
-          # Use explicit target if provided, otherwise use DAG routing
-          targets = if explicit_target
-                      [explicit_target]
-                    else
-                      get_targets(source_stage)
-                    end
+            # Use explicit target if provided, otherwise use DAG routing
+            targets = if explicit_target
+                        [explicit_target]
+                      else
+                        get_targets(source_stage)
+                      end
 
-          @in_flight_count.decrement
+            @in_flight_count.decrement
 
-          targets.each do |target_name|
+            targets.each do |target_name|
             target_stage = find_stage(target_name)
 
             # Validate that explicit target exists
@@ -449,6 +450,11 @@ module Minigun
                 end
               end
             end
+          end
+          rescue => e
+            log_error "[Pipeline:#{@name}][Dispatcher] Error: #{e.message}"
+            log_error e.backtrace.join("\n")
+            raise
           end
         end
 
