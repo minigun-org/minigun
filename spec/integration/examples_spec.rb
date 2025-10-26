@@ -3,10 +3,6 @@
 require 'spec_helper'
 
 RSpec.describe 'Examples Integration' do
-  before do
-    allow(Minigun.logger).to receive(:info)
-  end
-
   describe '00_quick_start.rb' do
     it 'runs simple producer-processor-consumer pipeline' do
       load File.expand_path('../../examples/00_quick_start.rb', __dir__)

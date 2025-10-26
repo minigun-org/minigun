@@ -13,10 +13,10 @@ The transport layer for Minigun pipelines has been successfully implemented and 
 - **Zero overhead** - data flows unwrapped, only control signals are Message objects
 
 ### Key Features Working
-✅ **Dynamic routing** (`emit_to_stage`) - route items to any stage by name  
-✅ **Fan-in patterns** (diamond) - correctly wait for all upstream sources  
-✅ **Fan-out patterns** - broadcast and round-robin strategies  
-✅ **Mixed routing** - combine DAG routing with dynamic routing  
+✅ **Dynamic routing** (`emit_to_stage`) - route items to any stage by name
+✅ **Fan-in patterns** (diamond) - correctly wait for all upstream sources
+✅ **Fan-out patterns** - broadcast and round-robin strategies
+✅ **Mixed routing** - combine DAG routing with dynamic routing
 ✅ **Complex topologies** - any combination of patterns works correctly
 
 ## Test Results
@@ -41,18 +41,18 @@ The transport layer itself is complete and robust.
 ## Critical Bugs Fixed
 
 ### Bug 1: Premature Fan-In Termination
-**Symptom**: Diamond merge stage exited after first END, losing half the data  
+**Symptom**: Diamond merge stage exited after first END, losing half the data
 **Cause**: Stages didn't track expected upstreams
 **Fix**: Pre-populate `sources_expected` from DAG, discover dynamic sources, exit only when all done
 
-### Bug 2: Duplicate END Signals  
-**Symptom**: Mixed routing got duplicate results (data sent to both DAG and dynamic targets)  
-**Cause**: Tracking ALL emits in `runtime_edges`, not just `emit_to_stage`  
+### Bug 2: Duplicate END Signals
+**Symptom**: Mixed routing got duplicate results (data sent to both DAG and dynamic targets)
+**Cause**: Tracking ALL emits in `runtime_edges`, not just `emit_to_stage`
 **Fix**: Only track dynamic routing in `runtime_edges`, DAG handles static routing
 
 ### Bug 3: Round-Robin END Starvation
-**Symptom**: Some targets in round-robin never received END signal  
-**Cause**: END only sent to targets that received data  
+**Symptom**: Some targets in round-robin never received END signal
+**Cause**: END only sent to targets that received data
 **Fix**: Broadcast END to ALL targets, even if they didn't receive data
 
 ## Architecture Highlights
@@ -73,14 +73,14 @@ sources_expected = Set.new(dag.upstream(stage))
 # During execution
 loop do
   msg = queue.pop
-  
+
   if msg.is_a?(Message) && msg.end_of_stream?
     sources_expected << msg.source  # Discover dynamic
     sources_done << msg.source
     break if sources_done == sources_expected
     next
   end
-  
+
   process(msg)
 end
 
@@ -94,7 +94,7 @@ end
 
 - **Data overhead**: Zero (no wrapping)
 - **Control overhead**: One Message object per stage per producer
-- **Memory**: O(E) where E = edges in graph  
+- **Memory**: O(E) where E = edges in graph
 - **Latency**: Deterministic, no polling or timeouts
 - **Scalability**: Works with any topology complexity
 
@@ -103,7 +103,7 @@ end
 ### New Files
 - `lib/minigun/message.rb` - Message class
 
-### Modified Files  
+### Modified Files
 - `lib/minigun/pipeline.rb` - Major refactor:
   - Added `@runtime_edges` tracking
   - Implemented Message-based END signaling
@@ -121,7 +121,7 @@ end
 The 14 failing integration tests are unrelated to transport layer:
 
 1. **Execution contexts** - threads/processes/ractors pooling
-2. **Multi-pipeline** - nested pipeline coordination  
+2. **Multi-pipeline** - nested pipeline coordination
 3. **Hooks** - lifecycle hook timing
 4. **Configuration** - runtime configuration features
 

@@ -243,7 +243,8 @@ module Minigun
         @stage_threads << start_stage_worker(stage_name, stage)
       end
 
-      # Wait for all stage workers to finish
+      # Wait for all threads (producers + workers) to finish
+      producer_threads.each(&:join)
       @stage_threads.each(&:join)
     end
 
@@ -375,8 +376,8 @@ module Minigun
         sources_done = Set.new
         runtime_edges = @runtime_edges
         stage_input_queues = @stage_input_queues
-        
-        # If no DAG upstream and stage is a regular consumer/processor (not a producer or PipelineStage), 
+
+        # If no DAG upstream and stage is a regular consumer/processor (not a producer or PipelineStage),
         # something is wrong - exit immediately to prevent hanging
         if sources_expected.empty? && !stage.producer? && !stage.is_a?(PipelineStage)
           log_info "[Pipeline:#{@name}][Worker:#{stage_name}] No upstream sources, exiting"
@@ -473,11 +474,24 @@ module Minigun
             end
           end
 
+          # Flush accumulator stages before sending END signals
+          if stage.respond_to?(:flush)
+            flushed_items = stage.flush(@context)
+            flushed_items.each do |batch|
+              # Route flushed batches to downstream stages
+              downstream = @dag.downstream(stage_name)
+              downstream.each do |downstream_stage|
+                output_queue = stage_input_queues[downstream_stage]
+                output_queue << batch if output_queue
+              end
+            end
+          end
+
           # Send END to ALL connections: DAG downstream + dynamic emit_to_stage targets
           dag_downstream = @dag.downstream(stage_name)
           dynamic_targets = runtime_edges[stage_name].to_a
           all_targets = (dag_downstream + dynamic_targets).uniq
-          
+
           all_targets.each do |target|
             stage_input_queues[target] << Message.end_signal(source: stage_name)
           end
@@ -612,24 +626,24 @@ module Minigun
             producer_context.instance_eval(&producer_stage.block)
           end
 
+          # Execute after hooks for this producer
+          execute_stage_hooks(:after, producer_name) unless is_pipeline
+        rescue => e
+          log_error "[Pipeline:#{@name}][Producer:#{producer_name}] Error: #{e.message}"
+          log_error e.backtrace.join("\n") if is_pipeline
+          # Don't propagate error - other producers should continue
+        ensure
           stage_stats.finish!
           log_info "[Pipeline:#{@name}][Producer:#{producer_name}] Done. Produced #{stage_stats.items_produced} items"
 
           # Send END signal to ALL connections: DAG downstream + dynamic emit_to_stage targets
+          # This must happen even if producer failed, so downstream stages don't hang
           dynamic_targets = runtime_edges[producer_name].to_a
           all_targets = (downstream + dynamic_targets).uniq
 
           all_targets.each do |target|
             stage_input_queues[target] << Message.end_signal(source: producer_name)
           end
-
-          # Execute after hooks for this producer
-          execute_stage_hooks(:after, producer_name) unless is_pipeline
-        rescue => e
-          stage_stats.finish!
-          log_error "[Pipeline:#{@name}][Producer:#{producer_name}] Error: #{e.message}"
-          log_error e.backtrace.join("\n") if is_pipeline
-          # Don't propagate error - other producers should continue
         end
       end
     end
