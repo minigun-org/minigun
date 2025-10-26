@@ -66,7 +66,7 @@ RSpec.describe Minigun::PipelineStage do
   end
 
   describe '#execute' do
-    it 'executes the pipeline stages inline and returns nil' do
+    it 'executes the pipeline stages inline and returns results' do
       stage = described_class.new(name: :my_pipeline)
       pipeline = Minigun::Pipeline.new(:test, config)
       stage.pipeline = pipeline
@@ -78,7 +78,8 @@ RSpec.describe Minigun::PipelineStage do
       context = Object.new
       result = stage.execute(context, 5)
 
-      expect(result).to be_nil
+      # PipelineStage now returns results to flow downstream in per-edge queue architecture
+      expect(result).to be_an(Array)
     end
   end
 

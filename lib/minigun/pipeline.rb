@@ -244,16 +244,32 @@ module Minigun
       @stage_threads.each(&:join)
     end
 
-    # Build a queue for each edge in the DAG
+    # Build a queue for each edge in the DAG, plus queues for all possible emit_to_stage targets
     def build_edge_queues
       queues = {}
       queue_size = [(@config[:max_processes] * @config[:max_threads] * 2), 100].max
 
+      # Create queues for DAG edges
       @stages.each do |from_stage, _|
         downstream = @dag.downstream(from_stage)
         downstream.each do |to_stage|
           edge_key = [from_stage, to_stage]
           queues[edge_key] = Queue.new  # Unbounded to prevent deadlock
+        end
+      end
+
+      # Create queues for ALL possible emit_to_stage targets (from non-terminal to any stage)
+      @stages.each do |from_stage, from_stage_obj|
+        # Only non-terminal stages can emit to others
+        next if @dag.terminal?(from_stage)
+
+        @stages.each_key do |to_stage|
+          # Don't create self-loops or edges to producers
+          next if from_stage == to_stage
+          next if @stages[to_stage].producer?
+
+          edge_key = [from_stage, to_stage]
+          queues[edge_key] ||= Queue.new  # Create if doesn't already exist
         end
       end
 
@@ -313,33 +329,65 @@ module Minigun
       Thread.new do
         log_info "[Pipeline:#{@name}][Worker:#{stage_name}] Starting"
 
-        # Find all input queues for this stage
+        # Find all input queues for this stage (fan-in support)
         input_queues = @edge_queues.select { |(from, to), _| to == stage_name }
 
-        # For simplicity, use first input queue with blocking pop
-        # TODO: Support multiple input queues (fan-in)
-        primary_queue = input_queues.values.first
-
-        unless primary_queue
+        if input_queues.empty?
           log_info "[Pipeline:#{@name}][Worker:#{stage_name}] No input queues, exiting"
           next
         end
 
-        loop do
-          # Blocking pop from primary input queue
-          item_data = primary_queue.pop
+        # Track which queues have finished
+        active_queues = input_queues.dup
 
-          break if item_data == :END_OF_QUEUE
+        loop do
+          # Try to pop from any active queue (non-blocking round-robin)
+          item_data = nil
+          active_queues.each do |(edge, queue)|
+            begin
+              item_data = queue.pop(true)  # Non-blocking
+
+              if item_data == :END_OF_QUEUE
+                # This queue is done, remove it
+                active_queues.delete(edge)
+                item_data = nil  # Don't process END_OF_QUEUE
+              else
+                break  # Got an item
+              end
+            rescue ThreadError
+              # Queue empty, try next
+            end
+          end
+
+          # Exit when all queues are done
+          break if active_queues.empty?
+
+          # If no item available, sleep and retry
+          unless item_data
+            sleep 0.001
+            next
+          end
 
           # Execute the stage
           results = execute_stage(stage, item_data)
 
-          # Push results to downstream queues
-          downstream = @dag.downstream(stage_name)
-          downstream.each do |downstream_stage|
-            edge_key = [stage_name, downstream_stage]
-            output_queue = @edge_queues[edge_key]
-            results.each { |result| output_queue << result } if output_queue
+          # Handle both plain items and targeted items (emit_to_stage)
+          results.each do |result|
+            if result.is_a?(Hash) && result.key?(:item) && result.key?(:target)
+              # Targeted emit via emit_to_stage - route to specific target
+              target_stage = result[:target]
+              edge_key = [stage_name, target_stage]
+              output_queue = @edge_queues[edge_key]
+              output_queue << result[:item] if output_queue
+            else
+              # Regular emit - uses DAG routing to all downstream
+              downstream = @dag.downstream(stage_name)
+              downstream.each do |downstream_stage|
+                edge_key = [stage_name, downstream_stage]
+                output_queue = @edge_queues[edge_key]
+                output_queue << result if output_queue
+              end
+            end
           end
         end
 

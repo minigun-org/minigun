@@ -200,10 +200,10 @@ module Minigun
       true
     end
 
-    # Execute method for when PipelineStage is used as a consumer
+    # Execute method for when PipelineStage is used as a processor/consumer
     def execute(context, item)
+      # Return results from execute_with_emit so they can flow downstream
       execute_with_emit(context, item)
-      nil  # Consumers don't return values
     end
 
     # Set the wrapped pipeline (called by Task)

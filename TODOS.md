@@ -2,6 +2,20 @@ ADD to README:
 - stages route to each other sequentially, unless you add :to or :from keywords
 - execute in paralle, and do NOT route to each other, unless unless you add :to or :from keywords.
 
+===============================
+
+OK. wait, what if we changed it so:
+
+- every consumer has an input queue
+- if there is fan-out (multiple consumers for any 1 producer), add producer output queues and an intermediate router (load balancer) object. the router has an input queue and round-robin allocates to the consumers.
+- fan-in without fan-out (i.e. a producer connects to 1 consumer, even if MULTIPLE producers connect to that consumer) is done by directly having the producer insert to the consumer's queue
+- emit_to_stage emits DIRECTLY to the consumer input queue
+
+====================================
+
+weighted routing (load balancing)
+
+==================================
 
 - config
 - hooks
@@ -10,7 +24,15 @@ ADD to README:
 
 ==================================
 
+OK. wait, what if we changed it so:
 
+- every producer has an output queue
+- every consumer has an input queue
+- routers (disapatchers) exist to connect output to inputs
+- emit_to_stage emits DIRECTLY to the consumer input queue
+- SINGLE queue can be queues if the producer to consumer is 1-to-1 (i.e. just the consumer queue)
+
+===================================
 
 
 multi-parents --> how do we know end of queues?
