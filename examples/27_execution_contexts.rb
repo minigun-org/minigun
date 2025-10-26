@@ -67,7 +67,7 @@ if Process.respond_to?(:fork)
   puts "  Context alive?: #{fork_ctx.alive?}"
   sleep 0.05
   puts "  Context alive? (after 50ms): #{fork_ctx.alive?}"
-  
+
   result = fork_ctx.join
   puts "  Result: #{result.inspect}"
   puts "  ✓ Fork execution with process isolation\n\n"

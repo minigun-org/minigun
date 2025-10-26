@@ -562,7 +562,7 @@ RSpec.describe 'Examples Integration' do
     it 'demonstrates execution context types' do
       # Run the example
       output = `ruby #{File.expand_path('../../examples/27_execution_contexts.rb', __dir__)} 2>&1`
-      
+
       expect($?.exitstatus).to eq(0)
       expect(output).to include('Execution Context Examples')
       expect(output).to include('InlineContext')
@@ -579,7 +579,7 @@ RSpec.describe 'Examples Integration' do
     it 'demonstrates context pool resource management' do
       # Run the example
       output = `ruby #{File.expand_path('../../examples/28_context_pool.rb', __dir__)} 2>&1`
-      
+
       expect($?.exitstatus).to eq(0)
       expect(output).to include('Context Pool Examples')
       expect(output).to include('Basic Context Pool')
@@ -597,7 +597,7 @@ RSpec.describe 'Examples Integration' do
     it 'demonstrates execution plan and affinity analysis' do
       # Run the example
       output = `ruby #{File.expand_path('../../examples/29_execution_plan.rb', __dir__)} 2>&1`
-      
+
       expect($?.exitstatus).to eq(0)
       expect(output).to include('Execution Plan Examples')
       expect(output).to include('Sequential Pipeline (Affinity Analysis)')
@@ -615,7 +615,7 @@ RSpec.describe 'Examples Integration' do
     it 'demonstrates execution orchestrator coordination' do
       # Run the example
       output = `ruby #{File.expand_path('../../examples/30_execution_orchestrator.rb', __dir__)} 2>&1`
-      
+
       expect($?.exitstatus).to eq(0)
       expect(output).to include('Execution Orchestrator Examples')
       expect(output).to include('Basic Orchestrator Usage')
