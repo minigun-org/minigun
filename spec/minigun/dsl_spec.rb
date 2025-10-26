@@ -28,25 +28,25 @@ RSpec.describe Minigun::DSL do
     it 'raises error when defining a producer without pipeline do' do
       expect {
         test_class.producer(:test_producer) { "producer code" }
-      }.to raise_error(NoMethodError, /Stage definitions must be inside 'pipeline do' block/)
+      }.to raise_error(NoMethodError, /undefined method/)
     end
 
     it 'raises error when defining processors without pipeline do' do
       expect {
         test_class.processor(:test_processor) { |x| x }
-      }.to raise_error(NoMethodError, /Stage definitions must be inside 'pipeline do' block/)
+      }.to raise_error(NoMethodError, /undefined method/)
     end
 
     it 'raises error when defining an accumulator without pipeline do' do
       expect {
         test_class.accumulator(:test_accumulator) { "accumulator code" }
-      }.to raise_error(NoMethodError, /Stage definitions must be inside 'pipeline do' block/)
+      }.to raise_error(NoMethodError, /undefined method/)
     end
 
     it 'raises error when defining a consumer without pipeline do' do
       expect {
         test_class.consumer(:test_consumer) { |x| x }
-      }.to raise_error(NoMethodError, /Stage definitions must be inside 'pipeline do' block/)
+      }.to raise_error(NoMethodError, /undefined method/)
     end
 
     it 'allows defining before_run hook inside pipeline do' do
@@ -215,7 +215,7 @@ RSpec.describe Minigun::DSL do
             3.times { |i| emit(i + 1) }
           end
         end
-      }.to raise_error(NoMethodError, /Stage definitions must be inside 'pipeline do' block/)
+      }.to raise_error(NoMethodError, /undefined method/)
     end
 
     it 'works correctly with pipeline block' do
@@ -261,7 +261,7 @@ RSpec.describe Minigun::DSL do
             5.times { |i| emit(i) }
           end
         end
-      }.to raise_error(NoMethodError, /Stage definitions must be inside 'pipeline do' block/)
+      }.to raise_error(NoMethodError, /undefined method/)
     end
 
     it 'requires pipeline do for all stages (mixing not allowed)' do
@@ -275,7 +275,7 @@ RSpec.describe Minigun::DSL do
             emit(10)
           end
         end
-      }.to raise_error(NoMethodError, /Stage definitions must be inside 'pipeline do' block/)
+      }.to raise_error(NoMethodError, /undefined method/)
     end
 
     it 'requires pipeline do for complex routing' do
@@ -288,7 +288,7 @@ RSpec.describe Minigun::DSL do
             emit(5)
           end
         end
-      }.to raise_error(NoMethodError, /Stage definitions must be inside 'pipeline do' block/)
+      }.to raise_error(NoMethodError, /undefined method/)
     end
 
     it 'requires pipeline do for all stage types' do
@@ -301,7 +301,7 @@ RSpec.describe Minigun::DSL do
             emit(1)
           end
         end
-      }.to raise_error(NoMethodError, /Stage definitions must be inside 'pipeline do' block/)
+      }.to raise_error(NoMethodError, /undefined method/)
     end
   end
 end

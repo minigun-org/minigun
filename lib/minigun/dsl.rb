@@ -42,27 +42,6 @@ module Minigun
         @_pipeline_definition_blocks || []
       end
 
-      # Error messages for stage definitions without pipeline do
-      def producer(*)
-        raise NoMethodError, stage_definition_error_message(:producer)
-      end
-
-      def processor(*)
-        raise NoMethodError, stage_definition_error_message(:processor)
-      end
-
-      def consumer(*)
-        raise NoMethodError, stage_definition_error_message(:consumer)
-      end
-
-      def accumulator(*)
-        raise NoMethodError, stage_definition_error_message(:accumulator)
-      end
-
-      def stage(*)
-        raise NoMethodError, stage_definition_error_message(:stage)
-      end
-
       private
 
       def stage_definition_error_message(method_name)
@@ -108,30 +87,30 @@ module Minigun
       end
     end
 
-    # Evaluate pipeline blocks in instance context (called before run)
+    # Evaluate pipeline blocks using PipelineDSL (called before run)
     def _evaluate_pipeline_blocks!
       return if @_pipeline_blocks_evaluated
       @_pipeline_blocks_evaluated = true
 
       self.class._pipeline_definition_blocks.each do |blk|
-        instance_eval(&blk)
+        # Use PipelineDSL for consistent behavior between named and unnamed pipelines
+        pipeline_dsl = PipelineDSL.new(self.class._minigun_task.root_pipeline, self)
+        pipeline_dsl.instance_eval(&blk)
       end
     end
 
-    # INSTANCE-LEVEL DSL METHODS
-
     # Pipeline block wrapper - REQUIRED for stage definitions
     # Supports two modes:
-    # 1. pipeline do...end - Main pipeline definition
+    # 1. pipeline do...end - Main pipeline definition (uses PipelineDSL)
     # 2. pipeline :name do...end - Named pipeline (multi-pipeline mode)
     def pipeline(name = nil, options = {}, &block)
       if name.nil?
-        # Mode 1: Main pipeline - evaluate in instance context
-        instance_eval(&block)
+        # Mode 1: Main pipeline - use PipelineDSL
+        pipeline_dsl = PipelineDSL.new(self.class._minigun_task.root_pipeline, self)
+        pipeline_dsl.instance_eval(&block)
       elsif options[:to] || options[:from] || self.class._minigun_task.pipelines.any?
         # Mode 2: Multi-pipeline mode
         self.class._minigun_task.define_pipeline(name, options) do |pipeline|
-          # Create a DSL context for this specific pipeline
           pipeline_dsl = PipelineDSL.new(pipeline, self)
           pipeline_dsl.instance_eval(&block) if block_given?
         end
@@ -141,180 +120,13 @@ module Minigun
       end
     end
 
-    # Execution context stack management
+    # Context management for PipelineDSL when @context is set
     def _execution_context_stack
       @_execution_context_stack ||= []
     end
 
     def _named_contexts
       @_named_contexts ||= {}
-    end
-
-    def _current_execution_context
-      _execution_context_stack.last
-    end
-
-    # Execution block methods - create execution contexts
-    def threads(pool_size, &block)
-      context = { type: :threads, pool_size: pool_size, mode: :pool }
-      _with_execution_context(context, &block)
-    end
-
-    def processes(pool_size, &block)
-      context = { type: :processes, pool_size: pool_size, mode: :pool }
-      _with_execution_context(context, &block)
-    end
-
-    def ractors(pool_size, &block)
-      context = { type: :ractors, pool_size: pool_size, mode: :pool }
-      _with_execution_context(context, &block)
-    end
-
-    def thread_per_batch(max:, &block)
-      context = { type: :threads, max: max, mode: :per_batch }
-      _with_execution_context(context, &block)
-    end
-
-    def process_per_batch(max:, &block)
-      context = { type: :processes, max: max, mode: :per_batch }
-      _with_execution_context(context, &block)
-    end
-
-    def ractor_per_batch(max:, &block)
-      context = { type: :ractors, max: max, mode: :per_batch }
-      _with_execution_context(context, &block)
-    end
-
-    # Batching shorthand - creates an accumulator stage
-    def batch(size)
-      # Generate unique name for batch stage
-      batch_num = (@_batch_counter ||= 0)
-      @_batch_counter += 1
-      accumulator(:"_batch_#{batch_num}", max_size: size)
-    end
-
-    # Named execution context definition
-    def execution_context(name, type, size_or_max)
-      _named_contexts[name] = {
-        type: type,
-        pool_size: size_or_max,
-        mode: :pool
-      }
-    end
-
-    private
-
-    def _with_execution_context(context, &block)
-      _execution_context_stack.push(context)
-      begin
-        instance_eval(&block)
-      ensure
-        _execution_context_stack.pop
-      end
-    end
-
-    public
-
-    # Stage definition methods (instance-level)
-    def producer(name = :producer, options = {}, &block)
-      options = _apply_execution_context(options)
-      self.class._minigun_task.add_stage(:producer, name, options, &block)
-    end
-
-    def processor(name, options = {}, &block)
-      options = _apply_execution_context(options)
-      self.class._minigun_task.add_stage(:processor, name, options, &block)
-    end
-
-    def consumer(name = :consumer, options = {}, &block)
-      options = _apply_execution_context(options)
-      self.class._minigun_task.add_stage(:consumer, name, options, &block)
-    end
-
-    def accumulator(name = :accumulator, options = {}, &block)
-      options = _apply_execution_context(options)
-      self.class._minigun_task.add_stage(:accumulator, name, options, &block)
-    end
-
-    def stage(name, options = {}, &block)
-      options = _apply_execution_context(options)
-      self.class._minigun_task.add_stage(:stage, name, options, &block)
-    end
-
-    private
-
-    def _apply_execution_context(options)
-      # If stage explicitly specifies an execution_context, use it
-      if options[:execution_context]
-        context_name = options[:execution_context]
-        if _named_contexts[context_name]
-          options[:_execution_context] = _named_contexts[context_name]
-        else
-          raise ArgumentError, "Unknown execution context: #{context_name}"
-        end
-      elsif _current_execution_context
-        # Use current context from stack
-        options[:_execution_context] = _current_execution_context
-      end
-      options
-    end
-
-    public
-
-    # Convenience methods for spawn strategies
-    def spawn_thread(name = :consumer, options = {}, &block)
-      stage(name, options.merge(strategy: :spawn_thread), &block)
-    end
-
-    def spawn_fork(name = :consumer, options = {}, &block)
-      stage(name, options.merge(strategy: :spawn_fork), &block)
-    end
-
-    def spawn_ractor(name = :consumer, options = {}, &block)
-      stage(name, options.merge(strategy: :spawn_ractor), &block)
-    end
-
-    # Hook methods (instance-level)
-    def before_run(&block)
-      self.class._minigun_task.add_hook(:before_run, &block)
-    end
-
-    def after_run(&block)
-      self.class._minigun_task.add_hook(:after_run, &block)
-    end
-
-    def before_fork(stage_name = nil, &block)
-      if stage_name
-        self.class._minigun_task.root_pipeline.add_stage_hook(:before_fork, stage_name, &block)
-      else
-        self.class._minigun_task.add_hook(:before_fork, &block)
-      end
-    end
-
-    def after_fork(stage_name = nil, &block)
-      if stage_name
-        self.class._minigun_task.root_pipeline.add_stage_hook(:after_fork, stage_name, &block)
-      else
-        self.class._minigun_task.add_hook(:after_fork, &block)
-      end
-    end
-
-    # Stage-specific hooks
-    def before(stage_name, &block)
-      self.class._minigun_task.root_pipeline.add_stage_hook(:before, stage_name, &block)
-    end
-
-    def after(stage_name, &block)
-      self.class._minigun_task.root_pipeline.add_stage_hook(:after, stage_name, &block)
-    end
-
-    def after_producer(&block)
-      self.class._minigun_task.root_pipeline.add_hook(:after_producer, &block)
-    end
-
-    # Routing
-    def reroute_stage(from_stage, to:)
-      self.class._minigun_task.root_pipeline.reroute_stage(from_stage, to: to)
     end
 
     # DSL context for defining stages within a named pipeline
@@ -380,47 +192,29 @@ module Minigun
 
       # Named execution context definition
       def execution_context(name, type, size_or_max)
-        _named_contexts[name] = {
+        ctx_def = {
           type: type,
           pool_size: size_or_max,
           mode: :pool
         }
-      end
 
-      private
-
-      def _with_execution_context(context, &block)
-        _execution_context_stack.push(context)
-        begin
-          instance_eval(&block)
-        ensure
-          _execution_context_stack.pop
+        # Store in instance context if available, otherwise in PipelineDSL
+        if @context && @context.respond_to?(:_named_contexts)
+          @context._named_contexts[name] = ctx_def
+        else
+          _named_contexts[name] = ctx_def
         end
       end
 
-      def _apply_execution_context(options)
-        # If @context exists (instance context), check its named contexts first
-        if options[:execution_context]
-          context_name = options[:execution_context]
-          named_ctx = if @context && @context.respond_to?(:_named_contexts)
-                       @context._named_contexts[context_name]
-                     else
-                       _named_contexts[context_name]
-                     end
-
-          if named_ctx
-            options[:_execution_context] = named_ctx
-          else
-            raise ArgumentError, "Unknown execution context: #{context_name}"
-          end
-        elsif _current_execution_context
-          # Use current context from stack
-          options[:_execution_context] = _current_execution_context
+      # Nested pipeline support
+      def pipeline(name, options = {}, &block)
+        # This handles nested pipeline stages within a pipeline block
+        if @context
+          @context.class._minigun_task.add_nested_pipeline(name, options, &block)
+        else
+          raise "Nested pipelines require instance context"
         end
-        options
       end
-
-      public
 
       # Main unified stage method
       # Stage determines its own type based on block arity
@@ -494,6 +288,39 @@ module Minigun
       # Routing
       def reroute_stage(from_stage, to:)
         @pipeline.reroute_stage(from_stage, to: to)
+      end
+
+      private
+
+      def _with_execution_context(context, &block)
+        _execution_context_stack.push(context)
+        begin
+          instance_eval(&block)
+        ensure
+          _execution_context_stack.pop
+        end
+      end
+
+      def _apply_execution_context(options)
+        # If @context exists (instance context), check its named contexts first
+        if options[:execution_context]
+          context_name = options[:execution_context]
+          named_ctx = if @context && @context.respond_to?(:_named_contexts)
+                       @context._named_contexts[context_name]
+                     else
+                       _named_contexts[context_name]
+                     end
+
+          if named_ctx
+            options[:_execution_context] = named_ctx
+          else
+            raise ArgumentError, "Unknown execution context: #{context_name}"
+          end
+        elsif _current_execution_context
+          # Use current context from stack
+          options[:_execution_context] = _current_execution_context
+        end
+        options
       end
     end
 
