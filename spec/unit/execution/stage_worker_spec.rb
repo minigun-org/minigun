@@ -76,19 +76,19 @@ RSpec.describe Minigun::Execution::StageWorker do
         .and_return({ test_stage: input_queue })
       allow(dag).to receive(:upstream).with(:test_stage).and_return([:upstream])
       allow(dag).to receive(:downstream).with(:test_stage).and_return([])
-      
+
       worker = described_class.new(pipeline, :test_stage, stage, config)
-      
+
       worker.start
-      
+
       # Thread should be created
       expect(worker.thread).to be_a(Thread)
-      
+
       # Put END signal so the worker exits
       input_queue << Minigun::Message.end_signal(source: :upstream)
-      
+
       worker.join
-      
+
       # Thread should have finished cleanly
       expect(worker.thread).not_to be_alive
     end
