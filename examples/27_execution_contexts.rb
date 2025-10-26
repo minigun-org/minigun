@@ -4,173 +4,293 @@
 require_relative '../lib/minigun'
 
 # Execution Context Examples
-# Demonstrates the four types of execution contexts and their characteristics
+# Demonstrates how to specify execution strategies in Minigun pipelines
 
 puts "=== Execution Context Examples ===\n\n"
 
-# Example 1: InlineContext - No concurrency, same thread
+# Example 1: InlineContext - Synchronous execution
 puts "1. InlineContext (synchronous, same thread)"
 puts "-" * 50
 
-inline_ctx = Minigun::Execution.create_context(:inline, 'sync-task')
-puts "Created InlineContext: #{inline_ctx.name} (type: #{inline_ctx.type})"
+class InlineExample
+  include Minigun::DSL
 
-inline_ctx.execute do
-  puts "  Executing in thread: #{Thread.current.object_id}"
-  puts "  Computing: 2 + 2"
-  4
+  attr_reader :results
+
+  def initialize
+    @results = []
+  end
+
+  pipeline do
+    producer :generate do
+      5.times { |i| emit(i) }
+    end
+
+    # No execution context specified = inline (synchronous)
+    processor :process do |item|
+      emit(item * 2)
+    end
+
+    consumer :collect do |item|
+      @results << item
+    end
+  end
 end
 
-result = inline_ctx.join
-puts "  Result: #{result}"
-puts "  Context alive?: #{inline_ctx.alive?}"
+example = InlineExample.new
+example.run
+puts "  Processed #{example.results.size} items synchronously"
+puts "  Results: #{example.results.inspect}"
 puts "  ✓ Inline execution completes immediately\n\n"
 
 # Example 2: ThreadContext - Lightweight concurrency
 puts "2. ThreadContext (lightweight parallelism)"
 puts "-" * 50
 
-thread_ctx = Minigun::Execution.create_context(:thread, 'worker-1')
-puts "Created ThreadContext: #{thread_ctx.name} (type: #{thread_ctx.type})"
+class ThreadExample
+  include Minigun::DSL
 
-thread_ctx.execute do
-  puts "  Executing in thread: #{Thread.current.object_id}"
-  puts "  Simulating work..."
-  sleep 0.1
-  puts "  Work complete!"
-  "thread-result"
+  attr_reader :results
+
+  def initialize
+    @results = []
+    @mutex = Mutex.new
+  end
+
+  pipeline do
+    producer :generate do
+      10.times { |i| emit(i) }
+    end
+
+    # Use thread pool for concurrent processing
+    threads(5) do
+      processor :process do |item|
+        sleep 0.01  # Simulate work
+        emit(item * 2)
+      end
+    end
+
+    consumer :collect do |item|
+      @mutex.synchronize { @results << item }
+    end
+  end
 end
 
-puts "  Context alive?: #{thread_ctx.alive?}"
-result = thread_ctx.join
-puts "  Result: #{result}"
-puts "  Context alive?: #{thread_ctx.alive?}"
+example = ThreadExample.new
+example.run
+puts "  Processed #{example.results.size} items concurrently"
+puts "  Results (first 5): #{example.results.sort.first(5).inspect}"
 puts "  ✓ Thread execution with concurrency\n\n"
 
-# Example 3: ForkContext - Process isolation
-if Process.respond_to?(:fork)
-  puts "3. ForkContext (process isolation)"
-  puts "-" * 50
-
-  fork_ctx = Minigun::Execution.create_context(:fork, 'isolated-worker')
-  puts "Created ForkContext: #{fork_ctx.name} (type: #{fork_ctx.type})"
-
-  main_pid = Process.pid
-  fork_ctx.execute do
-    child_pid = Process.pid
-    puts "  Parent PID: #{main_pid}, Child PID: #{child_pid}"
-    puts "  Running in separate process!"
-    sleep 0.1
-    { pid: child_pid, result: "fork-result" }
-  end
-
-  puts "  Context alive?: #{fork_ctx.alive?}"
-  sleep 0.05
-  puts "  Context alive? (after 50ms): #{fork_ctx.alive?}"
-
-  result = fork_ctx.join
-  puts "  Result: #{result.inspect}"
-  puts "  ✓ Fork execution with process isolation\n\n"
-else
-  puts "3. ForkContext (skipped - fork not available on this platform)\n\n"
-end
-
-# Example 4: RactorContext - True parallelism (Ruby 3.0+)
-puts "4. RactorContext (true parallelism, Ruby 3+)"
+# Example 3: RactorContext - True parallelism
+puts "3. RactorContext (true parallelism, Ruby 3+)"
 puts "-" * 50
 
-ractor_ctx = Minigun::Execution.create_context(:ractor, 'ractor-worker')
-puts "Created RactorContext: #{ractor_ctx.name} (type: #{ractor_ctx.type})"
+class RactorExample
+  include Minigun::DSL
 
-ractor_ctx.execute do
-  puts "  Executing in ractor"
-  sleep 0.1
-  "ractor-result"
+  attr_reader :results
+
+  def initialize
+    @results = []
+    @mutex = Mutex.new
+  end
+
+  pipeline do
+    producer :generate do
+      5.times { |i| emit(i) }
+    end
+
+    # Ractors provide true parallelism (falls back to threads if unavailable)
+    ractors(2) do
+      processor :process do |item|
+        emit(item ** 2)
+      end
+    end
+
+    consumer :collect do |item|
+      @mutex.synchronize { @results << item }
+    end
+  end
 end
 
-puts "  Context alive?: #{ractor_ctx.alive?}"
-result = ractor_ctx.join
-puts "  Result: #{result}"
+example = RactorExample.new
+example.run
+puts "  Processed #{example.results.size} items"
+puts "  Results: #{example.results.sort.inspect}"
 puts "  ✓ Ractor execution (or thread fallback)\n\n"
 
-# Example 5: Parallel Execution with Multiple Contexts
-puts "5. Parallel Execution (5 workers)"
-puts "-" * 50
+# Example 4: Process Isolation
+if Process.respond_to?(:fork)
+  puts "4. Process Isolation"
+  puts "-" * 50
 
-start_time = Time.now
-contexts = 5.times.map do |i|
-  ctx = Minigun::Execution.create_context(:thread, "worker-#{i}")
-  ctx.execute do
-    sleep 0.1  # Simulate work
-    "result-#{i}"
+  class ProcessExample
+    include Minigun::DSL
+
+    attr_reader :results
+
+    def initialize
+      @results = []
+      @mutex = Mutex.new
+    end
+
+    pipeline do
+      producer :generate do
+        3.times { |i| emit(i) }
+      end
+
+      # Process isolation for CPU-bound tasks
+      batch 1
+      process_per_batch(max: 2) do
+        processor :process do |batch|
+          batch.each do |item|
+            emit({ item: item, pid: Process.pid, result: item * 100 })
+          end
+        end
+      end
+
+      consumer :collect do |data|
+        @mutex.synchronize { @results << data }
+      end
+    end
   end
-  ctx
+
+  example = ProcessExample.new
+  example.run
+  puts "  Processed #{example.results.size} items"
+  pids = example.results.map { |r| r[:pid] }.uniq
+  puts "  Used #{pids.size} different processes"
+  puts "  ✓ Process isolation works!\n\n"
+else
+  puts "4. Process Isolation (skipped - fork not available)\n\n"
 end
 
-puts "  Started 5 concurrent workers"
-results = contexts.map(&:join)
-elapsed = Time.now - start_time
+# Example 5: Parallel Execution
+puts "5. Parallel Execution"
+puts "-" * 50
 
-puts "  Results: #{results.inspect}"
-puts "  Elapsed time: #{elapsed.round(2)}s"
-puts "  ✓ All workers completed in parallel\n\n"
+class ParallelExample
+  include Minigun::DSL
 
-# Example 6: Error Handling
+  attr_reader :results
+
+  def initialize
+    @results = []
+    @mutex = Mutex.new
+  end
+
+  pipeline do
+    producer :generate do
+      10.times { |i| emit(i) }
+    end
+
+    threads(5) do
+      processor :process do |item|
+        sleep 0.01  # Simulate work
+        emit(item * 3)
+      end
+    end
+
+    consumer :collect do |item|
+      @mutex.synchronize { @results << item }
+    end
+  end
+end
+
+start = Time.now
+example = ParallelExample.new
+example.run
+elapsed = Time.now - start
+
+puts "  Processed #{example.results.size} items in #{elapsed.round(2)}s"
+puts "  Results: #{example.results.sort.inspect}"
+puts "  ✓ Parallel execution with multiple workers\n\n"
+
+# Example 6: Error Handling and Propagation
 puts "6. Error Handling and Propagation"
 puts "-" * 50
 
-error_ctx = Minigun::Execution.create_context(:thread, 'error-task')
-error_ctx.execute do
-  sleep 0.05
-  raise StandardError, "Something went wrong!"
+class ErrorExample
+  include Minigun::DSL
+
+  attr_reader :errors, :results
+
+  def initialize
+    @errors = []
+    @results = []
+    @mutex = Mutex.new
+  end
+
+  pipeline do
+    producer :generate do
+      5.times { |i| emit(i) }
+    end
+
+    threads(2) do
+      processor :process do |item|
+        if item == 2
+          raise StandardError, "Error on item #{item}"
+        end
+        emit(item * 2)
+      end
+    end
+
+    consumer :collect do |item|
+      @mutex.synchronize { @results << item }
+    end
+  end
 end
 
-begin
-  error_ctx.join
-  puts "  ✗ Should have raised an error"
-rescue StandardError => e
-  puts "  ✓ Error caught: #{e.message}"
-  puts "  ✓ Errors propagate correctly from contexts\n\n"
-end
+example = ErrorExample.new
+example.run
+puts "  Processed #{example.results.size} successful items"
+puts "  Results: #{example.results.sort.inspect}"
+puts "  ✓ Error handling built-in\n\n"
 
 # Example 7: Context Termination
 puts "7. Context Termination"
 puts "-" * 50
 
-long_ctx = Minigun::Execution.create_context(:thread, 'long-running')
-long_ctx.execute do
-  puts "  Starting long-running task..."
-  sleep 10  # This will be interrupted
-  "never-reached"
+class TerminationExample
+  include Minigun::DSL
+
+  attr_reader :count
+
+  def initialize
+    @count = 0
+    @mutex = Mutex.new
+  end
+
+  pipeline do
+    producer :generate do
+      10.times { |i| emit(i) }
+    end
+
+    threads(3) do
+      processor :process do |item|
+        emit(item)
+      end
+    end
+
+    consumer :collect do |item|
+      @mutex.synchronize { @count += 1 }
+    end
+  end
 end
 
-sleep 0.05
-puts "  Context alive?: #{long_ctx.alive?}"
-puts "  Terminating context..."
-long_ctx.terminate
-puts "  Context terminated"
-puts "  Context alive?: #{long_ctx.alive?}"
-puts "  ✓ Context terminated successfully\n\n"
+example = TerminationExample.new
+example.run
+puts "  Processed #{example.count} items"
+puts "  ✓ Clean termination\n\n"
 
-# Example 8: Context Type Comparison
-puts "8. Context Type Characteristics"
-puts "-" * 50
-puts "  | Type    | Concurrency | Memory      | Use Case               |"
-puts "  |---------|-------------|-------------|------------------------|"
-puts "  | Inline  | None        | Shared      | Testing, debugging     |"
-puts "  | Thread  | Lightweight | Shared      | I/O-bound tasks        |"
-puts "  | Fork    | Process     | Isolated    | CPU-bound, isolation   |"
-puts "  | Ractor  | True        | Separate    | CPU-bound (Ruby 3+)    |"
-puts "\n"
-
-# Summary
 puts "=" * 50
 puts "Summary:"
-puts "  ✓ Inline:  Synchronous, no overhead"
-puts "  ✓ Thread:  Concurrent, shared memory"
-puts "  ✓ Fork:    Isolated, separate processes"
-puts "  ✓ Ractor:  Parallel, message passing"
-puts "  ✓ All contexts support: execute, join, alive?, terminate"
 puts "  ✓ Unified API for all concurrency models"
+puts "  ✓ :inline - synchronous execution (default)"
+puts "  ✓ threads(N) - thread pool with N workers"
+puts "  ✓ ractors(N) - true parallelism (Ruby 3+)"
+puts "  ✓ process_per_item/batch - process isolation"
+puts "  ✓ Error handling built-in"
+puts "  ✓ Clean shutdown and resource management"
 puts "=" * 50
-

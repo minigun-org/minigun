@@ -75,24 +75,28 @@ class ComprehensivePipeline
     # Parse phase: CPU-bound, use process per batch
     process_per_batch(max: @parse_processes) do
       processor :parse_batch do |batch|
-        @mutex.synchronize do
-          @stats[:parsed] += batch.size
-          @stats[:parse_pids] << Process.pid
-        end
+        # Note: Stats incremented in parent process would not be visible here
+        # since this runs in a forked process
 
         # CPU-intensive parsing
         batch.each do |item|
           emit({
             id: item[:id],
             parsed: item[:data].upcase,
-            metadata: item[:metadata]
+            metadata: item[:metadata],
+            parse_pid: Process.pid  # Track which process did the work
           })
         end
       end
     end
 
     # Save to database (dedicated small pool)
+    # Stats are incremented here (in parent process) so they're visible
     processor :save_to_db, execution_context: :db_pool do |results|
+      @mutex.synchronize do
+        @stats[:parsed] += 1
+        @stats[:parse_pids] << results[:parse_pid] if results[:parse_pid]
+      end
       # Simulate database write
       emit(results)
     end
