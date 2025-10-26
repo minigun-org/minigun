@@ -64,7 +64,7 @@ RSpec.describe Minigun::Task do
 
       expect(task.stages[:test_acc]).not_to be_nil
       expect(task.stages[:test_acc].name).to eq(:test_acc)
-      expect(task.stages[:test_acc].accumulator?).to be true
+      expect(task.stages[:test_acc]).to be_a(Minigun::AccumulatorStage)
     end
 
     it 'adds consumer stage' do

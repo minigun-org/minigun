@@ -124,21 +124,26 @@ RSpec.describe Minigun::PipelineStage do
       expect(result).to eq([10])
     end
 
-    it 'skips accumulator stages' do
+    it 'processes through accumulator stages' do
       stage = described_class.new(name: :my_pipeline)
       pipeline = Minigun::Pipeline.new(:test, config)
       stage.pipeline = pipeline
 
       pipeline.add_stage(:processor, :double) { |item| emit(item * 2) }
-      pipeline.add_stage(:accumulator, :batch, max_size: 10)
-      pipeline.add_stage(:processor, :add_one) { |item| emit(item + 1) }
+      pipeline.add_stage(:accumulator, :batch, max_size: 2)  # Small batch for testing
+      pipeline.add_stage(:processor, :sum_batch) { |batch| emit(batch.sum) }
 
       context = Object.new
-      result = stage.execute_with_emit(context, 5)
 
-      # Should skip accumulator, but continue with other processors
-      # 5 * 2 = 10, accumulator skipped, then 10 + 1 = 11
-      expect(result).to eq([11])
+      # First item: buffered by accumulator
+      result = stage.execute_with_emit(context, 5)
+      expect(result).to eq([])  # Nothing emitted yet
+
+      # Second item: accumulator reaches batch size and emits
+      result = stage.execute_with_emit(context, 3)
+
+      # Accumulator emits [10, 6], sum_batch processes it: 10 + 6 = 16
+      expect(result).to eq([16])
     end
 
     it 'handles multiple emits per stage' do

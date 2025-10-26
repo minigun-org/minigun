@@ -82,7 +82,7 @@ RSpec.describe Minigun::Execution::ExecutionPlan do
       expect(plan.affinity_for(:sink)).to be_nil
     end
 
-    it 'does not colocate with accumulator stages' do
+    it 'can colocate with accumulator stages' do
       producer = Minigun::AtomicStage.new(name: :source, block: proc { emit(1) })
       accumulator = Minigun::AccumulatorStage.new(name: :batch, options: { max_size: 10 })
       consumer = Minigun::AtomicStage.new(name: :sink, block: proc { |i| i })
@@ -99,8 +99,10 @@ RSpec.describe Minigun::Execution::ExecutionPlan do
 
       plan.plan!
 
-      # sink should NOT be colocated with accumulator
-      expect(plan.affinity_for(:sink)).to be_nil
+      # Accumulators are treated like any other stage
+      # sink CAN be colocated with batch, which is colocated with source
+      expect(plan.affinity_for(:sink)).to eq(:batch)
+      expect(plan.affinity_for(:batch)).to eq(:source)
     end
 
     it 'respects explicit execution context on stages' do

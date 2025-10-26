@@ -189,7 +189,7 @@ RSpec.describe Minigun::DSL do
 
       expect(gen_stage.producer?).to be true
       expect(double_stage.producer?).to be false
-      expect(double_stage.accumulator?).to be false
+      expect(double_stage).not_to be_a(Minigun::AccumulatorStage)
       expect(collect_stage.producer?).to be false
 
       # Verify we have 3 stages total

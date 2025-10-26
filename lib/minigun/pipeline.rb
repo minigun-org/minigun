@@ -269,9 +269,6 @@ module Minigun
       end
     end
 
-    def find_accumulator
-      @stages.values.find { |stage| stage.accumulator? }
-    end
 
     private
 
@@ -443,9 +440,9 @@ module Minigun
           end
         end
 
-        # Flush all accumulators to emit any remaining items
+        # Flush any stages with remaining buffered items
         @stages.each_value do |stage|
-          next unless stage.accumulator?
+          next unless stage.respond_to?(:flush)
 
           flushed_items = stage.flush(@context)
           flushed_items.each do |batch|

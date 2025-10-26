@@ -22,10 +22,6 @@ module Minigun
       false
     end
 
-    # Whether this stage is an accumulator (batches items)
-    def accumulator?
-      false
-    end
 
     # Whether this stage is composite (contains other stages)
     def composite?
@@ -116,10 +112,6 @@ module Minigun
       @max_wait = options[:max_wait] || nil  # Future: time-based batching
       @buffer = []
       @mutex = Mutex.new
-    end
-
-    def accumulator?
-      true
     end
 
     # Process items one at a time, buffering internally
@@ -229,8 +221,6 @@ module Minigun
       @pipeline.stages.each_value do |stage|
         # Skip producers - we're feeding items in from upstream
         next if stage.producer? || stage.is_a?(PipelineStage)
-        # Skip accumulators in this inline execution
-        next if stage.accumulator?
 
         break if current_items.empty?
 

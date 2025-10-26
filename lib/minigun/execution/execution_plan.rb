@@ -122,9 +122,6 @@ module Minigun
 
         return nil unless upstream_stage  # Skip if upstream is special node
 
-        # Don't colocate with accumulators (they batch items)
-        return nil if upstream_stage.accumulator?
-
         # Don't colocate if stage has explicit execution context
         return nil if stage.execution_context
 
