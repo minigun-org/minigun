@@ -86,14 +86,20 @@ module Minigun
     def execute_with_emit(context, item)
       emissions = []
 
-      # emit() - uses DAG routing (target = nil)
+      # Save original emit methods if they exist (for nested pipeline support)
+      original_emit = context.method(:emit) if context.respond_to?(:emit)
+      original_emit_to_stage = context.method(:emit_to_stage) if context.respond_to?(:emit_to_stage)
+
+      # emit() - collects locally and forwards to original if it exists
       context.define_singleton_method(:emit) do |emitted_item|
         emissions << emitted_item
+        original_emit.call(emitted_item) if original_emit
       end
 
-      # emit_to_stage() - uses explicit routing
+      # emit_to_stage() - collects locally and forwards to original if it exists
       context.define_singleton_method(:emit_to_stage) do |target_stage, emitted_item|
         emissions << { item: emitted_item, target: target_stage }
+        original_emit_to_stage.call(target_stage, emitted_item) if original_emit_to_stage
       end
 
       execute(context, item)
