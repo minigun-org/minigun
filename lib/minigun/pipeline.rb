@@ -41,34 +41,6 @@ module Minigun
       # Statistics tracking
       @stats = nil  # Will be initialized in run()
 
-      # For multi-pipeline communication
-      @input_queues = []  # Array of input queues from upstream pipelines
-      @output_queues = {}  # { pipeline_name => queue }
-    end
-
-    # Set an input queue for receiving items from upstream pipelines (backward compatibility)
-    def input_queue=(queue)
-      @input_queues << queue unless @input_queues.include?(queue)
-    end
-
-    # Get the input queues (returns array)
-    def input_queues
-      @input_queues
-    end
-
-    # Get the first input queue (backward compatibility)
-    def input_queue
-      @input_queues.first
-    end
-
-    # Add an input queue for receiving items from upstream pipelines
-    def add_input_queue(queue)
-      @input_queues << queue unless @input_queues.include?(queue)
-    end
-
-    # Add an output queue for sending items to a downstream pipeline
-    def add_output_queue(pipeline_name, queue)
-      @output_queues[pipeline_name] = queue
     end
 
     # Duplicate this pipeline for inheritance
@@ -501,57 +473,6 @@ module Minigun
       end
     end
 
-    def start_producer_old
-      produced_count = @produced_count
-      producer_stages = find_all_producers
-
-      # Handle both internal producers and input from upstream pipeline
-      has_internal_producers = producer_stages.any?
-      has_input_queues = @input_queues.any?
-
-      Thread.new do
-        producer_threads = []
-
-        if has_internal_producers
-          log_info "[Pipeline:#{@name}][Producers] Starting #{producer_stages.size} producer(s)"
-
-          # Start all producers (atomic and pipeline)
-          producer_stages.each do |producer_stage|
-            producer_threads << start_producer_thread(producer_stage, queue, in_flight_count, produced_count)
-          end
-        end
-
-        if has_input_queues
-          # Consume from input queues (upstream pipelines)
-          @input_queues.each_with_index do |input_queue, idx|
-            producer_threads << Thread.new do
-              log_info "[Pipeline:#{@name}][Input-#{idx}] Waiting for upstream items"
-
-              loop do
-                item = input_queue.pop
-                break if item == :END_OF_QUEUE
-
-                in_flight_count.increment
-                queue << [item, :_input]
-                produced_count.increment
-              end
-
-              log_info "[Pipeline:#{@name}][Input-#{idx}] Upstream finished"
-            end
-          end
-        end
-
-        # Wait for all producers to finish
-        producer_threads.each(&:join)
-
-        # Wait for all items to be processed
-        sleep 0.01 while in_flight_count.value > 0
-
-        # Signal end
-        queue << :END_OF_QUEUE
-      end
-    end
-
     # Start a single producer thread (handles both atomic and pipeline producers)
     def start_producer_thread(producer_stage)
       # Capture instance variables for closure
@@ -648,123 +569,6 @@ module Minigun
       end
     end
 
-    # Main event loop: processes items from queue and routes them to target stages
-    def start_dispatcher
-      Thread.new do
-        log_info "[Pipeline:#{@name}][Dispatcher] Starting"
-
-        output_items = []  # Track items to send to downstream pipelines
-
-        loop do
-          begin
-            item_data = @queue.pop
-            break if item_data == :END_OF_QUEUE
-
-            item, source_stage, explicit_target = item_data
-
-            # Use explicit target if provided, otherwise use DAG routing
-            targets = if explicit_target
-                        [explicit_target]
-                      else
-                        get_targets(source_stage)
-                      end
-
-            @in_flight_count.decrement
-
-            targets.each do |target_name|
-            target_stage = find_stage(target_name)
-
-            # Validate that explicit target exists
-            if explicit_target && !target_stage
-              log_error "[Pipeline:#{@name}] emit_to_stage: Unknown target stage '#{target_name}'"
-              next
-            end
-
-            next unless target_stage
-
-            if @dag.terminal?(target_name)
-              # Terminal stage (consumer) - execute through unified path
-              execute_stage(target_stage, item)
-            else
-              # Processor, Accumulator, or Pipeline - execute and route outputs
-              emitted_results = execute_stage(target_stage, item)
-
-              # Handle both plain items and targeted items (emit_to_stage)
-              emitted_results.each do |result|
-                if result.is_a?(Hash) && result.key?(:item) && result.key?(:target)
-                  # Targeted emit via emit_to_stage - has explicit target
-                  @in_flight_count.increment
-                  @queue << [result[:item], target_name, result[:target]]
-                else
-                  # Regular emit - uses DAG routing
-                  @in_flight_count.increment
-                  @queue << [result, target_name, nil]
-                end
-              end
-            end
-          end
-          rescue => e
-            log_error "[Pipeline:#{@name}][Dispatcher] Error: #{e.message}"
-            log_error e.backtrace.join("\n")
-            raise
-          end
-        end
-
-        # Flush any stages with remaining buffered items
-        @stages.each_value do |stage|
-          next unless stage.respond_to?(:flush)
-
-          flushed_items = stage.flush(@context)
-          flushed_items.each do |batch|
-            # Send batch to downstream stages
-            downstream_targets = @dag.downstream(stage.name)
-            downstream_targets.each do |downstream_name|
-              downstream_stage = find_stage(downstream_name)
-
-              if @dag.terminal?(downstream_name)
-                # Execute consumer through unified path
-                execute_stage(downstream_stage, batch)
-              else
-                # Process through downstream stage
-                next_items = execute_stage(downstream_stage, batch)
-                next_items.each do |next_item|
-                  # Find final consumers
-                  final_targets = @dag.downstream(downstream_name)
-                  final_targets.each do |final_name|
-                    final_stage = find_stage(final_name)
-                    if @dag.terminal?(final_name)
-                      execute_stage(final_stage, next_item)
-                    end
-                  end
-                end
-              end
-            end
-          end
-        end
-
-        # Send items to output queues if this pipeline has downstream pipelines
-        send_to_output_queues(output_items)
-
-        log_info "[Pipeline:#{@name}][Dispatcher] Done"
-      end
-    end
-
-
-    # Send completed items to downstream pipelines
-    def send_to_output_queues(output_items)
-      return if @output_queues.empty?
-
-      log_info "[Pipeline:#{@name}] Sending #{output_items.size} items to downstream pipelines"
-
-      @output_queues.each do |pipeline_name, queue|
-        output_items.each do |item|
-          queue << item
-        end
-        queue << :END_OF_QUEUE
-        log_info "[Pipeline:#{@name}] Sent #{output_items.size} items + END_OF_QUEUE to #{pipeline_name}"
-      end
-    end
-
     def execute_stage(stage, item)
       executor = Execution::StageExecutor.new(self, @config)
       item_data = { item: item, stage: stage }
@@ -772,11 +576,6 @@ module Minigun
     end
 
     def build_dag_routing!
-      # If this pipeline receives input from upstream, add :_input node and route it
-      if @input_queues.any?
-        handle_input_queue_routing!
-      end
-
       # Handle multiple producers specially - they should all connect to first non-producer
       handle_multiple_producers_routing!
 
@@ -791,23 +590,9 @@ module Minigun
 
     def validate_stages_exist!
       @dag.nodes.each do |node_name|
-        next if node_name == :_input  # Special internal node for input queue
-
         unless find_stage(node_name)
           raise Minigun::Error, "[Pipeline:#{@name}] Routing references non-existent stage '#{node_name}'"
         end
-      end
-    end
-
-    def handle_input_queue_routing!
-      # Add :_input as an internal DAG node for items from upstream pipeline
-      @dag.add_node(:_input) unless @dag.nodes.include?(:_input)
-
-      # Route :_input to the first non-producer stage (same logic as multiple producers)
-      first_non_producer = @stage_order.find { |s| !find_stage(s)&.producer? }
-
-      if first_non_producer
-        @dag.add_edge(:_input, first_non_producer)
       end
     end
 

@@ -78,30 +78,6 @@ RSpec.describe Minigun::Pipeline do
     end
   end
 
-  describe '#input_queue=' do
-    it 'sets an input queue for inter-pipeline communication' do
-      queue = SizedQueue.new(10)
-      pipeline.input_queue = queue
-      expect(pipeline.input_queue).to eq(queue)
-    end
-  end
-
-  describe '#add_output_queue' do
-    it 'adds an output queue for downstream pipeline' do
-      queue = SizedQueue.new(10)
-      pipeline.add_output_queue(:next_pipeline, queue)
-      expect(pipeline.output_queues[:next_pipeline]).to eq(queue)
-    end
-
-    it 'supports multiple output queues' do
-      queue1 = SizedQueue.new(10)
-      queue2 = SizedQueue.new(10)
-      pipeline.add_output_queue(:pipeline_a, queue1)
-      pipeline.add_output_queue(:pipeline_b, queue2)
-      expect(pipeline.output_queues.size).to eq(2)
-    end
-  end
-
   describe '#run' do
     before do
       allow(Minigun.logger).to receive(:info)
