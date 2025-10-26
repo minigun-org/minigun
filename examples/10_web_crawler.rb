@@ -2,127 +2,234 @@
 # frozen_string_literal: true
 
 require_relative '../lib/minigun'
+require 'set'
 
 # Web Crawler Example
-# Demonstrates a multi-stage web crawler pipeline
+# Demonstrates recursive web crawling with URL deduplication and depth tracking
 class WebCrawler
   include Minigun::DSL
 
   max_threads 20  # High concurrency for I/O-bound web fetching
 
-  attr_accessor :pages_fetched, :links_extracted, :pages_processed
+  attr_reader :visited_urls, :pages_fetched, :links_extracted, :pages_processed, :start_url
 
-  def initialize(seed_urls)
-    @seed_urls = seed_urls
+  def initialize(seed_urls = nil, start_url: 'http://example.com', max_pages: 20, max_depth: 3)
+    # Support both old API (array of seed URLs) and new API (single start URL)
+    if seed_urls.is_a?(Array)
+      @seed_urls = seed_urls
+      @start_url = seed_urls.first
+    else
+      @start_url = start_url
+      @seed_urls = [start_url]
+    end
+
+    @max_pages = max_pages
+    @max_depth = max_depth
+    @visited_urls = Set.new
     @pages_fetched = []
     @links_extracted = []
     @pages_processed = []
+    @pages_crawled = 0
+    @links_found = 0
     @mutex = Mutex.new
+    @domain = extract_domain(@start_url)
   end
 
   # Simulate fetching a web page
   def fetch_page(url)
-    puts "[Fetch] Fetching #{url}"
     # In a real crawler, this would use Net::HTTP or similar
-    sleep 0.1  # Simulate network delay
+    sleep 0.01  # Simulate network delay
+
+    # Simulate realistic page content
+    paragraphs = rand(2..5)
+    content = []
+    paragraphs.times do |i|
+      content << "This is paragraph #{i + 1} of content from #{url}. " * rand(3..8)
+    end
+
     {
       url: url,
-      title: "Page: #{url}",
-      content: "Content from #{url} with some text...",
-      status: 200
+      title: "Page: #{url.split('/').last || 'Home'}",
+      content: content.join("\n\n"),
+      status: 200,
+      word_count: content.join(' ').split.size
     }
   end
 
   # Extract links from page content
-  def extract_links(content)
-    # In a real crawler, this would parse HTML and extract <a> tags
-    # For demo, just generate some fake links
+  def extract_links_from_page(source_url, content)
+    # In a real crawler, this would parse HTML with Nokogiri
+    # For demo, generate plausible links based on the source URL
+    num_links = rand(2..5)
+
     links = []
-    if content.include?('example.com')
-      links << 'http://example.com/about'
-      links << 'http://example.com/contact'
-    elsif content.include?('test.com')
-      links << 'http://test.com/page1'
-      links << 'http://test.com/page2'
+    num_links.times do |i|
+      path = ['article', 'page', 'blog', 'post', 'category', 'product'].sample
+      links << "http://#{@domain}/#{path}/#{rand(1..100)}"
     end
+
+    # Add some cross-domain links occasionally
+    if rand < 0.3
+      links << "http://external-site.com/page/#{rand(1..10)}"
+    end
+
     links
+  end
+
+  # Check if URL should be crawled
+  def should_crawl?(url)
+    # Filtering rules
+    return false if url.include?('login') || url.include?('logout')
+    return false if url.include?('admin') || url.include?('cart')
+    return false unless url.start_with?("http://#{@domain}", "https://#{@domain}")
+
+    # Stop if we've reached the limit
+    return false if @pages_crawled >= @max_pages
+
+    true
   end
 
   # Save page data
   def save_page(page)
-    puts "[Save] Storing #{page[:url]} (#{page[:title]})"
     # In a real crawler, this would save to database or file
+    # For now, just track it
   end
 
   pipeline do
     # Stage 1: Seed with initial URLs
     producer :seed_urls do
-      @seed_urls.each { |url| emit(url) }
-      puts "[Seed] Emitted #{@seed_urls.size} seed URLs"
+      puts "\n" + "="*60
+      puts "WEB CRAWLER: Starting from #{@start_url}"
+      puts "Max pages: #{@max_pages}, Max depth: #{@max_depth}"
+      puts "="*60
+
+      @seed_urls.each do |url|
+        emit({ url: url, depth: 0 })
+      end
+      puts "[Seed] Emitted #{@seed_urls.size} seed URL(s)"
     end
 
-    # Stage 2: Fetch pages from URLs
-    processor :fetch_pages do |url|
-      page = fetch_page(url)
-      @mutex.synchronize { pages_fetched << page }
-      emit(page)
+    # Stage 2: Fetch pages (with deduplication)
+    threads(20) do
+      processor :fetch_pages do |page_info|
+        url = page_info[:url]
+        depth = page_info[:depth]
+
+        # Check if already visited (deduplication)
+        already_visited = @mutex.synchronize do
+          if @visited_urls.include?(url)
+            true
+          else
+            @visited_urls.add(url)
+            false
+          end
+        end
+
+        if already_visited
+          puts "⊘ Skipping already visited: #{url}"
+          next
+        end
+
+        # Check depth limit
+        if depth > @max_depth
+          puts "⊘ Max depth (#{@max_depth}) reached: #{url}"
+          next
+        end
+
+        # Check page limit
+        if @pages_crawled >= @max_pages
+          puts "⊘ Max pages (#{@max_pages}) reached"
+          next
+        end
+
+        # Fetch the page
+        puts "↓ [depth #{depth}] Fetching: #{url}"
+        page = fetch_page(url)
+        page[:depth] = depth
+
+        @mutex.synchronize do
+          @pages_fetched << page
+          @pages_crawled += 1
+        end
+
+        emit(page)
+      end
     end
 
     # Stage 3: Extract links from fetched pages
     processor :extract_links do |page|
-      links = extract_links(page[:content])
-      @mutex.synchronize { links_extracted.concat(links) }
+      links = extract_links_from_page(page[:url], page[:content])
 
-      puts "[Extract] Found #{links.size} links on #{page[:url]}"
+      @mutex.synchronize do
+        @links_extracted.concat(links)
+        @links_found += links.size
+      end
 
-      # Emit the page for further processing
+      puts "  📄 #{page[:title]} (#{page[:word_count]} words)"
+      puts "     Found #{links.size} links on #{page[:url]}"
+
+      # Emit the page for storage
       emit(page)
 
-      # Could emit links here to crawl them (would create a loop)
-      # For this demo, we just extract and log them
+      # Note: In a real recursive crawler, we would emit links back to fetch_pages
+      # For this demo, we just extract and track them to avoid complexity
+      # To enable recursive crawling:
+      # links.each do |link|
+      #   next unless should_crawl?(link)
+      #   emit({ url: link, depth: page[:depth] + 1 })
+      # end
     end
 
     # Stage 4: Process and store pages
     consumer :process_pages do |page|
-      @mutex.synchronize { pages_processed << page }
+      @mutex.synchronize { @pages_processed << page }
       save_page(page)
+      puts "✓ Stored: #{page[:url]} (depth: #{page[:depth]})"
     end
+
+    after_run do
+      puts "\n" + "="*60
+      puts "WEB CRAWLER STATISTICS"
+      puts "="*60
+      puts "Start URL: #{@start_url}"
+      puts "Pages crawled: #{@pages_crawled}"
+      puts "Links found: #{@links_found}"
+      puts "Unique URLs visited: #{@visited_urls.size}"
+      puts "Pages processed: #{@pages_processed.size}"
+
+      if @pages_crawled > 0
+        puts "Average links per page: #{(@links_found.to_f / @pages_crawled).round(1)}"
+      end
+
+      puts "\nCrawling complete!"
+      puts "="*60
+    end
+  end
+
+  private
+
+  def extract_domain(url)
+    # Extract domain from URL
+    url.split('/')[2] || 'example.com'
   end
 end
 
-if __FILE__ == $0
+if __FILE__ == $PROGRAM_NAME
   puts "=== Web Crawler Example ===\n\n"
 
-  seed_urls = [
-    'http://example.com',
-    'http://example.com/products',
-    'http://test.com',
-    'http://test.com/services',
-    'http://another-site.com'
-  ]
-
-  crawler = WebCrawler.new(seed_urls)
-
-  puts "Starting crawl with #{seed_urls.size} seed URLs\n"
-  puts "Max threads: 20 (for concurrent fetching)\n\n"
-
+  # Example 1: Simple crawl with default settings
+  puts "Example 1: Single start URL with deduplication\n"
+  crawler = WebCrawler.new(start_url: 'http://example.com', max_pages: 15, max_depth: 3)
   crawler.run
 
-  puts "\n=== Crawl Results ===\n"
-  puts "Pages fetched: #{crawler.pages_fetched.size}"
-  puts "Links extracted: #{crawler.links_extracted.size}"
-  puts "Pages processed: #{crawler.pages_processed.size}"
-
-  puts "\nFetched URLs:"
-  crawler.pages_fetched.each do |page|
-    puts "  - #{page[:url]} (#{page[:status]})"
-  end
-
-  puts "\nExtracted Links:"
-  crawler.links_extracted.each do |link|
-    puts "  - #{link}"
-  end
-
-  puts "\n✓ Crawl complete!"
+  # Example 2: Multiple seed URLs (backward compatible)
+  puts "\n\nExample 2: Multiple seed URLs\n"
+  seed_urls = [
+    'http://test.com',
+    'http://test.com/products',
+    'http://test.com/services'
+  ]
+  crawler2 = WebCrawler.new(seed_urls)
+  crawler2.run
 end
 

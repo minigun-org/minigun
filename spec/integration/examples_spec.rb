@@ -384,7 +384,11 @@ RSpec.describe 'Examples Integration' do
       '35_nested_contexts.rb',
       '36_batch_and_process.rb',
       '37_thread_per_batch.rb',
-      '38_comprehensive_execution.rb'
+      '38_comprehensive_execution.rb',
+      '39_load_balancer.rb',
+      '40_priority_routing.rb',
+      '41_message_router.rb',
+      '43_etl_pipeline.rb'
     ]
 
     missing_tests = example_basenames - tested_examples
@@ -728,6 +732,55 @@ RSpec.describe 'Examples Integration' do
       )
       example.run
       expect(example.stats[:parsed]).to be > 0
+    end
+  end
+
+  describe '39_load_balancer.rb' do
+    it 'demonstrates load balancing pattern' do
+      load File.expand_path('../../examples/39_load_balancer.rb', __dir__)
+
+      example = LoadBalancerExample.new
+      example.run
+
+      expect(example.server_stats.size).to eq(3)
+      expect(example.server_stats.values.map { |s| s[:requests] }.sum).to eq(15)
+    end
+  end
+
+  describe '40_priority_routing.rb' do
+    it 'demonstrates priority routing pattern' do
+      load File.expand_path('../../examples/40_priority_routing.rb', __dir__)
+
+      example = PriorityRoutingExample.new
+      example.run
+
+      expect(example.stats.values.sum).to eq(10)
+      expect(example.stats.keys).to include('critical_path', 'high_priority_path')
+    end
+  end
+
+  describe '41_message_router.rb' do
+    it 'demonstrates message routing pattern' do
+      load File.expand_path('../../examples/41_message_router.rb', __dir__)
+
+      example = MessageRouterExample.new
+      example.run
+
+      expect(example.message_counts.values.sum).to eq(25)
+      expect(example.message_counts.keys.size).to be >= 3
+    end
+  end
+
+  describe '43_etl_pipeline.rb' do
+    it 'demonstrates ETL pipeline pattern' do
+      load File.expand_path('../../examples/43_etl_pipeline.rb', __dir__)
+
+      example = EtlPipelineExample.new
+      example.run
+
+      expect(example.load_stats[:records_extracted]).to eq(12)
+      expect(example.load_stats[:records_transformed]).to be > 0
+      expect(example.load_stats[:batches_loaded]).to be >= 0 # May be 0 if items filtered
     end
   end
 end
