@@ -220,60 +220,89 @@ module Minigun
 
     # Main pipeline execution logic
     def run_pipeline(context)
-      # Create a queue for each edge in the DAG
-      @edge_queues = build_edge_queues
+      # Insert router stages for fan-out
+      insert_router_stages_for_fan_out
+
+      # Create one input queue per stage (except producers)
+      @stage_input_queues = build_stage_input_queues
       @produced_count = Concurrent::AtomicFixnum.new(0)
       @stage_threads = []
+      
+      # Track runtime edges (who sends to whom) for dynamic routing termination
+      # Key: source stage, Value: Set of target stages
+      @runtime_edges = Concurrent::Hash.new { |h, k| h[k] = Concurrent::Set.new }
 
       # Start producer threads
       producer_threads = start_producers
 
-      # Start stage worker threads (one per non-producer stage)
+      # Start stage worker threads (one per non-producer stage, including routers)
       @stages.each do |stage_name, stage|
         next if stage.producer?
         @stage_threads << start_stage_worker(stage_name, stage)
       end
 
-      # Wait for producers to finish
-      producer_threads.each(&:join)
-
-      # Signal end to all stage input queues
-      @edge_queues.each_value { |queue| queue << :END_OF_QUEUE }
-
       # Wait for all stage workers to finish
       @stage_threads.each(&:join)
     end
 
-    # Build a queue for each edge in the DAG, plus queues for all possible emit_to_stage targets
-    def build_edge_queues
+    # Build one input queue per stage (except producers)
+    def build_stage_input_queues
       queues = {}
-      queue_size = [(@config[:max_processes] * @config[:max_threads] * 2), 100].max
 
-      # Create queues for DAG edges
-      @stages.each do |from_stage, _|
-        downstream = @dag.downstream(from_stage)
-        downstream.each do |to_stage|
-          edge_key = [from_stage, to_stage]
-          queues[edge_key] = Queue.new  # Unbounded to prevent deadlock
-        end
-      end
+      @stages.each do |stage_name, stage|
+        # Skip producers - they don't have input queues
+        next if stage.producer?
 
-      # Create queues for ALL possible emit_to_stage targets (from non-terminal to any stage)
-      @stages.each do |from_stage, from_stage_obj|
-        # Only non-terminal stages can emit to others
-        next if @dag.terminal?(from_stage)
-
-        @stages.each_key do |to_stage|
-          # Don't create self-loops or edges to producers
-          next if from_stage == to_stage
-          next if @stages[to_stage].producer?
-
-          edge_key = [from_stage, to_stage]
-          queues[edge_key] ||= Queue.new  # Create if doesn't already exist
-        end
+        queues[stage_name] = Queue.new  # Unbounded to prevent deadlock
       end
 
       queues
+    end
+
+    # Insert RouterStage instances for fan-out patterns
+    def insert_router_stages_for_fan_out
+      stages_to_add = []
+      dag_updates = []
+
+      @stages.each do |stage_name, stage|
+        downstream = @dag.downstream(stage_name)
+
+        # Fan-out: stage has multiple downstream consumers
+        if downstream.size > 1
+          # Get explicit routing strategy from stage options, or default to :broadcast
+          routing_strategy = stage.options[:routing] || :broadcast
+
+          # Create a RouterStage
+          router_name = :"#{stage_name}_router"
+          router_stage = RouterStage.new(
+            name: router_name,
+            targets: downstream.dup,
+            routing_strategy: routing_strategy
+          )
+          stages_to_add << [router_name, router_stage]
+
+          # Update DAG: stage -> router -> [downstream targets]
+          dag_updates << {
+            remove_edges: downstream.map { |target| [stage_name, target] },
+            add_edge: [stage_name, router_name],
+            add_router_edges: downstream.map { |target| [router_name, target] }
+          }
+
+          log_info "[Pipeline:#{@name}] Inserting RouterStage '#{router_name}' (#{routing_strategy}) for fan-out: #{stage_name} -> #{downstream.join(', ')}"
+        end
+      end
+
+      # Apply DAG updates
+      dag_updates.each do |update|
+        update[:remove_edges].each { |(from, to)| @dag.remove_edge(from, to) }
+        @dag.add_edge(update[:add_edge][0], update[:add_edge][1])
+        update[:add_router_edges].each { |(from, to)| @dag.add_edge(from, to) }
+      end
+
+      # Add router stages to @stages
+      stages_to_add.each do |name, stage|
+        @stages[name] = stage
+      end
     end
 
     def find_stage(name)
@@ -329,65 +358,124 @@ module Minigun
       Thread.new do
         log_info "[Pipeline:#{@name}][Worker:#{stage_name}] Starting"
 
-        # Find all input queues for this stage (fan-in support)
-        input_queues = @edge_queues.select { |(from, to), _| to == stage_name }
+        # Get input queue for this stage
+        input_queue = @stage_input_queues[stage_name]
 
-        if input_queues.empty?
-          log_info "[Pipeline:#{@name}][Worker:#{stage_name}] No input queues, exiting"
+        unless input_queue
+          log_info "[Pipeline:#{@name}][Worker:#{stage_name}] No input queue, exiting"
           next
         end
 
-        # Track which queues have finished
-        active_queues = input_queues.dup
+        # Track sources: stages/producers that have sent us data or END
+        # We exit when all sources have sent END
+        sources_seen = Set.new
+        sources_done = Set.new
+        runtime_edges = @runtime_edges
+        stage_input_queues = @stage_input_queues
 
-        loop do
-          # Try to pop from any active queue (non-blocking round-robin)
-          item_data = nil
-          active_queues.each do |(edge, queue)|
-            begin
-              item_data = queue.pop(true)  # Non-blocking
+        # For routers, route according to strategy (broadcast or round-robin)
+        if stage.respond_to?(:router?) && stage.router?
+          target_queues = stage.targets.map { |target| stage_input_queues[target] }
 
-              if item_data == :END_OF_QUEUE
-                # This queue is done, remove it
-                active_queues.delete(edge)
-                item_data = nil  # Don't process END_OF_QUEUE
+          if stage.round_robin?
+            # Round-robin load balancing
+            round_robin_index = 0
+
+            loop do
+              msg = input_queue.pop
+              
+              # Handle END signal
+              if msg.is_a?(Message) && msg.end_of_stream?
+                sources_seen << msg.source
+                sources_done << msg.source
+                break if sources_done == sources_seen
+                next
+              end
+              
+              # Track data source
+              # Note: We can't track source without wrapping data, so routers
+              # rely on DAG upstream to know when to exit
+              
+              # Round-robin to downstream stages and track edges
+              target = stage.targets[round_robin_index]
+              runtime_edges[stage_name].add(target)
+              target_queues[round_robin_index] << msg
+              round_robin_index = (round_robin_index + 1) % target_queues.size
+            end
+          else
+            # Broadcast (default)
+            loop do
+              msg = input_queue.pop
+              
+              # Handle END signal
+              if msg.is_a?(Message) && msg.end_of_stream?
+                sources_seen << msg.source
+                sources_done << msg.source
+                break if sources_done == sources_seen
+                next
+              end
+
+              # Broadcast to all downstream stages (fan-out semantics) and track edges
+              stage.targets.each do |target|
+                runtime_edges[stage_name].add(target)
+                stage_input_queues[target] << msg
+              end
+            end
+          end
+
+          # Broadcast END to ALL router targets (even for round-robin)
+          # All targets need to know when upstream is complete
+          stage.targets.each do |target|
+            stage_input_queues[target] << Message.end_signal(source: stage_name)
+          end
+        else
+          # Regular stage processing
+          loop do
+            msg = input_queue.pop
+            
+            # Handle END signal
+            if msg.is_a?(Message) && msg.end_of_stream?
+              sources_seen << msg.source
+              sources_done << msg.source
+              break if sources_done == sources_seen
+              next
+            end
+
+            # Execute the stage
+            item = msg  # msg is unwrapped data
+            results = execute_stage(stage, item)
+
+            # Route results to downstream stages and track edges
+            results.each do |result|
+              if result.is_a?(Hash) && result.key?(:item) && result.key?(:target)
+                # Targeted emit via emit_to_stage - route DIRECTLY to target's input queue
+                target_stage = result[:target]
+                output_queue = stage_input_queues[target_stage]
+                if output_queue
+                  runtime_edges[stage_name].add(target_stage)
+                  output_queue << result[:item]
+                end
               else
-                break  # Got an item
+                # Regular emit - uses DAG routing to all downstream
+                downstream = @dag.downstream(stage_name)
+                downstream.each do |downstream_stage|
+                  output_queue = stage_input_queues[downstream_stage]
+                  if output_queue
+                    runtime_edges[stage_name].add(downstream_stage)
+                    output_queue << result
+                  end
+                end
               end
-            rescue ThreadError
-              # Queue empty, try next
             end
           end
 
-          # Exit when all queues are done
-          break if active_queues.empty?
-
-          # If no item available, sleep and retry
-          unless item_data
-            sleep 0.001
-            next
-          end
-
-          # Execute the stage
-          results = execute_stage(stage, item_data)
-
-          # Handle both plain items and targeted items (emit_to_stage)
-          results.each do |result|
-            if result.is_a?(Hash) && result.key?(:item) && result.key?(:target)
-              # Targeted emit via emit_to_stage - route to specific target
-              target_stage = result[:target]
-              edge_key = [stage_name, target_stage]
-              output_queue = @edge_queues[edge_key]
-              output_queue << result[:item] if output_queue
-            else
-              # Regular emit - uses DAG routing to all downstream
-              downstream = @dag.downstream(stage_name)
-              downstream.each do |downstream_stage|
-                edge_key = [stage_name, downstream_stage]
-                output_queue = @edge_queues[edge_key]
-                output_queue << result if output_queue
-              end
-            end
+          # Send END to ALL connections: DAG downstream + dynamic emit_to_stage targets
+          dag_downstream = @dag.downstream(stage_name)
+          dynamic_targets = runtime_edges[stage_name].to_a
+          all_targets = (dag_downstream + dynamic_targets).uniq
+          
+          all_targets.each do |target|
+            stage_input_queues[target] << Message.end_signal(source: stage_name)
           end
         end
 
@@ -450,7 +538,8 @@ module Minigun
     def start_producer_thread(producer_stage)
       # Capture instance variables for closure
       produced_count = @produced_count
-      edge_queues_map = @edge_queues
+      stage_input_queues = @stage_input_queues
+      runtime_edges = @runtime_edges
 
       Thread.new do
         producer_name = producer_stage.name
@@ -467,9 +556,9 @@ module Minigun
           # Create producer context with emit methods
           producer_context = @context.dup
 
-          # Get downstream edge queues
+          # Get downstream stage input queues
           downstream = @dag.downstream(producer_name)
-          edge_queues = downstream.map { |to| [[producer_name, to], edge_queues_map[[producer_name, to]]] }.to_h
+          downstream_queues = downstream.map { |to| stage_input_queues[to] }.compact
 
           if is_pipeline
             # Pipeline producers: collect items, then emit all at once
@@ -484,26 +573,35 @@ module Minigun
             producer_stage.pipeline.instance_variable_set(:@job_id, @job_id)
             producer_stage.pipeline.run(producer_context)
 
-            # Emit all collected items to downstream queues
+            # Emit all collected items to downstream queues and track edges
             emitted_items.each do |item|
-              edge_queues.each_value { |queue| queue << item }
+              downstream.each do |target|
+                runtime_edges[producer_name].add(target)
+                stage_input_queues[target] << item
+              end
               produced_count.increment
               stage_stats.increment_produced
             end
           else
             # Atomic producers: emit directly to downstream queues as they produce
             producer_context.define_singleton_method(:emit) do |item|
-              edge_queues.each_value { |queue| queue << item }
+              downstream.each do |target|
+                runtime_edges[producer_name].add(target)
+                stage_input_queues[target] << item
+              end
               produced_count.increment
               stage_stats.increment_produced
             end
 
             producer_context.define_singleton_method(:emit_to_stage) do |target_stage, item|
-              edge_key = [producer_name, target_stage]
-              queue = edge_queues_map[edge_key]
-              queue << item if queue
-              produced_count.increment
-              stage_stats.increment_produced
+              # emit_to_stage writes DIRECTLY to target's input queue and tracks edge
+              queue = stage_input_queues[target_stage]
+              if queue
+                runtime_edges[producer_name].add(target_stage)
+                queue << item
+                produced_count.increment
+                stage_stats.increment_produced
+              end
             end
 
             # Run producer block
@@ -512,6 +610,14 @@ module Minigun
 
           stage_stats.finish!
           log_info "[Pipeline:#{@name}][Producer:#{producer_name}] Done. Produced #{stage_stats.items_produced} items"
+
+          # Send END signal to ALL connections: DAG downstream + dynamic emit_to_stage targets
+          dynamic_targets = runtime_edges[producer_name].to_a
+          all_targets = (downstream + dynamic_targets).uniq
+          
+          all_targets.each do |target|
+            stage_input_queues[target] << Message.end_signal(source: producer_name)
+          end
 
           # Execute after hooks for this producer
           execute_stage_hooks(:after, producer_name) unless is_pipeline

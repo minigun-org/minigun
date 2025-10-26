@@ -48,6 +48,12 @@ module Minigun
       @reverse_edges[to] << from unless @reverse_edges[to].include?(from)
     end
 
+    # Remove an edge from source to target
+    def remove_edge(from, to)
+      @edges[from].delete(to)
+      @reverse_edges[to].delete(from)
+    end
+
     # Get all downstream stages from a given stage
     def downstream(name)
       @edges[name]

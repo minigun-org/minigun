@@ -11,6 +11,11 @@ OK. wait, what if we changed it so:
 - fan-in without fan-out (i.e. a producer connects to 1 consumer, even if MULTIPLE producers connect to that consumer) is done by directly having the producer insert to the consumer's queue
 - emit_to_stage emits DIRECTLY to the consumer input queue
 
+===============================
+
+configurable queue length
+
+
 ====================================
 
 weighted routing (load balancing)

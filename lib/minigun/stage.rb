@@ -184,6 +184,34 @@ module Minigun
 
   # Pipeline stage - composite stage that wraps a Pipeline
   # This is the key to the composite pattern!
+  # Router stage for fan-out (broadcast or round-robin)
+  class RouterStage < Stage
+    attr_accessor :targets, :routing_strategy
+
+    def initialize(name:, targets:, routing_strategy: :broadcast)
+      super(name: name, options: {})
+      @targets = targets
+      @routing_strategy = routing_strategy  # :broadcast or :round_robin
+    end
+
+    def router?
+      true
+    end
+
+    def broadcast?
+      @routing_strategy == :broadcast
+    end
+
+    def round_robin?
+      @routing_strategy == :round_robin
+    end
+
+    def execute(context, item)
+      # Router doesn't transform, just passes through
+      [item]
+    end
+  end
+
   class PipelineStage < Stage
     attr_reader :pipeline
 
