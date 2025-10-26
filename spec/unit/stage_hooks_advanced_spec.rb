@@ -19,36 +19,36 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
         end
 
         pipeline do
-        before_run { @execution_order << '1_pipeline_before_run' }
+          before_run { @execution_order << '1_pipeline_before_run' }
 
-        producer :gen do
-          @execution_order << '4_producer_block'
-          emit(1)
+          producer :gen do
+            @execution_order << '4_producer_block'
+            emit(1)
+          end
+
+          before(:gen) { @execution_order << '3_producer_before' }
+          after(:gen) { @execution_order << '5_producer_after' }
+
+          processor :proc do |item|
+            @execution_order << '7_processor_block'
+            emit(item * 2)
+          end
+
+          before(:proc) { @execution_order << '6_processor_before' }
+          after(:proc) { @execution_order << '8_processor_after' }
+
+          before_fork { @execution_order << '9_pipeline_before_fork' }
+
+          consumer :cons do |item|
+            @execution_order << '12_consumer_block'
+          end
+
+          before_fork(:cons) { @execution_order << '10_consumer_before_fork' }
+          after_fork(:cons) { @execution_order << '11_consumer_after_fork' }
+
+          after_fork { @execution_order << '13_pipeline_after_fork' }
+          after_run { @execution_order << '2_pipeline_after_run' }
         end
-        end
-
-        before(:gen) { @execution_order << '3_producer_before' }
-        after(:gen) { @execution_order << '5_producer_after' }
-
-        processor :proc do |item|
-          @execution_order << '7_processor_block'
-          emit(item * 2)
-        end
-
-        before(:proc) { @execution_order << '6_processor_before' }
-        after(:proc) { @execution_order << '8_processor_after' }
-
-        before_fork { @execution_order << '9_pipeline_before_fork' }
-
-        consumer :cons do |item|
-          @execution_order << '12_consumer_block'
-        end
-
-        before_fork(:cons) { @execution_order << '10_consumer_before_fork' }
-        after_fork(:cons) { @execution_order << '11_consumer_after_fork' }
-
-        after_fork { @execution_order << '13_pipeline_after_fork' }
-        after_run { @execution_order << '2_pipeline_after_run' }
       end
     end
 
@@ -98,20 +98,22 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
           @hook_error_caught = false
         end
 
-        producer :gen do
-          emit(1)
-        end
-
-        after :gen do
-          begin
-            raise StandardError, "Error in hook"
-          rescue StandardError => e
-            @hook_error_caught = true
+        pipeline do
+          producer :gen do
+            emit(1)
           end
-        end
 
-        consumer :collect do |item|
-          @results << item
+          after :gen do
+            begin
+              raise StandardError, "Error in hook"
+            rescue StandardError => e
+              @hook_error_caught = true
+            end
+          end
+
+          consumer :collect do |item|
+            @results << item
+          end
         end
       end
     end
@@ -138,34 +140,36 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
           @results = []
         end
 
-        before :gen do
-          @counter += 1
-        end
+        pipeline do
+          before :gen do
+            @counter += 1
+          end
 
-        producer :gen do
-          emit(10)
-          emit(20)
-        end
+          producer :gen do
+            emit(10)
+            emit(20)
+          end
 
-        after :gen do
-          @counter += 10
-        end
+          after :gen do
+            @counter += 10
+          end
 
-        before :transform do
-          @items_seen << "about to transform"
-        end
+          before :transform do
+            @items_seen << "about to transform"
+          end
 
-        processor :transform do |item|
-          @items_seen << item
-          emit(item * 2)
-        end
+          processor :transform do |item|
+            @items_seen << item
+            emit(item * 2)
+          end
 
-        after :transform do
-          @items_seen << "transformed"
-        end
+          after :transform do
+            @items_seen << "transformed"
+          end
 
-        consumer :collect do |item|
-          @results << item
+          consumer :collect do |item|
+            @results << item
+          end
         end
       end
     end
@@ -191,31 +195,33 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
           @events = []
         end
 
-        producer :gen do
-          emit(1)
-        end
+        pipeline do
+          producer :gen do
+            emit(1)
+          end
 
-        before :gen do
-          @events << :before_1
-        end
+          before :gen do
+            @events << :before_1
+          end
 
-        before :gen do
-          @events << :before_2
-        end
+          before :gen do
+            @events << :before_2
+          end
 
-        before :gen do
-          @events << :before_3
-        end
+          before :gen do
+            @events << :before_3
+          end
 
-        after :gen do
-          @events << :after_1
-        end
+          after :gen do
+            @events << :after_1
+          end
 
-        after :gen do
-          @events << :after_2
-        end
+          after :gen do
+            @events << :after_2
+          end
 
-        consumer :collect do |item|
+          consumer :collect do |item|
+          end
         end
       end
     end
@@ -251,24 +257,26 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
           @events = []
         end
 
-        # Inline hook
-        producer :gen,
-                 before: -> { @events << :inline_before },
-                 after: -> { @events << :inline_after } do
-          @events << :gen_block
-          emit(1)
-        end
+        pipeline do
+          # Inline hook
+          producer :gen,
+                   before: -> { @events << :inline_before },
+                   after: -> { @events << :inline_after } do
+            @events << :gen_block
+            emit(1)
+          end
 
-        # Named hook
-        before :gen do
-          @events << :named_before
-        end
+          # Named hook
+          before :gen do
+            @events << :named_before
+          end
 
-        after :gen do
-          @events << :named_after
-        end
+          after :gen do
+            @events << :named_after
+          end
 
-        consumer :collect do |item|
+          consumer :collect do |item|
+          end
         end
       end
     end
@@ -310,30 +318,32 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
           @results = []
         end
 
-        producer :gen, to: [:proc1, :proc2] do
-          emit(1)
-          emit(2)
-        end
+        pipeline do
+          producer :gen, to: [:proc1, :proc2] do
+            emit(1)
+            emit(2)
+          end
 
-        # Both processors get data from gen via fan-out routing
-        processor :proc1, to: :collect do |item|
-          emit(item * 10)
-        end
+          # Both processors get data from gen via fan-out routing
+          processor :proc1, to: :collect do |item|
+            emit(item * 10)
+          end
 
-        before(:proc1) do
-          @proc1_count += 1
-        end
+          before(:proc1) do
+            @proc1_count += 1
+          end
 
-        processor :proc2, to: :collect do |item|
-          emit(item * 100)
-        end
+          processor :proc2, to: :collect do |item|
+            emit(item * 100)
+          end
 
-        before(:proc2) do
-          @proc2_count += 1
-        end
+          before(:proc2) do
+            @proc2_count += 1
+          end
 
-        consumer :collect do |item|
-          @results << item
+          consumer :collect do |item|
+            @results << item
+          end
         end
       end
     end
@@ -364,25 +374,27 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
           @item_count = 0
         end
 
-        producer :gen do
-          10.times { |i| emit(i) }
-        end
-
-        before :transform do
-          @item_count += 1
-          # Run GC every 5 items
-          if @item_count % 5 == 0
-            GC.start
-            @gc_runs += 1
+        pipeline do
+          producer :gen do
+            10.times { |i| emit(i) }
           end
-        end
 
-        processor :transform do |item|
-          emit(item * 2)
-        end
+          before :transform do
+            @item_count += 1
+            # Run GC every 5 items
+            if @item_count % 5 == 0
+              GC.start
+              @gc_runs += 1
+            end
+          end
 
-        consumer :collect do |item|
-          @results << item
+          processor :transform do |item|
+            emit(item * 2)
+          end
+
+          consumer :collect do |item|
+            @results << item
+          end
         end
       end
     end
