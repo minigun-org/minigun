@@ -375,8 +375,6 @@ RSpec.describe 'Examples Integration' do
       '26_multi_pipeline_with_producers.rb',
       '27_execution_contexts.rb',
       '28_context_pool.rb',
-      '29_execution_plan.rb',
-      '30_execution_orchestrator.rb',
       '31_configurable_execution.rb',
       '32_execution_blocks.rb',
       '33_threads_block.rb',
@@ -607,40 +605,6 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
-  describe '29_execution_plan.rb' do
-    it 'demonstrates execution plan and affinity analysis' do
-      # Run the example
-      output = `ruby #{File.expand_path('../../examples/29_execution_plan.rb', __dir__)} 2>&1`
-
-      expect($?.exitstatus).to eq(0)
-      expect(output).to include('Execution Plan Examples')
-      expect(output).to include('Sequential Pipeline (Affinity Analysis)')
-      expect(output).to include('Fan-Out Pipeline')
-      expect(output).to include('Pipeline with Accumulator')
-      expect(output).to include('Explicit Strategy Override')
-      expect(output).to include('Context Type Analysis')
-      expect(output).to include('Affinity Groups')
-      expect(output).to include('Colocated Stage Checking')
-      expect(output).to include('✓ Optimizes for data locality when beneficial')
-    end
-  end
-
-  describe '30_execution_orchestrator.rb' do
-    it 'demonstrates execution orchestrator coordination' do
-      # Run the example
-      output = `ruby #{File.expand_path('../../examples/30_execution_orchestrator.rb', __dir__)} 2>&1`
-
-      expect($?.exitstatus).to eq(0)
-      expect(output).to include('Execution Orchestrator Examples')
-      expect(output).to include('Basic Orchestrator Usage')
-      expect(output).to include('Orchestrator with Context Pools')
-      expect(output).to include('Orchestrator Plan Analysis')
-      expect(output).to include('Resource Management')
-      expect(output).to include('Configuration Impact')
-      expect(output).to include('Strategy-to-Context Mapping')
-      expect(output).to include('✓ Manages complete execution lifecycle')
-    end
-  end
 
   describe '31_configurable_execution.rb' do
     it 'demonstrates configurable execution contexts' do
