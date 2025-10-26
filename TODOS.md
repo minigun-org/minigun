@@ -1,12 +1,7 @@
+
 ADD to README:
 - stages route to each other sequentially, unless you add :to or :from keywords
 - execute in paralle, and do NOT route to each other, unless unless you add :to or :from keywords.
-
-==================
-
-use IDs instead of names
-
-===============================
 
 OK. wait, what if we changed it so:
 
@@ -15,10 +10,34 @@ OK. wait, what if we changed it so:
 - fan-in without fan-out (i.e. a producer connects to 1 consumer, even if MULTIPLE producers connect to that consumer) is done by directly having the producer insert to the consumer's queue
 - emit_to_stage emits DIRECTLY to the consumer input queue
 
+==================
+
+use IDs instead of names
+
+============================
+
+ProcessPoolExecutor --> cow_fork
+
+============================
+
+Remove instance variable get stuff
+allow(pipeline).to receive(:instance_variable_get).with(:@runtime_edges).and_return({})
+
+================================
+
+look at emit method
+
+================================
+
+configs
+
+=====================================
+
+hooks
+
 ===============================
 
 configurable queue length
-
 
 =========================
 
@@ -39,19 +58,9 @@ weighted routing (load balancing)
 
 ==================================
 
-OK. wait, what if we changed it so:
-
-- every producer has an output queue
-- every consumer has an input queue
-- routers (disapatchers) exist to connect output to inputs
-- emit_to_stage emits DIRECTLY to the consumer input queue
-- SINGLE queue can be queues if the producer to consumer is 1-to-1 (i.e. just the consumer queue)
-
-===================================
-
-
 multi-parents --> how do we know end of queues?
 
+========================================
 
 redundant with stats, stats should use Concurrent::AtomicFixnum no?
       @produced_count = Concurrent::AtomicFixnum.new(0)
