@@ -309,13 +309,21 @@ module Minigun
                 producer_context = @context.dup
                 emit_proc = proc do |item|
                   in_flight_count.increment
-                  queue << [item, producer_name]
+                  queue << [item, producer_name, nil]  # nil = no explicit target
                   produced_count.increment
                   stage_stats.increment_produced
                 end
 
                 # Bind emit to this producer's context
                 producer_context.define_singleton_method(:emit, &emit_proc)
+
+                # Bind emit_to_stage for targeted routing
+                producer_context.define_singleton_method(:emit_to_stage) do |target_stage, item|
+                  in_flight_count.increment
+                  queue << [item, producer_name, target_stage]  # explicit target
+                  produced_count.increment
+                  stage_stats.increment_produced
+                end
 
                 # Run producer block
                 producer_context.instance_eval(&producer_stage.block)
@@ -416,13 +424,26 @@ module Minigun
           item_data = @queue.pop
           break if item_data == :END_OF_QUEUE
 
-          item, source_stage = item_data
-          targets = get_targets(source_stage)
+          item, source_stage, explicit_target = item_data
+          
+          # Use explicit target if provided, otherwise use DAG routing
+          targets = if explicit_target
+                      [explicit_target]
+                    else
+                      get_targets(source_stage)
+                    end
 
           @in_flight_count.decrement
 
           targets.each do |target_name|
             target_stage = find_stage(target_name)
+            
+            # Validate that explicit target exists
+            if explicit_target && !target_stage
+              log_error "[Pipeline:#{@name}] emit_to_stage: Unknown target stage '#{target_name}'"
+              next
+            end
+            
             next unless target_stage
 
             if @dag.terminal?(target_name)
@@ -430,11 +451,19 @@ module Minigun
               execute_consumers({ target_name => [{ item: item, stage: target_stage }] }, output_items)
             else
               # Processor, Accumulator, or Pipeline - execute and route outputs
-              emitted_items = execute_stage(target_stage, item)
+              emitted_results = execute_stage(target_stage, item)
 
-              emitted_items.each do |emitted_item|
-                @in_flight_count.increment
-                @queue << [emitted_item, target_name]
+              # Handle both plain items and targeted items (emit_to_stage)
+              emitted_results.each do |result|
+                if result.is_a?(Hash) && result.key?(:item) && result.key?(:target)
+                  # Targeted emit via emit_to_stage - has explicit target
+                  @in_flight_count.increment
+                  @queue << [result[:item], target_name, result[:target]]
+                else
+                  # Regular emit - uses DAG routing
+                  @in_flight_count.increment
+                  @queue << [result, target_name, nil]
+                end
               end
             end
           end

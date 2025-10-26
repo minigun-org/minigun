@@ -80,14 +80,25 @@ module Minigun
     end
 
     # Execute and return emitted items (for non-terminal stages)
+    # Returns array of emission results, where each result is either:
+    #   - A plain item (uses DAG routing)
+    #   - A hash { item:, target: } (uses explicit routing)
     def execute_with_emit(context, item)
-      emitted_items = []
-      emit_proc = proc { |i| emitted_items << i }
-      context.define_singleton_method(:emit, &emit_proc)
+      emissions = []
+
+      # emit() - uses DAG routing (target = nil)
+      context.define_singleton_method(:emit) do |emitted_item|
+        emissions << emitted_item
+      end
+
+      # emit_to_stage() - uses explicit routing
+      context.define_singleton_method(:emit_to_stage) do |target_stage, emitted_item|
+        emissions << { item: emitted_item, target: target_stage }
+      end
 
       execute(context, item)
 
-      emitted_items
+      emissions
     end
 
     # For backward compatibility

@@ -388,7 +388,9 @@ RSpec.describe 'Examples Integration' do
       '39_load_balancer.rb',
       '40_priority_routing.rb',
       '41_message_router.rb',
-      '43_etl_pipeline.rb'
+      '43_etl_pipeline.rb',
+      '44_custom_batching.rb',
+      '45_emit_to_stage_cross_context.rb'
     ]
 
     missing_tests = example_basenames - tested_examples
@@ -781,6 +783,30 @@ RSpec.describe 'Examples Integration' do
       expect(example.load_stats[:records_extracted]).to eq(12)
       expect(example.load_stats[:records_transformed]).to be > 0
       expect(example.load_stats[:batches_loaded]).to be >= 0 # May be 0 if items filtered
+    end
+  end
+
+  describe '44_custom_batching.rb' do
+    it 'demonstrates custom batching with type-based routing' do
+      load File.expand_path('../../examples/44_custom_batching.rb', __dir__)
+
+      example = CustomBatchingExample.new
+      example.run
+
+      expect(example.sent_counts.values.sum).to be > 0
+      expect(example.sent_counts.keys).to include('newsletter', 'transactional')
+    end
+
+    it 'demonstrates advanced multi-dimensional batching' do
+      load File.expand_path('../../examples/44_custom_batching.rb', __dir__)
+
+      example = AdvancedCustomBatchingExample.new
+      example.run
+
+      expect(example.batch_stats[:batches_sent]).to be > 0
+      # Some emails may remain buffered, so just check that some were sent
+      expect(example.batch_stats[:emails_sent]).to be > 0
+      expect(example.batch_stats[:types_processed].size).to be >= 1
     end
   end
 end
