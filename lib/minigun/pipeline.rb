@@ -220,18 +220,44 @@ module Minigun
 
     # Main pipeline execution logic
     def run_pipeline(context)
-      # Start internal queue (for stage-to-stage communication)
-      @queue = SizedQueue.new([(@config[:max_processes] * @config[:max_threads] * 2), 100].max)
-      @in_flight_count = Concurrent::AtomicFixnum.new(0)
+      # Create a queue for each edge in the DAG
+      @edge_queues = build_edge_queues
       @produced_count = Concurrent::AtomicFixnum.new(0)
+      @stage_threads = []
 
-      # Start producer and dispatcher threads
-      producer_thread = start_producer
-      dispatcher_thread = start_dispatcher
+      # Start producer threads
+      producer_threads = start_producers
 
-      # Wait for completion
-      producer_thread.join
-      dispatcher_thread.join
+      # Start stage worker threads (one per non-producer stage)
+      @stages.each do |stage_name, stage|
+        next if stage.producer?
+        @stage_threads << start_stage_worker(stage_name, stage)
+      end
+
+      # Wait for producers to finish
+      producer_threads.each(&:join)
+
+      # Signal end to all stage input queues
+      @edge_queues.each_value { |queue| queue << :END_OF_QUEUE }
+
+      # Wait for all stage workers to finish
+      @stage_threads.each(&:join)
+    end
+
+    # Build a queue for each edge in the DAG
+    def build_edge_queues
+      queues = {}
+      queue_size = [(@config[:max_processes] * @config[:max_threads] * 2), 100].max
+
+      @stages.each do |from_stage, _|
+        downstream = @dag.downstream(from_stage)
+        downstream.each do |to_stage|
+          edge_key = [from_stage, to_stage]
+          queues[edge_key] = Queue.new  # Unbounded to prevent deadlock
+        end
+      end
+
+      queues
     end
 
     def find_stage(name)
@@ -272,10 +298,57 @@ module Minigun
 
     private
 
-    def start_producer
-      queue = @queue
+    # Start all producer threads
+    def start_producers
+      producer_stages = find_all_producers
+      return [] if producer_stages.empty?
+
+      producer_stages.map do |producer_stage|
+        start_producer_thread(producer_stage)
+      end
+    end
+
+    # Start a worker thread for a non-producer stage
+    def start_stage_worker(stage_name, stage)
+      Thread.new do
+        log_info "[Pipeline:#{@name}][Worker:#{stage_name}] Starting"
+
+        # Find all input queues for this stage
+        input_queues = @edge_queues.select { |(from, to), _| to == stage_name }
+
+        # For simplicity, use first input queue with blocking pop
+        # TODO: Support multiple input queues (fan-in)
+        primary_queue = input_queues.values.first
+
+        unless primary_queue
+          log_info "[Pipeline:#{@name}][Worker:#{stage_name}] No input queues, exiting"
+          next
+        end
+
+        loop do
+          # Blocking pop from primary input queue
+          item_data = primary_queue.pop
+
+          break if item_data == :END_OF_QUEUE
+
+          # Execute the stage
+          results = execute_stage(stage, item_data)
+
+          # Push results to downstream queues
+          downstream = @dag.downstream(stage_name)
+          downstream.each do |downstream_stage|
+            edge_key = [stage_name, downstream_stage]
+            output_queue = @edge_queues[edge_key]
+            results.each { |result| output_queue << result } if output_queue
+          end
+        end
+
+        log_info "[Pipeline:#{@name}][Worker:#{stage_name}] Done"
+      end
+    end
+
+    def start_producer_old
       produced_count = @produced_count
-      in_flight_count = @in_flight_count
       producer_stages = find_all_producers
 
       # Handle both internal producers and input from upstream pipeline
@@ -326,7 +399,11 @@ module Minigun
     end
 
     # Start a single producer thread (handles both atomic and pipeline producers)
-    def start_producer_thread(producer_stage, queue, in_flight_count, produced_count)
+    def start_producer_thread(producer_stage)
+      # Capture instance variables for closure
+      produced_count = @produced_count
+      edge_queues_map = @edge_queues
+
       Thread.new do
         producer_name = producer_stage.name
         stage_stats = @stats.for_stage(producer_name, is_terminal: false)
@@ -342,6 +419,10 @@ module Minigun
           # Create producer context with emit methods
           producer_context = @context.dup
 
+          # Get downstream edge queues
+          downstream = @dag.downstream(producer_name)
+          edge_queues = downstream.map { |to| [[producer_name, to], edge_queues_map[[producer_name, to]]] }.to_h
+
           if is_pipeline
             # Pipeline producers: collect items, then emit all at once
             emitted_items = []
@@ -355,25 +436,24 @@ module Minigun
             producer_stage.pipeline.instance_variable_set(:@job_id, @job_id)
             producer_stage.pipeline.run(producer_context)
 
-            # Emit all collected items into the queue
+            # Emit all collected items to downstream queues
             emitted_items.each do |item|
-              in_flight_count.increment
-              queue << [item, producer_name, nil]
+              edge_queues.each_value { |queue| queue << item }
               produced_count.increment
               stage_stats.increment_produced
             end
           else
-            # Atomic producers: emit directly to queue as they produce
+            # Atomic producers: emit directly to downstream queues as they produce
             producer_context.define_singleton_method(:emit) do |item|
-              in_flight_count.increment
-              queue << [item, producer_name, nil]
+              edge_queues.each_value { |queue| queue << item }
               produced_count.increment
               stage_stats.increment_produced
             end
 
             producer_context.define_singleton_method(:emit_to_stage) do |target_stage, item|
-              in_flight_count.increment
-              queue << [item, producer_name, target_stage]
+              edge_key = [producer_name, target_stage]
+              queue = edge_queues_map[edge_key]
+              queue << item if queue
               produced_count.increment
               stage_stats.increment_produced
             end
