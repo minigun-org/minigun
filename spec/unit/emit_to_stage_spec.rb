@@ -306,6 +306,7 @@ RSpec.describe 'emit_to_stage' do
         define_method(:initialize) do |temp_file_path|
           @results = results
           @temp_file_path = temp_file_path
+          @fork_results_read = false
         end
 
         pipeline do
@@ -326,32 +327,30 @@ RSpec.describe 'emit_to_stage' do
           # Light processor in thread pool
           threads(2) do
             consumer :light_processor do |item|
-              @results << { type: :thread, value: item[:value] }
+              @results << { 'type' => 'thread', 'value' => item[:value] }
             end
           end
 
           # Heavy processor in forked processes (requires tempfile IPC)
-          # Note: process_per_batch receives an array of items, not individual items
           process_per_batch(max: 1) do
-            consumer :heavy_processor do |items|
+            consumer :heavy_processor do |item|
               # Write to temp file (fork-safe)
               File.open(@temp_file_path, 'a') do |f|
                 f.flock(File::LOCK_EX)
-                # Handle both single items and arrays
-                items_array = items.is_a?(Array) ? items : [items]
-                items_array.each do |item|
-                  f.puts({ type: :process, value: item[:value] }.to_json)
-                end
+                f.puts({ 'type' => 'process', 'value' => item[:value] }.to_json)
                 f.flock(File::LOCK_UN)
               end
             end
           end
           
           after_run do
-            # Read fork results from temp file
-            if File.exist?(@temp_file_path)
-              fork_results = File.readlines(@temp_file_path).map { |line| JSON.parse(line.strip, symbolize_names: true) }
-              @results.concat(fork_results)
+            # Read fork results from temp file (only once!)
+            unless @fork_results_read
+              @fork_results_read = true
+              if File.exist?(@temp_file_path)
+                fork_results = File.readlines(@temp_file_path).map { |line| JSON.parse(line.strip) }
+                @results.concat(fork_results)
+              end
             end
           end
         end
@@ -362,8 +361,8 @@ RSpec.describe 'emit_to_stage' do
         pipeline.run
 
         expect(results.size).to eq(2)
-        expect(results.map { |r| r[:value] }.sort).to eq([1, 2])
-        expect(results.map { |r| r[:type] }.sort).to eq([:process, :thread])
+        expect(results.map { |r| r['value'] }.sort).to eq([1, 2])
+        expect(results.map { |r| r['type'] }.sort).to eq(['process', 'thread'])
       ensure
         File.unlink(temp_file.path) if temp_file && File.exist?(temp_file.path)
       end

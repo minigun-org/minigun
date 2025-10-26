@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require 'tempfile'
 
 RSpec.describe 'Advanced Stage Hook Behaviors' do
   before do
@@ -16,6 +17,12 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
 
         def initialize
           @execution_order = []
+          @temp_order_file = Tempfile.new(['minigun_order', '.txt'])
+          @temp_order_file.close
+        end
+
+        def cleanup
+          File.unlink(@temp_order_file.path) if @temp_order_file && File.exist?(@temp_order_file.path)
         end
 
         pipeline do
@@ -39,49 +46,87 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
 
           before_fork { @execution_order << '9_pipeline_before_fork' }
 
-          consumer :cons do |item|
-            @execution_order << '12_consumer_block'
+          # Use process_per_batch so forking actually happens
+          process_per_batch(max: 1) do
+            consumer :cons do |item|
+              # Write to temp file (fork-safe)
+              File.open(@temp_order_file.path, 'a') do |f|
+                f.flock(File::LOCK_EX)
+                f.puts('12_consumer_block')
+                f.flock(File::LOCK_UN)
+              end
+            end
+
+            before_fork(:cons) { @execution_order << '10_consumer_before_fork' }
+            after_fork(:cons) do
+              # Write to temp file (child process can't mutate parent's @execution_order)
+              File.open(@temp_order_file.path, 'a') do |f|
+                f.flock(File::LOCK_EX)
+                f.puts('11_consumer_after_fork')
+                f.flock(File::LOCK_UN)
+              end
+            end
           end
 
-          before_fork(:cons) { @execution_order << '10_consumer_before_fork' }
-          after_fork(:cons) { @execution_order << '11_consumer_after_fork' }
-
-          after_fork { @execution_order << '13_pipeline_after_fork' }
-          after_run { @execution_order << '2_pipeline_after_run' }
+          after_fork do
+            # Write to temp file (child process can't mutate parent's @execution_order)
+            File.open(@temp_order_file.path, 'a') do |f|
+              f.flock(File::LOCK_EX)
+              f.puts('13_pipeline_after_fork')
+              f.flock(File::LOCK_UN)
+            end
+          end
+          
+          after_run do
+            # Read fork events from temp file
+            if File.exist?(@temp_order_file.path)
+              fork_events = File.readlines(@temp_order_file.path).map(&:strip)
+              @execution_order.concat(fork_events)
+            end
+            @execution_order << '2_pipeline_after_run'
+          end
         end
       end
     end
 
     it 'executes hooks in correct order' do
       pipeline = complex_pipeline.new
-      pipeline.run
+      
+      begin
+        pipeline.run
 
-      order = pipeline.execution_order
+        order = pipeline.execution_order
 
-      # Pipeline before_run comes first
-      expect(order.first).to eq('1_pipeline_before_run')
+        # Pipeline before_run comes first
+        expect(order.first).to eq('1_pipeline_before_run')
 
-      # Pipeline after_run comes last
-      expect(order.last).to eq('2_pipeline_after_run')
+        # Pipeline after_run comes last
+        expect(order.last).to eq('2_pipeline_after_run')
 
-      # Producer hooks surround producer execution
-      gen_before_idx = order.index('3_producer_before')
-      gen_block_idx = order.index('4_producer_block')
-      gen_after_idx = order.index('5_producer_after')
-      expect(gen_before_idx).to be < gen_block_idx
-      expect(gen_block_idx).to be < gen_after_idx
+        # Producer hooks surround producer execution
+        gen_before_idx = order.index('3_producer_before')
+        gen_block_idx = order.index('4_producer_block')
+        gen_after_idx = order.index('5_producer_after')
+        expect(gen_before_idx).to be < gen_block_idx
+        expect(gen_block_idx).to be < gen_after_idx
 
-      # Processor hooks surround processor execution
-      proc_before_idx = order.index('6_processor_before')
-      proc_block_idx = order.index('7_processor_block')
-      proc_after_idx = order.index('8_processor_after')
-      expect(proc_before_idx).to be < proc_block_idx
-      expect(proc_block_idx).to be < proc_after_idx
+        # Processor hooks surround processor execution
+        proc_before_idx = order.index('6_processor_before')
+        proc_block_idx = order.index('7_processor_block')
+        proc_after_idx = order.index('8_processor_after')
+        expect(proc_before_idx).to be < proc_block_idx
+        expect(proc_block_idx).to be < proc_after_idx
 
-      # Fork hooks happen in order (only if forking is supported)
-      if Process.respond_to?(:fork)
-        expect(order).to include('9_pipeline_before_fork')
-        expect(order).to include('10_consumer_before_fork')
+        # Fork hooks happen in order (only if forking is supported)
+        if Process.respond_to?(:fork)
+          expect(order).to include('9_pipeline_before_fork')
+          expect(order).to include('10_consumer_before_fork')
+          expect(order).to include('11_consumer_after_fork')
+          expect(order).to include('12_consumer_block')
+          expect(order).to include('13_pipeline_after_fork')
+        end
+      ensure
+        pipeline.cleanup
       end
     end
   end

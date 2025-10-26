@@ -19,10 +19,13 @@ class InlineHookExample
     @timer = {}
     @temp_file = Tempfile.new(['minigun_inline_results', '.txt'])
     @temp_file.close
+    @events_file = Tempfile.new(['minigun_inline_events', '.txt'])
+    @events_file.close
   end
 
   def cleanup
     File.unlink(@temp_file.path) if @temp_file && File.exist?(@temp_file.path)
+    File.unlink(@events_file.path) if @events_file && File.exist?(@events_file.path)
   end
 
   pipeline do
@@ -79,7 +82,12 @@ class InlineHookExample
                  puts "About to fork..."
                },
                after_fork: -> {
-                 @events << :after_fork
+                 # Write event to file (child process can't mutate parent's @events)
+                 File.open(@events_file.path, 'a') do |f|
+                   f.flock(File::LOCK_EX)
+                   f.puts('after_fork')
+                   f.flock(File::LOCK_UN)
+                 end
                  puts "Forked! Child PID: #{Process.pid}"
                } do |batch|
         # Write to temp file (fork-safe)
@@ -95,6 +103,12 @@ class InlineHookExample
       # Read fork results from temp file
       if File.exist?(@temp_file.path)
         @results = File.readlines(@temp_file.path).map { |line| line.strip.to_i }
+      end
+      
+      # Read fork events from events file
+      if File.exist?(@events_file.path)
+        fork_events = File.readlines(@events_file.path).map { |line| line.strip.to_sym }
+        @events.concat(fork_events)
       end
     end
   end
