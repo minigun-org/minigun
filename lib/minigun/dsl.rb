@@ -28,16 +28,13 @@ module Minigun
           # Store block for evaluation in initialize
           @_pipeline_definition_blocks ||= []
           @_pipeline_definition_blocks << block
-        elsif options[:to] || options[:from] || _minigun_task.pipelines.any?
-          # Multi-pipeline mode - evaluate at class level for now
+        else
+          # Named pipeline - always define at class level (multi-pipeline mode)
+          # This ensures proper ordering and avoids closure issues
           _minigun_task.define_pipeline(name, options) do |pipeline|
             pipeline_dsl = PipelineDSL.new(pipeline, nil)
             pipeline_dsl.instance_eval(&block) if block_given?
           end
-        else
-          # Nested pipeline - store for instance eval
-          @_pipeline_definition_blocks ||= []
-          @_pipeline_definition_blocks << lambda { pipeline(name, options, &block) }
         end
       end
 

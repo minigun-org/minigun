@@ -12,20 +12,20 @@ files_to_fix = [
 
 files_to_fix.each do |file|
   next unless File.exist?(file)
-  
+
   content = File.read(file)
   lines = content.lines
-  
+
   # Find all Class.new blocks with include Minigun::DSL
   modified = false
   in_class_block = false
   class_start = nil
   brace_count = 0
-  
+
   i = 0
   while i < lines.length
     line = lines[i]
-    
+
     # Detect Class.new do
     if line =~ /Class\.new.*do\s*$/
       in_class_block = true
@@ -35,12 +35,12 @@ files_to_fix.each do |file|
       # Track do/end balance
       brace_count += line.scan(/\bdo\b/).count
       brace_count -= line.scan(/\bend\b/).count
-      
+
       if brace_count == 0
         in_class_block = false
         class_start = nil
       end
-      
+
       # If we find include Minigun::DSL and the next non-blank/non-comment line
       # is a stage definition, add pipeline do
       if line =~ /include Minigun::DSL/ && !modified
@@ -58,7 +58,7 @@ files_to_fix.each do |file|
             end
           end
         end
-        
+
         # Check if next line is a stage definition
         if j < lines.length && lines[j] =~ /^\s+(producer|processor|consumer|accumulator|spawn_|before|after|reroute_|pipeline :|max_)/
           # Check if not already in pipeline do
@@ -66,7 +66,7 @@ files_to_fix.each do |file|
             # Add pipeline do
             indent = lines[j][/^\s*/]
             lines.insert(j, "#{indent}pipeline do\n")
-            
+
             # Find the end of this class block and add end before it
             k = j + 1
             class_brace_count = 1
@@ -80,17 +80,17 @@ files_to_fix.each do |file|
               end
               k += 1
             end
-            
+
             modified = true
             break
           end
         end
       end
     end
-    
+
     i += 1
   end
-  
+
   if modified
     File.write(file, lines.join)
     puts "Fixed: #{file}"

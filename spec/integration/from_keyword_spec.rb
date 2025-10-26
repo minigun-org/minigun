@@ -16,18 +16,18 @@ RSpec.describe 'From Keyword' do
         end
 
         pipeline do
-        producer :source, to: :double do
-          3.times { |i| emit(i) }
-        end
-        end
+          producer :source, to: :double do
+            3.times { |i| emit(i) }
+          end
 
-        processor :double do |item|
-          emit(item * 2)
-        end
+          processor :double do |item|
+            emit(item * 2)
+          end
 
-        # Use from: to connect from source and double
-        consumer :collect, from: [:source, :double] do |item|
-          @mutex.synchronize { @results << item }
+          # Use from: to connect from source and double
+          consumer :collect, from: [:source, :double] do |item|
+            @mutex.synchronize { @results << item }
+          end
         end
       end
 
@@ -48,13 +48,15 @@ RSpec.describe 'From Keyword' do
           @results = []
         end
 
-        producer :gen do
-          emit(10)
-          emit(20)
-        end
+        pipeline do
+          producer :gen do
+            emit(10)
+            emit(20)
+          end
 
-        consumer :save, from: :gen do |item|
-          @results << item
+          consumer :save, from: :gen do |item|
+            @results << item
+          end
         end
       end
 
@@ -75,22 +77,24 @@ RSpec.describe 'From Keyword' do
           @mutex = Mutex.new
         end
 
-        producer :a do
-          emit(1)
-        end
+        pipeline do
+          producer :a do
+            emit(1)
+          end
 
-        # B receives from A using to:
-        processor :b, to: :d do |item|
-          emit(item + 10)
-        end
+          # B receives from A using to:
+          processor :b, to: :d do |item|
+            emit(item + 10)
+          end
 
-        producer :c do
-          emit(2)
-        end
+          producer :c do
+            emit(2)
+          end
 
-        # D receives from B (via to:) and C (via from:)
-        consumer :d, from: :c do |item|
-          @mutex.synchronize { @results << item }
+          # D receives from B (via to:) and C (via from:)
+          consumer :d, from: :c do |item|
+            @mutex.synchronize { @results << item }
+          end
         end
       end
 
