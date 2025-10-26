@@ -430,8 +430,8 @@ module Minigun
             next unless target_stage
 
             if @dag.terminal?(target_name)
-              # Terminal stage (consumer) - execute immediately
-              execute_consumers({ target_name => [{ item: item, stage: target_stage }] }, output_items)
+              # Terminal stage (consumer) - execute through unified path
+              execute_stage(target_stage, item)
             else
               # Processor, Accumulator, or Pipeline - execute and route outputs
               emitted_results = execute_stage(target_stage, item)
@@ -464,8 +464,8 @@ module Minigun
               downstream_stage = find_stage(downstream_name)
 
               if @dag.terminal?(downstream_name)
-                # Execute consumer immediately
-                execute_consumers({ downstream_name => [{ item: batch, stage: downstream_stage }] }, output_items)
+                # Execute consumer through unified path
+                execute_stage(downstream_stage, batch)
               else
                 # Process through downstream stage
                 next_items = execute_stage(downstream_stage, batch)
@@ -475,7 +475,7 @@ module Minigun
                   final_targets.each do |final_name|
                     final_stage = find_stage(final_name)
                     if @dag.terminal?(final_name)
-                      execute_consumers({ final_name => [{ item: next_item, stage: final_stage }] }, output_items)
+                      execute_stage(final_stage, next_item)
                     end
                   end
                 end
@@ -491,17 +491,6 @@ module Minigun
       end
     end
 
-    # Execute consumers using the new execution context system
-    def execute_consumers(consumer_batches, output_items)
-      require_relative 'execution/stage_executor'
-      executor = Execution::StageExecutor.new(self, @config)
-
-      begin
-        executor.execute_batch(consumer_batches, output_items, @context, @stats, @stage_hooks)
-      ensure
-        executor.shutdown
-      end
-    end
 
     # Send completed items to downstream pipelines
     def send_to_output_queues(output_items)

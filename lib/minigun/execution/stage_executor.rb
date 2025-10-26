@@ -15,22 +15,6 @@ module Minigun
         @context_pools = {}
       end
 
-      # Execute a batch of items through stages with proper execution contexts
-      def execute_batch(batch_map, output_items, context, stats, stage_hooks)
-        @stats = stats
-        @stage_hooks = stage_hooks
-        @output_items = output_items
-        @user_context = context
-
-        # Group stages by their execution context
-        context_groups = group_by_execution_context(batch_map)
-
-        # Execute each group with its appropriate execution context
-        context_groups.each do |exec_ctx, stage_items|
-          execute_with_context(exec_ctx, stage_items)
-        end
-      end
-
       def shutdown
         @context_pools.each_value do |pool|
           pool.terminate_all
@@ -39,20 +23,6 @@ module Minigun
       end
 
       private
-
-      def group_by_execution_context(batch_map)
-        groups = Hash.new { |h, k| h[k] = [] }
-
-        batch_map.each do |_consumer_name, item_data_array|
-          item_data_array.each do |item_data|
-            stage = item_data[:stage]
-            exec_ctx = stage.execution_context || default_context
-            groups[exec_ctx] << item_data
-          end
-        end
-
-        groups
-      end
 
       def execute_with_context(exec_ctx, stage_items)
         return execute_inline(stage_items) if exec_ctx.nil?
