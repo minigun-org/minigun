@@ -379,9 +379,9 @@ RSpec.describe 'emit_to_stage v2' do
 
           stage :message_batcher do |message|
             @batches ||= Hash.new { |h, k| h[k] = [] }
-            
+
             @batches[message[:type]] << message
-            
+
             if @batches[message[:type]].size >= 2
               emit_to_stage(:"#{message[:type]}_sender", @batches[message[:type]].dup)
               @batches[message[:type]].clear

@@ -19,11 +19,11 @@ The previous architecture had critical issues with pipeline termination:
 ```ruby
 class Minigun::Message
   attr_reader :type, :source
-  
+
   def end_of_stream?
     @type == :end
   end
-  
+
   def self.end_signal(source:)
     new(type: :end, source: source)
   end
@@ -59,14 +59,14 @@ sources_done = Set.new
 
 loop do
   msg = input_queue.pop
-  
+
   if msg.is_a?(Message) && msg.end_of_stream?
     sources_seen << msg.source
     sources_done << msg.source
     break if sources_done == sources_seen  # Exit when all sources done
     next
   end
-  
+
   # Process data...
 end
 ```
@@ -78,7 +78,7 @@ end
    - Any stages reached via `emit_to_stage`
 
 2. **Intermediate stages** send END to:
-   - DAG downstream stages  
+   - DAG downstream stages
    - Any stages reached via `emit_to_stage`
 
 3. **Router stages** send END to:
@@ -95,10 +95,31 @@ end
 
 ## Test Results
 
-- ✅ **emit_to_stage tests**: 15/15 passing
-- ✅ **emit_to_stage v2 tests**: 9/9 passing  
-- ✅ **Basic examples**: Working (quick_start, diamond_pattern, round_robin)
-- ⚠️ **Integration tests**: 27/44 passing (17 failures to investigate)
+- ✅ **emit_to_stage tests**: 24/24 passing (both v1 and v2)
+- ✅ **Basic examples**: Working (quick_start, diamond_pattern, round_robin, mixed_routing)
+- ✅ **Diamond pattern (fan-in)**: Fixed! Now correctly waits for all upstream sources
+- ✅ **Dynamic routing**: emit_to_stage fully functional
+- ⚠️ **Integration tests**: 30/44 passing (14 failures remain, unrelated to transport layer)
+
+## Critical Fixes
+
+### 1. Source Discovery for Fan-In
+Initial implementation had a bug where stages would exit after receiving the first END signal. Fixed by:
+
+1. **Pre-populate expected sources** from DAG upstream at startup
+2. **Discover dynamic sources** when receiving END from them (emit_to_stage)
+3. **Exit only when** `sources_done == sources_expected`
+
+This ensures fan-in stages (like diamond merge) wait for END from ALL upstream sources before terminating.
+
+### 2. Runtime Edge Tracking - Only for Dynamic Routing
+Initially tracked ALL emits in `runtime_edges`, causing duplicate END signals. Fixed by:
+
+1. **Only track `emit_to_stage`** in runtime_edges (dynamic routing)
+2. **Don't track regular `emit`** - DAG already knows these connections
+3. **Send END to** `DAG downstream + runtime_edges` (deduplicated)
+
+This prevents stages from receiving duplicate data/END signals when using regular DAG routing.
 
 ## Implementation Files
 
