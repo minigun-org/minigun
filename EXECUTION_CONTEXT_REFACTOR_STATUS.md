@@ -25,7 +25,7 @@
 - For `process_per_batch`
 
 **ProcessPoolContext** (IPC Pool - persistent workers):
-- Uses `IPCTransport`  
+- Uses `IPCTransport`
 - Spawns worker once → event loop → process multiple items
 - For `processes(N) do`
 

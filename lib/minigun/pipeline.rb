@@ -44,6 +44,12 @@ module Minigun
       # For multi-pipeline communication
       @input_queues = []  # Array of input queues from upstream pipelines
       @output_queues = {}  # { pipeline_name => queue }
+
+      # Whether this pipeline is being used as a producer in a parent pipeline
+      @is_producer = false
+
+      # User context (will be set in run())
+      @context = nil
     end
 
     # Set an input queue for receiving items from upstream pipelines (backward compatibility)
@@ -186,8 +192,13 @@ module Minigun
     end
 
     # Run this pipeline
-    def run(context)
-      @context = context
+    def run(context = nil, emissions = nil)
+      # Use provided context or create new OpenStruct
+      @context = context || OpenStruct.new
+      
+      # Use provided emissions or create new one
+      @emissions = emissions || Emissions.new
+      
       @job_start = Time.now
       @job_id ||= nil  # Job ID may be set by Runner
 
@@ -339,47 +350,47 @@ module Minigun
           # Execute before hooks for this producer
           execute_stage_hooks(:before, producer_name) unless is_pipeline
 
-          # Create producer context with emit methods
+          # Create producer context
           producer_context = @context.dup
 
+          # Create producer emissions collector
+          producer_emissions = Emissions.new
+          
+          # Define emit methods on context that delegate to emissions
+          producer_context.define_singleton_method(:emit) { |item| producer_emissions.emit(item) }
+          producer_context.define_singleton_method(:emit_to_stage) { |target, item| producer_emissions.emit_to_stage(target, item) }
+
           if is_pipeline
-            # Pipeline producers: collect items, then emit all at once
-            emitted_items = []
-            emit_mutex = Mutex.new
-
-            producer_context.define_singleton_method(:emit) do |item|
-              emit_mutex.synchronize { emitted_items << item }
-            end
-
-            # Run the nested pipeline
+            # Pipeline producers: run nested pipeline and collect its consumer outputs
+            # Mark that this pipeline is being used as a producer
+            producer_stage.pipeline.instance_variable_set(:@is_producer, true)
             producer_stage.pipeline.instance_variable_set(:@job_id, @job_id)
-            producer_stage.pipeline.run(producer_context)
+            
+            # Run the nested pipeline, passing producer_emissions so nested consumers emit to it
+            producer_stage.pipeline.run(producer_context, producer_emissions)
 
-            # Emit all collected items into the queue
-            emitted_items.each do |item|
+            # Emit all collected items from nested pipeline consumers into parent queue
+            producer_emissions.items.each do |item|
               in_flight_count.increment
               queue << [item, producer_name, nil]
               produced_count.increment
               stage_stats.increment_produced
             end
           else
-            # Atomic producers: emit directly to queue as they produce
-            producer_context.define_singleton_method(:emit) do |item|
-              in_flight_count.increment
-              queue << [item, producer_name, nil]
-              produced_count.increment
-              stage_stats.increment_produced
-            end
-
-            producer_context.define_singleton_method(:emit_to_stage) do |target_stage, item|
-              in_flight_count.increment
-              queue << [item, producer_name, target_stage]
-              produced_count.increment
-              stage_stats.increment_produced
-            end
-
-            # Run producer block
+            # Atomic producers: run block and collect emissions
             producer_context.instance_eval(&producer_stage.block)
+
+            # Enqueue all emitted items
+            producer_emissions.items.each do |emission|
+              in_flight_count.increment
+              if emission.is_a?(Hash) && emission.key?(:target)
+                queue << [emission[:item], producer_name, emission[:target]]
+              else
+                queue << [emission, producer_name, nil]
+              end
+              produced_count.increment
+              stage_stats.increment_produced
+            end
           end
 
           stage_stats.finish!
@@ -430,7 +441,9 @@ module Minigun
             next unless target_stage
 
             if @dag.terminal?(target_name)
-              # Terminal stage (consumer) - execute like any other stage
+              # Terminal stage (consumer) - execute
+              # Note: If this pipeline is a producer, consumer emissions are already
+              # captured by parent_emit in execute_with_emit, so no need to emit again
               execute_stage(target_stage, item)
             else
               # Processor, Accumulator, or Pipeline - execute and route outputs

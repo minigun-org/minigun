@@ -187,7 +187,7 @@ module Minigun
         rescue
           # Pipe may be closed, ignore
         end
-        
+
         @transport.terminate
         @transport.close_all_pipes
       end

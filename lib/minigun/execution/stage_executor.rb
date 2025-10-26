@@ -47,7 +47,7 @@ module Minigun
       def execute_with_context(exec_ctx, stage_items)
         # Clear output items
         @output_items.clear
-        
+
         # All stages have an execution context (never nil)
         case exec_ctx[:mode]
         when :pool
@@ -60,7 +60,7 @@ module Minigun
           # Fallback to inline if mode is unknown
           execute_inline(stage_items)
         end
-        
+
         # Return the collected output items
         @output_items.dup
       end
@@ -313,7 +313,7 @@ module Minigun
         stage_items.each do |item_data|
           stage = item_data[:stage]
           item = item_data[:item]
-          
+
           # Get stats
           is_terminal = @pipeline.instance_variable_get(:@dag).terminal?(stage.name)
           stage_stats = @stats.for_stage(stage.name, is_terminal: is_terminal)
@@ -326,9 +326,10 @@ module Minigun
           # Track consumption
           stage_stats.increment_consumed
 
-          # Execute the stage with emit support
+          # Execute the stage
           result = if stage.respond_to?(:execute_with_emit)
-            stage.execute_with_emit(@user_context, item)
+            @emissions.clear
+            stage.execute_with_emit(@user_context, item, @emissions)
           else
             stage.execute(@user_context, item)
             []
@@ -352,7 +353,8 @@ module Minigun
       def execute_stage_item(item_data, mutex)
         item = item_data[:item]
         stage = item_data[:stage]
-        stage_stats = @stats.for_stage(stage.name, is_terminal: true)
+        is_terminal = @pipeline.instance_variable_get(:@dag).terminal?(stage.name)
+        stage_stats = @stats.for_stage(stage.name, is_terminal: is_terminal)
         stage_stats.start! unless stage_stats.start_time
         start_time = Time.now
 
@@ -360,24 +362,25 @@ module Minigun
         hooks = @stage_hooks.dig(:before, stage.name) || []
         hooks.each { |h| @user_context.instance_exec(&h) }
 
-        # If this stage has downstream pipelines, create emit method
-        has_downstream = !@pipeline.instance_variable_get(:@output_queues).empty?
-        if has_downstream
-          emit_proc = proc do |emitted_item|
-            if mutex
-              mutex.synchronize { @output_items << emitted_item }
-            else
-              @output_items << emitted_item
-            end
-          end
-          @user_context.define_singleton_method(:emit, &emit_proc)
+        # Execute the stage
+        result = if stage.respond_to?(:execute_with_emit)
+          @emissions.clear
+          stage.execute_with_emit(@user_context, item, @emissions)
+        else
+          stage.execute(@user_context, item)
+          []
         end
 
-        # Execute the stage
-        stage.execute(@user_context, item)
-
-        # Track consumption
+        # Track consumption and production
         stage_stats.increment_consumed
+        stage_stats.increment_produced(result.size) if result.is_a?(Array)
+
+        # Add results to output for non-terminal stages
+        if mutex && result.is_a?(Array)
+          result.each { |r| mutex.synchronize { @output_items << r } }
+        elsif result.is_a?(Array)
+          result.each { |r| @output_items << r }
+        end
 
         # Record latency
         duration = Time.now - start_time
