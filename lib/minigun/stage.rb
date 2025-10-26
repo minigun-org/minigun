@@ -87,22 +87,43 @@ module Minigun
       emissions = []
 
       # Save original emit methods if they exist (for nested pipeline support)
-      original_emit = context.method(:emit) if context.respond_to?(:emit)
-      original_emit_to_stage = context.method(:emit_to_stage) if context.respond_to?(:emit_to_stage)
+      has_original_emit = context.respond_to?(:emit)
+      has_original_emit_to_stage = context.respond_to?(:emit_to_stage)
 
-      # emit() - collects locally and forwards to original if it exists
+      original_emit = context.method(:emit) if has_original_emit
+      original_emit_to_stage = context.method(:emit_to_stage) if has_original_emit_to_stage
+
+      # Check if we're about to wrap an already-wrapped method (prevents infinite recursion)
+      already_wrapped = has_original_emit && original_emit.source_location&.first&.include?('stage.rb')
+
+      # emit() - collects locally and forwards to original only if not already wrapped
       context.define_singleton_method(:emit) do |emitted_item|
         emissions << emitted_item
-        original_emit.call(emitted_item) if original_emit
+        original_emit.call(emitted_item) if original_emit && !already_wrapped
       end
 
-      # emit_to_stage() - collects locally and forwards to original if it exists
+      # emit_to_stage() - collects locally and forwards to original only if not already wrapped
       context.define_singleton_method(:emit_to_stage) do |target_stage, emitted_item|
         emissions << { item: emitted_item, target: target_stage }
-        original_emit_to_stage.call(target_stage, emitted_item) if original_emit_to_stage
+        original_emit_to_stage.call(target_stage, emitted_item) if original_emit_to_stage && !already_wrapped
       end
 
-      execute(context, item)
+      begin
+        execute(context, item)
+      ensure
+        # Clean up singleton methods
+        if has_original_emit
+          context.define_singleton_method(:emit, original_emit)
+        else
+          context.singleton_class.remove_method(:emit) rescue nil
+        end
+
+        if has_original_emit_to_stage
+          context.define_singleton_method(:emit_to_stage, original_emit_to_stage)
+        else
+          context.singleton_class.remove_method(:emit_to_stage) rescue nil
+        end
+      end
 
       emissions
     end
