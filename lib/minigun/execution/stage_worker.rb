@@ -151,7 +151,7 @@ module Minigun
         end
 
         # Flush accumulator stages before sending END signals
-        flush_accumulator(dag, stage_input_queues) if @stage.respond_to?(:flush)
+        flush_stage(dag, stage_input_queues) if @stage.respond_to?(:flush)
 
         # Send END to ALL connections: DAG downstream + dynamic emit_to_stage targets
         send_end_signals(dag, runtime_edges, stage_input_queues)
@@ -178,7 +178,7 @@ module Minigun
         end
       end
 
-      def flush_accumulator(dag, stage_input_queues)
+      def flush_stage(dag, stage_input_queues)
         context = @pipeline.instance_variable_get(:@context)
         flushed_items = @stage.flush(context)
         flushed_items.each do |batch|
