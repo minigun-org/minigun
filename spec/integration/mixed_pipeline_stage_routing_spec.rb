@@ -16,6 +16,7 @@ RSpec.describe 'Mixed Pipeline and Stage Routing' do
         end
 
         # Pipeline that produces items
+        pipeline do
         pipeline :source, to: :process do
           producer :gen do
             3.times { |i| emit(i) }
@@ -24,6 +25,7 @@ RSpec.describe 'Mixed Pipeline and Stage Routing' do
           consumer :forward do |item|
             emit(item * 10)
           end
+        end
         end
 
         # Stage that receives from pipeline

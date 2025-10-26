@@ -9,9 +9,11 @@ RSpec.describe 'Circular Dependency Detection' do
         Class.new do
           include Minigun::DSL
 
-          # A stage that routes to itself
-          processor :loop_stage, to: :loop_stage do |item|
-            emit(item)
+          pipeline do
+            # A stage that routes to itself
+            processor :loop_stage, to: :loop_stage do |item|
+              emit(item)
+            end
           end
         end.new.run
       }.to raise_error(Minigun::Error, /Circular dependency/)
@@ -22,12 +24,14 @@ RSpec.describe 'Circular Dependency Detection' do
         Class.new do
           include Minigun::DSL
 
-          processor :a, to: :b do |item|
-            emit(item)
-          end
+          pipeline do
+            processor :a, to: :b do |item|
+              emit(item)
+            end
 
-          processor :b, to: :a do |item|
-            emit(item)
+            processor :b, to: :a do |item|
+              emit(item)
+            end
           end
         end.new.run
       }.to raise_error(Minigun::Error, /Circular dependency/)
@@ -38,16 +42,18 @@ RSpec.describe 'Circular Dependency Detection' do
         Class.new do
           include Minigun::DSL
 
-          processor :a, to: :b do |item|
-            emit(item)
-          end
+          pipeline do
+            processor :a, to: :b do |item|
+              emit(item)
+            end
 
-          processor :b, to: :c do |item|
-            emit(item)
-          end
+            processor :b, to: :c do |item|
+              emit(item)
+            end
 
-          processor :c, to: :a do |item|
-            emit(item)
+            processor :c, to: :a do |item|
+              emit(item)
+            end
           end
         end.new.run
       }.to raise_error(Minigun::Error, /Circular dependency/)
@@ -58,17 +64,19 @@ RSpec.describe 'Circular Dependency Detection' do
         Class.new do
           include Minigun::DSL
 
-          processor :a, to: :b do |item|
-            emit(item)
-          end
+          pipeline do
+            processor :a, to: :b do |item|
+              emit(item)
+            end
 
-          # from: :c means c->b, creating b->c and c->b cycle when combined with b->c
-          processor :b, to: :c, from: :c do |item|
-            emit(item)
-          end
+            # from: :c means c->b, creating b->c and c->b cycle when combined with b->c
+            processor :b, to: :c, from: :c do |item|
+              emit(item)
+            end
 
-          processor :c do |item|
-            emit(item)
+            processor :c do |item|
+              emit(item)
+            end
           end
         end.new.run
       }.to raise_error(Minigun::Error, /Circular dependency/)
@@ -85,22 +93,24 @@ RSpec.describe 'Circular Dependency Detection' do
           @mutex = Mutex.new
         end
 
-        producer :source do
-          emit(1)
-        end
+        pipeline do
+          producer :source do
+            emit(1)
+          end
 
-        # Diamond pattern: source -> left -> merge
-        #                   source -> right -> merge
-        processor :left, from: :source, to: :merge do |item|
-          emit(item + 10)
-        end
+          # Diamond pattern: source -> left -> merge
+          #                   source -> right -> merge
+          processor :left, from: :source, to: :merge do |item|
+            emit(item + 10)
+          end
 
-        processor :right, from: :source, to: :merge do |item|
-          emit(item + 20)
-        end
+          processor :right, from: :source, to: :merge do |item|
+            emit(item + 20)
+          end
 
-        consumer :merge do |item|
-          @mutex.synchronize { @results << item }
+          consumer :merge do |item|
+            @mutex.synchronize { @results << item }
+          end
         end
       end
 
@@ -121,28 +131,30 @@ RSpec.describe 'Circular Dependency Detection' do
           @mutex = Mutex.new
         end
 
-        producer :start do
-          emit(1)
-        end
+        pipeline do
+          producer :start do
+            emit(1)
+          end
 
-        processor :a, from: :start do |item|
-          emit(item + 1)
-        end
+          processor :a, from: :start do |item|
+            emit(item + 1)
+          end
 
-        processor :b, from: :start do |item|
-          emit(item + 2)
-        end
+          processor :b, from: :start do |item|
+            emit(item + 2)
+          end
 
-        processor :c, from: [:a, :b] do |item|
-          emit(item + 10)
-        end
+          processor :c, from: [:a, :b] do |item|
+            emit(item + 10)
+          end
 
-        processor :d, from: :a do |item|
-          emit(item + 20)
-        end
+          processor :d, from: :a do |item|
+            emit(item + 20)
+          end
 
-        consumer :end_stage, from: [:c, :d] do |item|
-          @mutex.synchronize { @results << item }
+          consumer :end_stage, from: [:c, :d] do |item|
+            @mutex.synchronize { @results << item }
+          end
         end
       end
 

@@ -15,8 +15,10 @@ RSpec.describe 'From Keyword' do
           @mutex = Mutex.new
         end
 
+        pipeline do
         producer :source, to: :double do
           3.times { |i| emit(i) }
+        end
         end
 
         processor :double do |item|

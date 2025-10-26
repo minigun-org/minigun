@@ -15,10 +15,12 @@ RSpec.describe 'Multiple Producers' do
           @mutex = Mutex.new
         end
 
+        pipeline do
         producer :source_a do
           5.times do |i|
             emit("A#{i}")
           end
+        end
         end
 
         producer :source_b do

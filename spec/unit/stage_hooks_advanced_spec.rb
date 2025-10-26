@@ -18,11 +18,13 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
           @execution_order = []
         end
 
+        pipeline do
         before_run { @execution_order << '1_pipeline_before_run' }
 
         producer :gen do
           @execution_order << '4_producer_block'
           emit(1)
+        end
         end
 
         before(:gen) { @execution_order << '3_producer_before' }
