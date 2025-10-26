@@ -105,24 +105,24 @@ module Minigun
         new_task.instance_variable_set(:@config, parent_task.config.dup)
         new_task.instance_variable_set(:@root_pipeline, parent_task.root_pipeline.dup) # Duplicate the pipeline
         subclass.instance_variable_set(:@_minigun_task, new_task)
-        
+
         # Inherit pipeline definition blocks
         subclass.instance_variable_set(:@_pipeline_definition_blocks, (@_pipeline_definition_blocks || []).dup)
       end
     end
-    
+
     # Evaluate pipeline blocks in instance context (called before run)
     def _evaluate_pipeline_blocks!
       return if @_pipeline_blocks_evaluated
       @_pipeline_blocks_evaluated = true
-      
+
       self.class._pipeline_definition_blocks.each do |blk|
         instance_eval(&blk)
       end
     end
 
     # INSTANCE-LEVEL DSL METHODS
-    
+
     # Pipeline block wrapper - REQUIRED for stage definitions
     # Supports two modes:
     # 1. pipeline do...end - Main pipeline definition
@@ -223,7 +223,7 @@ module Minigun
 
     # DSL context for defining stages within a named pipeline
     class PipelineDSL
-      def initialize(pipeline, context)
+      def initialize(pipeline, context = nil)
         @pipeline = pipeline
         @context = context
       end

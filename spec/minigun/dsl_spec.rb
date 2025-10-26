@@ -25,58 +25,63 @@ RSpec.describe Minigun::DSL do
       expect(test_class._minigun_task.config[:max_retries]).to eq(5)
     end
 
-    it 'allows defining a producer' do
-      test_class.producer(:test_producer) { "producer code" }
-      stage = test_class._minigun_task.stages[:test_producer]
-      expect(stage).not_to be_nil
-      expect(stage.name).to eq(:test_producer)
-      expect(stage.producer?).to be true
+    it 'raises error when defining a producer without pipeline do' do
+      expect {
+        test_class.producer(:test_producer) { "producer code" }
+      }.to raise_error(NoMethodError, /Stage definitions must be inside 'pipeline do' block/)
     end
 
-    it 'allows defining processors' do
-      test_class.processor(:test_processor) { |x| x }
-      # Processor is now an AtomicStage, check that it was added
-      task = test_class._minigun_task
-      all_stages = task.root_pipeline.stage_order.map { |name| task.root_pipeline.find_stage(name) }
-      processor = all_stages.find { |s| s.name == :test_processor }
-      expect(processor).not_to be_nil
-      expect(processor.producer?).to be false
+    it 'raises error when defining processors without pipeline do' do
+      expect {
+        test_class.processor(:test_processor) { |x| x }
+      }.to raise_error(NoMethodError, /Stage definitions must be inside 'pipeline do' block/)
     end
 
-    it 'allows defining an accumulator' do
-      test_class.accumulator(:test_accumulator) { "accumulator code" }
-      stage = test_class._minigun_task.stages[:test_accumulator]
-      expect(stage).not_to be_nil
-      expect(stage.name).to eq(:test_accumulator)
-      expect(stage.accumulator?).to be true
+    it 'raises error when defining an accumulator without pipeline do' do
+      expect {
+        test_class.accumulator(:test_accumulator) { "accumulator code" }
+      }.to raise_error(NoMethodError, /Stage definitions must be inside 'pipeline do' block/)
     end
 
-    it 'allows defining a consumer' do
-      test_class.consumer(:test_consumer) { |x| x }  # Consumer takes an argument
-      # Consumer is now an AtomicStage, check that it was added
-      task = test_class._minigun_task
-      consumer = task.stages[:test_consumer]
-      expect(consumer).not_to be_nil
-      expect(consumer.producer?).to be false
+    it 'raises error when defining a consumer without pipeline do' do
+      expect {
+        test_class.consumer(:test_consumer) { |x| x }
+      }.to raise_error(NoMethodError, /Stage definitions must be inside 'pipeline do' block/)
     end
 
-    it 'allows defining before_run hook' do
-      test_class.before_run { "before run" }
+    it 'allows defining before_run hook inside pipeline do' do
+      test_class.pipeline do
+        before_run { "before run" }
+      end
+      instance = test_class.new
+      instance.run rescue nil  # Trigger evaluation
       expect(test_class._minigun_task.hooks[:before_run]).not_to be_empty
     end
 
-    it 'allows defining after_run hook' do
-      test_class.after_run { "after run" }
+    it 'allows defining after_run hook inside pipeline do' do
+      test_class.pipeline do
+        after_run { "after run" }
+      end
+      instance = test_class.new
+      instance.run rescue nil  # Trigger evaluation
       expect(test_class._minigun_task.hooks[:after_run]).not_to be_empty
     end
 
-    it 'allows defining before_fork hook' do
-      test_class.before_fork { "before fork" }
+    it 'allows defining before_fork hook inside pipeline do' do
+      test_class.pipeline do
+        before_fork { "before fork" }
+      end
+      instance = test_class.new
+      instance.run rescue nil  # Trigger evaluation
       expect(test_class._minigun_task.hooks[:before_fork]).not_to be_empty
     end
 
-    it 'allows defining after_fork hook' do
-      test_class.after_fork { "after fork" }
+    it 'allows defining after_fork hook inside pipeline do' do
+      test_class.pipeline do
+        after_fork { "after fork" }
+      end
+      instance = test_class.new
+      instance.run rescue nil  # Trigger evaluation
       expect(test_class._minigun_task.hooks[:after_fork]).not_to be_empty
     end
 
@@ -85,6 +90,10 @@ RSpec.describe Minigun::DSL do
         producer(:grouped_producer) { "code" }
         consumer(:grouped_consumer) { |x| x }
       end
+
+      # Need to instantiate and run to trigger evaluation
+      instance = test_class.new
+      instance.run rescue nil
 
       producer = test_class._minigun_task.stages[:grouped_producer]
       consumer = test_class._minigun_task.stages[:grouped_consumer]
@@ -101,13 +110,15 @@ RSpec.describe Minigun::DSL do
       Class.new do
         include Minigun::DSL
 
-        producer(:test_producer) do
-          5.times { |i| emit(i) }
-        end
+        pipeline do
+          producer(:test_producer) do
+            5.times { |i| emit(i) }
+          end
 
-        consumer(:test_consumer) do |item|
-          @processed ||= []
-          @processed << item
+          consumer(:test_consumer) do |item|
+            @processed ||= []
+            @processed << item
+          end
         end
       end
     end
@@ -132,6 +143,9 @@ RSpec.describe Minigun::DSL do
         max_processes 2
 
         pipeline do
+          before_run { @start_time = Time.now }
+          after_run { @end_time = Time.now }
+
           producer :generate do
             3.times { |i| emit(i + 1) }
           end
@@ -146,12 +160,17 @@ RSpec.describe Minigun::DSL do
           end
         end
 
-        before_run { @start_time = Time.now }
-        after_run { @end_time = Time.now }
+        def initialize
+          @start_time = nil
+          @end_time = nil
+        end
       end
     end
 
     it 'correctly configures all components' do
+      # Need to instantiate to trigger pipeline evaluation
+      instance = test_class.new
+      instance.run rescue nil  # Trigger evaluation
       task = test_class._minigun_task
       pipeline = task.root_pipeline
 
@@ -180,44 +199,27 @@ RSpec.describe Minigun::DSL do
     end
   end
 
-  describe 'implicit pipeline definition (without pipeline block)' do
+  describe 'pipeline do wrapper requirement' do
     before do
       allow(Minigun.logger).to receive(:info)
     end
 
-    it 'allows defining stages without pipeline block wrapper' do
-      # Define pipeline WITHOUT explicit pipeline block
-      pipeline_class = Class.new do
-        include Minigun::DSL
+    it 'raises error when defining stages without pipeline block wrapper' do
+      # Attempting to define pipeline WITHOUT explicit pipeline block should error
+      expect {
+        Class.new do
+          include Minigun::DSL
 
-        attr_accessor :results
-
-        def initialize
-          @results = []
+          # No pipeline do...end wrapper - should raise error!
+          producer :generate do
+            3.times { |i| emit(i + 1) }
+          end
         end
-
-        # No pipeline do...end wrapper!
-        producer :generate do
-          3.times { |i| emit(i + 1) }
-        end
-
-        processor :double do |num|
-          emit(num * 2)
-        end
-
-        consumer :collect do |num|
-          results << num
-        end
-      end
-
-      pipeline = pipeline_class.new
-      pipeline.run
-
-      expect(pipeline.results).to contain_exactly(2, 4, 6)
+      }.to raise_error(NoMethodError, /Stage definitions must be inside 'pipeline do' block/)
     end
 
-    it 'works identically with or without pipeline block' do
-      # WITH pipeline block
+    it 'works correctly with pipeline block' do
+      # WITH pipeline block - should work
       with_block = Class.new do
         include Minigun::DSL
         attr_accessor :results
@@ -237,133 +239,69 @@ RSpec.describe Minigun::DSL do
         end
       end
 
-      # WITHOUT pipeline block
-      without_block = Class.new do
-        include Minigun::DSL
-        attr_accessor :results
+      instance = with_block.new
+      instance.run
 
-        def initialize
-          @results = []
-        end
-
-        producer :source do
-          5.times { |i| emit(i) }
-        end
-
-        consumer :sink do |num|
-          results << num
-        end
-      end
-
-      with_result = with_block.new
-      with_result.run
-
-      without_result = without_block.new
-      without_result.run
-
-      expect(with_result.results.sort).to eq(without_result.results.sort)
-      expect(with_result.results).to contain_exactly(0, 1, 2, 3, 4)
-      expect(without_result.results).to contain_exactly(0, 1, 2, 3, 4)
+      expect(instance.results).to contain_exactly(0, 1, 2, 3, 4)
     end
 
-    it 'supports mixing both styles' do
-      mixed_class = Class.new do
-        include Minigun::DSL
+    it 'OLD TEST - WITHOUT pipeline block raises error' do
+      # This test documents the old behavior is no longer supported
+      expect {
+        Class.new do
+          include Minigun::DSL
         attr_accessor :results
 
         def initialize
           @results = []
         end
 
-        # Some stages outside pipeline block
-        producer :start do
-          emit(10)
-        end
-
-        # Some stages inside pipeline block
-        pipeline do
-          processor :multiply do |n|
-            emit(n * 3)
-          end
-
-          consumer :finish do |n|
-            results << n
+          # Stages without pipeline do should raise error
+          producer :source do
+            5.times { |i| emit(i) }
           end
         end
-      end
-
-      pipeline = mixed_class.new
-      pipeline.run
-
-      expect(pipeline.results).to eq([30])
+      }.to raise_error(NoMethodError, /Stage definitions must be inside 'pipeline do' block/)
     end
 
-    it 'can define complex routing without pipeline block' do
-      routing_class = Class.new do
-        include Minigun::DSL
-        attr_accessor :path_a_results, :path_b_results
+    it 'requires pipeline do for all stages (mixing not allowed)' do
+      # Attempting to mix styles should fail
+      expect {
+        Class.new do
+          include Minigun::DSL
 
-        def initialize
-          @path_a_results = []
-          @path_b_results = []
-          @mutex = Mutex.new
+          # Stage outside pipeline block - should raise error
+          producer :start do
+            emit(10)
+          end
         end
-
-        producer :start, to: [:process_a, :process_b] do
-          emit(5)
-        end
-
-        consumer :process_a do |n|
-          @mutex.synchronize { path_a_results << n * 2 }
-        end
-
-        consumer :process_b do |n|
-          @mutex.synchronize { path_b_results << n * 3 }
-        end
-      end
-
-      pipeline = routing_class.new
-      pipeline.run
-
-      expect(pipeline.path_a_results).to eq([10])
-      expect(pipeline.path_b_results).to eq([15])
+      }.to raise_error(NoMethodError, /Stage definitions must be inside 'pipeline do' block/)
     end
 
-    it 'supports all stage types without pipeline block' do
-      full_class = Class.new do
-        include Minigun::DSL
-        attr_accessor :results
+    it 'requires pipeline do for complex routing' do
+      expect {
+        Class.new do
+          include Minigun::DSL
 
-        def initialize
-          @results = []
+          # Routing without pipeline block - should raise error
+          producer :start, to: [:process_a, :process_b] do
+            emit(5)
+          end
         end
+      }.to raise_error(NoMethodError, /Stage definitions must be inside 'pipeline do' block/)
+    end
 
-        # Direct definition - no pipeline block needed
-        producer :fetch do
-          emit(1)
-          emit(2)
+    it 'requires pipeline do for all stage types' do
+      expect {
+        Class.new do
+          include Minigun::DSL
+
+          # Direct definition without pipeline block - should raise error
+          producer :fetch do
+            emit(1)
+          end
         end
-
-        processor :validate do |n|
-          emit(n) if n > 0
-        end
-
-        processor :transform do |n|
-          emit(n * 10)
-        end
-
-        consumer :save do |n|
-          results << n
-        end
-
-        before_run { @results << :started }
-        after_run { @results << :finished }
-      end
-
-      pipeline = full_class.new
-      pipeline.run
-
-      expect(pipeline.results).to include(:started, 10, 20, :finished)
+      }.to raise_error(NoMethodError, /Stage definitions must be inside 'pipeline do' block/)
     end
   end
 end

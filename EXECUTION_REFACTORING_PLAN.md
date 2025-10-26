@@ -21,15 +21,15 @@
 ```ruby
 class MyPipeline
   include Minigun::DSL
-  
+
   producer :generate do
     emit(data)
   end
-  
+
   processor :transform do |item|
     emit(item * 2)
   end
-  
+
   consumer :save do |item|
     store(item)
   end
@@ -48,24 +48,24 @@ end
 ```ruby
 class ConfiguredPipeline
   include Minigun::DSL
-  
+
   # New unified configuration
   concurrency threads: 10, processes: 4
-  
+
   producer :fetch do
     urls.each { |url| emit(url) }
   end
-  
+
   # I/O-bound: automatic thread pool
   processor :download do |url|
     emit(HTTP.get(url))
   end
-  
+
   # CPU-bound: explicit process isolation
   processor :parse, concurrency: :process do |html|
     emit(parse(html))
   end
-  
+
   consumer :save do |item|
     db.save(item)
   end
@@ -77,17 +77,17 @@ end
 ```ruby
 class ExpertPipeline
   include Minigun::DSL
-  
+
   concurrency(
     threads: 20,
     processes: 4,
     inline: false  # Disable affinity optimization
   )
-  
+
   producer :stream do
     emit(data)
   end
-  
+
   # Fine-grained control
   processor :work,
     context: :fork,           # Explicit context type
@@ -96,7 +96,7 @@ class ExpertPipeline
   do |item|
     emit(process(item))
   end
-  
+
   # Ractor support
   processor :parallel, context: :ractor do |item|
     emit(item)
@@ -143,7 +143,7 @@ end
 
 Delete these:
 - `spawn_fork` → use `concurrency: :process`
-- `spawn_thread` → use `concurrency: :thread`  
+- `spawn_thread` → use `concurrency: :thread`
 - `spawn_ractor` → use `context: :ractor`
 
 ## Implementation Strategy
@@ -183,7 +183,7 @@ module Minigun
         @plan = nil
         @pools = {}
       end
-      
+
       def execute
         # Create execution plan
         @plan = ExecutionPlan.new(
@@ -191,7 +191,7 @@ module Minigun
           @pipeline.stages,
           @pipeline.config
         ).plan!
-        
+
         # Create context pools
         @plan.context_types.each do |type|
           @pools[type] = ContextPool.new(
@@ -199,33 +199,33 @@ module Minigun
             max_size: pool_size_for(type)
           )
         end
-        
+
         # Execute producers
         execute_producers
-        
+
         # Execute pipeline
         execute_stages
-        
+
         # Wait for completion
         @pools.values.each(&:join_all)
       ensure
         @pools.values.each(&:terminate_all)
       end
-      
+
       private
-      
+
       def execute_producers
         @pipeline.producers.each do |producer|
           context_type = @plan.context_for(producer.name)
           pool = @pools[context_type]
-          
+
           ctx = pool.acquire("producer:#{producer.name}")
           ctx.execute do
             producer.execute(@pipeline.context)
           end
         end
       end
-      
+
       def execute_stages
         # Group by affinity
         @plan.affinity_groups.each do |parent, stages|
@@ -236,13 +236,13 @@ module Minigun
           end
         end
       end
-      
+
       def execute_colocated(parent, stages)
         # All stages run sequentially in parent's context
         # No queues - direct function calls
         context_type = @plan.context_for(parent)
         pool = @pools[context_type]
-        
+
         ctx = pool.acquire("colocated:#{parent}")
         ctx.execute do
           # Execute stages in sequence within same context
@@ -252,21 +252,21 @@ module Minigun
           end
         end
       end
-      
+
       def execute_independent(stages)
         # Each stage gets its own context
         stages.each do |stage_name|
           stage = @pipeline.stages[stage_name]
           context_type = @plan.context_for(stage_name)
           pool = @pools[context_type]
-          
+
           ctx = pool.acquire("stage:#{stage_name}")
           ctx.execute do
             stage.execute(@pipeline.context)
           end
         end
       end
-      
+
       def pool_size_for(type)
         case type
         when :thread
@@ -312,18 +312,18 @@ module Minigun
           _minigun_task.set_config(:default_concurrency, options)
         end
       end
-      
+
       # Deprecated aliases (backward compat during migration)
       def max_threads(value)
         warn "[DEPRECATED] Use 'concurrency threads: #{value}' instead"
         concurrency threads: value
       end
-      
+
       def max_processes(value)
         warn "[DEPRECATED] Use 'concurrency processes: #{value}' instead"
         concurrency processes: value
       end
-      
+
       # Stage methods now support new options
       def processor(name, options = {}, &block)
         # Map old :strategy to new :concurrency
@@ -331,12 +331,12 @@ module Minigun
           options[:concurrency] = map_strategy_to_concurrency(options[:strategy])
           options.delete(:strategy)
         end
-        
+
         _minigun_task.add_stage(:processor, name, options, &block)
       end
-      
+
       private
-      
+
       def map_strategy_to_concurrency(strategy)
         case strategy
         when :spawn_fork then :process
@@ -358,18 +358,18 @@ end
 class Pipeline
   def run_with_executor(context)
     @context = context
-    
+
     # Use new Executor
     executor = Execution::Executor.new(self)
     executor.execute
-    
+
     # Return stats
     @stats
   end
-  
+
   # Old method kept for comparison during migration
   alias run_legacy run_normal_pipeline
-  
+
   # Switch to new by default
   alias run_normal_pipeline run_with_executor
 end
@@ -382,18 +382,18 @@ end
 ```ruby
 class Example
   include Minigun::DSL
-  
+
   max_threads 10
   max_processes 4
-  
+
   producer :gen do
     emit(1)
   end
-  
+
   spawn_fork :heavy do |item|
     emit(process(item))
   end
-  
+
   consumer :save do |item|
     store(item)
   end
@@ -405,17 +405,17 @@ end
 ```ruby
 class Example
   include Minigun::DSL
-  
+
   concurrency threads: 10, processes: 4
-  
+
   producer :gen do
     emit(1)
   end
-  
+
   processor :heavy, concurrency: :process do |item|
     emit(process(item))
   end
-  
+
   consumer :save do |item|
     store(item)
   end
