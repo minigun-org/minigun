@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require 'tempfile'
 
 RSpec.describe 'Class Inheritance with Minigun DSL' do
   before do
@@ -416,6 +417,12 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
           @published = []
           @connected = false
           @disconnected = false
+          @temp_file = Tempfile.new(['minigun_inheritance', '.txt'])
+          @temp_file.close
+        end
+
+        def cleanup
+          File.unlink(@temp_file.path) if @temp_file && File.exist?(@temp_file.path)
         end
 
         pipeline do
@@ -436,7 +443,19 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
           process_per_batch(max: 1) do
             consumer :publish do |batch|
               # process_per_batch receives batches from accumulator
-              batch.each { |item| publish_item(item) }
+              # Write to temp file (fork-safe)
+              File.open(@temp_file.path, 'a') do |f|
+                f.flock(File::LOCK_EX)
+                batch.each { |item| f.puts(publish_item(item)) }
+                f.flock(File::LOCK_UN)
+              end
+            end
+          end
+          
+          after_run do
+            # Read fork results from temp file
+            if File.exist?(@temp_file.path)
+              @published = File.readlines(@temp_file.path).map(&:strip)
             end
           end
         end
@@ -466,7 +485,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
         end
 
         def publish_item(item)
-          @published << "Customer: #{item}"
+          "Customer: #{item}"
         end
       end
     end
@@ -480,24 +499,32 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
         end
 
         def publish_item(item)
-          @published << "Order: #{item}"
+          "Order: #{item}"
         end
       end
     end
 
     it 'customer publisher works' do
       publisher = customer_publisher.new
-      publisher.run
+      begin
+        publisher.run
 
-      expect(publisher.published).to include('Customer: customer_1', 'Customer: customer_2')
+        expect(publisher.published).to include('Customer: customer_1', 'Customer: customer_2')
+      ensure
+        publisher.cleanup
+      end
     end
 
     it 'order publisher works with overridden config' do
       publisher = order_publisher.new
-      publisher.run
+      begin
+        publisher.run
 
-      expect(publisher.published).to include('Order: order_1', 'Order: order_2', 'Order: order_3')
-      expect(order_publisher._minigun_task.config[:max_threads]).to eq(20)
+        expect(publisher.published).to include('Order: order_1', 'Order: order_2', 'Order: order_3')
+        expect(order_publisher._minigun_task.config[:max_threads]).to eq(20)
+      ensure
+        publisher.cleanup
+      end
     end
 
     it 'base publisher cannot run (abstract)' do

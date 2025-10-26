@@ -55,7 +55,7 @@ class BatchProcessor
         batch.each { |item| item ** 2 }
       end
     end
-    
+
     after_run do
       # Read fork results from temp file
       if File.exist?(@temp_file.path)

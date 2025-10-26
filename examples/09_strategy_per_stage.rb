@@ -45,7 +45,7 @@ class StrategyPerStageExample
       consumer :heavy_save do |batch|
         puts "[HeavySave:process_per_batch:#{Process.pid}] Processing batch of #{batch.size}"
         sleep 0.01  # Simulate heavy work
-        
+
         # Write results to temp file (fork-safe)
         File.open(@temp_file.path, 'a') do |f|
           f.flock(File::LOCK_EX)
@@ -62,7 +62,7 @@ class StrategyPerStageExample
         batch.each { |num| @mutex.synchronize { thread_results << num } }
       end
     end
-    
+
     after_run do
       # Read fork results from temp file
       if File.exist?(@temp_file.path)

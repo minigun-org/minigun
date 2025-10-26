@@ -64,7 +64,7 @@ class NestedPipeline
           end
 
           processed = batch.map { |item| item[:data].upcase }
-          
+
           # Write results to temp file (fork-safe)
           File.open(@temp_results_file.path, 'a') do |f|
             f.flock(File::LOCK_EX)
@@ -77,7 +77,7 @@ class NestedPipeline
       # Note: stages here would be back in thread context
       # But we end after process_per_batch in this example
     end
-    
+
     after_run do
       # Read fork results from temp files
       if File.exist?(@temp_pids_file.path)

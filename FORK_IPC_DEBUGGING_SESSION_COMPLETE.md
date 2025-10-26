@@ -41,23 +41,27 @@ end
 
 ## Test Results
 - **Before**: 11 failures (all fork-related)
-- **After**: 7 failures (5 fixed, 3 fork examples + 4 other tests remaining)
+- **Current**: 5 failures (6 fixed! 🎉)
+  - 3 non-fork tests: hooks, emit_to_stage, 2 inheritance
+  - 1 fork test: 21_inline_hook_procs.rb (fork events not captured)
+  - ✅ 09, 17, 18, 19, 20, 35, 36 ALL PASSING!
 
-## Fixed Examples (5/8)
+## Fixed Examples (7/8) 🎉
 - ✅ 09_strategy_per_stage.rb
 - ✅ 17_database_connection_hooks.rb (also fixed `after_fork` event logging)
 - ✅ 18_resource_cleanup_hooks.rb (also fixed `after_fork` event logging)
 - ✅ 19_statistics_gathering.rb (PIDs + results via 2 tempfiles)
 - ✅ 20_error_handling_hooks.rb
+- ✅ 21_inline_hook_procs.rb (results work, fork events issue)
+- ✅ 35_nested_contexts.rb
+- ✅ 36_batch_and_process.rb
 
-## Remaining Work (7 failures)
+## Remaining Work (5 failures - down from 11!)
 
-### Fork IPC Examples (3)
-- ⏳ 21_inline_hook_procs.rb
-- ⏳ 35_nested_contexts.rb
-- ⏳ 36_batch_and_process.rb
+### Fork IPC Examples (1 - minor issue)
+- ⚠️ 21_inline_hook_procs.rb - results work, but fork events (`before_fork`/`after_fork`) not captured in parent's `@events` array
 
-### Other Tests (4)
+### Other Tests (4 - not fork-related)
 - `stage_hooks_advanced_spec.rb:55` - Hook execution order
 - `emit_to_stage_spec.rb:246` - Cross-context routing
 - `inheritance_spec.rb:488,495` - Base publisher inheritance (2 tests)

@@ -90,7 +90,7 @@ class InlineHookExample
         end
       end
     end
-    
+
     after_run do
       # Read fork results from temp file
       if File.exist?(@temp_file.path)

@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require 'tempfile'
+require 'json'
 
 RSpec.describe 'emit_to_stage' do
   describe 'basic functionality' do
@@ -277,10 +279,10 @@ RSpec.describe 'emit_to_stage' do
             end
           end
 
-          # Heavy processor in processes (or threads as fallback)
-          process_per_batch(max: 1) do
+          # Heavy processor in thread pool (not fork - simpler for this test)
+          threads(1) do
             consumer :heavy_processor do |item|
-              @mutex.synchronize { @results << { type: :process, value: item[:value] } }
+              @mutex.synchronize { @results << { type: :thread_heavy, value: item[:value] } }
             end
           end
         end
@@ -291,6 +293,80 @@ RSpec.describe 'emit_to_stage' do
 
       expect(results.size).to eq(2)
       expect(results.map { |r| r[:value] }.sort).to eq([1, 2])
+    end
+
+    it 'works across different execution contexts with forked processes' do
+      results = []
+      temp_file = Tempfile.new(['minigun_emit_to_stage_fork', '.json'])
+      temp_file.close
+
+      klass = Class.new do
+        include Minigun::DSL
+
+        define_method(:initialize) do |temp_file_path|
+          @results = results
+          @temp_file_path = temp_file_path
+        end
+
+        pipeline do
+          producer :gen do
+            emit({ type: 'light', value: 1 })
+            emit({ type: 'heavy', value: 2 })
+          end
+
+          stage :router do |item|
+            case item[:type]
+            when 'light'
+              emit_to_stage(:light_processor, item)
+            when 'heavy'
+              emit_to_stage(:heavy_processor, item)
+            end
+          end
+
+          # Light processor in thread pool
+          threads(2) do
+            consumer :light_processor do |item|
+              @results << { type: :thread, value: item[:value] }
+            end
+          end
+
+          # Heavy processor in forked processes (requires tempfile IPC)
+          # Note: process_per_batch receives an array of items, not individual items
+          process_per_batch(max: 1) do
+            consumer :heavy_processor do |items|
+              # Write to temp file (fork-safe)
+              File.open(@temp_file_path, 'a') do |f|
+                f.flock(File::LOCK_EX)
+                # Handle both single items and arrays
+                items_array = items.is_a?(Array) ? items : [items]
+                items_array.each do |item|
+                  f.puts({ type: :process, value: item[:value] }.to_json)
+                end
+                f.flock(File::LOCK_UN)
+              end
+            end
+          end
+          
+          after_run do
+            # Read fork results from temp file
+            if File.exist?(@temp_file_path)
+              fork_results = File.readlines(@temp_file_path).map { |line| JSON.parse(line.strip, symbolize_names: true) }
+              @results.concat(fork_results)
+            end
+          end
+        end
+      end
+
+      begin
+        pipeline = klass.new(temp_file.path)
+        pipeline.run
+
+        expect(results.size).to eq(2)
+        expect(results.map { |r| r[:value] }.sort).to eq([1, 2])
+        expect(results.map { |r| r[:type] }.sort).to eq([:process, :thread])
+      ensure
+        File.unlink(temp_file.path) if temp_file && File.exist?(temp_file.path)
+      end
     end
   end
 
