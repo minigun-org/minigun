@@ -113,6 +113,26 @@ RSpec.describe Minigun::OutputQueue do
         expect(stage_stats).to receive(:increment_produced).once
         routed_queue << 42
       end
+
+      it 'tracks runtime edges for END signal handling' do
+        # Initially no runtime edges
+        expect(runtime_edges[stage_name]).to be_empty
+
+        # Call .to() to create runtime edge
+        output_queue.to(:stage_a)
+
+        # Runtime edge should be tracked
+        expect(runtime_edges[stage_name]).to include(:stage_a)
+
+        # Multiple .to() calls to same stage don't duplicate
+        output_queue.to(:stage_a)
+        expect(runtime_edges[stage_name].size).to eq(1)
+
+        # Different targets are tracked separately
+        output_queue.to(:stage_b)
+        expect(runtime_edges[stage_name]).to include(:stage_a, :stage_b)
+        expect(runtime_edges[stage_name].size).to eq(2)
+      end
     end
   end
 
