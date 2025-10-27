@@ -11,7 +11,70 @@ ADD to README:
 add to architecture
 - multi-parents --> how do we know end of queues?
 
+
+       base.extend(ClassMethods)
++
++      # Add class-level attribute accessors for metaprogramming
++      class << base
++        attr_accessor :_minigun_task, :_pipeline_definition_blocks
++      end
++
+       base.class_eval do
+         # Create a single task instance for the class
+         @_minigun_task = Minigun::Task.new
+@@ -80,12 +86,12 @@ module Minigun
+         parent_task = self._minigun_task
+         # Create a new task and copy the parent's configuration and pipelines
+         new_task = Minigun::Task.new
+-        new_task.instance_variable_set(:@config, parent_task.config.dup)
+-        new_task.instance_variable_set(:@root_pipeline, parent_task.root_pipeline.dup) # Duplicate the pipeline
+-        subclass.instance_variable_set(:@_minigun_task, new_task)
++        new_task.send(:config=, parent_task.config.dup)
++        new_task.send(:root_pipeline=, parent_task.root_pipeline.dup) # Duplicate the pipeline
++        subclass._minigun_task = new_task
+
+         # Inherit pipeline definition blocks
+-        subclass.instance_variable_set(:@_pipeline_definition_blocks, (@_pipeline_definition_blocks || []).dup)
++        subclass._pipeline_definition_blocks = (@_pipeline_definition_blocks || []).dup
+       end
+     end
+
+
+---------
+
+
+
++    # Private setters for duplication and job_id injection
++    private
++
++    attr_writer :stages, :hooks, :stage_hooks, :dag, :stage_order, :job_id
+
+-----------
+
++    # Private setters for DSL inheritance
++    private
++
++    attr_writer :config, :root_pipeline
+
+
 ======================
+
+This creates a new OutputQueue everytime
+
+    # Magic sauce: explicit routing to specific stage
+    # Returns a new OutputQueue that routes only to that stage
+    def to(target_stage)
+      target_queue = @all_stage_queues[target_stage]
+      raise ArgumentError, "Unknown target stage: #{target_stage}" unless target_queue
+
+      # Track this as a runtime edge for END signal handling
+      @runtime_edges[@stage_name].add(target_stage)
+
+      # Return new OutputQueue that shares the same stats object
+      OutputQueue.new(@stage_name, [target_queue], @all_stage_queues, @runtime_edges, stage_stats: @stage_stats)
+    end
+
+==============
 
 use stage object_ids instead of names
 

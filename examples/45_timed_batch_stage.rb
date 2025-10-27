@@ -19,6 +19,9 @@ class TimedBatchStage < Minigun::Stage
   def run_worker_loop(stage_ctx)
     require_relative '../lib/minigun/queue_wrappers'
 
+    # Get stage stats for tracking
+    stage_stats = stage_ctx.stats.for_stage(stage_ctx.stage_name, is_terminal: stage_ctx.dag.terminal?(stage_ctx.stage_name))
+
     # Create wrapped output queue
     wrapped_output = Minigun::OutputQueue.new(
       stage_ctx.stage_name,
@@ -26,7 +29,8 @@ class TimedBatchStage < Minigun::Stage
         stage_ctx.stage_input_queues[ds]
       },
       stage_ctx.stage_input_queues,
-      stage_ctx.runtime_edges
+      stage_ctx.runtime_edges,
+      stage_stats: stage_stats
     )
 
     batch = []

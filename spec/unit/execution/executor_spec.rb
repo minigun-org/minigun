@@ -63,10 +63,12 @@ RSpec.describe Minigun::Execution::Executor do
 
     it 'tracks consumption and production' do
       executor = Minigun::Execution::InlineExecutor.new
-      items_produced_count = 0
       output_queue = double('output_queue')
-      allow(output_queue).to receive(:items_produced) { items_produced_count }
-      allow(output_queue).to receive(:<<) { items_produced_count += 1; output_queue }
+      # OutputQueue now calls increment_produced directly when << is called
+      allow(output_queue).to receive(:<<) do
+        stage_stats.increment_produced
+        output_queue
+      end
 
       allow(stage).to receive(:execute) do |_context, **kwargs|
         kwargs[:output_queue] << 42

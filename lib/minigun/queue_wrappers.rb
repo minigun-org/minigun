@@ -58,20 +58,18 @@ module Minigun
 
   # Wrapper around stage output that routes to downstream queues
   class OutputQueue
-    attr_reader :items_produced
-
-    def initialize(stage_name, downstream_queues, all_stage_queues, runtime_edges)
+    def initialize(stage_name, downstream_queues, all_stage_queues, runtime_edges, stage_stats: nil)
       @stage_name = stage_name
       @downstream_queues = downstream_queues  # Array of Queue objects
       @all_stage_queues = all_stage_queues    # Hash of all queues for .to() method
       @runtime_edges = runtime_edges           # Track dynamic routing
-      @items_produced = 0                      # Track count for stats
+      @stage_stats = stage_stats               # Stats object for tracking (optional)
     end
 
     # Send item to all downstream stages
     def <<(item)
       @downstream_queues.each { |queue| queue << item }
-      @items_produced += 1
+      @stage_stats&.increment_produced  # Track in stats directly
       self
     end
 
@@ -84,11 +82,8 @@ module Minigun
       # Track this as a runtime edge for END signal handling
       @runtime_edges[@stage_name].add(target_stage)
 
-      # Return new OutputQueue that only routes to this target
-      # Share the same items_produced counter so we don't double-count
-      OutputQueue.new(@stage_name, [target_queue], @all_stage_queues, @runtime_edges).tap do |new_queue|
-        new_queue.instance_variable_set(:@items_produced, @items_produced)
-      end
+      # Return new OutputQueue that shares the same stats object
+      OutputQueue.new(@stage_name, [target_queue], @all_stage_queues, @runtime_edges, stage_stats: @stage_stats)
     end
   end
 end

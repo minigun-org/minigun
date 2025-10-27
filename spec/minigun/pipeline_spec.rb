@@ -168,7 +168,8 @@ RSpec.describe Minigun::Pipeline do
 
       # Add to DAG with no upstream
       pipeline.dag.add_node(:nested)
-      pipeline.instance_variable_set(:@stage_order, [:nested])
+      pipeline.stage_order.clear
+      pipeline.stage_order << :nested
 
       producers = pipeline.send(:find_all_producers)
 

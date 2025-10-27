@@ -10,23 +10,19 @@ module Minigun
 
     attr_reader :nodes, :edges, :reverse_edges
 
-    def initialize
-      @nodes = [] # Track insertion order
-      @edges = Hash.new { |h, k| h[k] = [] }  # stage_name => [downstream_stage_names]
-      @reverse_edges = Hash.new { |h, k| h[k] = [] }  # stage_name => [upstream_stage_names]
+    def initialize(nodes: [], edges: nil, reverse_edges: nil)
+      @nodes = nodes.dup # Track insertion order
+      @edges = edges ? edges.dup : Hash.new { |h, k| h[k] = [] }  # stage_name => [downstream_stage_names]
+      @reverse_edges = reverse_edges ? reverse_edges.dup : Hash.new { |h, k| h[k] = [] }  # stage_name => [upstream_stage_names]
     end
 
     # Duplicate this DAG
     def dup
-      new_dag = DAG.new
-      new_dag.instance_variable_set(:@nodes, @nodes.dup)
-      new_dag.instance_variable_set(:@edges, Hash.new { |h, k| h[k] = [] }.merge(
-        @edges.transform_values(&:dup)
-      ))
-      new_dag.instance_variable_set(:@reverse_edges, Hash.new { |h, k| h[k] = [] }.merge(
-        @reverse_edges.transform_values(&:dup)
-      ))
-      new_dag
+      DAG.new(
+        nodes: @nodes.dup,
+        edges: Hash.new { |h, k| h[k] = [] }.merge(@edges.transform_values(&:dup)),
+        reverse_edges: Hash.new { |h, k| h[k] = [] }.merge(@reverse_edges.transform_values(&:dup))
+      )
     end
 
     # Add a node (stage) to the graph

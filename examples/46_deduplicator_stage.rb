@@ -19,6 +19,9 @@ class DeduplicatorStage < Minigun::Stage
   def run_worker_loop(stage_ctx)
     require_relative '../lib/minigun/queue_wrappers'
 
+    # Get stage stats for tracking
+    stage_stats = stage_ctx.stats.for_stage(stage_ctx.stage_name, is_terminal: stage_ctx.dag.terminal?(stage_ctx.stage_name))
+
     # Create wrapped queues
     wrapped_input = Minigun::InputQueue.new(
       stage_ctx.input_queue,
@@ -31,7 +34,8 @@ class DeduplicatorStage < Minigun::Stage
         stage_ctx.stage_input_queues[ds]
       },
       stage_ctx.stage_input_queues,
-      stage_ctx.runtime_edges
+      stage_ctx.runtime_edges,
+      stage_stats: stage_stats
     )
 
     # Process items one-by-one

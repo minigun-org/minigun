@@ -223,9 +223,10 @@ RSpec.describe Minigun::Execution::Worker do
       executor = instance_double(Minigun::Execution::InlineExecutor)
       allow(executor).to receive(:shutdown)
 
-      # Override the private create_executor_for_stage method to return our mock
+      # Mock executor creation to return our test double
+      allow_any_instance_of(described_class).to receive(:create_executor_if_needed).and_return(executor)
+
       worker = described_class.new(pipeline, stage, config)
-      worker.instance_variable_set(:@executor, executor)
 
       # Cause an error in the worker loop
       allow(pipeline).to receive(:stage_input_queues)

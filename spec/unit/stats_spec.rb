@@ -331,9 +331,12 @@ RSpec.describe Minigun::Stats do
   describe 'percentile methods' do
     let(:stats) do
       s = described_class.new(:test_stage)
-      # Manually add samples for testing
-      samples = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.10]
-      s.instance_variable_set(:@latency_samples, samples)
+      # Add samples using the public API
+      s.start!
+      [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.10].each do |latency|
+        s.record_latency(latency)
+      end
+      s.finish!
       s
     end
 
@@ -393,14 +396,15 @@ RSpec.describe Minigun::Stats do
 
     it 'includes latency data when available' do
       stats = described_class.new(:test_stage)
-      stats.instance_variable_set(:@latency_samples, [0.01, 0.02, 0.03])
-      stats.instance_variable_set(:@latency_count, 1000)  # Simulating reservoir sampling
+      stats.start!
+      [0.01, 0.02, 0.03].each { |latency| stats.record_latency(latency) }
+      stats.finish!
 
       hash = stats.to_h
       expect(hash[:latency]).to be_a(Hash)
       expect(hash[:latency][:p50]).to be_a(Numeric)
       expect(hash[:latency][:samples]).to eq(3)
-      expect(hash[:latency][:observations]).to eq(1000)
+      expect(hash[:latency][:observations]).to eq(3)
     end
 
     it 'shows observations count separately from samples in to_h' do
@@ -447,7 +451,9 @@ RSpec.describe Minigun::Stats do
 
     it 'includes latency info when available' do
       stats = described_class.new(:test_stage)
-      stats.instance_variable_set(:@latency_samples, [0.01, 0.02])
+      stats.start!
+      [0.01, 0.02].each { |latency| stats.record_latency(latency) }
+      stats.finish!
 
       string = stats.to_s
       expect(string).to include('Latency')

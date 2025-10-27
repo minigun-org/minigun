@@ -57,13 +57,17 @@ module Minigun
     def run_worker_loop(stage_ctx)
       require_relative 'queue_wrappers'
 
+      # Get stage stats for tracking
+      stage_stats = stage_ctx.stats.for_stage(stage_ctx.stage_name, is_terminal: stage_ctx.dag.terminal?(stage_ctx.stage_name))
+
       # Create wrapped queues
       wrapped_input = InputQueue.new(stage_ctx.input_queue, stage_ctx.stage_name, stage_ctx.sources_expected)
       wrapped_output = OutputQueue.new(
         stage_ctx.stage_name,
         stage_ctx.dag.downstream(stage_ctx.stage_name).map { |ds| stage_ctx.stage_input_queues[ds] },
         stage_ctx.stage_input_queues,
-        stage_ctx.runtime_edges
+        stage_ctx.runtime_edges,
+        stage_stats: stage_stats
       )
 
       # Execute with both queues (block manages its own loop)
@@ -155,9 +159,6 @@ module Minigun
         context = stage_ctx.pipeline.context
         execute(context, item: nil, input_queue: nil, output_queue: output_queue)
 
-        # Update stats
-        output_queue.items_produced.times { stage_stats.increment_produced }
-
         # Execute after hooks
         execute_hooks(stage_ctx, :after)
       rescue => e
@@ -175,7 +176,8 @@ module Minigun
     def create_output_queue(ctx)
       downstream = ctx.dag.downstream(ctx.stage_name)
       downstream_queues = downstream.map { |to| ctx.stage_input_queues[to] }.compact
-      OutputQueue.new(ctx.stage_name, downstream_queues, ctx.stage_input_queues, ctx.runtime_edges)
+      stage_stats = ctx.stats.for_stage(ctx.stage_name, is_terminal: ctx.dag.terminal?(ctx.stage_name))
+      OutputQueue.new(ctx.stage_name, downstream_queues, ctx.stage_input_queues, ctx.runtime_edges, stage_stats: stage_stats)
     end
 
     def execute_hooks(ctx, type)
@@ -211,13 +213,17 @@ module Minigun
     def run_worker_loop(stage_ctx)
       require_relative 'queue_wrappers'
 
+      # Get stage stats for tracking
+      stage_stats = stage_ctx.stats.for_stage(stage_ctx.stage_name, is_terminal: stage_ctx.dag.terminal?(stage_ctx.stage_name))
+
       # Create wrapped queues
       wrapped_input = InputQueue.new(stage_ctx.input_queue, stage_ctx.stage_name, stage_ctx.sources_expected)
       wrapped_output = OutputQueue.new(
         stage_ctx.stage_name,
         stage_ctx.dag.downstream(stage_ctx.stage_name).map { |ds| stage_ctx.stage_input_queues[ds] },
         stage_ctx.stage_input_queues,
-        stage_ctx.runtime_edges
+        stage_ctx.runtime_edges,
+        stage_stats: stage_stats
       )
 
       # Process items loop
@@ -485,11 +491,13 @@ module Minigun
       # Check if this PipelineStage is acting as a producer (no upstream)
       if stage_ctx.sources_expected.empty?
         # Producer mode: run the nested pipeline once
+        stage_stats = stage_ctx.stats.for_stage(stage_ctx.stage_name, is_terminal: stage_ctx.dag.terminal?(stage_ctx.stage_name))
         wrapped_output = OutputQueue.new(
           stage_ctx.stage_name,
           stage_ctx.dag.downstream(stage_ctx.stage_name).map { |ds| stage_ctx.stage_input_queues[ds] },
           stage_ctx.stage_input_queues,
-          stage_ctx.runtime_edges
+          stage_ctx.runtime_edges,
+          stage_stats: stage_stats
         )
 
         context = stage_ctx.pipeline.context
@@ -508,12 +516,14 @@ module Minigun
       end
 
       # Consumer mode: process items from upstream
+      stage_stats = stage_ctx.stats.for_stage(stage_ctx.stage_name, is_terminal: stage_ctx.dag.terminal?(stage_ctx.stage_name))
       wrapped_input = InputQueue.new(stage_ctx.input_queue, stage_ctx.stage_name, stage_ctx.sources_expected)
       wrapped_output = OutputQueue.new(
         stage_ctx.stage_name,
         stage_ctx.dag.downstream(stage_ctx.stage_name).map { |ds| stage_ctx.stage_input_queues[ds] },
         stage_ctx.stage_input_queues,
-        stage_ctx.runtime_edges
+        stage_ctx.runtime_edges,
+        stage_stats: stage_stats
       )
 
       # Traditional item-by-item processing
