@@ -19,6 +19,6 @@ Gem::Specification.new do |spec|
   spec.metadata['changelog_uri'] = "#{spec.homepage}/blob/main/CHANGELOG.md"
   spec.metadata['rubygems_mfa_required'] = 'true'
 
-  spec.add_dependency 'concurrent-ruby', '~> 1.1'
+  spec.add_dependency 'concurrent-ruby', '>= 1.1'
   spec.add_dependency 'logger', '>= 1.0'
 end

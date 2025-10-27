@@ -1,10 +1,11 @@
 # frozen_string_literal: true
 
+require 'concurrent'
+
 module Minigun
   # Tracks execution statistics for a single stage
   class Stats
     attr_reader :stage_name, :start_time, :end_time
-    attr_reader :items_produced, :items_consumed, :items_failed
     attr_reader :latency_samples, :latency_count
 
     # Latency tracking - reservoir sampling for uniform distribution
@@ -15,14 +16,27 @@ module Minigun
       @is_terminal = is_terminal
       @start_time = nil
       @end_time = nil
-      @items_produced = 0
-      @items_consumed = 0
-      @items_failed = 0
+      @items_produced = Concurrent::AtomicFixnum.new(0)
+      @items_consumed = Concurrent::AtomicFixnum.new(0)
+      @items_failed = Concurrent::AtomicFixnum.new(0)
 
       # Latency tracking - reservoir sampling
       @latency_samples = []
       @latency_count = 0  # Total number of latency observations
       @mutex = Mutex.new
+    end
+
+    # Public accessors that return integer values from AtomicFixnum
+    def items_produced
+      @items_produced.value
+    end
+
+    def items_consumed
+      @items_consumed.value
+    end
+
+    def items_failed
+      @items_failed.value
     end
 
     # Mark stage as started
@@ -35,17 +49,17 @@ module Minigun
       @end_time = Time.now
     end
 
-    # Increment counters (thread-safe)
+    # Increment counters (lock-free, thread-safe)
     def increment_produced(count = 1)
-      @mutex.synchronize { @items_produced += count }
+      @items_produced.increment(count)
     end
 
     def increment_consumed(count = 1)
-      @mutex.synchronize { @items_consumed += count }
+      @items_consumed.increment(count)
     end
 
     def increment_failed(count = 1)
-      @mutex.synchronize { @items_failed += count }
+      @items_failed.increment(count)
     end
 
     # Record latency for an item (in seconds) using reservoir sampling
@@ -90,13 +104,13 @@ module Minigun
     # For terminal stages (final consumers), count consumed items
     # For non-terminal stages (produce items for downstream), count produced items
     def total_items
-      @is_terminal ? @items_consumed : @items_produced
+      @is_terminal ? items_consumed : items_produced
     end
 
     # Success rate
     def success_rate
       return 100.0 if total_items.zero?
-      ((total_items - @items_failed) / total_items.to_f) * 100
+      ((total_items - items_failed) / total_items.to_f) * 100
     end
 
     # Calculate percentile from latency samples
@@ -136,9 +150,9 @@ module Minigun
       {
         stage_name: @stage_name,
         runtime: runtime.round(2),
-        items_produced: @items_produced,
-        items_consumed: @items_consumed,
-        items_failed: @items_failed,
+        items_produced: items_produced,
+        items_consumed: items_consumed,
+        items_failed: items_failed,
         total_items: total_items,
         throughput: throughput.round(2),
         time_per_item: time_per_item.round(4),
@@ -166,8 +180,8 @@ module Minigun
         "Throughput: #{throughput.round(2)} items/s"
       ]
 
-      if @items_failed > 0
-        parts << "Failed: #{@items_failed} (#{(100 - success_rate).round(2)}%)"
+      if items_failed > 0
+        parts << "Failed: #{items_failed} (#{(100 - success_rate).round(2)}%)"
       end
 
       if has_latency_data?
