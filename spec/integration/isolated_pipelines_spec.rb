@@ -133,8 +133,8 @@ RSpec.describe 'Isolated Pipelines' do
       # Verify the pipeline ran successfully
       expect(instance.results).to eq([1])
 
-      # Get the PipelineStage object
-      task = instance.class._minigun_task
+      # Get the PipelineStage object from instance task
+      task = instance._minigun_task
       pipeline_stage = task.root_pipeline.stages[:standalone]
 
       # Verify it's a PipelineStage (nested pipeline)

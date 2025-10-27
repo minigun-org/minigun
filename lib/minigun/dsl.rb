@@ -22,21 +22,16 @@ module Minigun
         _minigun_task.set_config(:max_retries, value)
       end
 
-      # Pipeline block - evaluates on class-level task (blueprint)
+      # Pipeline block - stores block for lazy instance-level evaluation
+      # All pipeline definitions (both unnamed and named) are stored and evaluated at instance time
+      # This allows blocks to access instance variables correctly
       def pipeline(name = nil, options = {}, &block)
-        if name.nil?
-          # Evaluate on class-level task immediately, passing class as context
-          # This populates the blueprint that will be deep-copied per instance
-          pipeline_dsl = PipelineDSL.new(_minigun_task.root_pipeline, self)
-          pipeline_dsl.instance_eval(&block)
-        else
-          # Named pipeline - always define at class level (multi-pipeline mode)
-          # This ensures proper ordering and avoids closure issues
-          _minigun_task.define_pipeline(name, options) do |pipeline|
-            pipeline_dsl = PipelineDSL.new(pipeline, self)
-            pipeline_dsl.instance_eval(&block) if block_given?
-          end
-        end
+        @_pipeline_definition_blocks ||= []
+        @_pipeline_definition_blocks << { name: name, options: options, block: block }
+      end
+
+      def _pipeline_definition_blocks
+        @_pipeline_definition_blocks || []
       end
 
       private
@@ -87,6 +82,12 @@ module Minigun
           root_pipeline: parent_task.root_pipeline.dup
         )
         subclass._minigun_task = new_task
+
+        # Inherit pipeline definition blocks (deep dup to avoid shared hashes)
+        subclass.instance_variable_set(
+          :@_pipeline_definition_blocks,
+          (@_pipeline_definition_blocks || []).map(&:dup)
+        )
       end
     end
 
@@ -106,22 +107,22 @@ module Minigun
         config: class_task.config.dup,
         root_pipeline: class_task.root_pipeline.dup
       )
-    end
 
-    # Pipeline block wrapper - REQUIRED for stage definitions
-    # Supports two modes:
-    # 1. pipeline do...end - Main pipeline definition (uses PipelineDSL)
-    # 2. pipeline :name do...end - Named pipeline (multi-pipeline mode)
-    def pipeline(name = nil, options = {}, &block)
-      if name.nil?
-        # Mode 1: Main pipeline - use PipelineDSL
-        pipeline_dsl = PipelineDSL.new(self.class._minigun_task.root_pipeline, self)
-        pipeline_dsl.instance_eval(&block)
-      else
-        # Mode 2: Named pipeline (standalone or multi-pipeline)
-        self.class._minigun_task.define_pipeline(name, options) do |pipeline|
-          pipeline_dsl = PipelineDSL.new(pipeline, self)
-          pipeline_dsl.instance_eval(&block) if block_given?
+      # Evaluate stored pipeline blocks on instance task with instance context
+      self.class._pipeline_definition_blocks.each do |entry|
+        name = entry[:name]
+        opts = entry[:options]
+        
+        if name
+          # Named pipeline - define on instance task, then evaluate block in PipelineDSL context
+          @_minigun_task.define_pipeline(name, opts) do |pipeline|
+            pipeline_dsl = PipelineDSL.new(pipeline, self)
+            pipeline_dsl.instance_eval(&entry[:block])
+          end
+        else
+          # Unnamed pipeline - evaluate in PipelineDSL context on root pipeline
+          pipeline_dsl = PipelineDSL.new(@_minigun_task.root_pipeline, self)
+          pipeline_dsl.instance_eval(&entry[:block])
         end
       end
     end
@@ -216,9 +217,9 @@ module Minigun
       def pipeline(name, options = {}, &block)
         # This handles nested pipeline stages within a pipeline block
         if @context
-          # Get task class (context can be either the class itself or an instance)
-          task_class = @context.is_a?(Class) ? @context : @context.class
-          task_class._minigun_task.add_nested_pipeline(name, options, &block)
+          # Get the task from context (instance or class)
+          task = @context._minigun_task
+          task.add_nested_pipeline(name, options, &block)
         else
           raise "Nested pipelines require instance context"
         end

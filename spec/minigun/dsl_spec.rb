@@ -55,7 +55,7 @@ RSpec.describe Minigun::DSL do
       end
       instance = test_class.new
       instance.run rescue nil  # Trigger evaluation
-      expect(test_class._minigun_task.hooks[:before_run]).not_to be_empty
+      expect(instance._minigun_task.root_pipeline.hooks[:before_run]).not_to be_empty
     end
 
     it 'allows defining after_run hook inside pipeline do' do
@@ -64,7 +64,7 @@ RSpec.describe Minigun::DSL do
       end
       instance = test_class.new
       instance.run rescue nil  # Trigger evaluation
-      expect(test_class._minigun_task.hooks[:after_run]).not_to be_empty
+      expect(instance._minigun_task.root_pipeline.hooks[:after_run]).not_to be_empty
     end
 
     it 'allows defining before_fork hook inside pipeline do' do
@@ -73,7 +73,7 @@ RSpec.describe Minigun::DSL do
       end
       instance = test_class.new
       instance.run rescue nil  # Trigger evaluation
-      expect(test_class._minigun_task.hooks[:before_fork]).not_to be_empty
+      expect(instance._minigun_task.root_pipeline.hooks[:before_fork]).not_to be_empty
     end
 
     it 'allows defining after_fork hook inside pipeline do' do
@@ -82,7 +82,7 @@ RSpec.describe Minigun::DSL do
       end
       instance = test_class.new
       instance.run rescue nil  # Trigger evaluation
-      expect(test_class._minigun_task.hooks[:after_fork]).not_to be_empty
+      expect(instance._minigun_task.root_pipeline.hooks[:after_fork]).not_to be_empty
     end
 
     it 'allows defining pipeline block for grouping' do
@@ -95,8 +95,8 @@ RSpec.describe Minigun::DSL do
       instance = test_class.new
       instance.run rescue nil
 
-      producer = test_class._minigun_task.stages[:grouped_producer]
-      consumer = test_class._minigun_task.stages[:grouped_consumer]
+      producer = instance._minigun_task.root_pipeline.stages[:grouped_producer]
+      consumer = instance._minigun_task.root_pipeline.stages[:grouped_consumer]
 
       expect(producer).not_to be_nil
       expect(producer.name).to eq(:grouped_producer)
@@ -171,7 +171,7 @@ RSpec.describe Minigun::DSL do
       # Need to instantiate to trigger pipeline evaluation
       instance = test_class.new
       instance.run rescue nil  # Trigger evaluation
-      task = test_class._minigun_task
+      task = instance._minigun_task
       pipeline = task.root_pipeline
 
       expect(task.config[:max_threads]).to eq(3)
