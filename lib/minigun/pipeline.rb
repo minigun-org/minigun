@@ -106,8 +106,8 @@ module Minigun
         add_stage_hook(:after_fork, name, &after_fork_proc)
       end
 
-      # Set stage_type option for AtomicStage
-      options[:stage_type] = type if [:stage, :producer, :processor, :consumer].include?(type)
+      # Set stage_type option for AtomicStage (only if not already set by DSL)
+      options[:stage_type] ||= type if [:stage, :producer, :processor, :consumer].include?(type)
 
       # Create appropriate stage subclass
       stage = case type
