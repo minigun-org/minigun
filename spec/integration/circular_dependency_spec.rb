@@ -12,7 +12,7 @@ RSpec.describe 'Circular Dependency Detection' do
           pipeline do
             # A stage that routes to itself
             processor :loop_stage, to: :loop_stage do |item|
-              emit(item)
+              output << item
             end
           end
         end.new.run
@@ -26,11 +26,11 @@ RSpec.describe 'Circular Dependency Detection' do
 
           pipeline do
             processor :a, to: :b do |item|
-              emit(item)
+              output << item
             end
 
             processor :b, to: :a do |item|
-              emit(item)
+              output << item
             end
           end
         end.new.run
@@ -44,15 +44,15 @@ RSpec.describe 'Circular Dependency Detection' do
 
           pipeline do
             processor :a, to: :b do |item|
-              emit(item)
+              output << item
             end
 
             processor :b, to: :c do |item|
-              emit(item)
+              output << item
             end
 
             processor :c, to: :a do |item|
-              emit(item)
+              output << item
             end
           end
         end.new.run
@@ -66,16 +66,16 @@ RSpec.describe 'Circular Dependency Detection' do
 
           pipeline do
             processor :a, to: :b do |item|
-              emit(item)
+              output << item
             end
 
             # from: :c means c->b, creating b->c and c->b cycle when combined with b->c
             processor :b, to: :c, from: :c do |item|
-              emit(item)
+              output << item
             end
 
             processor :c do |item|
-              emit(item)
+              output << item
             end
           end
         end.new.run
@@ -95,17 +95,17 @@ RSpec.describe 'Circular Dependency Detection' do
 
         pipeline do
           producer :source do
-            emit(1)
+            output << 1
           end
 
           # Diamond pattern: source -> left -> merge
           #                   source -> right -> merge
           processor :left, from: :source, to: :merge do |item|
-            emit(item + 10)
+            output << item + 10
           end
 
           processor :right, from: :source, to: :merge do |item|
-            emit(item + 20)
+            output << item + 20
           end
 
           consumer :merge do |item|
@@ -133,23 +133,23 @@ RSpec.describe 'Circular Dependency Detection' do
 
         pipeline do
           producer :start do
-            emit(1)
+            output << 1
           end
 
           processor :a, from: :start do |item|
-            emit(item + 1)
+            output << item + 1
           end
 
           processor :b, from: :start do |item|
-            emit(item + 2)
+            output << item + 2
           end
 
           processor :c, from: [:a, :b] do |item|
-            emit(item + 10)
+            output << item + 10
           end
 
           processor :d, from: :a do |item|
-            emit(item + 20)
+            output << item + 20
           end
 
           consumer :end_stage, from: [:c, :d] do |item|
@@ -175,11 +175,11 @@ RSpec.describe 'Circular Dependency Detection' do
 
           pipeline :a, to: :b do
             producer :gen do
-              emit(1)
+              output << 1
             end
 
             consumer :fwd do |item|
-              emit(item)
+              output << item
             end
           end
 
@@ -199,7 +199,7 @@ RSpec.describe 'Circular Dependency Detection' do
 
           pipeline :loop, to: :loop do
             producer :gen do
-              emit(1)
+              output << 1
             end
 
             consumer :collect do |_item|
@@ -217,11 +217,11 @@ RSpec.describe 'Circular Dependency Detection' do
 
           pipeline :a, to: :b do
             producer :gen do
-              emit(1)
+              output << 1
             end
 
             consumer :fwd do |item|
-              emit(item)
+              output << item
             end
           end
 
@@ -254,31 +254,31 @@ RSpec.describe 'Circular Dependency Detection' do
 
         pipeline :source, to: [:left, :right] do
           producer :gen do
-            emit(1)
+            output << 1
           end
 
           consumer :fwd do |item|
-            emit(item)
+            output << item
           end
         end
 
         pipeline :left, to: :merge do
           processor :transform do |item|
-            emit(item + 10)
+            output << item + 10
           end
 
           consumer :fwd do |item|
-            emit(item)
+            output << item
           end
         end
 
         pipeline :right, to: :merge do
           processor :transform do |item|
-            emit(item + 20)
+            output << item + 20
           end
 
           consumer :fwd do |item|
-            emit(item)
+            output << item
           end
         end
 

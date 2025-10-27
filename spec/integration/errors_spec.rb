@@ -21,7 +21,7 @@ RSpec.describe 'Error Handling' do
 
         pipeline do
           producer :generate do
-            5.times { |i| emit(i) }
+            5.times { |i| output << i }
           end
 
           consumer :process do |item|
@@ -52,7 +52,7 @@ RSpec.describe 'Error Handling' do
 
         pipeline do
           producer :generate, to: :nonexistent do
-            emit(1)
+            output << 1
           end
         end
       end

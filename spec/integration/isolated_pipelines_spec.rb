@@ -20,7 +20,7 @@ RSpec.describe 'Isolated Pipelines' do
         pipeline do
         pipeline :pipeline_a do
           producer :source_a do
-            3.times { |i| emit("A#{i}") }
+            3.times { |i| output << "A#{i}" }
           end
 
           consumer :collect_a do |item|
@@ -32,7 +32,7 @@ RSpec.describe 'Isolated Pipelines' do
         # Pipeline B - standalone (no connection to A)
         pipeline :pipeline_b do
           producer :source_b do
-            2.times { |i| emit("B#{i}") }
+            2.times { |i| output << "B#{i}" }
           end
 
           consumer :collect_b do |item|
@@ -68,7 +68,7 @@ RSpec.describe 'Isolated Pipelines' do
 
         pipeline :x do
           producer :gen_x do
-            emit(10)
+            output << 10
           end
 
           consumer :collect_x do |item|
@@ -78,7 +78,7 @@ RSpec.describe 'Isolated Pipelines' do
 
         pipeline :y do
           producer :gen_y do
-            emit(20)
+            output << 20
           end
 
           consumer :collect_y do |item|
@@ -88,7 +88,7 @@ RSpec.describe 'Isolated Pipelines' do
 
         pipeline :z do
           producer :gen_z do
-            emit(30)
+            output << 30
           end
 
           consumer :collect_z do |item|
@@ -118,7 +118,7 @@ RSpec.describe 'Isolated Pipelines' do
 
         pipeline :standalone do
           producer :source do
-            emit(1)
+            output << 1
           end
 
           consumer :sink do |item|

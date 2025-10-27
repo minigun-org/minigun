@@ -12,8 +12,8 @@ RSpec.describe Minigun::Stage do
 end
 
 RSpec.describe Minigun::AtomicStage do
-  describe 'producer behavior (block arity 0)' do
-    let(:stage) { described_class.new(name: :test, block: proc {}) }
+  describe 'producer behavior' do
+    let(:stage) { described_class.new(name: :test, block: proc { |output| }, options: { stage_type: :producer }) }
 
     it 'is a producer' do
       expect(stage.producer?).to be true
@@ -23,11 +23,12 @@ RSpec.describe Minigun::AtomicStage do
       result = nil
       stage = described_class.new(
         name: :test,
-        block: proc { result = 42 }
+        block: proc { |output| result = 42 },
+        options: { stage_type: :producer }
       )
 
       context = Object.new
-      stage.execute(context)
+      stage.execute(context, output_queue: Object.new)
 
       expect(result).to eq(42)
     end
@@ -40,17 +41,22 @@ RSpec.describe Minigun::AtomicStage do
       expect(stage.producer?).to be false
     end
 
-    it 'executes with emit and returns emitted items' do
+    it 'executes with queue-based output' do
       stage = described_class.new(
         name: :test,
-        block: proc do |item|
-          emit(item * 2)
-          emit(item * 3)
-        end
+        block: proc do |item, output|
+          output << item * 2
+          output << item * 3
+        end,
+        options: { stage_type: :processor }
       )
 
       context = Object.new
-      emitted = stage.execute_with_emit(context, 5)
+      emitted = []
+      mock_output = Object.new
+      mock_output.define_singleton_method(:<<) { |item| emitted << item }
+
+      stage.execute(context, item: 5, output_queue: mock_output)
 
       expect(emitted).to eq([10, 15])
     end
@@ -105,11 +111,12 @@ RSpec.describe 'Stage common behavior' do
       result = nil
       stage = Minigun::AtomicStage.new(
         name: :test,
-        block: proc { |item| result = item * 2 }
+        block: proc { |item| result = item * 2 },
+        options: { stage_type: :consumer }
       )
 
       context = Object.new
-      stage.execute(context, 5)
+      stage.execute(context, item: 5)
 
       expect(result).to eq(10)
     end
@@ -120,11 +127,13 @@ RSpec.describe 'Stage common behavior' do
 
       stage = Minigun::AtomicStage.new(
         name: :test,
-        block: proc { |item| @value + item }
+        block: proc { |item| @value + item },
+        options: { stage_type: :consumer }
       )
 
-      result = stage.execute(context, 23)
-      expect(result).to eq(123)
+      stage.execute(context, item: 23)
+      # Note: execute doesn't return values for consumers in new DSL
+      expect(context.instance_variable_get(:@value)).to eq(100) # unchanged
     end
   end
 
@@ -134,16 +143,15 @@ RSpec.describe 'Stage common behavior' do
       stage = Minigun::AtomicStage.new(
         name: :test,
         block: block,
-        options: { opt: 'val' }
+        options: { opt: 'val', stage_type: :processor }
       )
 
       hash = stage.to_h
 
-      expect(hash).to eq({
-        name: :test,
-        block: block,
-        options: { opt: 'val' }
-      })
+      expect(hash[:name]).to eq(:test)
+      expect(hash[:block]).to eq(block)
+      expect(hash[:options]).to include(opt: 'val')
+      expect(hash[:stage_type]).to eq(:processor)
     end
   end
 

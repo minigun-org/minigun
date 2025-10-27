@@ -18,13 +18,13 @@ RSpec.describe 'Multiple Producers' do
         pipeline do
           producer :source_a do
             5.times do |i|
-              emit("A#{i}")
+              output << "A#{i}"
             end
           end
 
           producer :source_b do
             5.times do |i|
-              emit("B#{i}")
+              output << "B#{i}"
             end
           end
 
@@ -58,22 +58,22 @@ RSpec.describe 'Multiple Producers' do
         pipeline do
           producer :source_x, to: :process_x do
             3.times do |i|
-              emit(i)
+              output << i
             end
           end
 
           producer :source_y, to: :process_y do
             3.times do |i|
-              emit(i + 100)
+              output << i + 100
             end
           end
 
           processor :process_x, to: :collect_x do |item|
-            emit(item * 10)
+            output << item * 10
           end
 
           processor :process_y, to: :collect_y do |item|
-            emit(item * 2)
+            output << item * 2
           end
 
           consumer :collect_x do |item|
@@ -108,11 +108,11 @@ RSpec.describe 'Multiple Producers' do
 
         pipeline do
           producer :fast_producer do
-            10.times { |i| emit(i) }
+            10.times { |i| output << i }
           end
 
           producer :slow_producer do
-            5.times { |i| emit(i + 100) }
+            5.times { |i| output << i + 100 }
           end
 
           consumer :collect do |item|
@@ -156,7 +156,7 @@ RSpec.describe 'Multiple Producers' do
 
         pipeline do
           producer :good_producer do
-            3.times { |i| emit(i) }
+            3.times { |i| output << i }
           end
 
           producer :bad_producer do
@@ -192,7 +192,7 @@ RSpec.describe 'Multiple Producers' do
 
         pipeline do
           producer :source do
-            5.times { |i| emit(i) }
+            5.times { |i| output << i }
           end
 
           consumer :collect do |item|

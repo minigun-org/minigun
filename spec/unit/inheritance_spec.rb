@@ -24,12 +24,12 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
 
         pipeline do
           producer :generate do
-            emit(1)
-            emit(2)
+            output << 1
+            output << 2
           end
 
           processor :transform do |num|
-            emit(num * 2)
+            output << num * 2
           end
 
           consumer :collect do |num|
@@ -85,8 +85,8 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
 
         pipeline do
           producer :generate do
-            emit(1)
-            emit(2)
+            output << 1
+            output << 2
           end
 
           consumer :collect do |num|
@@ -100,7 +100,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
       Class.new(parent_class) do
         pipeline do
           processor :double do |num|
-            emit(num * 2)
+            output << num * 2
           end
 
           # Reroute: generate -> double -> collect (instead of generate -> collect)
@@ -149,7 +149,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
 
           producer :generate do
             @events << :generate
-            emit(1)
+            output << 1
           end
 
           after :generate do
@@ -190,7 +190,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
         pipeline do
           producer :generate do
             @events << :generate
-            emit(1)
+            output << 1
           end
 
           consumer :collect do |num|
@@ -232,7 +232,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
 
         pipeline do
           producer :generate do
-            emit(1)
+            output << 1
           end
 
           consumer :collect do |num|
@@ -272,7 +272,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
 
         pipeline do
           producer :generate do
-            emit(1)
+            output << 1
           end
 
           consumer :collect do |num|
@@ -288,7 +288,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
 
         pipeline do
           processor :double do |num|
-            emit(num * 2)
+            output << num * 2
           end
 
           # Reroute: generate -> double -> collect (instead of generate -> collect)
@@ -304,7 +304,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
 
         pipeline do
           processor :add_ten do |num|
-            emit(num + 10)
+            output << num + 10
           end
 
           # Reroute: generate -> double -> add_ten -> collect
@@ -354,7 +354,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
 
         pipeline do
           producer :generate do
-            emit(10)
+            output << 10
           end
 
           consumer :collect do |num|
@@ -368,7 +368,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
       Class.new(parent_class) do
         pipeline do
           processor :double do |num|
-            emit(num * 2)
+            output << num * 2
           end
 
           # Reroute: generate -> double -> collect
@@ -382,7 +382,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
       Class.new(parent_class) do
         pipeline do
           processor :triple do |num|
-            emit(num * 3)
+            output << num * 3
           end
 
           # Reroute: generate -> triple -> collect
@@ -435,7 +435,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
           end
 
           producer :fetch_ids do
-            items_to_publish.each { |item| emit(item) }
+            items_to_publish.each { |item| output << item }
           end
 
           accumulator :batch

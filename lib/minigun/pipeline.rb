@@ -106,6 +106,9 @@ module Minigun
         add_stage_hook(:after_fork, name, &after_fork_proc)
       end
 
+      # Set stage_type option for AtomicStage
+      options[:stage_type] = type if [:stage, :producer, :processor, :consumer].include?(type)
+
       # Create appropriate stage subclass
       stage = case type
               when :stage, :producer, :processor, :consumer
@@ -373,6 +376,9 @@ module Minigun
             # Atomic producers: execute with OutputQueue
             producer_stage.execute(@context, item: nil, input_queue: nil, output_queue: output_queue)
           end
+
+          # Update stats with items produced
+          output_queue.items_produced.times { stage_stats.increment_produced }
 
           # Execute after hooks for this producer
           execute_stage_hooks(:after, producer_name) unless is_pipeline

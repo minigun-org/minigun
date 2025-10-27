@@ -18,13 +18,13 @@ RSpec.describe 'emit_to_stage' do
 
         pipeline do
           producer :gen do
-            emit({ id: 1, route: :fast })
-            emit({ id: 2, route: :slow })
-            emit({ id: 3, route: :fast })
+            output << { id: 1, route: :fast }
+            output << { id: 2, route: :slow }
+            output << { id: 3, route: :fast }
           end
 
           stage :router do |item|
-            emit_to_stage(item[:route], item)
+            output.to(item[:route]) << item
           end
 
           consumer :fast do |item|
@@ -58,15 +58,15 @@ RSpec.describe 'emit_to_stage' do
 
         pipeline do
           producer :gen do
-            emit(1)
-            emit(2)
+            output << 1
+            output << 2
           end
 
           stage :router do |item|
             if item == 1
-              emit(item * 10)  # Regular emit - goes to next stage via DAG
+              output << item * 10  # Regular emit - goes to next stage via DAG
             else
-              emit_to_stage(:special, item * 100)  # Targeted emit
+              output.to(:special) << item * 100  # Targeted emit
             end
           end
 
@@ -100,13 +100,13 @@ RSpec.describe 'emit_to_stage' do
 
         pipeline do
           producer :gen do
-            emit({ value: 100 })
+            output << { value: 100 }
           end
 
           stage :splitter do |item|
-            emit_to_stage(:consumer_a, { stage: 'A', value: item[:value] })
-            emit_to_stage(:consumer_b, { stage: 'B', value: item[:value] * 2 })
-            emit_to_stage(:consumer_c, { stage: 'C', value: item[:value] * 3 })
+            output.to(:consumer_a) << { stage: 'A', value: item[:value] }
+            output.to(:consumer_b) << { stage: 'B', value: item[:value] * 2 }
+            output.to(:consumer_c) << { stage: 'C', value: item[:value] * 3 }
           end
 
           consumer :consumer_a do |item|
@@ -140,11 +140,11 @@ RSpec.describe 'emit_to_stage' do
 
         pipeline do
           producer :gen do
-            emit(1)
+            output << 1
           end
 
           stage :router do |item|
-            emit_to_stage(:nonexistent_stage, item)
+            output.to(:nonexistent_stage) << item
           end
 
           consumer :actual_stage do |item|
@@ -171,15 +171,15 @@ RSpec.describe 'emit_to_stage' do
 
         pipeline do
           producer :gen do
-            emit(1)
-            emit(2)
+            output << 1
+            output << 2
           end
 
           stage :router do |item|
             if item == 1
-              emit_to_stage(:nonexistent, item)
+              output.to(:nonexistent) << item
             else
-              emit_to_stage(:valid, item)
+              output.to(:valid) << item
             end
           end
 
@@ -212,14 +212,14 @@ RSpec.describe 'emit_to_stage' do
 
         pipeline do
           producer :gen do
-            5.times { |i| emit(i) }
+            5.times { |i| output << i }
           end
 
           stage :router do |item|
             if item.even?
-              emit_to_stage(:even_processor, item)
+              output.to(:even_processor) << item
             else
-              emit_to_stage(:odd_processor, item)
+              output.to(:odd_processor) << item
             end
           end
 
@@ -259,16 +259,16 @@ RSpec.describe 'emit_to_stage' do
 
         pipeline do
           producer :gen do
-            emit({ type: 'light', value: 1 })
-            emit({ type: 'heavy', value: 2 })
+            output << { type: 'light', value: 1 }
+            output << { type: 'heavy', value: 2 }
           end
 
           stage :router do |item|
             case item[:type]
             when 'light'
-              emit_to_stage(:light_processor, item)
+              output.to(:light_processor) << item
             when 'heavy'
-              emit_to_stage(:heavy_processor, item)
+              output.to(:heavy_processor) << item
             end
           end
 
@@ -311,16 +311,16 @@ RSpec.describe 'emit_to_stage' do
 
         pipeline do
           producer :gen do
-            emit({ type: 'light', value: 1 })
-            emit({ type: 'heavy', value: 2 })
+            output << { type: 'light', value: 1 }
+            output << { type: 'heavy', value: 2 }
           end
 
           stage :router do |item|
             case item[:type]
             when 'light'
-              emit_to_stage(:light_processor, item)
+              output.to(:light_processor) << item
             when 'heavy'
-              emit_to_stage(:heavy_processor, item)
+              output.to(:heavy_processor) << item
             end
           end
 
@@ -382,9 +382,9 @@ RSpec.describe 'emit_to_stage' do
 
         pipeline do
           producer :gen do
-            emit({ priority: 'high', data: 'urgent' })
-            emit({ priority: 'low', data: 'delayed' })
-            emit({ priority: 'medium', data: 'normal' })
+            output << { priority: 'high', data: 'urgent' }
+            output << { priority: 'low', data: 'delayed' }
+            output << { priority: 'medium', data: 'normal' }
           end
 
           stage :priority_router do |item|
@@ -399,7 +399,7 @@ RSpec.describe 'emit_to_stage' do
                        :default_handler
                      end
 
-            emit_to_stage(target, item)
+            output.to(target) << item
           end
 
           consumer :high_priority_handler do |item|
@@ -444,14 +444,14 @@ RSpec.describe 'emit_to_stage' do
 
         pipeline do
           producer :gen do
-            10.times { |i| emit(i) }
+            10.times { |i| output << i }
           end
 
           stage :load_balancer do |item|
             # Round-robin across 3 workers
             worker = @counter % 3
             @counter += 1
-            emit_to_stage(:"worker_#{worker}", item)
+            output.to(:"worker_#{worker}") << item
           end
 
           consumer :worker_0 do |item|
@@ -496,24 +496,24 @@ RSpec.describe 'emit_to_stage' do
 
         pipeline do
           producer :gen do
-            emit({ category: 'email', type: 'transactional', id: 1 })
-            emit({ category: 'email', type: 'marketing', id: 2 })
-            emit({ category: 'sms', type: 'transactional', id: 3 })
+            output << { category: 'email', type: 'transactional', id: 1 }
+            output << { category: 'email', type: 'marketing', id: 2 }
+            output << { category: 'sms', type: 'transactional', id: 3 }
           end
 
           stage :category_router do |item|
             if item[:category] == 'email'
-              emit_to_stage(:email_type_router, item)
+              output.to(:email_type_router) << item
             else
-              emit_to_stage(:sms_handler, item)
+              output.to(:sms_handler) << item
             end
           end
 
           stage :email_type_router do |item|
             if item[:type] == 'transactional'
-              emit_to_stage(:email_transactional, item)
+              output.to(:email_transactional) << item
             else
-              emit_to_stage(:email_marketing, item)
+              output.to(:email_marketing) << item
             end
           end
 
@@ -554,11 +554,11 @@ RSpec.describe 'emit_to_stage' do
 
         pipeline do
           producer :gen do
-            emit({ type: 'A', value: 1 })
-            emit({ type: 'B', value: 2 })
-            emit({ type: 'A', value: 3 })
-            emit({ type: 'B', value: 4 })
-            emit({ type: 'A', value: 5 })
+            output << { type: 'A', value: 1 }
+            output << { type: 'B', value: 2 }
+            output << { type: 'A', value: 3 }
+            output << { type: 'B', value: 4 }
+            output << { type: 'A', value: 5 }
           end
 
           stage :type_batcher do |item|
@@ -569,7 +569,7 @@ RSpec.describe 'emit_to_stage' do
             if @batches[item[:type]].size >= 2
               batch = @batches[item[:type]].dup
               @batches[item[:type]].clear
-              emit_to_stage(:"#{item[:type]}_handler", batch)
+              output.to(:"#{item[:type]}_handler") << batch
             end
           end
 
@@ -605,11 +605,11 @@ RSpec.describe 'emit_to_stage' do
     it 'returns plain items when only emit is used' do
       stage = Minigun::AtomicStage.new(
         name: :test,
-        block: proc { |item| emit(item * 2) }
+        block: proc { |item| output << item * 2 }
       )
 
       context = Object.new
-      results = stage.execute_with_emit(context, 5)
+      results = stage.execute_with_output << context, 5
 
       expect(results).to eq([10])
     end
@@ -617,11 +617,11 @@ RSpec.describe 'emit_to_stage' do
     it 'returns hash with target when emit_to_stage is used' do
       stage = Minigun::AtomicStage.new(
         name: :test,
-        block: proc { |item| emit_to_stage(:target, item * 2) }
+        block: proc { |item| output.to(:target) << item * 2 }
       )
 
       context = Object.new
-      results = stage.execute_with_emit(context, 5)
+      results = stage.execute_with_output << context, 5
 
       expect(results.size).to eq(1)
       expect(results.first).to eq({ item: 10, target: :target })
@@ -631,14 +631,14 @@ RSpec.describe 'emit_to_stage' do
       stage = Minigun::AtomicStage.new(
         name: :test,
         block: proc do |item|
-          emit(item * 2)
-          emit_to_stage(:specific, item * 3)
-          emit(item * 4)
+          output << item * 2
+          output.to(:specific) << item * 3
+          output << item * 4
         end
       )
 
       context = Object.new
-      results = stage.execute_with_emit(context, 5)
+      results = stage.execute_with_output << context, 5
 
       expect(results.size).to eq(3)
       # All items in emissions array, mixed types

@@ -17,11 +17,11 @@ RSpec.describe 'From Keyword' do
 
         pipeline do
           producer :source, to: :double do
-            3.times { |i| emit(i) }
+            3.times { |i| output << i }
           end
 
           processor :double do |item|
-            emit(item * 2)
+            output << item * 2
           end
 
           # Use from: to connect from source and double
@@ -50,8 +50,8 @@ RSpec.describe 'From Keyword' do
 
         pipeline do
           producer :gen do
-            emit(10)
-            emit(20)
+            output << 10
+            output << 20
           end
 
           consumer :save, from: :gen do |item|
@@ -79,16 +79,16 @@ RSpec.describe 'From Keyword' do
 
         pipeline do
           producer :a do
-            emit(1)
+            output << 1
           end
 
           # B receives from A using to:
           processor :b, to: :d do |item|
-            emit(item + 10)
+            output << item + 10
           end
 
           producer :c do
-            emit(2)
+            output << 2
           end
 
           # D receives from B (via to:) and C (via from:)
@@ -121,12 +121,12 @@ RSpec.describe 'From Keyword' do
 
         pipeline :generate do
           producer :source do
-            2.times { |i| emit(i) }
+            2.times { |i| output << i }
           end
 
           consumer :forward do |item|
             @mutex.synchronize { @results_a << item }
-            emit(item * 10)
+            output << item * 10
           end
         end
 
@@ -158,21 +158,21 @@ RSpec.describe 'From Keyword' do
 
         pipeline :source_a do
           producer :gen_a do
-            emit('A')
+            output << 'A'
           end
 
           consumer :out_a do |item|
-            emit(item)
+            output << item
           end
         end
 
         pipeline :source_b do
           producer :gen_b do
-            emit('B')
+            output << 'B'
           end
 
           consumer :out_b do |item|
-            emit(item)
+            output << item
           end
         end
 
@@ -203,31 +203,31 @@ RSpec.describe 'From Keyword' do
 
         pipeline :a, to: :b do
           producer :gen do
-            emit(1)
+            output << 1
           end
 
           consumer :fwd do |item|
-            emit(item)
+            output << item
           end
         end
 
         pipeline :b, to: :d do
           processor :transform do |item|
-            emit(item + 10)
+            output << item + 10
           end
 
           consumer :fwd do |item|
-            emit(item)
+            output << item
           end
         end
 
         pipeline :c do
           producer :gen do
-            emit(2)
+            output << 2
           end
 
           consumer :fwd do |item|
-            emit(item)
+            output << item
           end
         end
 

@@ -27,11 +27,17 @@ module Minigun
         # Track consumption of input item
         stage_stats.increment_consumed if item
 
+        # Track items produced before execution
+        items_before = output_queue&.items_produced || 0
+
         # Execute the stage using this executor's strategy
         execute_with_strategy(stage, item, user_context, pipeline, input_queue, output_queue)
 
-        # TODO: Track production - with queues we can't easily count outputs here
-        # May need to instrument OutputQueue or track differently
+        # Track production by reading count from OutputQueue
+        if output_queue
+          items_produced = output_queue.items_produced - items_before
+          items_produced.times { stage_stats.increment_produced }
+        end
 
         # Record latency
         duration = Time.now - start_time

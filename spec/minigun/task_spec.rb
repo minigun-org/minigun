@@ -112,8 +112,8 @@ RSpec.describe Minigun::Task do
     end
 
     it 'executes simple producer-consumer pipeline' do
-      task.add_stage(:producer, :gen) do
-        3.times { |i| emit(i + 1) }
+      task.add_stage(:producer, :gen) do |output|
+        3.times { |i| output << i + 1 }
       end
 
       task.add_stage(:consumer, :process) do |item|
@@ -123,19 +123,19 @@ RSpec.describe Minigun::Task do
       # Suppress logger output in tests
       allow(Minigun.logger).to receive(:info)
 
-      result = task.run(context)
+      task.run(context)
 
-      expect(context.consumed.size).to be > 0
-      expect(result).to be > 0
+      # With queue-based DSL, items flow through directly
+      expect(context.consumed).to contain_exactly(1, 2, 3)
     end
 
     it 'executes producer-processor-consumer pipeline' do
-      task.add_stage(:producer, :gen) do
-        3.times { |i| emit(i + 1) }
+      task.add_stage(:producer, :gen) do |output|
+        3.times { |i| output << i + 1 }
       end
 
-      task.add_stage(:processor, :double) do |item|
-        emit(item * 2)
+      task.add_stage(:processor, :double) do |item, output|
+        output << item * 2
       end
 
       task.add_stage(:consumer, :process) do |item|
@@ -154,8 +154,8 @@ RSpec.describe Minigun::Task do
         self.before_run_called = true
       end
 
-      task.add_stage(:producer, :gen) do
-        emit(1)
+      task.add_stage(:producer, :gen) do |output|
+        output << 1
       end
 
       task.add_stage(:consumer, :process) do |item|
@@ -174,8 +174,8 @@ RSpec.describe Minigun::Task do
         self.after_run_called = true
       end
 
-      task.add_stage(:producer, :gen) do
-        emit(1)
+      task.add_stage(:producer, :gen) do |output|
+        output << 1
       end
 
       task.add_stage(:consumer, :process) do |item|
@@ -192,8 +192,8 @@ RSpec.describe Minigun::Task do
     it 'handles multiple items through pipeline' do
       task.set_config(:max_threads, 2)
 
-      task.add_stage(:producer, :gen) do
-        10.times { |i| emit(i) }
+      task.add_stage(:producer, :gen) do |output|
+        10.times { |i| output << i }
       end
 
       task.add_stage(:consumer, :process) do |item|
@@ -208,8 +208,8 @@ RSpec.describe Minigun::Task do
     end
 
     it 'returns accumulated count' do
-      task.add_stage(:producer, :gen) do
-        5.times { |i| emit(i) }
+      task.add_stage(:producer, :gen) do |output|
+        5.times { |i| output << i }
       end
 
       task.add_stage(:consumer, :process) do |item|
@@ -226,8 +226,8 @@ RSpec.describe Minigun::Task do
 
   describe 'thread safety' do
     it 'uses atomic counter for produced items' do
-      task.add_stage(:producer, :gen) do
-        100.times { |i| emit(i) }
+      task.add_stage(:producer, :gen) do |output|
+        100.times { |i| output << i }
       end
 
       task.add_stage(:consumer, :process) { |_item| }

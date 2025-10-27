@@ -21,8 +21,8 @@ RSpec.describe 'Stage-Specific Hooks' do
         pipeline do
           producer :generate do
             @events << :producer_run
-            emit(1)
-            emit(2)
+            output << 1
+            output << 2
           end
 
           before :generate do
@@ -35,7 +35,7 @@ RSpec.describe 'Stage-Specific Hooks' do
 
           processor :transform do |num|
             @events << :processor_run
-            emit(num * 2)
+            output << num * 2
           end
 
           before :transform do
@@ -83,7 +83,7 @@ RSpec.describe 'Stage-Specific Hooks' do
                    before: -> { @events << :before_inline },
                    after: -> { @events << :after_inline } do
             @events << :producer_run
-            emit(1)
+            output << 1
           end
 
           consumer :collect do |num|
@@ -120,7 +120,7 @@ RSpec.describe 'Stage-Specific Hooks' do
 
         pipeline do
           producer :generate do
-            3.times { |i| emit(i) }
+            3.times { |i| output << i }
           end
 
           accumulator :batch
@@ -176,7 +176,7 @@ RSpec.describe 'Stage-Specific Hooks' do
 
           producer :generate do
             @events << :producer_run
-            emit(1)
+            output << 1
           end
 
           before :generate do
@@ -221,7 +221,7 @@ RSpec.describe 'Stage-Specific Hooks' do
         pipeline do
           producer :generate do
             @events << :producer_run
-            emit(1)
+            output << 1
           end
 
           before :generate do

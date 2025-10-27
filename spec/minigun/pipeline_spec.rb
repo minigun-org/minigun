@@ -151,7 +151,7 @@ RSpec.describe Minigun::Pipeline do
 
   describe '#find_all_producers' do
     it 'finds AtomicStage producers' do
-      pipeline.add_stage(:producer, :source) { emit(1) }
+      pipeline.add_stage(:producer, :source) { output << 1 }
       pipeline.add_stage(:consumer, :sink) { |item| item }
 
       producers = pipeline.send(:find_all_producers)
@@ -178,7 +178,7 @@ RSpec.describe Minigun::Pipeline do
 
     it 'does not include PipelineStages with upstream' do
       # Add a regular producer
-      pipeline.add_stage(:producer, :source) { emit(1) }
+      pipeline.add_stage(:producer, :source) { output << 1 }
 
       # Add a PipelineStage with upstream
       pipeline_stage = Minigun::PipelineStage.new(name: :nested)
@@ -199,7 +199,7 @@ RSpec.describe Minigun::Pipeline do
 
     it 'finds both AtomicStage and PipelineStage producers' do
       # Add atomic producer
-      pipeline.add_stage(:producer, :atomic_source) { emit(1) }
+      pipeline.add_stage(:producer, :atomic_source) { output << 1 }
 
       # Add PipelineStage producer
       pipeline_stage = Minigun::PipelineStage.new(name: :pipeline_source)
@@ -218,7 +218,7 @@ RSpec.describe Minigun::Pipeline do
 
   describe '#handle_multiple_producers_routing!' do
     it 'connects single producer to next stage' do
-      pipeline.add_stage(:producer, :source) { emit(1) }
+      pipeline.add_stage(:producer, :source) { output << 1 }
       pipeline.add_stage(:consumer, :sink) { |item| item }
 
       pipeline.send(:build_dag_routing!)
@@ -227,10 +227,10 @@ RSpec.describe Minigun::Pipeline do
     end
 
     it 'connects each producer to its next sequential non-producer' do
-      pipeline.add_stage(:producer, :source_a) { emit(1) }
-      pipeline.add_stage(:processor, :process_a) { |item| emit(item * 10) }
-      pipeline.add_stage(:producer, :source_b) { emit(2) }
-      pipeline.add_stage(:processor, :process_b) { |item| emit(item * 20) }
+      pipeline.add_stage(:producer, :source_a) { output << 1 }
+      pipeline.add_stage(:processor, :process_a) { |item| output << item * 10 }
+      pipeline.add_stage(:producer, :source_b) { output << 2 }
+      pipeline.add_stage(:processor, :process_b) { |item| output << item * 20 }
 
       pipeline.send(:build_dag_routing!)
 
@@ -241,10 +241,10 @@ RSpec.describe Minigun::Pipeline do
     end
 
     it 'does not connect producers that already have explicit routing' do
-      pipeline.add_stage(:producer, :source_a) { emit(1) }
-      pipeline.add_stage(:processor, :process_a, from: :source_a) { |item| emit(item * 10) }
-      pipeline.add_stage(:producer, :source_b) { emit(2) }
-      pipeline.add_stage(:processor, :process_b) { |item| emit(item * 20) }
+      pipeline.add_stage(:producer, :source_a) { output << 1 }
+      pipeline.add_stage(:processor, :process_a, from: :source_a) { |item| output << item * 10 }
+      pipeline.add_stage(:producer, :source_b) { output << 2 }
+      pipeline.add_stage(:processor, :process_b) { |item| output << item * 20 }
 
       pipeline.send(:build_dag_routing!)
 
@@ -255,9 +255,9 @@ RSpec.describe Minigun::Pipeline do
     end
 
     it 'handles producers at the end with no following stage' do
-      pipeline.add_stage(:producer, :source_a) { emit(1) }
+      pipeline.add_stage(:producer, :source_a) { output << 1 }
       pipeline.add_stage(:consumer, :sink) { |item| item }
-      pipeline.add_stage(:producer, :source_b) { emit(2) }
+      pipeline.add_stage(:producer, :source_b) { output << 2 }
 
       # source_b has no stage after it, so no automatic routing
       expect { pipeline.send(:build_dag_routing!) }.not_to raise_error
@@ -268,11 +268,11 @@ RSpec.describe Minigun::Pipeline do
     end
 
     it 'connects multiple producers to different stages, not all to first' do
-      pipeline.add_stage(:producer, :source_a) { emit(1) }
-      pipeline.add_stage(:processor, :process_a) { |item| emit(item * 10) }
-      pipeline.add_stage(:producer, :source_b) { emit(2) }
-      pipeline.add_stage(:processor, :process_b) { |item| emit(item * 20) }
-      pipeline.add_stage(:producer, :source_c) { emit(3) }
+      pipeline.add_stage(:producer, :source_a) { output << 1 }
+      pipeline.add_stage(:processor, :process_a) { |item| output << item * 10 }
+      pipeline.add_stage(:producer, :source_b) { output << 2 }
+      pipeline.add_stage(:processor, :process_b) { |item| output << item * 20 }
+      pipeline.add_stage(:producer, :source_c) { output << 3 }
       pipeline.add_stage(:consumer, :sink) { |item| item }
 
       pipeline.send(:build_dag_routing!)
@@ -285,8 +285,8 @@ RSpec.describe Minigun::Pipeline do
 
     it 'handles mixed AtomicStage and PipelineStage producers' do
       # Atomic producer
-      pipeline.add_stage(:producer, :atomic_source) { emit(1) }
-      pipeline.add_stage(:processor, :process_atomic) { |item| emit(item * 10) }
+      pipeline.add_stage(:producer, :atomic_source) { output << 1 }
+      pipeline.add_stage(:processor, :process_atomic) { |item| output << item * 10 }
 
       # PipelineStage producer
       pipeline_stage = Minigun::PipelineStage.new(name: :pipeline_source)
@@ -324,8 +324,8 @@ RSpec.describe Minigun::Pipeline do
       pipeline_stage = Minigun::PipelineStage.new(name: :source_pipeline)
       source_pipeline = Minigun::Pipeline.new(:source, config)
       pipeline_stage.pipeline = source_pipeline
-      source_pipeline.add_stage(:producer, :gen) { 3.times { |i| emit(i) } }
-      source_pipeline.add_stage(:processor, :double) { |item| emit(item * 2) }
+      source_pipeline.add_stage(:producer, :gen) { 3.times { |i| output << i } }
+      source_pipeline.add_stage(:processor, :double) { |item| output << item * 2 }
 
       pipeline.stages[:source_pipeline] = pipeline_stage
       pipeline.instance_variable_get(:@stage_order).unshift(:source_pipeline)
@@ -350,14 +350,14 @@ RSpec.describe Minigun::Pipeline do
       end.new
 
       # Regular producer
-      pipeline.add_stage(:producer, :source) { 3.times { |i| emit(i) } }
+      pipeline.add_stage(:producer, :source) { 3.times { |i| output << i } }
 
       # PipelineStage as processor
       pipeline_stage = Minigun::PipelineStage.new(name: :processor_pipeline)
       proc_pipeline = Minigun::Pipeline.new(:processor, config)
       pipeline_stage.pipeline = proc_pipeline
-      proc_pipeline.add_stage(:processor, :multiply) { |item| emit(item * 10) }
-      proc_pipeline.add_stage(:processor, :add_one) { |item| emit(item + 1) }
+      proc_pipeline.add_stage(:processor, :multiply) { |item| output << item * 10 }
+      proc_pipeline.add_stage(:processor, :add_one) { |item| output << item + 1 }
 
       pipeline.stages[:processor_pipeline] = pipeline_stage
       pipeline.instance_variable_get(:@stage_order) << :processor_pipeline
@@ -386,8 +386,8 @@ RSpec.describe Minigun::Pipeline do
       ps1 = Minigun::PipelineStage.new(name: :pipeline_a)
       p1 = Minigun::Pipeline.new(:pa, config)
       ps1.pipeline = p1
-      p1.add_stage(:producer, :gen) { emit(10) }
-      p1.add_stage(:processor, :double) { |item| emit(item * 2) }
+      p1.add_stage(:producer, :gen) { output << 10 }
+      p1.add_stage(:processor, :double) { |item| output << item * 2 }
 
       pipeline.stages[:pipeline_a] = ps1
       pipeline.instance_variable_get(:@stage_order) << :pipeline_a
@@ -397,8 +397,8 @@ RSpec.describe Minigun::Pipeline do
       ps2 = Minigun::PipelineStage.new(name: :pipeline_b)
       p2 = Minigun::Pipeline.new(:pb, config)
       ps2.pipeline = p2
-      p2.add_stage(:producer, :gen) { emit(5) }
-      p2.add_stage(:processor, :triple) { |item| emit(item * 3) }
+      p2.add_stage(:producer, :gen) { output << 5 }
+      p2.add_stage(:processor, :triple) { |item| output << item * 3 }
 
       pipeline.stages[:pipeline_b] = ps2
       pipeline.instance_variable_get(:@stage_order) << :pipeline_b
