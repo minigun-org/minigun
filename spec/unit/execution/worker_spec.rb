@@ -20,9 +20,6 @@ RSpec.describe Minigun::Worker do
     double(
       'stage',
       name: :test_stage,
-      producer?: false,
-      router?: false,
-      stage_with_loop?: false,
       execution_context: nil,
       log_type: "Worker",
       run_mode: :streaming
