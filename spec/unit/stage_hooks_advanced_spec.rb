@@ -250,13 +250,10 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
             @events << :before_3
           end
 
-
-
           after :gen do
             @events << :after_1
             @events << :after_2
           end
-
 
           consumer :collect do |item|
           end

@@ -325,9 +325,6 @@ module Minigun
           raise ArgumentError, "Unknown execution context: #{context_name}" unless named_ctx
 
           options[:_execution_context] = named_ctx
-
-
-
         elsif _current_execution_context
           # Use current context from stack
           options[:_execution_context] = _current_execution_context

@@ -229,12 +229,10 @@ RSpec.describe 'Stage-Specific Hooks' do
             @events << :before_2
           end
 
-
           after :generate do
             @events << :after_1
             @events << :after_2
           end
-
 
           consumer :collect do |num|
           end
