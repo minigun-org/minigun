@@ -1,5 +1,5 @@
 
-ADD to README:
+ADD to README / DOCS:
 - stages route to each other sequentially, unless you add :to or :from keywords
 - execute in paralle, and do NOT route to each other, unless unless you add :to or :from keywords.
 
@@ -10,52 +10,6 @@ ADD to README:
 
 add to architecture
 - multi-parents --> how do we know end of queues?
-
-
-       base.extend(ClassMethods)
-+
-+      # Add class-level attribute accessors for metaprogramming
-+      class << base
-+        attr_accessor :_minigun_task, :_pipeline_definition_blocks
-+      end
-+
-       base.class_eval do
-         # Create a single task instance for the class
-         @_minigun_task = Minigun::Task.new
-@@ -80,12 +86,12 @@ module Minigun
-         parent_task = self._minigun_task
-         # Create a new task and copy the parent's configuration and pipelines
-         new_task = Minigun::Task.new
--        new_task.instance_variable_set(:@config, parent_task.config.dup)
--        new_task.instance_variable_set(:@root_pipeline, parent_task.root_pipeline.dup) # Duplicate the pipeline
--        subclass.instance_variable_set(:@_minigun_task, new_task)
-+        new_task.send(:config=, parent_task.config.dup)
-+        new_task.send(:root_pipeline=, parent_task.root_pipeline.dup) # Duplicate the pipeline
-+        subclass._minigun_task = new_task
-
-         # Inherit pipeline definition blocks
--        subclass.instance_variable_set(:@_pipeline_definition_blocks, (@_pipeline_definition_blocks || []).dup)
-+        subclass._pipeline_definition_blocks = (@_pipeline_definition_blocks || []).dup
-       end
-     end
-
-
----------
-
-
-
-+    # Private setters for duplication and job_id injection
-+    private
-+
-+    attr_writer :stages, :hooks, :stage_hooks, :dag, :stage_order, :job_id
-
------------
-
-+    # Private setters for DSL inheritance
-+    private
-+
-+    attr_writer :config, :root_pipeline
-
 
 ======================
 
@@ -75,6 +29,24 @@ This creates a new OutputQueue everytime
     end
 
 ==============
+
+- flush timers on batch
+- consolidate accumulator and batch
+
+=========================
+
+- signal trapping, child state management/killing
+- child culling (look at puma)
+
+===========================
+
+- IPC Fork
+
+==========================
+
+- fibers
+
+=======================
 
 use stage object_ids instead of names
 
@@ -99,11 +71,14 @@ hooks
 ===============================
 
 signals
-
 result.is_a?(Hash) && result.key?(:item) && result.key?(:target)
 --> tmake this a signal
 
 ====================================
+
+error handling
+
+=============================
 
 weighted routing (load balancing)
 
@@ -113,10 +88,9 @@ weighted routing (load balancing)
 - hooks
 - readme
 - ractors
+- fibers
 
 ==================================
-
-========================================
 
 redundant with stats, stats should use Concurrent::AtomicFixnum no?
       @produced_count = Concurrent::AtomicFixnum.new(0)
@@ -196,37 +170,13 @@ trigger(:stage)
       alias fork_accumulate spawn_fork
       alias cow_fork spawn_fork
       alias ipc_fork consumer  # ipc_fork was just a consumer with different execution
-
-
-remove these:
-
-  # Spawn strategies (require preceding accumulator stage)
-  def spawn_thread(name = :consumer, options = {}, &block)
-    _minigun_task.add_stage(:consumer, name, options.merge(strategy: :spawn_thread), &block)
-  end
-
-  def spawn_fork(name = :consumer, options = {}, &block)
-    _minigun_task.add_stage(:consumer, name, options.merge(strategy: :spawn_fork), &block)
-  end
-
-  def spawn_ractor(name = :consumer, options = {}, &block)
-    _minigun_task.add_stage(:consumer, name, options.merge(strategy: :spawn_ractor), &block)
-  end
-
-
-name = :accumulator
-
-
 SpawnFork
-
 SpawnRactor
-
 threaded --> spawn_threads
 ractor_accumulate --> spawn_ractors
 fork_accumulate --> spawn_forks
 
-
-rename implicit_pipeline to root_pipeline
+----------------------------
 
 these should be pipeline-level scoped limits (or global if at root_pipeline)
 
@@ -236,45 +186,7 @@ these should be pipeline-level scoped limits (or global if at root_pipeline)
 
 they should constrain child events, BUT we should allow at least one thread/process for each stage, and log a warning once if the stage has an explicit value set but it's constrained by the global limit
 
-back-pressure?
-
-
-        accumulator_max_single: config[:accumulator_max_single] || 2000,
-        accumulator_max_all: config[:accumulator_max_all] || 4000,
-        accumulator_check_interval: config[:accumulator_check_interval] || 100,
-        use_ipc: config[:use_ipc] || false
-
-
-        accumulator_max_single: config[:accumulator_max_single] || 2000,
-        accumulator_max_all: config[:accumulator_max_all] || 4000,
-        accumulator_check_interval: config[:accumulator_check_interval] || 100,
-        use_ipc: config[:use_ipc] || false
-
-
-        accumulator_max_single: config[:accumulator_max_single] || 2000,
-        accumulator_max_all: config[:accumulator_max_all] || 4000,
-        accumulator_check_interval: config[:accumulator_check_interval] || 100,
-        use_ipc: config[:use_ipc] || false
-
-
-classy stages
-  - classy usage (Pipeline, Stage, etc. by themselves) --> also add to readme
-
-
-nested pipelines
-
-accumulator
-
-test ipc forking and ractor stuff
-
-mine old code for ideas
-
-everything should be a stage
-
-new_task.instance_variable_set(:@config, parent_task.config.dup)
-new_task.instance_variable_set(:@implicit_pipeline, parent_task.implicit_pipeline) # Share the pipeline
-
-
+------------------------------
 
 let's think about the hooks DSL
 
@@ -287,16 +199,8 @@ let's think about the hooks DSL
     reconnect_database!
   end
 
-
 test that this applies to ALL children in the pipeline
-
-after_each_fork???
-
-after_each??
-
-rescue_error ?
-
-:class, error or standard error
-
-
-on_error ?
+- after_each_fork???
+- after_each??
+- rescue_error ?
+- :class, error or standard error
