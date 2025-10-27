@@ -103,7 +103,7 @@ class DatabasePublisher
     end
 
     # Stage 2: Enrich customer data
-    processor :enrich_data do |customer_data, customer_id|
+    processor :enrich_data do |customer_data, output|
       customer_hash = customer_data
       enriched = enrich_customer_data(customer_hash)
 

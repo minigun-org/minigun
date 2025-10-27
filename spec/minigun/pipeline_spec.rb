@@ -324,8 +324,8 @@ RSpec.describe Minigun::Pipeline do
       pipeline_stage = Minigun::PipelineStage.new(name: :source_pipeline)
       source_pipeline = Minigun::Pipeline.new(:source, config)
       pipeline_stage.pipeline = source_pipeline
-      source_pipeline.add_stage(:producer, :gen) { 3.times { |i| output << i } }
-      source_pipeline.add_stage(:processor, :double) { |item| output << item * 2 }
+      source_pipeline.add_stage(:producer, :gen) { |output| 3.times { |i| output << i } }
+      source_pipeline.add_stage(:processor, :double) { |item, output| output << item * 2 }
 
       pipeline.stages[:source_pipeline] = pipeline_stage
       pipeline.instance_variable_get(:@stage_order).unshift(:source_pipeline)
@@ -350,14 +350,14 @@ RSpec.describe Minigun::Pipeline do
       end.new
 
       # Regular producer
-      pipeline.add_stage(:producer, :source) { 3.times { |i| output << i } }
+      pipeline.add_stage(:producer, :source) { |output| 3.times { |i| output << i } }
 
       # PipelineStage as processor
       pipeline_stage = Minigun::PipelineStage.new(name: :processor_pipeline)
       proc_pipeline = Minigun::Pipeline.new(:processor, config)
       pipeline_stage.pipeline = proc_pipeline
-      proc_pipeline.add_stage(:processor, :multiply) { |item| output << item * 10 }
-      proc_pipeline.add_stage(:processor, :add_one) { |item| output << item + 1 }
+      proc_pipeline.add_stage(:processor, :multiply) { |item, output| output << item * 10 }
+      proc_pipeline.add_stage(:processor, :add_one) { |item, output| output << item + 1 }
 
       pipeline.stages[:processor_pipeline] = pipeline_stage
       pipeline.instance_variable_get(:@stage_order) << :processor_pipeline
@@ -386,8 +386,8 @@ RSpec.describe Minigun::Pipeline do
       ps1 = Minigun::PipelineStage.new(name: :pipeline_a)
       p1 = Minigun::Pipeline.new(:pa, config)
       ps1.pipeline = p1
-      p1.add_stage(:producer, :gen) { output << 10 }
-      p1.add_stage(:processor, :double) { |item| output << item * 2 }
+      p1.add_stage(:producer, :gen) { |output| output << 10 }
+      p1.add_stage(:processor, :double) { |item, output| output << item * 2 }
 
       pipeline.stages[:pipeline_a] = ps1
       pipeline.instance_variable_get(:@stage_order) << :pipeline_a
@@ -397,8 +397,8 @@ RSpec.describe Minigun::Pipeline do
       ps2 = Minigun::PipelineStage.new(name: :pipeline_b)
       p2 = Minigun::Pipeline.new(:pb, config)
       ps2.pipeline = p2
-      p2.add_stage(:producer, :gen) { output << 5 }
-      p2.add_stage(:processor, :triple) { |item| output << item * 3 }
+      p2.add_stage(:producer, :gen) { |output| output << 5 }
+      p2.add_stage(:processor, :triple) { |item, output| output << item * 3 }
 
       pipeline.stages[:pipeline_b] = ps2
       pipeline.instance_variable_get(:@stage_order) << :pipeline_b

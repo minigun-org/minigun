@@ -104,7 +104,7 @@ class InlineHookExample
       if File.exist?(@temp_file.path)
         @results = File.readlines(@temp_file.path).map { |line| line.strip.to_i }
       end
-      
+
       # Read fork events from events file
       if File.exist?(@events_file.path)
         fork_events = File.readlines(@events_file.path).map { |line| line.strip.to_sym }
