@@ -6,6 +6,7 @@
 
 require_relative '../lib/minigun'
 
+# Demonstrates combining thread blocks with named contexts
 class ThreadsPlusNamed
   include Minigun::DSL
 

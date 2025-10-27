@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 module Minigun
+  # Execution strategies for running pipeline stages
   module Execution
     # Base executor class - all execution strategies inherit from this
     # Executors handle stage execution including hooks, stats, and error handling

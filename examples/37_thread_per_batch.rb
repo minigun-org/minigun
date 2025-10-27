@@ -12,6 +12,7 @@ puts '=' * 60
 puts 'Thread Per Batch Pattern'
 puts '=' * 60
 
+# Demonstrates thread-per-batch execution pattern
 class ThreadPerBatchExample
   include Minigun::DSL
 
@@ -63,6 +64,7 @@ puts "\n#{'=' * 60}"
 puts 'Example 2: Mixed Thread Pool and Thread Per Batch'
 puts '=' * 60
 
+# Demonstrates mixing thread pools and thread-per-batch patterns
 class MixedThreading
   include Minigun::DSL
 

@@ -11,6 +11,7 @@ puts '=' * 60
 puts 'threads(N) Block - Thread Pool Execution'
 puts '=' * 60
 
+# Demonstrates thread pools for I/O-bound work
 class WebScraper
   include Minigun::DSL
 

@@ -12,6 +12,7 @@ puts "=== Execution Context Examples ===\n\n"
 puts '1. InlineContext (synchronous, same thread)'
 puts '-' * 50
 
+# Demonstrates inline (synchronous) execution
 class InlineExample
   include Minigun::DSL
 
@@ -47,6 +48,7 @@ puts "  ✓ Inline execution completes immediately\n\n"
 puts '2. ThreadContext (lightweight parallelism)'
 puts '-' * 50
 
+# Demonstrates thread-based execution with each stage in its own thread
 class ThreadExample
   include Minigun::DSL
 
@@ -86,6 +88,7 @@ puts "  ✓ Thread execution with concurrency\n\n"
 puts '3. RactorContext (true parallelism, Ruby 3+)'
 puts '-' * 50
 
+# Demonstrates Ractor-based parallel execution
 class RactorExample
   include Minigun::DSL
 
@@ -125,6 +128,7 @@ if Process.respond_to?(:fork)
   puts '4. Process Isolation'
   puts '-' * 50
 
+  # Demonstrates process-based execution with isolation
   class ProcessExample
     include Minigun::DSL
 
@@ -170,6 +174,7 @@ end
 puts '5. Parallel Execution'
 puts '-' * 50
 
+# Demonstrates parallel processing of multiple items
 class ParallelExample
   include Minigun::DSL
 
@@ -211,6 +216,7 @@ puts "  ✓ Parallel execution with multiple workers\n\n"
 puts '6. Error Handling and Propagation'
 puts '-' * 50
 
+# Demonstrates error handling in different execution contexts
 class ErrorExample
   include Minigun::DSL
 
@@ -251,6 +257,7 @@ puts "  ✓ Error handling built-in\n\n"
 puts '7. Context Termination'
 puts '-' * 50
 
+# Demonstrates proper termination and cleanup of execution contexts
 class TerminationExample
   include Minigun::DSL
 

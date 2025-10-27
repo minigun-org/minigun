@@ -6,6 +6,7 @@
 
 require_relative '../lib/minigun'
 
+# Demonstrates threads block after process-per-batch
 class WithFinalThreads
   include Minigun::DSL
 

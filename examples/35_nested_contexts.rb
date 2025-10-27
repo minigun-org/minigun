@@ -13,6 +13,7 @@ puts '=' * 60
 puts 'Nested Execution Contexts'
 puts '=' * 60
 
+# Demonstrates nested execution contexts for I/O and CPU work
 class NestedPipeline
   include Minigun::DSL
 
@@ -106,6 +107,7 @@ puts "\n#{'=' * 60}"
 puts 'Example 2: Deep Nesting'
 puts '=' * 60
 
+# Demonstrates deeply nested execution contexts
 class DeepNesting
   include Minigun::DSL
 
@@ -167,6 +169,7 @@ puts "\n#{'=' * 60}"
 puts 'Example 3: Real-World Nested Pattern'
 puts '=' * 60
 
+# Demonstrates realistic image processing with batching and concurrency
 class ImageProcessor
   include Minigun::DSL
 

@@ -7,6 +7,7 @@
 
 require_relative '../lib/minigun'
 
+# Demonstrates broadcast fan-out to multiple downstream stages
 class BroadcastPipeline
   include Minigun::DSL
 

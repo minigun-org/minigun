@@ -3,6 +3,7 @@
 module Minigun
   # DSL for defining Minigun pipelines
   module DSL
+    # Class-level methods for pipeline definition
     module ClassMethods
       def _minigun_task
         @_minigun_task

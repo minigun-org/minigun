@@ -6,6 +6,7 @@
 
 require_relative '../lib/minigun'
 
+# Demonstrates exact structure matching for testing
 class ExactStructure
   include Minigun::DSL
 

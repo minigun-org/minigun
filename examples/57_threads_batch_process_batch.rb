@@ -6,6 +6,7 @@
 
 require_relative '../lib/minigun'
 
+# Demonstrates threads, batching, and process-per-batch together
 class ThreadsBatchProcessBatch
   include Minigun::DSL
 

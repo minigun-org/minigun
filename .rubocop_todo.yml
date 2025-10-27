@@ -130,43 +130,6 @@ RSpec/VerifiedDoubles:
     - 'spec/unit/queue_wrappers_spec.rb'
     - 'spec/unit/runner_spec.rb'
 
-# Offense count: 60
-# Configuration parameters: AllowedConstants.
-Style/Documentation:
-  Exclude:
-    - 'spec/**/*'
-    - 'examples/27_execution_contexts.rb'
-    - 'examples/27_round_robin_load_balancing.rb'
-    - 'examples/28_broadcast_fan_out.rb'
-    - 'examples/28_context_pool.rb'
-    - 'examples/31_configurable_execution.rb'
-    - 'examples/32_execution_blocks.rb'
-    - 'examples/33_threads_block.rb'
-    - 'examples/34_named_contexts.rb'
-    - 'examples/35_nested_contexts.rb'
-    - 'examples/36_batch_and_process.rb'
-    - 'examples/37_thread_per_batch.rb'
-    - 'examples/38_comprehensive_execution.rb'
-    - 'examples/45_emit_to_stage_cross_context.rb'
-    - 'examples/47_backpressure_demo.rb'
-    - 'examples/51_simple_named_context.rb'
-    - 'examples/52_threads_plus_named.rb'
-    - 'examples/53_batch_with_named.rb'
-    - 'examples/54_process_batch_named.rb'
-    - 'examples/55_full_combo.rb'
-    - 'examples/56_threads_batch_consumer.rb'
-    - 'examples/57_threads_batch_process_batch.rb'
-    - 'examples/58_with_final_threads.rb'
-    - 'examples/59_with_middle_named.rb'
-    - 'examples/60_exact_structure.rb'
-    - 'examples/61_scale_test.rb'
-    - 'examples/99_test_mixed.rb'
-    - 'lib/minigun.rb'
-    - 'lib/minigun/configuration.rb'
-    - 'lib/minigun/dsl.rb'
-    - 'lib/minigun/execution/executor.rb'
-    - 'lib/minigun/stage.rb'
-
 # Offense count: 6
 # Configuration parameters: MinBranchesCount.
 Style/HashLikeCase:

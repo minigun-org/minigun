@@ -6,6 +6,7 @@
 
 require_relative '../lib/minigun'
 
+# Demonstrates scalability testing with configurable parameters
 class ScaleTest
   include Minigun::DSL
 

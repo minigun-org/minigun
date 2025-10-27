@@ -6,6 +6,7 @@
 
 require_relative '../lib/minigun'
 
+# Demonstrates batching combined with named contexts
 class BatchWithNamed
   include Minigun::DSL
 

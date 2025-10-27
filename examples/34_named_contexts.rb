@@ -11,6 +11,7 @@ puts '=' * 60
 puts 'Named Execution Contexts'
 puts '=' * 60
 
+# Demonstrates named execution contexts
 class DataPipeline
   include Minigun::DSL
 
@@ -69,6 +70,7 @@ puts "\n#{'=' * 60}"
 puts 'Example 2: Mixed Named and Block Contexts'
 puts '=' * 60
 
+# Demonstrates mixing different execution contexts in one pipeline
 class MixedPipeline
   include Minigun::DSL
 

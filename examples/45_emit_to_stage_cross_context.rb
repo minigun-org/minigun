@@ -6,6 +6,7 @@ require_relative '../lib/minigun'
 # This shows that IPC transport is automatically handled when routing
 # between different execution contexts (threads, processes, etc.)
 
+# Demonstrates cross-context routing with automatic IPC handling
 class CrossContextRoutingExample
   include Minigun::DSL
 

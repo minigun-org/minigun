@@ -21,6 +21,7 @@ puts '=' * 60
 puts 'Example 1: Basic Thread Pool'
 puts '=' * 60
 
+# Demonstrates basic thread pool execution
 class ThreadPoolExample
   include Minigun::DSL
 
@@ -63,6 +64,7 @@ puts '=' * 60
 puts 'Example 2: Batch + Process Per Batch'
 puts '=' * 60
 
+# Demonstrates batch accumulation and processing
 class BatchProcessExample
   include Minigun::DSL
 
@@ -110,6 +112,7 @@ puts '=' * 60
 puts 'Example 3: Nested Contexts'
 puts '=' * 60
 
+# Demonstrates nested execution contexts with threads and processes
 class NestedContextExample
   include Minigun::DSL
 
@@ -161,6 +164,7 @@ puts '=' * 60
 puts 'Example 4: Named Execution Contexts'
 puts '=' * 60
 
+# Demonstrates defining and using named execution contexts
 class NamedContextExample
   include Minigun::DSL
 
@@ -207,6 +211,7 @@ puts '=' * 60
 puts 'Example 5: Complex Real-World Pipeline'
 puts '=' * 60
 
+# Demonstrates a complex multi-stage pipeline with mixed execution contexts
 class ComplexPipeline
   include Minigun::DSL
 
@@ -272,6 +277,7 @@ puts '=' * 60
 puts 'Example 6: Thread Per Batch'
 puts '=' * 60
 
+# Demonstrates spawning a thread per batch for concurrent processing
 class ThreadPerBatchExample
   include Minigun::DSL
 

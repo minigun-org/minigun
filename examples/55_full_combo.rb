@@ -6,6 +6,7 @@
 
 require_relative '../lib/minigun'
 
+# Demonstrates all execution features combined
 class FullCombo
   include Minigun::DSL
 

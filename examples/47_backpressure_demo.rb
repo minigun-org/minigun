@@ -76,11 +76,12 @@ class BoundedExample
     end
 
     consumer :slow_consumer, queue_size: 10 do |_item, _output|
-      sleep 0.05  # 50ms per item
+      sleep 0.05 # 50ms per item
     end
   end
 end
 
+# Demonstrates unbounded queues with no backpressure
 class UnboundedExample
   include Minigun::DSL
 
@@ -97,7 +98,7 @@ class UnboundedExample
     end
 
     consumer :slow_consumer, queue_size: Float::INFINITY do |_item, _output|
-      sleep 0.05  # 50ms per item
+      sleep 0.05 # 50ms per item
     end
   end
 end
@@ -122,6 +123,7 @@ class GlobalConfigSmallExample
   end
 end
 
+# Demonstrates global queue size configuration
 class GlobalConfigLargeExample
   include Minigun::DSL
 

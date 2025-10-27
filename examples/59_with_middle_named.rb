@@ -6,6 +6,7 @@
 
 require_relative '../lib/minigun'
 
+# Demonstrates named context in the middle of processing pipeline
 class WithMiddleNamed
   include Minigun::DSL
 

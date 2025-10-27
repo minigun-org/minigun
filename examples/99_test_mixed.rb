@@ -3,6 +3,7 @@
 
 require_relative '../lib/minigun'
 
+# Test example for mixed pipeline configurations
 class TestMixedExample
   include Minigun::DSL
 

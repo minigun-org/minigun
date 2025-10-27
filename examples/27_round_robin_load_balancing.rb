@@ -7,6 +7,7 @@
 
 require_relative '../lib/minigun'
 
+# Demonstrates round-robin load balancing across multiple workers
 class LoadBalancedWorkers
   include Minigun::DSL
 

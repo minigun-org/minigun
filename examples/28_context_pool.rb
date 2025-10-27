@@ -12,6 +12,7 @@ puts "=== Context Pool Examples ===\n\n"
 puts '1. Basic Context Pool'
 puts '-' * 50
 
+# Demonstrates basic thread pool usage
 class BasicPoolExample
   include Minigun::DSL
 
@@ -51,6 +52,7 @@ puts "  ✓ Pool manages concurrency automatically\n\n"
 puts '2. Pool Capacity Management'
 puts '-' * 50
 
+# Demonstrates thread pool capacity management
 class CapacityExample
   include Minigun::DSL
 
@@ -92,6 +94,7 @@ puts "  ✓ Pool limits concurrency as expected\n\n"
 puts '3. Pooled Parallel Execution'
 puts '-' * 50
 
+# Demonstrates parallel processing with a thread pool
 class ParallelExample
   include Minigun::DSL
 
@@ -128,6 +131,7 @@ puts "  ✓ Efficient parallel processing\n\n"
 puts '4. Context Reuse'
 puts '-' * 50
 
+# Demonstrates thread context reuse in pools
 class ReuseExample
   include Minigun::DSL
 
@@ -166,6 +170,7 @@ puts "  ✓ Threads are reused efficiently\n\n"
 puts '5. Bulk Operations'
 puts '-' * 50
 
+# Demonstrates bulk operations with thread pools
 class BulkExample
   include Minigun::DSL
 
@@ -206,6 +211,7 @@ puts "  ✓ High-throughput bulk processing\n\n"
 puts '6. Emergency Termination'
 puts '-' * 50
 
+# Demonstrates proper pool termination and cleanup
 class TerminationExample
   include Minigun::DSL
 
@@ -243,6 +249,7 @@ puts "  ✓ Clean shutdown and resource cleanup\n\n"
 puts '7. Real-World: Batch Processing'
 puts '-' * 50
 
+# Demonstrates batch processing with thread pools
 class BatchProcessor
   include Minigun::DSL
 

@@ -11,6 +11,7 @@ puts '=' * 60
 puts 'Complete Refactor 2 Feature Demonstration'
 puts '=' * 60
 
+# Demonstrates all execution patterns in one comprehensive pipeline
 class ComprehensivePipeline
   include Minigun::DSL
 

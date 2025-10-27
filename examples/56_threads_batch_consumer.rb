@@ -6,6 +6,7 @@
 
 require_relative '../lib/minigun'
 
+# Demonstrates threads with batching and consumer stages
 class ThreadsBatchConsumer
   include Minigun::DSL
 

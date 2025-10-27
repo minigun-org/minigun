@@ -13,6 +13,7 @@ puts '=' * 60
 puts 'Batch + Process Per Batch Pattern'
 puts '=' * 60
 
+# Demonstrates batching with process-per-batch for CoW optimization
 class BatchProcessor
   include Minigun::DSL
 
@@ -79,6 +80,7 @@ puts "\n#{'=' * 60}"
 puts 'Example 2: Dynamic Batch Sizes'
 puts '=' * 60
 
+# Demonstrates dynamic batch sizes based on runtime conditions
 class DynamicBatching
   include Minigun::DSL
 
@@ -130,6 +132,7 @@ puts "\n#{'=' * 60}"
 puts 'Example 3: Configurable Batch Processing'
 puts '=' * 60
 
+# Demonstrates configurable batch sizes and process limits
 class ConfigurableBatching
   include Minigun::DSL
 

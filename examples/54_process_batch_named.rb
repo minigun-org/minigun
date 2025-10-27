@@ -6,6 +6,7 @@
 
 require_relative '../lib/minigun'
 
+# Demonstrates process-per-batch with named contexts
 class ProcessBatchNamed
   include Minigun::DSL
 

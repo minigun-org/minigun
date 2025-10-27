@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+# Minigun is a high-performance data pipeline framework for Ruby
 module Minigun
   # Global configuration for Minigun
   class Configuration

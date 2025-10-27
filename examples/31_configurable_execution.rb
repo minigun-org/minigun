@@ -19,6 +19,7 @@ puts '=' * 60
 puts 'Example 1: Basic Configurable Thread Pool'
 puts '=' * 60
 
+# Demonstrates runtime-configurable thread pools
 class ConfigurableDownloader
   include Minigun::DSL
 
@@ -72,6 +73,7 @@ puts '=' * 60
 puts 'Example 2: Configurable Process-Per-Batch'
 puts '=' * 60
 
+# Demonstrates configurable process-per-batch with dynamic batch sizes
 class DataProcessor
   include Minigun::DSL
 
@@ -133,6 +135,7 @@ puts '=' * 60
 puts 'Example 3: Environment-Based Configuration'
 puts '=' * 60
 
+# Demonstrates environment-based pipeline configuration
 class SmartPipeline
   include Minigun::DSL
 
@@ -196,6 +199,7 @@ puts '=' * 60
 puts 'Example 4: Dynamic Configuration Methods'
 puts '=' * 60
 
+# Demonstrates dynamic configuration based on runtime conditions
 class AdaptivePipeline
   include Minigun::DSL
 
@@ -271,6 +275,7 @@ puts '=' * 60
 puts 'Example 5: Configuration Object Pattern'
 puts '=' * 60
 
+# Configuration object for pipeline settings
 class PipelineConfig
   attr_accessor :thread_pool_size, :process_pool_size, :batch_size
 
@@ -286,6 +291,7 @@ class PipelineConfig
   end
 end
 
+# Demonstrates using configuration objects with pipelines
 class ConfigurablePipeline
   include Minigun::DSL
 

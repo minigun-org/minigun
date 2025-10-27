@@ -6,6 +6,7 @@ require 'securerandom'
 require 'logger'
 require 'English'
 
+# Minigun is a high-performance data pipeline framework for Ruby
 module Minigun
   class Error < StandardError; end
 

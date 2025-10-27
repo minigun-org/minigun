@@ -6,6 +6,7 @@
 
 require_relative '../lib/minigun'
 
+# Demonstrates basic named context usage
 class SimpleNamedContext
   include Minigun::DSL
 

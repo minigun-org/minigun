@@ -423,6 +423,7 @@ module Minigun
     end
   end
 
+  # Stage that wraps and executes a nested pipeline
   class PipelineStage < Stage
     attr_reader :pipeline, :stages_to_add
 
