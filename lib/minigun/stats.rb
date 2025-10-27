@@ -120,7 +120,7 @@ module Minigun
 
       sorted = @latency_samples.sort
       index = ((p / 100.0) * sorted.length).ceil - 1
-      index = [0, [index, sorted.length - 1].min].max
+      index = index.clamp(0, sorted.length - 1)
       sorted[index]
     end
 

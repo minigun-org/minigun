@@ -36,6 +36,16 @@ Support Cross-Pipeline Routing?
 fix DataProcessingPipeline spec
 I see the issue now - when you're inside a pipeline block, the stages within it are part of a PipelineStage which doesn't support output.to(). The output parameter is just an Array for collecting items, not an OutputQueue.
 
+====================================
+
+This method looks suss:
+
+    def execute(context, item: nil, _input_queue: nil, output_queue: nil)
+      return unless @block
+
+      context.instance_exec(item, output_queue, &@block)
+    end
+
 ============================
 
 - flush timers on batch

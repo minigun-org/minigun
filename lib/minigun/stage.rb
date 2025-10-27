@@ -125,7 +125,7 @@ module Minigun
 
   # Producer stage - executes once, no input
   class ProducerStage < Stage
-    def execute(context, item: nil, input_queue: nil, output_queue: nil)
+    def execute(context, item: nil, input_queue: nil, output_queue: nil) # rubocop:disable Lint/UnusedMethodArgument
       return unless @block
 
       context.instance_exec(output_queue, &@block)
@@ -201,7 +201,7 @@ module Minigun
 
   # Consumer/Processor stage - loops on input, processes items
   class ConsumerStage < Stage
-    def execute(context, item: nil, input_queue: nil, output_queue: nil)
+    def execute(context, item: nil, input_queue: nil, output_queue: nil) # rubocop:disable Lint/UnusedMethodArgument
       return unless @block
 
       context.instance_exec(item, output_queue, &@block)
@@ -298,7 +298,7 @@ module Minigun
     end
 
     # Override execute to buffer items and emit batches via output queue
-    def execute(context, item: nil, input_queue: nil, output_queue: nil)
+    def execute(context, item: nil, input_queue: nil, output_queue: nil) # rubocop:disable Lint/UnusedMethodArgument
       return unless item
 
       batch_to_emit = nil
@@ -441,7 +441,7 @@ module Minigun
     end
 
     # Execute method for when PipelineStage is used as a processor/consumer
-    def execute(context, item: nil, input_queue: nil, output_queue: nil)
+    def execute(context, item: nil, input_queue: nil, output_queue: nil) # rubocop:disable Lint/UnusedMethodArgument
       # If no pipeline set, just pass item through
       unless @pipeline
         output_queue << item if output_queue && item

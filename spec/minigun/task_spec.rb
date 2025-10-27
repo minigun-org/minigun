@@ -235,11 +235,10 @@ RSpec.describe Minigun::Task do
       allow(Minigun.logger).to receive(:info)
 
       context = Object.new
-      task.run(context)
 
       # If counter is thread-safe, all items will be counted
       # This is implicitly tested by the run completing successfully
-      expect(true).to be true
+      expect { task.run(context) }.not_to raise_error
     end
   end
 end
