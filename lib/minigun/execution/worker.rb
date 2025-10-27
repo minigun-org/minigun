@@ -36,7 +36,7 @@ module Minigun
         log_info "Starting"
 
         stage_ctx = create_stage_context
-        
+
         # Check for disconnected stages (no upstream, not a producer, not a PipelineStage)
         if handle_disconnected_stage(stage_ctx)
           return
@@ -51,26 +51,26 @@ module Minigun
       ensure
         @executor&.shutdown
       end
-      
+
       def handle_disconnected_stage(stage_ctx)
         # Only check non-producers and non-PipelineStages
         return false if @stage.producer?
         return false if @stage.is_a?(PipelineStage)
-        
+
         # If no upstream sources, this stage is disconnected
         if stage_ctx.sources_expected.empty?
           log_info "No upstream sources, sending END signals and exiting"
-          
+
           # Send END to all downstream stages so they don't deadlock
           downstream = stage_ctx.dag.downstream(stage_ctx.stage_name)
           downstream.each do |target|
             stage_ctx.stage_input_queues[target] << Message.end_signal(source: stage_ctx.stage_name)
           end
-          
+
           log_info "Done"
           return true
         end
-        
+
         false
       end
 
