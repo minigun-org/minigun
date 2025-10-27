@@ -124,7 +124,7 @@ class ErrorHandlingExample
         end
       end
 
-      consumer :save_results do |batch|
+      consumer :save_results do |batch, output|
         batch.each do |item|
           begin
             # Simulate save that might fail

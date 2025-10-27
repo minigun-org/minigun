@@ -27,7 +27,7 @@ class MultiPipelineETL
       end
     end
 
-    consumer :output do |item|
+    consumer :output do |item, output|
       @mutex.synchronize { extracted << item }
       output << item # Send to next pipeline
     end
@@ -45,7 +45,7 @@ class MultiPipelineETL
       output << item.merge(enriched_at: Time.now)
     end
 
-    consumer :output do |item|
+    consumer :output do |item, output|
       @mutex.synchronize { transformed << item }
       output << item # Send to both load pipelines
     end

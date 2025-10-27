@@ -41,7 +41,7 @@ class InlineHookExample
     # Inline hooks for simple operations
     producer :fetch_data,
              before: -> { @timer[:fetch_start] = Time.now },
-             after: -> { @timer[:fetch_end] = Time.now } do
+             after: -> { @timer[:fetch_end] = Time.now } do |output|
       @events << :fetching
       10.times { |i| output << i }
     end
@@ -55,7 +55,7 @@ class InlineHookExample
               after: -> {
                 @events << :validate_end
                 puts "Validated #{@validation_count} items"
-              } do |num|
+              } do |num, output|
       @validation_count += 1
       if num > 0
         output << num
@@ -65,7 +65,7 @@ class InlineHookExample
     # Inline hooks for processors
     processor :transform,
               before: -> { @events << :transform_start },
-              after: -> { @events << :transform_end } do |num|
+              after: -> { @events << :transform_end } do |num, output|
       output << num * 2
     end
 
