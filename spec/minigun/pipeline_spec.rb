@@ -62,6 +62,22 @@ RSpec.describe Minigun::Pipeline do
       expect(pipeline.dag.downstream(:source)).to include(:transform)
       expect(pipeline.dag.downstream(:transform)).to include(:save)
     end
+
+    it 'raises error on duplicate stage name' do
+      pipeline.add_stage(:producer, :fetch) { |output| output << "first" }
+
+      expect {
+        pipeline.add_stage(:producer, :fetch) { |output| output << "second" }
+      }.to raise_error(Minigun::Error, /Stage name collision.*fetch/)
+    end
+
+    it 'raises error on duplicate stage name across different types' do
+      pipeline.add_stage(:producer, :my_stage) { |output| output << "data" }
+
+      expect {
+        pipeline.add_stage(:consumer, :my_stage) { |item| puts item }
+      }.to raise_error(Minigun::Error, /Stage name collision.*my_stage/)
+    end
   end
 
   describe '#add_hook' do

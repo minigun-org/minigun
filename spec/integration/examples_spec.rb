@@ -479,8 +479,8 @@ RSpec.describe 'Examples Integration' do
       expect(demo.results.size).to eq(20)
       expect(demo.results.sort).to eq((1..20).map { |n| n * 2 })
 
-      # Access stats
-      task = demo.class._minigun_task
+      # Access stats from instance task (not class task)
+      task = demo._minigun_task
       pipeline = task.root_pipeline
       stats = pipeline.stats
 
@@ -722,10 +722,10 @@ RSpec.describe 'Examples Integration' do
 
         output_lines = output.string.lines
         batch_lines = output_lines.grep(/Processing batch/)
-        
+
         # Should have multiple batches due to size (5) and timeout (0.3s)
         expect(batch_lines.size).to be >= 2
-        
+
         # Should process all 20 items total
         total_items = batch_lines.map { |line| line[/batch of (\d+)/, 1].to_i }.sum
         expect(total_items).to eq(20)
@@ -749,11 +749,11 @@ RSpec.describe 'Examples Integration' do
 
         output_lines = output.string.lines
         unique_lines = output_lines.grep(/Unique item:/)
-        
+
         # Input: [1, 2, 3, 2, 4, 1, 5, 3, 6, 4]
         # Should deduplicate to: [1, 2, 3, 4, 5, 6]
         expect(unique_lines.size).to eq(6)
-        
+
         items = unique_lines.map { |line| line[/Unique item: (\d+)/, 1].to_i }
         expect(items.sort).to eq([1, 2, 3, 4, 5, 6])
       ensure
@@ -774,10 +774,10 @@ RSpec.describe 'Examples Integration' do
 
         output_lines = output.string.lines
         unique_lines = output_lines.grep(/Unique user:/)
-        
+
         # Should deduplicate 6 users down to 4 unique IDs
         expect(unique_lines.size).to eq(4)
-        
+
         # Should keep first occurrence of each ID
         expect(output_lines.join).to include('Alice')
         expect(output_lines.join).to include('Bob')
@@ -802,7 +802,7 @@ RSpec.describe 'Examples Integration' do
 
         output_lines = output.string.lines
         final_lines = output_lines.grep(/Final item:/)
-        
+
         # Input: 100 items with only 20 unique values (i % 20)
         # Should deduplicate to 20 unique items
         expect(final_lines.size).to eq(20)

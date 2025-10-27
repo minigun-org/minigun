@@ -124,8 +124,8 @@ RSpec.describe 'Multiple Producers' do
       instance = test_class.new
       instance.run
 
-      # Get stats
-      task = instance.class._minigun_task
+      # Get stats from instance task (not class task)
+      task = instance._minigun_task
       pipeline = task.root_pipeline
       stats = pipeline.stats
 

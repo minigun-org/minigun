@@ -10,7 +10,7 @@ module Minigun
     attr_reader :name, :config, :stages, :hooks, :dag, :input_queue, :output_queues, :stage_order, :stats,
                 :context, :stage_hooks, :stage_input_queues, :runtime_edges
 
-    def initialize(name, config = {}, stages: nil, hooks: nil, stage_hooks: nil, dag: nil, stage_order: nil)
+    def initialize(name, config = {}, stages: nil, hooks: nil, stage_hooks: nil, dag: nil, stage_order: nil, stats: nil)
       @name = name
       @config = {
         max_threads: config[:max_threads] || 5,
@@ -41,7 +41,7 @@ module Minigun
       @stage_order = stage_order || []
 
       # Statistics tracking
-      @stats = nil  # Will be initialized in run()
+      @stats = stats  # Will be initialized in run() if nil
 
     end
 
@@ -50,7 +50,7 @@ module Minigun
       new_pipeline = Pipeline.new(
         @name,
         @config.dup,
-        stages: @stages.dup,  # Shallow copy - stages themselves are shared
+        stages: @stages.transform_values(&:dup),  # Deep copy - dup each stage object
         hooks: {
           before_run: @hooks[:before_run].dup,
           after_run: @hooks[:after_run].dup,
@@ -124,6 +124,11 @@ module Minigun
                   raise Minigun::Error, "Unknown stage type: #{actual_type}"
                 end
               end
+
+      # Check for name collision
+      if @stages.key?(name)
+        raise Minigun::Error, "Stage name collision: '#{name}' is already defined in pipeline '#{@name}'"
+      end
 
       # Store stage by name
       @stages[name] = stage

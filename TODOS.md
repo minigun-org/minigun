@@ -13,7 +13,23 @@ add to architecture
 
 ========================================================================================
 
-use stage object_ids instead of names
+Support Cross-Pipeline Routing?
+- use stage identifiers instead of names?
+- Yes! We'd need to:
+- Build a global queue registry in Task or Runner that includes ALL stages from ALL pipelines
+- Pass this global registry to OutputQueue instead of just local stage_input_queues
+- Handle END signals across pipelines (more complex - need to track which pipelines are done)
+- Something like:
+
+  task.pipeline(:foo)
+  task.stages(:bar)
+
+  task.minigun.dag
+  
+
+  task.pipeline(:foo).stage(:bar)
+  task.pipelines
+  task.stages
 
 ============================
 
@@ -24,6 +40,10 @@ use stage object_ids instead of names
 
 - signal trapping, child state management/killing
 - child culling (look at puma)
+
+============================
+
+- mermaid diagrams
 
 ===========================
 

@@ -22,24 +22,21 @@ module Minigun
         _minigun_task.set_config(:max_retries, value)
       end
 
-      # Pipeline block - stores block for later instance-level evaluation
+      # Pipeline block - evaluates on class-level task (blueprint)
       def pipeline(name = nil, options = {}, &block)
         if name.nil?
-          # Store block for evaluation in initialize
-          @_pipeline_definition_blocks ||= []
-          @_pipeline_definition_blocks << block
+          # Evaluate on class-level task immediately, passing class as context
+          # This populates the blueprint that will be deep-copied per instance
+          pipeline_dsl = PipelineDSL.new(_minigun_task.root_pipeline, self)
+          pipeline_dsl.instance_eval(&block)
         else
           # Named pipeline - always define at class level (multi-pipeline mode)
           # This ensures proper ordering and avoids closure issues
           _minigun_task.define_pipeline(name, options) do |pipeline|
-            pipeline_dsl = PipelineDSL.new(pipeline, nil)
+            pipeline_dsl = PipelineDSL.new(pipeline, self)
             pipeline_dsl.instance_eval(&block) if block_given?
           end
         end
-      end
-
-      def _pipeline_definition_blocks
-        @_pipeline_definition_blocks || []
       end
 
       private
@@ -90,22 +87,25 @@ module Minigun
           root_pipeline: parent_task.root_pipeline.dup
         )
         subclass._minigun_task = new_task
-
-        # Inherit pipeline definition blocks
-        subclass._pipeline_definition_blocks = (@_pipeline_definition_blocks || []).dup
       end
     end
 
+    # Instance-level task (deep copy of class blueprint, created at execution time)
+    attr_reader :_minigun_task
+
     # Evaluate pipeline blocks using PipelineDSL (called before run)
+    # Creates an instance-level deep copy of the class task for execution isolation
     def _evaluate_pipeline_blocks!
       return if @_pipeline_blocks_evaluated
       @_pipeline_blocks_evaluated = true
 
-      self.class._pipeline_definition_blocks.each do |blk|
-        # Use PipelineDSL for consistent behavior between named and unnamed pipelines
-        pipeline_dsl = PipelineDSL.new(self.class._minigun_task.root_pipeline, self)
-        pipeline_dsl.instance_eval(&blk)
-      end
+      # Deep copy class-level task for this instance
+      # This prevents shared state across multiple runs/instances
+      class_task = self.class._minigun_task
+      @_minigun_task = Minigun::Task.new(
+        config: class_task.config.dup,
+        root_pipeline: class_task.root_pipeline.dup
+      )
     end
 
     # Pipeline block wrapper - REQUIRED for stage definitions
@@ -216,7 +216,9 @@ module Minigun
       def pipeline(name, options = {}, &block)
         # This handles nested pipeline stages within a pipeline block
         if @context
-          @context.class._minigun_task.add_nested_pipeline(name, options, &block)
+          # Get task class (context can be either the class itself or an instance)
+          task_class = @context.is_a?(Class) ? @context : @context.class
+          task_class._minigun_task.add_nested_pipeline(name, options, &block)
         else
           raise "Nested pipelines require instance context"
         end
@@ -341,13 +343,13 @@ module Minigun
     # Full production execution with Runner (signal handling, job ID, stats)
     def run
       _evaluate_pipeline_blocks!
-      self.class._minigun_task.run(self)
+      @_minigun_task.run(self)
     end
 
     # Direct pipeline execution (lightweight, no Runner overhead)
     def perform
       _evaluate_pipeline_blocks!
-      self.class._minigun_task.perform(self)
+      @_minigun_task.root_pipeline.run(self)
     end
 
     # Convenience aliases
