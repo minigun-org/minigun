@@ -11,7 +11,55 @@ ADD to README / DOCS:
 add to architecture
 - multi-parents --> how do we know end of queues?
 
-========================================================================================
+======================================================
+
+WIP on pipeline inheritance
+
+we are trying to do this should do this:
+- on a non-inherited pipeline, unnamed pipelines are NOT combined (or should they be? I think no)
+- on a non-inherited pipeline, named pipelines ARE combined
+- for inheritance, the first unnamed pipeline is combined. (subsequent unnamed pipelines are not combined). -- too complicated??? need to decide.
+- you can also append to named pipelines by declaring a pipeline of the same name on the child. -- this is the same as non-inherited
+- if the final result is that there is a single pipeline, it is hoisted to become the root pipeline. this can be either done with a setter, a private setter (probably best), or a redefinition of the task (probably not)
+- update readme accordingly (there is a WIP section)
+
+========================================
+
+rename to WarpZone
+
+==================================
+
+      # Evaluate stored pipeline blocks on instance task with instance context
+      blocks = self.class._pipeline_definition_blocks
+      single_unnamed = (blocks.size == 1 && blocks.first[:name].nil?)
+
+      blocks.each do |entry|
+        name = entry[:name]
+        opts = entry[:options]
+
+        if single_unnamed
+          # Single unnamed pipeline: add stages directly to root_pipeline
+          pipeline_dsl = PipelineDSL.new(@_minigun_task.root_pipeline, self)
+          pipeline_dsl.instance_eval(&entry[:block])
+        else
+          # Multiple pipelines OR named pipeline: create a PipelineStage
+          # Generate name if not provided (for unnamed blocks)
+          name ||= :"_pipeline_#{SecureRandom.uuid}"
+          @_minigun_task.define_pipeline(name, opts) do |pipeline|
+            pipeline_dsl = PipelineDSL.new(pipeline, self)
+            pipeline_dsl.instance_eval(&entry[:block])
+          end
+        end
+      end
+
+instead of this, hoist the pipleine
+
+
+
+
+
+
+===============================
 
 Support Cross-Pipeline Routing?
 - use stage identifiers instead of names?
@@ -25,7 +73,7 @@ Support Cross-Pipeline Routing?
   task.stages(:bar)
 
   task.minigun.dag
-  
+
 
   task.pipeline(:foo).stage(:bar)
   task.pipelines

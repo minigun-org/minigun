@@ -1,10 +1,13 @@
 # frozen_string_literal: true
 
+require 'securerandom'
+
 module Minigun
   # Task orchestrates one or more pipelines
   # Supports both single-pipeline (implicit) and multi-pipeline modes
   class Task
     attr_reader :config, :root_pipeline
+    # attr_writer :root_pipeline  # for hoisting
 
     def initialize(config: nil, root_pipeline: nil)
       @config = config || {
@@ -56,7 +59,10 @@ module Minigun
     end
 
     # Add a nested pipeline as a stage within the implicit pipeline
-    def add_nested_pipeline(name, options = {}, &block)
+    def add_nested_pipeline(name = nil, options = {}, context = nil, &block)
+      # Generate name if not provided
+      name ||= :"_pipeline_#{SecureRandom.uuid}"
+
       # Create a PipelineStage and configure it
       pipeline_stage = PipelineStage.new(name: name, options: options)
 
@@ -66,7 +72,8 @@ module Minigun
 
       # Add stages to the nested pipeline via block
       if block_given?
-        dsl = Minigun::DSL::PipelineDSL.new(nested_pipeline)
+        # Pass context so nested pipelines can access instance variables
+        dsl = Minigun::DSL::PipelineDSL.new(nested_pipeline, context)
         dsl.instance_eval(&block)
       end
 
@@ -86,7 +93,9 @@ module Minigun
 
     # Define a named pipeline with routing
     # Pipelines are just PipelineStage objects in root_pipeline
-    def define_pipeline(name, options = {}, &block)
+    def define_pipeline(name = nil, options = {}, &block)
+      # Generate name if not provided
+      name ||= :"_pipeline_#{@root_pipeline.stages.size}"
       # Check if already exists
       if @root_pipeline.stages.key?(name)
         pipeline_stage = @root_pipeline.stages[name]
