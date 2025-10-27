@@ -64,6 +64,7 @@ module Minigun
       @all_stage_queues = all_stage_queues    # Hash of all queues for .to() method
       @runtime_edges = runtime_edges           # Track dynamic routing
       @stage_stats = stage_stats               # Stats object for tracking (optional)
+      @to_cache = {}                           # Memoization cache for .to() results
     end
 
     # Send item to all downstream stages
@@ -74,16 +75,25 @@ module Minigun
     end
 
     # Magic sauce: explicit routing to specific stage
-    # Returns a new OutputQueue that routes only to that stage
+    # Returns a memoized OutputQueue that routes only to that stage
     def to(target_stage)
+      # Return cached instance if available
+      return @to_cache[target_stage] if @to_cache.key?(target_stage)
+
       target_queue = @all_stage_queues[target_stage]
       raise ArgumentError, "Unknown target stage: #{target_stage}" unless target_queue
 
       # Track this as a runtime edge for END signal handling
       @runtime_edges[@stage_name].add(target_stage)
 
-      # Return new OutputQueue that shares the same stats object
-      OutputQueue.new(@stage_name, [target_queue], @all_stage_queues, @runtime_edges, stage_stats: @stage_stats)
+      # Create and cache the OutputQueue for this target
+      @to_cache[target_stage] = OutputQueue.new(
+        @stage_name,
+        [target_queue],
+        @all_stage_queues,
+        @runtime_edges,
+        stage_stats: @stage_stats
+      )
     end
   end
 end
