@@ -577,6 +577,64 @@ class ConfiguredTask
 end
 ```
 
+### Queue Sizing and Backpressure
+
+Minigun uses `SizedQueue` (bounded queues) by default for automatic backpressure. This prevents memory bloat when producers are faster than consumers.
+
+**Global Default:**
+
+```ruby
+# Set global default queue size
+Minigun.configure do |config|
+  config.default_queue_size = 1000  # Default is 1000
+end
+```
+
+**Per-Stage Queue Size:**
+
+```ruby
+pipeline do
+  producer :fast_source do |output|
+    # Produces data very quickly
+  end
+
+  # Small queue for tight backpressure
+  processor :slow_transform, queue_size: 50 do |item, output|
+    # Slow processing creates backpressure on producer
+    sleep 0.1
+    output << item * 2
+  end
+
+  # Large queue for buffering bursts
+  consumer :batch_sink, queue_size: 5000 do |item, output|
+    # Can handle bursty workloads
+  end
+
+  # Unbounded queue (use with caution!)
+  consumer :emergency_overflow, queue_size: Float::INFINITY do |item, output|
+    # No backpressure - can grow without bound
+  end
+end
+```
+
+**Unbounded Queues:**
+
+Set `queue_size` to `0`, `nil`, or `Float::INFINITY` for unbounded `Queue` instead of `SizedQueue`:
+
+```ruby
+# All three are equivalent
+processor :stage1, queue_size: 0
+processor :stage2, queue_size: nil
+processor :stage3, queue_size: Float::INFINITY
+```
+
+**When to Use Each:**
+
+- **Bounded (default 1000)**: Best for most cases. Provides automatic backpressure.
+- **Small (50-100)**: Tight coupling between stages, immediate backpressure.
+- **Large (5000+)**: Buffer for bursty producers, smooth out spikes.
+- **Unbounded**: Only when you're certain producers won't overwhelm consumers (e.g., rate-limited APIs).
+
 ## Hooks
 
 Minigun supports hooks for various lifecycle events:

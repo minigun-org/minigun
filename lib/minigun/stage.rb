@@ -30,6 +30,21 @@ module Minigun
       @options = options
     end
 
+    # Get the queue size for this stage
+    # Returns nil for unbounded queues (0, Float::INFINITY, nil)
+    # Returns integer for bounded queues (SizedQueue)
+    def queue_size
+      size = @options[:queue_size]
+
+      # Use global default if not specified
+      size = Minigun.default_queue_size if size.nil?
+
+      # Check for unbounded indicators
+      return nil if size == 0 || size == Float::INFINITY || size == false
+
+      size.to_i
+    end
+
     # Execute the stage with the given context
     # For loop-based stages, this receives input_queue and output_queue
     def execute(context, input_queue: nil, output_queue: nil)

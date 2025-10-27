@@ -17,6 +17,7 @@ module Minigun
 end
 
 require_relative 'minigun/version'
+require_relative 'minigun/configuration'
 require_relative 'minigun/message'
 require_relative 'minigun/queue_wrappers'
 require_relative 'minigun/execution/executor'

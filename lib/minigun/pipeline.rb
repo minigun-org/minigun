@@ -238,7 +238,13 @@ module Minigun
         # Skip autonomous stages - they don't have input queues
         next if stage.run_mode == :autonomous
 
-        queues[stage_name] = Queue.new  # Unbounded to prevent deadlock
+        # Use stage's queue_size setting (bounded SizedQueue or unbounded Queue)
+        size = stage.queue_size
+        queues[stage_name] = if size.nil?
+                               Queue.new  # Unbounded queue
+                             else
+                               SizedQueue.new(size)  # Bounded queue with backpressure
+                             end
       end
 
       queues
