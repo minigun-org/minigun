@@ -116,25 +116,23 @@ RSpec.describe Minigun::Execution::InlineExecutor do
   let(:user_context) { double('user_context') }
 
   describe '#execute_stage_item' do
-    it 'executes stage immediately in same thread' do
-      allow(stage).to receive(:respond_to?).with(:execute_with_emit).and_return(true)
-      allow(stage).to receive(:execute_with_emit).with(user_context, 42).and_return([84])
+    let(:output_queue) { double('output_queue', items_produced: 1) }
 
-      result = executor.execute_stage_item(stage: stage, item: 42, user_context: user_context, stats: stats, pipeline: pipeline)
-      expect(result).to eq([84])
+    it 'executes stage immediately in same thread' do
+      expect(stage).to receive(:execute).with(user_context, item: 42, input_queue: nil, output_queue: output_queue)
+
+      executor.execute_stage_item(stage: stage, item: 42, user_context: user_context, output_queue: output_queue, stats: stats, pipeline: pipeline)
     end
 
     it 'executes in calling thread' do
       calling_thread_id = Thread.current.object_id
       execution_thread_id = nil
 
-      allow(stage).to receive(:respond_to?).with(:execute_with_emit).and_return(true)
-      allow(stage).to receive(:execute_with_emit) do
+      allow(stage).to receive(:execute) do
         execution_thread_id = Thread.current.object_id
-        []
       end
 
-      executor.execute_stage_item(stage: stage, item: 1, user_context: user_context, stats: stats, pipeline: pipeline)
+      executor.execute_stage_item(stage: stage, item: 1, user_context: user_context, output_queue: output_queue, stats: stats, pipeline: pipeline)
       expect(execution_thread_id).to eq(calling_thread_id)
     end
   end
@@ -179,40 +177,37 @@ RSpec.describe Minigun::Execution::ThreadPoolExecutor do
     it 'executes in different thread' do
       calling_thread_id = Thread.current.object_id
       execution_thread_id = nil
+      output_queue = double('output_queue', items_produced: 0)
 
-      allow(stage).to receive(:respond_to?).with(:execute_with_emit).and_return(true)
-      allow(stage).to receive(:execute_with_emit) do
+      allow(stage).to receive(:execute) do
         execution_thread_id = Thread.current.object_id
-        []
       end
 
-      executor.execute_stage_item(stage: stage, item: 1, user_context: user_context, stats: stats, pipeline: pipeline)
+      executor.execute_stage_item(stage: stage, item: 1, user_context: user_context, output_queue: output_queue, stats: stats, pipeline: pipeline)
       expect(execution_thread_id).not_to eq(calling_thread_id)
     end
 
     it 'returns result from thread' do
-      allow(stage).to receive(:respond_to?).with(:execute_with_emit).and_return(true)
-      allow(stage).to receive(:execute_with_emit).and_return([42])
+      output_queue = double('output_queue', items_produced: 1)
+      expect(stage).to receive(:execute).with(user_context, item: 1, input_queue: nil, output_queue: output_queue)
 
-      result = executor.execute_stage_item(stage: stage, item: 1, user_context: user_context, stats: stats, pipeline: pipeline)
-      expect(result).to eq([42])
+      executor.execute_stage_item(stage: stage, item: 1, user_context: user_context, output_queue: output_queue, stats: stats, pipeline: pipeline)
     end
 
     it 'respects max_size concurrency limit' do
       executed = []
       mutex = Mutex.new
+      output_queue = double('output_queue', items_produced: 0)
 
-      allow(stage).to receive(:respond_to?).with(:execute_with_emit).and_return(true)
-      allow(stage).to receive(:execute_with_emit) do
+      allow(stage).to receive(:execute) do
         mutex.synchronize { executed << 1 }
         sleep 0.01
-        []
       end
 
       # Start 5 concurrent executions with max_size=3
       threads = 5.times.map do
         Thread.new do
-          executor.execute_stage_item(stage: stage, item: 1, user_context: user_context, stats: stats, pipeline: pipeline)
+          executor.execute_stage_item(stage: stage, item: 1, user_context: user_context, output_queue: output_queue, stats: stats, pipeline: pipeline)
         end
       end
 
@@ -221,12 +216,11 @@ RSpec.describe Minigun::Execution::ThreadPoolExecutor do
     end
 
     it 'propagates errors from thread' do
-      allow(stage).to receive(:respond_to?).with(:execute_with_emit).and_return(true)
-      allow(stage).to receive(:execute_with_emit).and_raise(StandardError, "boom")
+      output_queue = double('output_queue', items_produced: 0)
+      allow(stage).to receive(:execute).and_raise(StandardError, "boom")
 
-      # Errors are caught and logged, returns []
-      result = executor.execute_stage_item(stage: stage, item: 1, user_context: user_context, stats: stats, pipeline: pipeline)
-      expect(result).to eq([])
+      # Errors are caught and logged (no exception propagated)
+      expect { executor.execute_stage_item(stage: stage, item: 1, user_context: user_context, output_queue: output_queue, stats: stats, pipeline: pipeline) }.not_to raise_error
     end
   end
 
