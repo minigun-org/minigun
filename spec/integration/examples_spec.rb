@@ -706,4 +706,109 @@ RSpec.describe 'Examples Integration' do
       expect(example.batch_stats[:types_processed].size).to be >= 1
     end
   end
+
+  describe '45_timed_batch_stage.rb' do
+    it 'demonstrates custom TimedBatchStage with size and timeout limits' do
+      load File.expand_path('../../examples/45_timed_batch_stage.rb', __dir__)
+
+      # Capture output to verify batches are processed
+      output = StringIO.new
+      original_stdout = $stdout
+      $stdout = output
+
+      begin
+        example = TimedBatchExample.new
+        example.run
+
+        output_lines = output.string.lines
+        batch_lines = output_lines.grep(/Processing batch/)
+        
+        # Should have multiple batches due to size (5) and timeout (0.3s)
+        expect(batch_lines.size).to be >= 2
+        
+        # Should process all 20 items total
+        total_items = batch_lines.map { |line| line[/batch of (\d+)/, 1].to_i }.sum
+        expect(total_items).to eq(20)
+      ensure
+        $stdout = original_stdout
+      end
+    end
+  end
+
+  describe '46_deduplicator_stage.rb' do
+    it 'demonstrates simple value deduplication' do
+      load File.expand_path('../../examples/46_deduplicator_stage.rb', __dir__)
+
+      output = StringIO.new
+      original_stdout = $stdout
+      $stdout = output
+
+      begin
+        example = SimpleDeduplicatorExample.new
+        example.run
+
+        output_lines = output.string.lines
+        unique_lines = output_lines.grep(/Unique item:/)
+        
+        # Input: [1, 2, 3, 2, 4, 1, 5, 3, 6, 4]
+        # Should deduplicate to: [1, 2, 3, 4, 5, 6]
+        expect(unique_lines.size).to eq(6)
+        
+        items = unique_lines.map { |line| line[/Unique item: (\d+)/, 1].to_i }
+        expect(items.sort).to eq([1, 2, 3, 4, 5, 6])
+      ensure
+        $stdout = original_stdout
+      end
+    end
+
+    it 'demonstrates hash deduplication with key extraction' do
+      load File.expand_path('../../examples/46_deduplicator_stage.rb', __dir__)
+
+      output = StringIO.new
+      original_stdout = $stdout
+      $stdout = output
+
+      begin
+        example = HashDeduplicatorExample.new
+        example.run
+
+        output_lines = output.string.lines
+        unique_lines = output_lines.grep(/Unique user:/)
+        
+        # Should deduplicate 6 users down to 4 unique IDs
+        expect(unique_lines.size).to eq(4)
+        
+        # Should keep first occurrence of each ID
+        expect(output_lines.join).to include('Alice')
+        expect(output_lines.join).to include('Bob')
+        expect(output_lines.join).to include('Charlie')
+        expect(output_lines.join).to include('David')
+        expect(output_lines.join).not_to include('duplicate')
+      ensure
+        $stdout = original_stdout
+      end
+    end
+
+    it 'demonstrates thread-safe deduplication' do
+      load File.expand_path('../../examples/46_deduplicator_stage.rb', __dir__)
+
+      output = StringIO.new
+      original_stdout = $stdout
+      $stdout = output
+
+      begin
+        example = ThreadedDeduplicatorExample.new
+        example.run
+
+        output_lines = output.string.lines
+        final_lines = output_lines.grep(/Final item:/)
+        
+        # Input: 100 items with only 20 unique values (i % 20)
+        # Should deduplicate to 20 unique items
+        expect(final_lines.size).to eq(20)
+      ensure
+        $stdout = original_stdout
+      end
+    end
+  end
 end

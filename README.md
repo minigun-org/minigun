@@ -46,27 +46,27 @@ require 'minigun'
 
 class MyTask
   include Minigun::DSL
-  
+
   pipeline do
     producer :generate do
       10.times { |i| emit(i) }
     end
-    
+
     processor :transform do |number|
       emit(number * 2)
     end
-    
+
     accumulator :batch do |item|
       @items ||= []
       @items << item
-      
+
       if @items.size >= 5
         batch = @items.dup
         @items.clear
         emit(batch)
       end
     end
-    
+
     cow_fork :process_batch do |batch|
       # Process the batch in a forked child process
       batch.each { |item| puts "Processing #{item}" }
@@ -97,6 +97,202 @@ For handling batched data processing, two fork implementations are available:
 - **ipc_fork**: Uses IPC-style forking for batch processing with different memory characteristics
 
 These are actually aliases for the consumer stage with specific fork configurations.
+
+### Custom Stage Classes
+
+Minigun allows you to create custom stage classes to encapsulate complex behavior or implement specialized processing patterns. All stages inherit from the base `Stage` class and can override its behavior.
+
+#### Execution Modes
+
+Every stage has a `run_mode` that determines how it executes within the pipeline. There are three execution strategies:
+
+```ruby
+:autonomous  # Generates data independently (ProducerStage)
+:streaming   # Processes stream of items in worker loop (Stage, ConsumerStage)
+:composite   # Manages internal stages (PipelineStage)
+```
+
+The `run_mode` method controls critical behaviors like:
+- Whether the stage needs an input queue
+- Whether it needs an executor for concurrent processing
+- How the pipeline routes data to and from the stage
+- How the stage participates in disconnection detection
+
+#### Creating Custom Stages
+
+To create a custom stage class, inherit from `Minigun::Stage` and implement the required methods:
+
+```ruby
+class CustomStage < Minigun::Stage
+  # Define execution mode (default: :streaming)
+  def run_mode
+    :streaming
+  end
+
+  # Define how a single item is processed
+  def execute(context, item: nil, input_queue: nil, output_queue: nil)
+    # Your custom processing logic
+    result = process_item(item)
+    output_queue << result if output_queue
+  end
+
+  # Optional: Customize the worker loop
+  def run_worker_loop(stage_ctx)
+    # Custom loop implementation
+    # See ProducerStage or ConsumerStage for examples
+  end
+
+  # Optional: Customize logging type
+  def log_type
+    "Custom"
+  end
+end
+```
+
+#### Example: Batch Processor Stage
+
+Here's a custom stage that batches items with a timeout:
+
+```ruby
+class TimedBatchStage < Minigun::Stage
+  attr_reader :batch_size, :timeout
+
+  def initialize(name:, options: {})
+    super
+    @batch_size = options[:batch_size] || 100
+    @timeout = options[:timeout] || 5.0
+  end
+
+  def run_mode
+    :streaming  # Processes items from input queue
+  end
+
+  def run_worker_loop(stage_ctx)
+    require 'minigun/queue_wrappers'
+
+    wrapped_input = Minigun::InputQueue.new(
+      stage_ctx.input_queue,
+      stage_ctx.stage_name,
+      stage_ctx.sources_expected
+    )
+
+    wrapped_output = Minigun::OutputQueue.new(
+      stage_ctx.stage_name,
+      stage_ctx.dag.downstream(stage_ctx.stage_name).map { |ds|
+        stage_ctx.stage_input_queues[ds]
+      },
+      stage_ctx.stage_input_queues,
+      stage_ctx.runtime_edges
+    )
+
+    batch = []
+    last_flush = Time.now
+
+    loop do
+      # Check for timeout
+      if !batch.empty? && (Time.now - last_flush) >= @timeout
+        wrapped_output << batch.dup
+        batch.clear
+        last_flush = Time.now
+      end
+
+      # Try to get item with timeout
+      begin
+        item = wrapped_input.pop(timeout: 0.1)
+
+        if item == Minigun::AllUpstreamsDone
+          # Flush remaining items
+          wrapped_output << batch unless batch.empty?
+          break
+        end
+
+        batch << item
+
+        # Flush if batch is full
+        if batch.size >= @batch_size
+          wrapped_output << batch.dup
+          batch.clear
+          last_flush = Time.now
+        end
+      rescue ThreadError
+        # Timeout, continue to check for flush
+      end
+    end
+
+    send_end_signals(stage_ctx)
+  end
+end
+
+# Use in a pipeline
+class MyTask
+  include Minigun::DSL
+
+  pipeline do
+    producer :generate do
+      100.times { |i| emit(i) }
+    end
+
+    # Use custom stage class
+    custom_stage TimedBatchStage, :batch, batch_size: 10, timeout: 2.0
+
+    consumer :process do |batch, output|
+      puts "Processing batch of #{batch.size} items"
+    end
+  end
+end
+```
+
+#### Example: Stateful Filter Stage
+
+Create a stage that filters based on accumulated state:
+
+```ruby
+class DeduplicatorStage < Minigun::Stage
+  def initialize(name:, options: {})
+    super
+    @seen = Set.new
+    @mutex = Mutex.new
+  end
+
+  def run_mode
+    :streaming
+  end
+
+  def execute(context, item: nil, input_queue: nil, output_queue: nil)
+    key = extract_key(item)
+
+    is_new = @mutex.synchronize do
+      if @seen.include?(key)
+        false
+      else
+        @seen.add(key)
+        true
+      end
+    end
+
+    output_queue << item if is_new && output_queue
+  end
+
+  private
+
+  def extract_key(item)
+    # Override in subclass or pass as option
+    item[:id] || item
+  end
+end
+```
+
+#### When to Create Custom Stages
+
+Consider creating custom stage classes when you need:
+
+1. **Complex State Management**: Stages that maintain sophisticated internal state
+2. **Specialized Worker Loops**: Custom timing, batching, or control flow logic
+3. **Reusable Patterns**: Behavior you want to use across multiple pipelines
+4. **Framework Extensions**: Adding new execution modes or patterns to Minigun
+5. **Performance Optimization**: Fine-tuned control over threading, batching, or memory
+
+For simple transformations, use the standard `producer`, `processor`, and `consumer` DSL methods. For complex, reusable behavior, create custom stage classes.
 
 ### Stage Connections
 
@@ -143,33 +339,33 @@ pipeline do
       emit(user)
     end
   end
-  
+
   # These processors receive data from the same producer
   processor :email_processor, from: :user_producer do |user|
     generate_email(user)
   end
-  
+
   processor :notification_processor, from: :user_producer do |user|
     generate_notification(user)
   end
-  
+
   # Connect the email processor to an accumulator
   accumulator :email_accumulator, from: :email_processor do |email|
     @emails ||= []
     @emails << email
-    
+
     if @emails.size >= 100
       batch = @emails.dup
       @emails.clear
       emit(batch)
     end
   end
-  
+
   # Process accumulated emails
   cow_fork :email_sender, from: :email_accumulator, processes: 4 do |emails|
     emails.each { |email| send_email(email) }
   end
-  
+
   # Process notifications directly
   consumer :notification_sender, from: :notification_processor do |notification|
     send_notification(notification)
@@ -186,32 +382,32 @@ pipeline do
   producer :data_source do
     data_items.each { |item| emit(item) }
   end
-  
+
   # Split to parallel processors
   processor :validate, from: :data_source, to: [:transform_a, :transform_b] do |item|
     emit(item) if item.valid?
   end
-  
+
   # Parallel transformations
   processor :transform_a, from: :validate, to: :combine do |item|
     emit(transform_a(item))
   end
-  
+
   processor :transform_b, from: :validate, to: :combine do |item|
     emit(transform_b(item))
   end
-  
+
   # Rejoin for final processing
   processor :combine, from: [:transform_a, :transform_b] do |item|
     @results ||= []
     @results << item
-    
+
     if @results.size >= 2
       emit(combine_results(@results))
       @results.clear
     end
   end
-  
+
   consumer :store_results, from: :combine do |result|
     store_result(result)
   end
@@ -251,24 +447,24 @@ pipeline do
   producer :user_producer do
     User.find_each do |user|
       emit(user)
-      
+
       # Route VIP users to a high priority queue
       emit_to_queue(:high_priority, user) if user.vip?
     end
   end
-  
+
   # This processor handles both default and high priority users
   processor :email_processor, threads: 5, queues: [:default, :high_priority] do |user|
     email = generate_email(user)
     emit(email)
   end
-  
+
   # Regular handling for emails
   accumulator :email_accumulator, from: :email_processor do |email|
     @emails ||= {}
     @emails[email.type] ||= []
     @emails[email.type] << email
-    
+
     # Emit batches by email type when they reach the threshold
     @emails.each do |type, batch|
       if batch.size >= 50
@@ -277,17 +473,17 @@ pipeline do
       end
     end
   end
-  
+
   # Handle newsletter emails separately
   consumer :newsletter_sender, queues: [:newsletter] do |emails|
     send_newsletter_batch(emails)
   end
-  
+
   # Handle transaction emails separately
   consumer :transaction_sender, queues: [:transaction] do |emails|
     send_transaction_batch(emails)
   end
-  
+
   # Handle all other types
   consumer :general_sender, queues: [:default] do |emails|
     send_email_batch(emails)
@@ -308,34 +504,34 @@ pipeline do
       emit_to_queue(queue, item)
     end
   end
-  
+
   # Process queue 1 with specific settings
   processor :worker_1, queues: [:queue_1], threads: 3 do |item|
     process_with_worker_1(item)
   end
-  
+
   # Process queue 2 with different settings
   processor :worker_2, queues: [:queue_2], threads: 5 do |item|
     process_with_worker_2(item)
   end
-  
+
   # Process queue 3 with yet different settings
   processor :worker_3, queues: [:queue_3], threads: 2 do |item|
     process_with_worker_3(item)
   end
-  
+
   # All results go to the same accumulator
   accumulator :result_collector, from: [:worker_1, :worker_2, :worker_3] do |result|
     @results ||= []
     @results << result
-    
+
     if @results.size >= 100
       batch = @results.dup
       @results.clear
       emit(batch)
     end
   end
-  
+
   consumer :store_results, from: :result_collector do |batch|
     store_batch(batch)
   end
@@ -347,33 +543,33 @@ end
 ```ruby
 class ConfiguredTask
   include Minigun::Task
-  
+
   # Global configuration
   max_threads 10        # Maximum threads per process
   max_processes 4       # Maximum forked processes
   max_retries 3         # Maximum retry attempts for errors
   batch_size 100        # Default batch size
   consumer_type :cow    # Default consumer fork implementation (:cow or :ipc)
-  
+
   # Advanced IPC options
   pipe_timeout 30       # Timeout for IPC pipe operations (seconds)
   use_compression true  # Enable compression for large IPC transfers
   gc_probability 0.1    # Probability of GC during batch processing (0.0-1.0)
-  
+
   # Stage-specific configuration
   pipeline do
     producer :source do
       # Generate data
     end
-    
+
     processor :transform, threads: 5 do |item|
       # Process with 5 threads
     end
-    
+
     accumulator :batch, max_queue: 1000, max_all: 2000 do |item|
       # Batch with custom limits
     end
-    
+
     consumer :sink, fork: :ipc, processes: 2 do |batch|
       # Consume with 2 IPC processes
     end
@@ -388,19 +584,19 @@ Minigun supports hooks for various lifecycle events:
 ```ruby
 class TaskWithHooks
   include Minigun::Task
-  
+
   before_run do
     # Called before the pipeline starts
   end
-  
+
   after_run do
     # Called after the pipeline completes
   end
-  
+
   before_fork do
     # Called in the parent process before forking
   end
-  
+
   after_fork do
     # Called in the child process after forking
   end
@@ -414,7 +610,7 @@ end
 ```ruby
 class DataETL
   include Minigun::Task
-  
+
   pipeline do
     producer :extract do
       # Extract data from source
@@ -422,12 +618,12 @@ class DataETL
         emit(batch)
       end
     end
-    
+
     processor :transform do |batch|
       # Transform the data
       batch.map { |row| transform_row(row) }
     end
-    
+
     consumer :load do |batch|
       # Load data to destination
       destination.insert_batch(batch)
@@ -441,19 +637,19 @@ end
 ```ruby
 class WebCrawler
   include Minigun::Task
-  
+
   max_threads 20
-  
+
   pipeline do
     producer :seed_urls do
       initial_urls.each { |url| emit(url) }
     end
-    
+
     processor :fetch_pages do |url|
       response = HTTP.get(url)
       { url: url, content: response.body }
     end
-    
+
     processor :extract_links do |page|
       links = extract_links_from_html(page[:content])
       # Emit new links for crawling
@@ -461,18 +657,18 @@ class WebCrawler
       # Pass the page content for processing
       page
     end
-    
+
     accumulator :batch_pages do |page|
       @pages ||= []
       @pages << page
-      
+
       if @pages.size >= 10
         batch = @pages.dup
         @pages.clear
         emit(batch)
       end
     end
-    
+
     cow_fork :process_pages do |batch|
       # Process pages in parallel using forked processes
       batch.each { |page| process_content(page) }
@@ -505,7 +701,7 @@ The COW fork implementation leverages Ruby's copy-on-write memory sharing betwee
 - Ideal for read-only operations on large data structures
 - Best performance when memory footprint is important
 
-### IPC Fork 
+### IPC Fork
 
 ```ruby
 ipc_fork :process_batch do |batch|
@@ -563,7 +759,7 @@ Minigun optimizes garbage collection in forked processes:
 ##### Additional IPC Options
 
 ```ruby
-ipc_fork :process_batch, 
+ipc_fork :process_batch,
          pipe_timeout: 60,         # Timeout for pipe operations (seconds)
          max_chunk_size: 2_000_000 # Max size for chunked data (bytes)
          do |batch|

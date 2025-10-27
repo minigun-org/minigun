@@ -242,6 +242,13 @@ module Minigun
         @pipeline.add_stage(:stage, name, options, &block)
       end
 
+      # Custom stage - for using custom Stage subclasses
+      # Pass a Stage class as the first argument instead of a symbol
+      def custom_stage(stage_class, name, options = {})
+        options = _apply_execution_context(options)
+        @pipeline.add_stage(stage_class, name, options)
+      end
+
       # Accumulator is special - kept explicit
       def accumulator(name = :accumulator, options = {}, &block)
         options = _apply_execution_context(options)

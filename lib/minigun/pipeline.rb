@@ -76,6 +76,7 @@ module Minigun
     end
 
     # Add a stage to this pipeline
+    # type can be a Symbol (:producer, :consumer, etc.) or a custom Stage class
     def add_stage(type, name, options = {}, &block)
       # Extract routing information
       to_targets = options.delete(:to)
@@ -106,21 +107,27 @@ module Minigun
         add_stage_hook(:after_fork, name, &after_fork_proc)
       end
 
-      # Extract stage_type from options if present (used by DSL)
-      actual_type = options.delete(:stage_type) || type
-
-      # Create appropriate stage subclass based on type
-      stage = case actual_type
-              when :producer
-                ProducerStage.new(name: name, block: block, options: options)
-              when :processor, :consumer
-                ConsumerStage.new(name: name, block: block, options: options)
-              when :stage
-                Stage.new(name: name, block: block, options: options)
-              when :accumulator
-                AccumulatorStage.new(name: name, block: block, options: options)
+      # Create stage instance
+      stage = if type.is_a?(Class)
+                # Custom stage class provided
+                type.new(name: name, options: options)
               else
-                raise Minigun::Error, "Unknown stage type: #{actual_type}"
+                # Extract stage_type from options if present (used by DSL)
+                actual_type = options.delete(:stage_type) || type
+
+                # Create appropriate stage subclass based on type symbol
+                case actual_type
+                when :producer
+                  ProducerStage.new(name: name, block: block, options: options)
+                when :processor, :consumer
+                  ConsumerStage.new(name: name, block: block, options: options)
+                when :stage
+                  Stage.new(name: name, block: block, options: options)
+                when :accumulator
+                  AccumulatorStage.new(name: name, block: block, options: options)
+                else
+                  raise Minigun::Error, "Unknown stage type: #{actual_type}"
+                end
               end
 
       # Store stage by name

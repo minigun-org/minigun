@@ -416,6 +416,7 @@ module Minigun
       # We'll inject the pipeline later when we have the config
       @pipeline = nil
       @stages_to_add = []  # Queue of stages to add when pipeline is created
+      @temp_collector = nil  # Track temp collector stage if added
     end
 
     def run_mode
@@ -547,15 +548,14 @@ module Minigun
       # Collect all items produced by the nested pipeline
       collected_items = []
 
-      # Add a temporary consumer to collect items
-      temp_consumer_added = false
-      unless @pipeline.stages.values.any? { |s| s.is_a?(ConsumerStage) && s.name.to_s.start_with?('_temp_collector') }
+      # Add a temporary consumer to collect items if not already present
+      if @temp_collector.nil?
         @pipeline.instance_eval do
           add_stage(:stage, :_temp_collector, stage_type: :consumer) do |item, output|
             collected_items << item
           end
         end
-        temp_consumer_added = true
+        @temp_collector = @pipeline.stages[:_temp_collector]
       end
 
       # Run the nested pipeline
@@ -565,8 +565,9 @@ module Minigun
       collected_items.each { |item| output_queue << item } if output_queue
 
       # Clean up temporary collector
-      if temp_consumer_added
+      if @temp_collector
         @pipeline.stages.delete(:_temp_collector)
+        @temp_collector = nil
       end
     end
 
