@@ -92,7 +92,7 @@ class ComprehensivePipeline
 
     # Save to database (dedicated small pool)
     # Stats are incremented here (in parent process) so they're visible
-    processor :save_to_db, execution_context: :db_pool do |results|
+    processor :save_to_db, execution_context: :db_pool do |results, output|
       @mutex.synchronize do
         @stats[:parsed] += 1
         @stats[:parse_pids] << results[:parse_pid] if results[:parse_pid]
