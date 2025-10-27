@@ -294,6 +294,155 @@ Consider creating custom stage classes when you need:
 
 For simple transformations, use the standard `producer`, `processor`, and `consumer` DSL methods. For complex, reusable behavior, create custom stage classes.
 
+### Pipeline Inheritance
+
+Minigun supports pipeline inheritance, allowing child classes to extend or modify parent pipelines. This enables powerful composition patterns for building reusable pipeline components.
+
+#### Unnamed Pipeline Merging
+
+When a class inherits from another and both define unnamed `pipeline do` blocks, the **first two unnamed pipelines merge**:
+
+```ruby
+class BaseTask
+  include Minigun::DSL
+
+  attr_accessor :results
+
+  def initialize
+    @results = []
+  end
+
+  pipeline do
+    producer :source do |output|
+      [1, 2, 3].each { |n| output << n }
+    end
+
+    processor :double do |n, output|
+      output << n * 2
+    end
+
+    consumer :collect do |n|
+      @results << n
+    end
+  end
+end
+
+# Child class extends parent's pipeline
+class ExtendedTask < BaseTask
+  pipeline do
+    # Add a new stage
+    processor :triple do |n, output|
+      output << n * 3
+    end
+
+    # Reroute parent's stages
+    reroute_stage :double, to: :triple
+    reroute_stage :triple, to: :collect
+  end
+end
+
+base = BaseTask.new
+base.run
+base.results  # => [2, 4, 6] (doubled)
+
+extended = ExtendedTask.new
+extended.run
+extended.results  # => [6, 12, 18] (doubled then tripled)
+```
+
+The child's pipeline block is **evaluated on the same root pipeline** as the parent's, allowing `reroute_stage` to modify the parent's routing.
+
+#### Named Pipeline Extension
+
+Named pipelines can also be extended by declaring a pipeline with the same name in the child class:
+
+```ruby
+class ParentTask
+  include Minigun::DSL
+
+  pipeline :data_flow do
+    producer :source do |output|
+      output << "data"
+    end
+
+    consumer :sink do |item|
+      puts item
+    end
+  end
+end
+
+class ChildTask < ParentTask
+  # Extend :data_flow by declaring it again
+  pipeline :data_flow do
+    processor :transform do |item, output|
+      output << item.upcase
+    end
+
+    reroute_stage :source, to: :transform
+    reroute_stage :transform, to: :sink
+  end
+end
+```
+
+The child's named pipeline block is evaluated on the **existing named pipeline stage**, allowing you to add stages and modify routing.
+
+#### Multiple Unnamed Pipelines
+
+If you need **multiple isolated pipelines** in a class hierarchy, only the first two unnamed blocks merge. Additional unnamed blocks create isolated `PipelineStage` instances:
+
+```ruby
+class MultiTask < BaseTask
+  # First unnamed: merges with parent (extends default pipeline)
+  pipeline do
+    reroute_stage :source, to: :collect  # Skip doubling
+  end
+
+  # Second unnamed: isolated pipeline
+  pipeline do
+    producer :extra_source do |output|
+      output << "extra"
+    end
+
+    consumer :extra_sink do |item|
+      puts item
+    end
+  end
+end
+```
+
+#### When Inheritance Doesn't Merge
+
+To prevent merging and ensure isolation, use **named pipelines**:
+
+```ruby
+class IsolatedChild < BaseTask
+  # Named pipeline: isolated from parent's unnamed pipeline
+  pipeline :isolated_flow do
+    producer :new_source do |output|
+      output << "new"
+    end
+
+    consumer :new_sink do |item|
+      puts item
+    end
+  end
+end
+```
+
+#### Use Cases for Pipeline Inheritance
+
+- **Specialization**: Create base pipelines with common stages, override routing in children
+- **Variants**: Build multiple pipeline variants from a shared base (e.g., test vs. production)
+- **Mixins**: Create reusable pipeline components that can be mixed into multiple classes
+- **Testing**: Create test-specific routing or mock stages by inheriting from production pipelines
+
+#### Best Practices
+
+1. **Use named pipelines for isolation**: If you don't want child classes to modify your pipeline, use a named pipeline
+2. **Document inheritance intent**: Make it clear whether a pipeline is designed for extension
+3. **Test inheritance hierarchies**: Ensure child modifications work as expected
+4. **Limit inheritance depth**: Deep inheritance can make pipeline behavior hard to understand
+
 ### Stage Connections
 
 Minigun supports two types of stage connections:
