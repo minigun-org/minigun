@@ -43,7 +43,7 @@ class CustomBatchingExample
     end
 
     # Custom batching stage - batches by type with different thresholds
-    stage :email_batcher do |email|
+    processor :email_batcher do |email, output|
       # Initialize batch storage per type
       @batches ||= Hash.new { |h, k| h[k] = [] }
       @thresholds ||= {
@@ -65,12 +65,12 @@ class CustomBatchingExample
         batch = @batches[type].dup
         @batches[type].clear
 
-        # Route to type-specific sender using emit_to_stage
+        # Route to type-specific sender using output.to()
         target_stage = :"#{type}_sender"
         puts "  ✓ Batch ready! Routing #{batch.size} #{type} emails to #{target_stage}"
 
-        # Use emit_to_stage for direct routing to the target consumer
-        emit_to_stage(target_stage, { type: type, batch: batch })
+        # Use output.to() for direct routing to the target consumer
+        output.to(target_stage) << { type: type, batch: batch }
       end
     end
 
@@ -202,7 +202,7 @@ class AdvancedCustomBatchingExample
     end
 
     # Custom batching with multi-dimensional grouping
-    stage :smart_batcher do |message|
+    processor :smart_batcher do |message, output|
       # Initialize batch storage with composite keys
       @batches ||= Hash.new { |h, k| h[k] = [] }
 

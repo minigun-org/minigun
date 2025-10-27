@@ -95,8 +95,8 @@ class DatabasePublisher
       puts "[Producer] Fetching customers from #{@model_class.name}..."
 
       @model_class.find_each do |customer|
-        # Emit [model_class, id] tuple for downstream processing
-        output << [customer.to_h, customer.id]
+        # Emit customer hash for downstream processing
+        output << customer.to_h
       end
 
       puts "[Producer] Finished fetching customers"

@@ -181,6 +181,9 @@ module Minigun
         all_targets = (dag_downstream + dynamic_targets).uniq
 
         all_targets.each do |target|
+          # Skip if target doesn't have an input queue (e.g., producers)
+          next unless stage_input_queues[target]
+
           stage_input_queues[target] << Message.end_signal(source: @stage_name)
         end
       end

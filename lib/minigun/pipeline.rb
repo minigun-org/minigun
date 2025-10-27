@@ -443,11 +443,27 @@ module Minigun
         # Skip if this is the last stage
         next if index >= @stage_order.size - 1
 
-        next_stage = @stage_order[index + 1]
+        # Find the next non-producer stage
+        next_stage = nil
+        next_stage_obj = nil
+        ((index + 1)...@stage_order.size).each do |next_index|
+          candidate = @stage_order[next_index]
+          candidate_obj = find_stage(candidate)
+
+          # Skip producers
+          next if candidate_obj.producer?
+
+          # Found a valid non-producer stage
+          next_stage = candidate
+          next_stage_obj = candidate_obj
+          break
+        end
+
+        # No valid next stage found
+        next unless next_stage
 
         # Skip if BOTH current and next are PipelineStages (isolated pipelines)
         current_stage = find_stage(stage_name)
-        next_stage_obj = find_stage(next_stage)
         if current_stage.is_a?(PipelineStage) && next_stage_obj.is_a?(PipelineStage)
           next
         end

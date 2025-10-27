@@ -257,7 +257,7 @@ RSpec.describe 'Circular Dependency Detection' do
             output << 1
           end
 
-          consumer :fwd do |item|
+          consumer :fwd do |item, output|
             output << item
           end
         end
@@ -267,7 +267,7 @@ RSpec.describe 'Circular Dependency Detection' do
             output << item + 10
           end
 
-          consumer :fwd do |item|
+          consumer :fwd do |item, output|
             output << item
           end
         end
@@ -277,7 +277,7 @@ RSpec.describe 'Circular Dependency Detection' do
             output << item + 20
           end
 
-          consumer :fwd do |item|
+          consumer :fwd do |item, output|
             output << item
           end
         end

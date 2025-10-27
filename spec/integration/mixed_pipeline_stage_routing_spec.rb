@@ -709,7 +709,7 @@ RSpec.describe 'Mixed Pipeline and Stage Routing' do
         end
 
         pipeline :source do
-          producer :gen do
+          producer :gen do |output|
             2.times { |i| output << i }
           end
 
