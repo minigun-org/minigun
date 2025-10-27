@@ -210,7 +210,7 @@ module Minigun
       @runtime_edges = Concurrent::Hash.new { |h, k| h[k] = Concurrent::Set.new }
 
       # Start producer threads
-      producer_threads = start_producers
+      producer_threads = start_producer_workers
 
       # Start stage worker threads (one per non-producer stage, including routers)
       @stages.each do |stage_name, stage|
@@ -324,7 +324,7 @@ module Minigun
     private
 
     # Start all producer threads
-    def start_producers
+    def start_producer_workers
       producer_stages = find_all_producers
       return [] if producer_stages.empty?
 
