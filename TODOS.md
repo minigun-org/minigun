@@ -25,11 +25,16 @@ Support Cross-Pipeline Routing?
   task.stages(:bar)
 
   task.minigun.dag
-  
+
 
   task.pipeline(:foo).stage(:bar)
   task.pipelines
   task.stages
+
+===============================================
+
+fix DataProcessingPipeline spec
+I see the issue now - when you're inside a pipeline block, the stages within it are part of a PipelineStage which doesn't support output.to(). The output parameter is just an Array for collecting items, not an OutputQueue.
 
 ============================
 

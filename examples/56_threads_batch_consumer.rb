@@ -23,7 +23,7 @@ class ThreadsBatchConsumer
 
     threads(3) do
       processor :work do |item, output|
-        output << item * 2
+        output << (item * 2)
       end
     end
 
@@ -35,9 +35,8 @@ class ThreadsBatchConsumer
   end
 end
 
-puts "Testing: threads block + batch + consumer"
+puts 'Testing: threads block + batch + consumer'
 pipeline = ThreadsBatchConsumer.new
 pipeline.run
 puts "Results: #{pipeline.results.size} batches, total items: #{pipeline.results.sum}"
-puts pipeline.results.sum == 20 ? "✓ Works!" : "✗ Failed"
-
+puts pipeline.results.sum == 20 ? '✓ Works!' : '✗ Failed'

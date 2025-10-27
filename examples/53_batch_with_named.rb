@@ -24,13 +24,13 @@ class BatchWithNamed
     end
 
     processor :prep, execution_context: :processor_pool do |item, output|
-      output << item + 1
+      output << (item + 1)
     end
 
     batch 5
 
     processor :process_batch do |batch, output|
-      batch.each { |item| output << item * 2 }
+      batch.each { |item| output << (item * 2) }
     end
 
     consumer :save do |item|
@@ -39,9 +39,8 @@ class BatchWithNamed
   end
 end
 
-puts "Testing: batch + named context"
+puts 'Testing: batch + named context'
 pipeline = BatchWithNamed.new
 pipeline.run
 puts "Results: #{pipeline.results.size} items"
-puts "✓ Batch + named works" if pipeline.results.size == 30
-
+puts '✓ Batch + named works' if pipeline.results.size == 30

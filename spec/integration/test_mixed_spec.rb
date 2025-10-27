@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 
 RSpec.describe 'Test Mixed Routing' do
@@ -12,4 +14,3 @@ RSpec.describe 'Test Mixed Routing' do
     expect(example.final.sort).to eq([0, 1, 10, 20, 101, 201])
   end
 end
-

@@ -66,14 +66,14 @@ class FullCombo
     end
 
     threads(5) do
-      consumer :upload do |item|
+      consumer :upload do |_item|
         @mutex.synchronize { @stats[:uploaded] += 1 }
       end
     end
   end
 end
 
-puts "Testing: full combination (mini example 38)"
+puts 'Testing: full combination (mini example 38)'
 pipeline = FullCombo.new
 pipeline.run
 
@@ -86,5 +86,4 @@ success = pipeline.stats[:downloaded] == 50 &&
           pipeline.stats[:parsed] == 50 &&
           pipeline.stats[:uploaded] == 50
 
-puts success ? "✓ Full combo works!" : "✗ Full combo failed"
-
+puts success ? '✓ Full combo works!' : '✗ Full combo failed'

@@ -19,11 +19,11 @@ class MultiPipelineTask
   # Pipeline A: Processes some data and forwards to Pipeline B
   pipeline :pipeline_a, to: :pipeline_b do
     producer :source_x do |output|
-      puts "[Pipeline A] Producer X: generating items..."
+      puts '[Pipeline A] Producer X: generating items...'
       3.times do |i|
         output << { id: i, source: 'x', value: i * 10 }
       end
-      puts "[Pipeline A] Producer X: done (3 items)"
+      puts '[Pipeline A] Producer X: done (3 items)'
     end
 
     processor :process_x do |item, output|
@@ -37,20 +37,20 @@ class MultiPipelineTask
   pipeline :pipeline_b do
     # Producer 1 in Pipeline B
     producer :source_y do |output|
-      puts "[Pipeline B] Producer Y: generating items..."
+      puts '[Pipeline B] Producer Y: generating items...'
       2.times do |i|
         output << { id: i + 100, source: 'y', value: i * 20 }
       end
-      puts "[Pipeline B] Producer Y: done (2 items)"
+      puts '[Pipeline B] Producer Y: done (2 items)'
     end
 
     # Producer 2 in Pipeline B
     producer :source_z do |output|
-      puts "[Pipeline B] Producer Z: generating items..."
+      puts '[Pipeline B] Producer Z: generating items...'
       2.times do |i|
         output << { id: i + 200, source: 'z', value: i * 30 }
       end
-      puts "[Pipeline B] Producer Z: done (2 items)"
+      puts '[Pipeline B] Producer Z: done (2 items)'
     end
 
     # Consumer receives items from:
@@ -60,46 +60,46 @@ class MultiPipelineTask
     consumer :collect_all do |item|
       @mutex.synchronize do
         @results << item
-        processed_marker = item[:processed_by_a] ? " (from Pipeline A)" : ""
+        processed_marker = item[:processed_by_a] ? ' (from Pipeline A)' : ''
         puts "[Pipeline B] Collected: #{item[:id]} from source '#{item[:source]}'#{processed_marker}"
       end
     end
   end
 end
 
-if __FILE__ == $0
-  puts "=== Multi-Pipeline with Multiple Producers Example ==="
+if __FILE__ == $PROGRAM_NAME
+  puts '=== Multi-Pipeline with Multiple Producers Example ==='
   puts "Pipeline A (processor) → Pipeline B (2 producers + consumer)\n\n"
 
   task = MultiPipelineTask.new
 
-  puts "=" * 60
-  puts "RUNNING TASK"
-  puts "=" * 60
-  puts ""
+  puts '=' * 60
+  puts 'RUNNING TASK'
+  puts '=' * 60
+  puts ''
 
   task.run
 
-  puts "\n" + "=" * 60
-  puts "RESULTS"
-  puts "=" * 60
+  puts "\n#{'=' * 60}"
+  puts 'RESULTS'
+  puts '=' * 60
 
   puts "\nTotal items collected: #{task.results.size}"
-  puts "Expected: 7 items (3 from A, 2 from Y, 2 from Z)"
+  puts 'Expected: 7 items (3 from A, 2 from Y, 2 from Z)'
 
   # Group by source
   by_source = task.results.group_by { |r| r[:source] }
   puts "\nItems by source:"
   by_source.each do |source, items|
     from_pipeline_a = items.any? { |i| i[:processed_by_a] }
-    marker = from_pipeline_a ? " (via Pipeline A)" : " (native to Pipeline B)"
+    marker = from_pipeline_a ? ' (via Pipeline A)' : ' (native to Pipeline B)'
     puts "  #{source}: #{items.size} items#{marker}"
   end
 
   # Show all items
   puts "\nAll collected items:"
   task.results.sort_by { |r| r[:id] }.each do |item|
-    processed = item[:processed_by_a] ? "✓ Processed by A" : "  Native to B"
+    processed = item[:processed_by_a] ? '✓ Processed by A' : '  Native to B'
     puts "  ID: #{item[:id]}, Source: #{item[:source]}, Value: #{item[:value]} | #{processed}"
   end
 
@@ -121,9 +121,9 @@ if __FILE__ == $0
     puts "\n✅ SUCCESS: All items routed correctly!"
     puts "\nKey points demonstrated:"
     puts "  ✓ Pipeline A's processor routes to Pipeline B"
-    puts "  ✓ Pipeline B has 2 internal producers (Y and Z)"
+    puts '  ✓ Pipeline B has 2 internal producers (Y and Z)'
     puts "  ✓ All 3 sources (A's processor + B's 2 producers) route to B's consumer"
-    puts "  ✓ Multiple producers in nested pipelines work correctly"
+    puts '  ✓ Multiple producers in nested pipelines work correctly'
   else
     puts "\n❌ FAILED: Item counts don't match expected values"
   end

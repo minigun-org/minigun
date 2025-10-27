@@ -43,7 +43,7 @@ RSpec.describe Minigun::Message do
     it 'creates an end-type message' do
       message = described_class.end_signal(source: :producer)
 
-      expect(message).to be_a(Minigun::Message)
+      expect(message).to be_a(described_class)
       expect(message.type).to eq(:end)
       expect(message.source).to eq(:producer)
     end
@@ -86,4 +86,3 @@ RSpec.describe Minigun::Message do
     end
   end
 end
-

@@ -35,7 +35,7 @@ RSpec.describe Minigun::Task do
 
   describe '#add_stage' do
     it 'adds producer stage' do
-      block = proc { "producer" }
+      block = proc { 'producer' }
       task.add_stage(:producer, :test_producer, &block)
 
       expect(task.stages[:test_producer]).not_to be_nil
@@ -59,7 +59,7 @@ RSpec.describe Minigun::Task do
     end
 
     it 'adds accumulator stage' do
-      block = proc { "accumulator" }
+      block = proc { 'accumulator' }
       task.add_stage(:accumulator, :test_acc, &block)
 
       expect(task.stages[:test_acc]).not_to be_nil
@@ -78,15 +78,15 @@ RSpec.describe Minigun::Task do
 
   describe '#add_hook' do
     it 'adds before_run hook' do
-      block = proc { "before" }
+      block = proc { 'before' }
       task.add_hook(:before_run, &block)
 
       expect(task.hooks[:before_run]).to include(block)
     end
 
     it 'adds multiple hooks of same type' do
-      block1 = proc { "first" }
-      block2 = proc { "second" }
+      block1 = proc { 'first' }
+      block2 = proc { 'second' }
 
       task.add_hook(:after_run, &block1)
       task.add_hook(:after_run, &block2)
@@ -113,7 +113,7 @@ RSpec.describe Minigun::Task do
 
     it 'executes simple producer-consumer pipeline' do
       task.add_stage(:producer, :gen) do |output|
-        3.times { |i| output << i + 1 }
+        3.times { |i| output << (i + 1) }
       end
 
       task.add_stage(:consumer, :process) do |item|
@@ -131,11 +131,11 @@ RSpec.describe Minigun::Task do
 
     it 'executes producer-processor-consumer pipeline' do
       task.add_stage(:producer, :gen) do |output|
-        3.times { |i| output << i + 1 }
+        3.times { |i| output << (i + 1) }
       end
 
       task.add_stage(:processor, :double) do |item, output|
-        output << item * 2
+        output << (item * 2)
       end
 
       task.add_stage(:consumer, :process) do |item|
@@ -243,4 +243,3 @@ RSpec.describe Minigun::Task do
     end
   end
 end
-

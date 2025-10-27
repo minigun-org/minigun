@@ -30,9 +30,9 @@ class DeduplicatorStage < Minigun::Stage
     )
     wrapped_output = Minigun::OutputQueue.new(
       stage_ctx.stage_name,
-      stage_ctx.dag.downstream(stage_ctx.stage_name).map { |ds|
+      stage_ctx.dag.downstream(stage_ctx.stage_name).map do |ds|
         stage_ctx.stage_input_queues[ds]
-      },
+      end,
       stage_ctx.stage_input_queues,
       stage_ctx.runtime_edges,
       stage_stats: stage_stats
@@ -91,7 +91,7 @@ class SimpleDeduplicatorExample
     # Use custom deduplicator stage
     custom_stage DeduplicatorStage, :dedupe
 
-    consumer :collect do |item, output|
+    consumer :collect do |item, _output|
       puts "Unique item: #{item}"
     end
   end
@@ -105,12 +105,12 @@ class HashDeduplicatorExample
     producer :generate do |output|
       # Emit user objects with duplicate IDs
       users = [
-        { id: 1, name: "Alice" },
-        { id: 2, name: "Bob" },
-        { id: 1, name: "Alice (duplicate)" },
-        { id: 3, name: "Charlie" },
-        { id: 2, name: "Bob (duplicate)" },
-        { id: 4, name: "David" }
+        { id: 1, name: 'Alice' },
+        { id: 2, name: 'Bob' },
+        { id: 1, name: 'Alice (duplicate)' },
+        { id: 3, name: 'Charlie' },
+        { id: 2, name: 'Bob (duplicate)' },
+        { id: 4, name: 'David' }
       ]
 
       users.each { |user| output << user }
@@ -119,7 +119,7 @@ class HashDeduplicatorExample
     # Use custom deduplicator stage with key extraction
     custom_stage DeduplicatorStage, :dedupe, key_method: ->(item) { item[:id] }
 
-    consumer :collect do |user, output|
+    consumer :collect do |user, _output|
       puts "Unique user: #{user.inspect}"
     end
   end
@@ -133,7 +133,7 @@ class ThreadedDeduplicatorExample
     producer :generate do |output|
       # Emit lots of data with duplicates
       100.times do |i|
-        output << (i % 20)  # Creates duplicates
+        output << (i % 20) # Creates duplicates
       end
     end
 
@@ -145,15 +145,15 @@ class ThreadedDeduplicatorExample
       output << "processed_#{item}"
     end
 
-    consumer :collect do |item, output|
+    consumer :collect do |item, _output|
       puts "Final item: #{item}"
     end
   end
 end
 
-if __FILE__ == $0
+if __FILE__ == $PROGRAM_NAME
   puts "\n=== Simple Deduplicator Example ==="
-  puts "Input: [1, 2, 3, 2, 4, 1, 5, 3, 6, 4]"
+  puts 'Input: [1, 2, 3, 2, 4, 1, 5, 3, 6, 4]'
   puts "Expected output: [1, 2, 3, 4, 5, 6]\n\n"
 
   SimpleDeduplicatorExample.new.run
@@ -170,4 +170,3 @@ if __FILE__ == $0
 
   puts "\n=== Examples Complete ==="
 end
-

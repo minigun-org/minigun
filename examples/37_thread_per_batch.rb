@@ -8,9 +8,9 @@
 
 require_relative '../lib/minigun'
 
-puts "=" * 60
-puts "Thread Per Batch Pattern"
-puts "=" * 60
+puts '=' * 60
+puts 'Thread Per Batch Pattern'
+puts '=' * 60
 
 class ThreadPerBatchExample
   include Minigun::DSL
@@ -55,13 +55,13 @@ puts "  Processed: #{pipeline.results.size} items"
 puts "  Batches: #{pipeline.batch_threads.size}"
 puts "  Unique threads: #{pipeline.batch_threads.uniq.size}"
 puts "\n✓ Each batch in its own thread"
-puts "✓ Max 5 concurrent threads enforced"
-puts "✓ Good for batch-level parallelism"
-puts "✓ Shared memory across threads"
+puts '✓ Max 5 concurrent threads enforced'
+puts '✓ Good for batch-level parallelism'
+puts '✓ Shared memory across threads'
 
-puts "\n" + "=" * 60
-puts "Example 2: Mixed Thread Pool and Thread Per Batch"
-puts "=" * 60
+puts "\n#{'=' * 60}"
+puts 'Example 2: Mixed Thread Pool and Thread Per Batch'
+puts '=' * 60
 
 class MixedThreading
   include Minigun::DSL
@@ -81,7 +81,7 @@ class MixedThreading
     # Thread pool for individual items
     threads(10) do
       processor :fetch do |item, output|
-        output << item * 2
+        output << (item * 2)
       end
 
       processor :validate do |item, output|
@@ -110,6 +110,5 @@ puts "\nResults:"
 puts "  Batch results: #{pipeline.results.size}"
 puts "  Sum of sums: #{pipeline.results.sum}"
 puts "\n✓ Thread pool for item processing"
-puts "✓ Thread per batch for batch aggregation"
-puts "✓ Mix strategies within one pipeline"
-
+puts '✓ Thread per batch for batch aggregation'
+puts '✓ Mix strategies within one pipeline'

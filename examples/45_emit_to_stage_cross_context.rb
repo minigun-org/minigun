@@ -23,7 +23,7 @@ class CrossContextRoutingExample
   pipeline do
     producer :generate_tasks do |output|
       puts "\n🎯 CROSS-CONTEXT ROUTING WITH emit_to_stage\n"
-      puts "="*60
+      puts '=' * 60
 
       # Generate different types of tasks
       tasks = [
@@ -79,7 +79,7 @@ class CrossContextRoutingExample
     # Fast processor - runs in a thread pool (shared memory)
     threads(3) do
       consumer :fast_processor do |task|
-        sleep 0.01  # Simulate fast work
+        sleep 0.01 # Simulate fast work
         puts "    ⚡ [Thread #{Thread.current.object_id}] Fast processed task #{task[:id]}"
       end
     end
@@ -87,7 +87,7 @@ class CrossContextRoutingExample
     # Slow processor - runs in a separate thread pool (shared memory)
     threads(2) do
       consumer :slow_processor do |task|
-        sleep 0.05  # Simulate slower work
+        sleep 0.05 # Simulate slower work
         puts "    🐢 [Thread #{Thread.current.object_id}] Slow processed task #{task[:id]}"
       end
     end
@@ -95,15 +95,15 @@ class CrossContextRoutingExample
     # Heavy processor - runs in forked processes (IPC required!)
     process_per_batch(max: 2) do
       consumer :heavy_processor do |task|
-        sleep 0.1  # Simulate heavy work
+        sleep 0.1 # Simulate heavy work
         puts "    💪 [Process #{Process.pid}] Heavy processed task #{task[:id]}"
       end
     end
 
     after_run do
-      puts "\n" + "="*60
-      puts "CROSS-CONTEXT ROUTING STATISTICS"
-      puts "="*60
+      puts "\n#{'=' * 60}"
+      puts 'CROSS-CONTEXT ROUTING STATISTICS'
+      puts '=' * 60
       puts "Tasks routed to fast_processor (thread pool): #{@stats[:routed_to_fast]}"
       puts "Tasks routed to slow_processor (thread pool): #{@stats[:routed_to_slow]}"
       puts "Tasks routed to heavy_processor (processes):  #{@stats[:routed_to_heavy]}"
@@ -113,8 +113,7 @@ class CrossContextRoutingExample
 end
 
 # Run the example if executed directly
-if __FILE__ == $0
+if __FILE__ == $PROGRAM_NAME
   example = CrossContextRoutingExample.new
   example.run
 end
-

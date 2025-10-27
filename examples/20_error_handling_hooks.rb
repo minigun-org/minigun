@@ -61,21 +61,15 @@ class ErrorHandlingExample
     end
 
     processor :validate do |item, output|
-      begin
-        # Simulate validation that might fail
-        if item[:id] == 13
-          raise StandardError, "Unlucky number 13!"
-        end
+      # Simulate validation that might fail
+      raise StandardError, 'Unlucky number 13!' if item[:id] == 13
 
-        if item[:value] < 0
-          raise ArgumentError, "Value cannot be negative"
-        end
+      raise ArgumentError, 'Value cannot be negative' if item[:value] < 0
 
-        output << item
-      rescue => e
-        @errors << { stage: :validate, item: item, error: e.message }
-        # Don't re-emit - filter out bad data
-      end
+      output << item
+    rescue StandardError => e
+      @errors << { stage: :validate, item: item, error: e.message }
+      # Don't re-emit - filter out bad data
     end
 
     # Process with retry logic
@@ -86,9 +80,7 @@ class ErrorHandlingExample
         @retry_counts[item[:id]] += 1
 
         # Simulate intermittent failures
-        if item[:id] == 7 && @retry_counts[item[:id]] < 2
-          raise "Temporary failure for item #{item[:id]}"
-        end
+        raise "Temporary failure for item #{item[:id]}" if item[:id] == 7 && @retry_counts[item[:id]] < 2
 
         transformed = item.merge(
           doubled: item[:value] * 2,
@@ -96,7 +88,7 @@ class ErrorHandlingExample
         )
 
         output << transformed
-      rescue => e
+      rescue StandardError => e
         if @retry_counts[item[:id]] < max_retries
           # Retry by re-emitting
           output << item
@@ -119,38 +111,30 @@ class ErrorHandlingExample
     process_per_batch(max: 2) do
       after_fork :save_results do
         # Report errors from this child process
-        if @process_errors&.any?
-          puts "Child process #{Process.pid} had #{@process_errors.size} errors"
-        end
+        puts "Child process #{Process.pid} had #{@process_errors.size} errors" if @process_errors&.any?
       end
 
-      consumer :save_results do |batch, output|
+      consumer :save_results do |batch, _output|
         batch.each do |item|
-          begin
-            # Simulate save that might fail
-            if item[:id] == 15
-              raise "Database connection lost"
-            end
+          # Simulate save that might fail
+          raise 'Database connection lost' if item[:id] == 15
 
-            # Write to temp file (fork-safe)
-            File.open(@temp_file.path, 'a') do |f|
-              f.flock(File::LOCK_EX)
-              f.puts(item.to_json)
-              f.flock(File::LOCK_UN)
-            end
-          rescue => e
-            (@process_errors ||= []) << { item: item, error: e.message }
-            @errors << { stage: :save_results, item: item, error: e.message }
+          # Write to temp file (fork-safe)
+          File.open(@temp_file.path, 'a') do |f|
+            f.flock(File::LOCK_EX)
+            f.puts(item.to_json)
+            f.flock(File::LOCK_UN)
           end
+        rescue StandardError => e
+          (@process_errors ||= []) << { item: item, error: e.message }
+          @errors << { stage: :save_results, item: item, error: e.message }
         end
       end
     end
 
     after_run do
       # Read fork results from temp file
-      if File.exist?(@temp_file.path)
-        @results = File.readlines(@temp_file.path).map { |line| JSON.parse(line.strip) }
-      end
+      @results = File.readlines(@temp_file.path).map { |line| JSON.parse(line.strip) } if File.exist?(@temp_file.path)
     end
   end
 end
@@ -189,4 +173,3 @@ if __FILE__ == $PROGRAM_NAME
     example.cleanup
   end
 end
-

@@ -18,15 +18,15 @@ RSpec.describe 'Isolated Pipelines' do
 
         # Pipeline A - standalone
         pipeline do
-        pipeline :pipeline_a do
-          producer :source_a do |output|
-            3.times { |i| output << "A#{i}" }
-          end
+          pipeline :pipeline_a do
+            producer :source_a do |output|
+              3.times { |i| output << "A#{i}" }
+            end
 
-          consumer :collect_a do |item|
-            @mutex.synchronize { @pipeline_a_results << item }
+            consumer :collect_a do |item|
+              @mutex.synchronize { @pipeline_a_results << item }
+            end
           end
-        end
         end
 
         # Pipeline B - standalone (no connection to A)
@@ -146,4 +146,3 @@ RSpec.describe 'Isolated Pipelines' do
     end
   end
 end
-

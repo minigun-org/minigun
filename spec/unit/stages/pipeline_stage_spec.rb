@@ -16,7 +16,7 @@ RSpec.describe Minigun::PipelineStage do
   describe '#composite?' do
     it 'returns true' do
       stage = described_class.new(name: :my_pipeline)
-      expect(stage).to be_a(Minigun::PipelineStage)
+      expect(stage).to be_a(described_class)
     end
   end
 
@@ -72,11 +72,14 @@ RSpec.describe Minigun::PipelineStage do
       stage.pipeline = pipeline
 
       # Add processor to pipeline (no consumer, so output is returned)
-      pipeline.add_stage(:processor, :double) { |item, output| output << item * 2 }
+      pipeline.add_stage(:processor, :double) { |item, output| output << (item * 2) }
 
       context = Object.new
       output_queue = []
-      output_queue.define_singleton_method(:<<) { |item| self.push(item); self }
+      output_queue.define_singleton_method(:<<) do |item|
+        push(item)
+        self
+      end
 
       stage.execute(context, item: 5, output_queue: output_queue)
 
@@ -88,7 +91,10 @@ RSpec.describe Minigun::PipelineStage do
   describe '#execute with queue-based DSL' do
     let(:create_output_queue) do
       [].tap do |arr|
-        arr.define_singleton_method(:<<) { |item| push(item); self }
+        arr.define_singleton_method(:<<) do |item|
+          push(item)
+          self
+        end
       end
     end
 
@@ -108,8 +114,8 @@ RSpec.describe Minigun::PipelineStage do
       stage.pipeline = pipeline
 
       # Add stages that transform the item
-      pipeline.add_stage(:processor, :double) { |item, output| output << item * 2 }
-      pipeline.add_stage(:processor, :add_ten) { |item, output| output << item + 10 }
+      pipeline.add_stage(:processor, :double) { |item, output| output << (item * 2) }
+      pipeline.add_stage(:processor, :add_ten) { |item, output| output << (item + 10) }
 
       context = Object.new
       output_queue = create_output_queue
@@ -127,7 +133,7 @@ RSpec.describe Minigun::PipelineStage do
 
       # Add a producer (should be skipped) and a processor
       pipeline.add_stage(:producer, :source) { |output| output << 999 }
-      pipeline.add_stage(:processor, :double) { |item, output| output << item * 2 }
+      pipeline.add_stage(:processor, :double) { |item, output| output << (item * 2) }
 
       context = Object.new
       output_queue = create_output_queue
@@ -143,8 +149,8 @@ RSpec.describe Minigun::PipelineStage do
       pipeline = Minigun::Pipeline.new(:test, config)
       stage.pipeline = pipeline
 
-      pipeline.add_stage(:processor, :double) { |item, output| output << item * 2 }
-      pipeline.add_stage(:accumulator, :batch, max_size: 2)  # Small batch for testing
+      pipeline.add_stage(:processor, :double) { |item, output| output << (item * 2) }
+      pipeline.add_stage(:accumulator, :batch, max_size: 2) # Small batch for testing
       pipeline.add_stage(:processor, :sum_batch) { |batch, output| output << batch.sum }
 
       context = Object.new
@@ -152,7 +158,7 @@ RSpec.describe Minigun::PipelineStage do
       # First item: buffered by accumulator
       output_queue1 = create_output_queue
       stage.execute(context, item: 5, output_queue: output_queue1)
-      expect(output_queue1).to eq([])  # Nothing emitted yet
+      expect(output_queue1).to eq([]) # Nothing emitted yet
 
       # Second item: accumulator reaches batch size and emits
       output_queue2 = create_output_queue
@@ -170,7 +176,7 @@ RSpec.describe Minigun::PipelineStage do
       # Stage that outputs multiple items
       pipeline.add_stage(:processor, :fan_out) do |item, output|
         output << item
-        output << item * 10
+        output << (item * 10)
       end
 
       context = Object.new
@@ -187,7 +193,7 @@ RSpec.describe Minigun::PipelineStage do
       stage.pipeline = pipeline
 
       results = []
-      pipeline.add_stage(:processor, :double) { |item, output| output << item * 2 }
+      pipeline.add_stage(:processor, :double) { |item, output| output << (item * 2) }
       pipeline.add_stage(:consumer, :collect) { |item| results << item }
 
       context = Object.new
@@ -224,9 +230,9 @@ RSpec.describe Minigun::PipelineStage do
       pipeline = Minigun::Pipeline.new(:test, config)
       stage.pipeline = pipeline
 
-      pipeline.add_stage(:processor, :double) { |item, output| output << item * 2 }
-      pipeline.add_stage(:processor, :square) { |item, output| output << item ** 2 }
-      pipeline.add_stage(:processor, :add_one) { |item, output| output << item + 1 }
+      pipeline.add_stage(:processor, :double) { |item, output| output << (item * 2) }
+      pipeline.add_stage(:processor, :square) { |item, output| output << (item**2) }
+      pipeline.add_stage(:processor, :add_one) { |item, output| output << (item + 1) }
 
       context = Object.new
       output_queue = create_output_queue
@@ -243,12 +249,12 @@ RSpec.describe Minigun::PipelineStage do
       stage.pipeline = pipeline
 
       # Add a nested pipeline stage
-      inner_stage = Minigun::PipelineStage.new(name: :inner)
+      inner_stage = described_class.new(name: :inner)
       inner_pipeline = Minigun::Pipeline.new(:inner, config)
       inner_stage.pipeline = inner_pipeline
       pipeline.stages[:inner] = inner_stage
 
-      pipeline.add_stage(:processor, :double) { |item, output| output << item * 2 }
+      pipeline.add_stage(:processor, :double) { |item, output| output << (item * 2) }
 
       context = Object.new
       output_queue = create_output_queue
@@ -282,6 +288,7 @@ RSpec.describe Minigun::PipelineStage do
 
       context = Class.new do
         attr_accessor :tracking
+
         def initialize
           @tracking = []
         end
@@ -289,7 +296,7 @@ RSpec.describe Minigun::PipelineStage do
 
       pipeline.add_stage(:processor, :track_and_double) do |item, output|
         tracking << "saw #{item}"
-        output << item * 2
+        output << (item * 2)
       end
 
       output_queue = create_output_queue
@@ -297,9 +304,7 @@ RSpec.describe Minigun::PipelineStage do
       stage.execute(context, item: 5, output_queue: output_queue)
 
       expect(output_queue).to eq([10])
-      expect(context.tracking).to eq(["saw 5"])
+      expect(context.tracking).to eq(['saw 5'])
     end
   end
 end
-
-

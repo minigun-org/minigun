@@ -23,7 +23,7 @@ class WithFinalThreads
 
     threads(3) do
       processor :work do |item, output|
-        output << item * 2
+        output << (item * 2)
       end
     end
 
@@ -31,7 +31,7 @@ class WithFinalThreads
 
     process_per_batch(max: 2) do
       processor :process_batch do |batch, output|
-        batch.each { |item| output << item + 100 }
+        batch.each { |item| output << (item + 100) }
       end
     end
 
@@ -43,9 +43,8 @@ class WithFinalThreads
   end
 end
 
-puts "Testing: threads + batch + process_per_batch + threads(consumer)"
+puts 'Testing: threads + batch + process_per_batch + threads(consumer)'
 pipeline = WithFinalThreads.new
 pipeline.run
 puts "Results: #{pipeline.results.size} items"
-puts pipeline.results.size == 20 ? "✓ Works!" : "✗ Failed"
-
+puts pipeline.results.size == 20 ? '✓ Works!' : '✗ Failed'

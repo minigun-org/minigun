@@ -28,14 +28,14 @@ RSpec.describe Minigun::ProducerStage do
     let(:stage) { described_class.new(name: :test, block: proc { |output| }) }
 
     it 'is a ProducerStage' do
-      expect(stage).to be_a(Minigun::ProducerStage)
+      expect(stage).to be_a(described_class)
     end
 
     it 'executes without an item argument' do
       result = nil
       stage = described_class.new(
         name: :test,
-        block: proc { |output| result = 42 }
+        block: proc { |_output| result = 42 }
       )
 
       context = Object.new
@@ -51,15 +51,15 @@ RSpec.describe Minigun::ConsumerStage do
     let(:stage) { described_class.new(name: :test, block: proc { |_x, _output| }) }
 
     it 'is a ConsumerStage' do
-      expect(stage).to be_a(Minigun::ConsumerStage)
+      expect(stage).to be_a(described_class)
     end
 
     it 'executes with queue-based output' do
       stage = described_class.new(
         name: :test,
         block: proc do |item, output|
-          output << item * 2
-          output << item * 3
+          output << (item * 2)
+          output << (item * 3)
         end
       )
 
@@ -84,7 +84,7 @@ RSpec.describe Minigun::ConsumerStage do
     end
 
     it 'is a ConsumerStage' do
-      expect(stage).to be_a(Minigun::ConsumerStage)
+      expect(stage).to be_a(described_class)
     end
 
     it 'has execution context' do
@@ -96,7 +96,7 @@ end
 RSpec.describe Minigun::AccumulatorStage do
   it 'is a special batching stage' do
     stage = described_class.new(name: :test, block: proc {})
-    expect(stage.max_size).to eq(100)  # default
+    expect(stage.max_size).to eq(100) # default
   end
 end
 
@@ -135,6 +135,7 @@ RSpec.describe 'Stage common behavior' do
     it 'has access to context instance variables' do
       context_class = Class.new do
         attr_reader :value
+
         def initialize(value)
           @value = value
         end
@@ -147,7 +148,7 @@ RSpec.describe 'Stage common behavior' do
       )
 
       stage.execute(context, item: 23)
-      # Note: execute doesn't return values for consumers in new DSL
+      # NOTE: execute doesn't return values for consumers in new DSL
       expect(context.value).to eq(100) # unchanged
     end
   end
@@ -189,4 +190,3 @@ RSpec.describe 'Stage common behavior' do
     end
   end
 end
-

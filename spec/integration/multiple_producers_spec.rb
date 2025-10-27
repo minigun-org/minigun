@@ -64,23 +64,23 @@ RSpec.describe 'Multiple Producers' do
 
           producer :source_y, to: :process_y do |output|
             3.times do |i|
-              output << i + 100
+              output << (i + 100)
             end
           end
 
           processor :process_x, to: :collect_x do |item, output|
-            output << item * 10
+            output << (item * 10)
           end
 
           processor :process_y, to: :collect_y do |item, output|
-            output << item * 2
+            output << (item * 2)
           end
 
-          consumer :collect_x do |item, output|
+          consumer :collect_x do |item, _output|
             @mutex.synchronize { @results_x << item }
           end
 
-          consumer :collect_y do |item, output|
+          consumer :collect_y do |item, _output|
             @mutex.synchronize { @results_y << item }
           end
         end
@@ -112,7 +112,7 @@ RSpec.describe 'Multiple Producers' do
           end
 
           producer :slow_producer do |output|
-            5.times { |i| output << i + 100 }
+            5.times { |i| output << (i + 100) }
           end
 
           consumer :collect do |item|
@@ -159,8 +159,8 @@ RSpec.describe 'Multiple Producers' do
             3.times { |i| output << i }
           end
 
-          producer :bad_producer do |output|
-            raise StandardError, "Producer error"
+          producer :bad_producer do |_output|
+            raise StandardError, 'Producer error'
           end
 
           consumer :collect do |item|
@@ -208,4 +208,3 @@ RSpec.describe 'Multiple Producers' do
     end
   end
 end
-

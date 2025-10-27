@@ -11,7 +11,7 @@ class Customer
     @id = id
     @name = "Customer #{id}"
     @email = "customer#{id}@example.com"
-    @updated_at = Time.now - rand(1..365) * 86400 # Random date within last year
+    @updated_at = Time.now - (rand(1..365) * 86_400) # Random date within last year
   end
 
   # Simulate ActiveRecord's find_each (batched iteration)
@@ -78,13 +78,13 @@ class DatabasePublisher
   pipeline do
     before_run do
       @start_time = Time.now
-      puts "[Lifecycle] Starting database publisher..."
+      puts '[Lifecycle] Starting database publisher...'
       puts "[Lifecycle] Target model: #{@model_class.name}"
     end
 
     after_run do
       duration = Time.now - @start_time
-      puts "[Lifecycle] Publishing complete!"
+      puts '[Lifecycle] Publishing complete!'
       puts "[Lifecycle] Duration: #{duration.round(2)}s"
       puts "[Lifecycle] Published #{@published_ids.size} records"
       puts "[Lifecycle] Average: #{(@published_ids.size / duration).round(2)} records/sec"
@@ -99,7 +99,7 @@ class DatabasePublisher
         output << customer.to_h
       end
 
-      puts "[Producer] Finished fetching customers"
+      puts '[Producer] Finished fetching customers'
     end
 
     # Stage 2: Enrich customer data
@@ -125,11 +125,11 @@ class DatabasePublisher
   end
 end
 
-if __FILE__ == $0
+if __FILE__ == $PROGRAM_NAME
   puts "=== Database Publisher Example ===\n\n"
-  puts "This example demonstrates a real-world ETL pipeline:"
-  puts "  1. Fetch records from database (batched)"
-  puts "  2. Enrich data with additional fields"
+  puts 'This example demonstrates a real-world ETL pipeline:'
+  puts '  1. Fetch records from database (batched)'
+  puts '  2. Enrich data with additional fields'
   puts "  3. Publish to external service (Elasticsearch, API, etc.)\n\n"
 
   publisher = DatabasePublisher.new
@@ -147,10 +147,9 @@ if __FILE__ == $0
   puts "  ... and #{publisher.published_ids.size - 10} more" if publisher.published_ids.size > 10
 
   puts "\n=== Use Cases ===\n"
-  puts "• Syncing database records to Elasticsearch"
-  puts "• Publishing updates to external APIs"
-  puts "• ETL processes for data warehousing"
-  puts "• Batch processing of large datasets"
+  puts '• Syncing database records to Elasticsearch'
+  puts '• Publishing updates to external APIs'
+  puts '• ETL processes for data warehousing'
+  puts '• Batch processing of large datasets'
   puts "\n✓ Publishing complete!"
 end
-

@@ -7,9 +7,9 @@
 
 require_relative '../lib/minigun'
 
-puts "=" * 60
-puts "Named Execution Contexts"
-puts "=" * 60
+puts '=' * 60
+puts 'Named Execution Contexts'
+puts '=' * 60
 
 class DataPipeline
   include Minigun::DSL
@@ -60,14 +60,14 @@ pipeline.run
 puts "\nResults:"
 puts "  Processed: #{pipeline.results.size} items"
 puts "\n✓ Named contexts assigned to specific stages"
-puts "✓ io_workers (50 threads) for fetch"
-puts "✓ cpu_workers (4 processes) for compute"
-puts "✓ fast_lane (100 threads) for validate"
-puts "✓ Flexible, declarative stage assignment"
+puts '✓ io_workers (50 threads) for fetch'
+puts '✓ cpu_workers (4 processes) for compute'
+puts '✓ fast_lane (100 threads) for validate'
+puts '✓ Flexible, declarative stage assignment'
 
-puts "\n" + "=" * 60
-puts "Example 2: Mixed Named and Block Contexts"
-puts "=" * 60
+puts "\n#{'=' * 60}"
+puts 'Example 2: Mixed Named and Block Contexts'
+puts '=' * 60
 
 class MixedPipeline
   include Minigun::DSL
@@ -90,7 +90,7 @@ class MixedPipeline
     # Use block context for some stages
     threads(20) do
       processor :download do |item, output|
-        output << item * 2
+        output << (item * 2)
       end
 
       processor :parse do |item, output|
@@ -101,11 +101,11 @@ class MixedPipeline
     # Use named context for specific heavy work
     processor :heavy_work, execution_context: :heavy_compute do |item, output|
       # CPU-intensive work in isolated process
-      output << item[:value] ** 2
+      output << (item[:value]**2)
     end
 
     # Back to default for final stage
-    consumer :save do |result|
+    consumer :save do |_result|
       @mutex.synchronize { @count += 1 }
     end
   end
@@ -117,6 +117,5 @@ pipeline.run
 puts "\nResults:"
 puts "  Processed: #{pipeline.count} items"
 puts "\n✓ Block contexts (threads) for I/O stages"
-puts "✓ Named context (heavy_compute) for CPU stage"
-puts "✓ Mix and match as needed"
-
+puts '✓ Named context (heavy_compute) for CPU stage'
+puts '✓ Mix and match as needed'

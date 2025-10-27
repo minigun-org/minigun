@@ -9,9 +9,9 @@
 require_relative '../lib/minigun'
 require 'tempfile'
 
-puts "=" * 60
-puts "Nested Execution Contexts"
-puts "=" * 60
+puts '=' * 60
+puts 'Nested Execution Contexts'
+puts '=' * 60
 
 class NestedPipeline
   include Minigun::DSL
@@ -74,18 +74,14 @@ class NestedPipeline
         end
       end
 
-      # Note: stages here would be back in thread context
+      # NOTE: stages here would be back in thread context
       # But we end after process_per_batch in this example
     end
 
     after_run do
       # Read fork results from temp files
-      if File.exist?(@temp_pids_file.path)
-        @batch_pids = File.readlines(@temp_pids_file.path).map { |line| line.strip.to_i }
-      end
-      if File.exist?(@temp_results_file.path)
-        @results = File.readlines(@temp_results_file.path).map(&:strip)
-      end
+      @batch_pids = File.readlines(@temp_pids_file.path).map { |line| line.strip.to_i } if File.exist?(@temp_pids_file.path)
+      @results = File.readlines(@temp_results_file.path).map(&:strip) if File.exist?(@temp_results_file.path)
     end
   end
 end
@@ -99,16 +95,16 @@ begin
   puts "  Batches: #{pipeline.batch_pids.size}"
   puts "  Unique PIDs: #{pipeline.batch_pids.uniq.size}"
   puts "\n✓ Outer threads(50) for I/O stages"
-  puts "✓ batch 20 accumulates items"
-  puts "✓ Inner process_per_batch(max: 4) for CPU work"
-  puts "✓ Proper context inheritance and isolation"
+  puts '✓ batch 20 accumulates items'
+  puts '✓ Inner process_per_batch(max: 4) for CPU work'
+  puts '✓ Proper context inheritance and isolation'
 ensure
   pipeline.cleanup
 end
 
-puts "\n" + "=" * 60
-puts "Example 2: Deep Nesting"
-puts "=" * 60
+puts "\n#{'=' * 60}"
+puts 'Example 2: Deep Nesting'
+puts '=' * 60
 
 class DeepNesting
   include Minigun::DSL
@@ -128,7 +124,7 @@ class DeepNesting
     # Level 1: Thread pool
     threads(20) do
       processor :fetch do |item, output|
-        output << item * 2
+        output << (item * 2)
       end
 
       # Level 2: Batch
@@ -136,7 +132,7 @@ class DeepNesting
 
       # Level 3: Thread per batch
       thread_per_batch(max: 5) do
-        processor :parse_batch do |batch, output|
+        processor :parse_batch do |batch, _output|
           # Each batch in its own thread
           batch.map { |x| x + 100 }
         end
@@ -163,13 +159,13 @@ pipeline.run
 puts "\nResults:"
 puts "  Processed: #{pipeline.results.size} items"
 puts "\n✓ Deep nesting works correctly"
-puts "✓ Each level maintains proper context"
-puts "✓ Batching stages inserted at each batch call"
-puts "✓ Per-batch spawning respects max limits"
+puts '✓ Each level maintains proper context'
+puts '✓ Batching stages inserted at each batch call'
+puts '✓ Per-batch spawning respects max limits'
 
-puts "\n" + "=" * 60
-puts "Example 3: Real-World Nested Pattern"
-puts "=" * 60
+puts "\n#{'=' * 60}"
+puts 'Example 3: Real-World Nested Pattern'
+puts '=' * 60
 
 class ImageProcessor
   include Minigun::DSL
@@ -202,7 +198,7 @@ class ImageProcessor
 
       # Process batches in separate processes (CPU-intensive)
       process_per_batch(max: 4) do
-        processor :resize_batch do |batch, output|
+        processor :resize_batch do |batch, _output|
           # CPU-intensive image resizing
           batch.map do |img|
             { filename: img[:filename], resized: true, thumbnails: 3 }
@@ -228,10 +224,9 @@ pipeline.run
 puts "\nResults:"
 puts "  Processed: #{pipeline.processed_count} images"
 puts "\n✓ Real-world pattern:"
-puts "  1. Download in threads (I/O)"
-puts "  2. Validate in threads (fast)"
-puts "  3. Batch for efficiency"
-puts "  4. Resize in processes (CPU)"
-puts "  5. Upload in threads (I/O)"
-puts "✓ Each operation in optimal execution context"
-
+puts '  1. Download in threads (I/O)'
+puts '  2. Validate in threads (fast)'
+puts '  3. Batch for efficiency'
+puts '  4. Resize in processes (CPU)'
+puts '  5. Upload in threads (I/O)'
+puts '✓ Each operation in optimal execution context'

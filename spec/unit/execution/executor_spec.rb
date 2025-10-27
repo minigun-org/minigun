@@ -19,13 +19,13 @@ RSpec.describe Minigun::Execution::Executor do
 
     it 'all executors extend Executor base class' do
       executor = Minigun::Execution.create_executor(type: :thread, max_size: 5)
-      expect(executor).to be_a(Minigun::Execution::Executor)
+      expect(executor).to be_a(described_class)
     end
 
     it 'raises error for unknown type' do
-      expect {
+      expect do
         Minigun::Execution.create_executor(type: :unknown, max_size: 5)
-      }.to raise_error(ArgumentError, /Unknown executor type/)
+      end.to raise_error(ArgumentError, /Unknown executor type/)
     end
   end
 
@@ -33,18 +33,16 @@ RSpec.describe Minigun::Execution::Executor do
     let(:pipeline) do
       dag = double('dag', terminal?: false)
       double('pipeline',
-        name: 'test_pipeline',
-        dag: dag,
-        send: nil
-      )
+             name: 'test_pipeline',
+             dag: dag,
+             send: nil)
     end
     let(:stage) do
       double('stage',
-        name: :test,
-        execute_with_emit: nil,
-        execute: nil,
-        respond_to?: false
-      )
+             name: :test,
+             execute_with_emit: nil,
+             execute: nil,
+             respond_to?: false)
     end
     let(:stage_stats) { double('stage_stats', start!: nil, start_time: nil, increment_consumed: nil, increment_produced: nil, record_latency: nil) }
     let(:stats) { double('stats', for_stage: stage_stats) }
@@ -76,7 +74,7 @@ RSpec.describe Minigun::Execution::Executor do
       end
 
       expect(stage_stats).to receive(:increment_consumed).once
-      expect(stage_stats).to receive(:increment_produced).exactly(2).times
+      expect(stage_stats).to receive(:increment_produced).twice
 
       executor.execute_stage_item(stage: stage, item: 1, user_context: user_context, output_queue: output_queue, stats: stats, pipeline: pipeline)
     end
@@ -92,12 +90,12 @@ RSpec.describe Minigun::Execution::Executor do
 
     it 'handles errors gracefully' do
       executor = Minigun::Execution::InlineExecutor.new
-      allow(stage).to receive(:execute).and_raise(StandardError, "test error")
+      allow(stage).to receive(:execute).and_raise(StandardError, 'test error')
 
       # Should not raise, errors are logged
-      expect {
+      expect do
         executor.execute_stage_item(stage: stage, item: 1, user_context: user_context, stats: stats, pipeline: pipeline)
-      }.not_to raise_error
+      end.not_to raise_error
     end
   end
 end
@@ -107,18 +105,16 @@ RSpec.describe Minigun::Execution::InlineExecutor do
   let(:pipeline) do
     dag = double('dag', terminal?: false)
     double('pipeline',
-      name: 'test_pipeline',
-      dag: dag,
-      send: nil
-    )
+           name: 'test_pipeline',
+           dag: dag,
+           send: nil)
   end
   let(:stage) do
     double('stage',
-      name: :test,
-      execute_with_emit: nil,
-      execute: nil,
-      respond_to?: false
-    )
+           name: :test,
+           execute_with_emit: nil,
+           execute: nil,
+           respond_to?: false)
   end
   let(:stage_stats) { double('stage_stats', start!: nil, start_time: nil, increment_consumed: nil, increment_produced: nil, record_latency: nil) }
   let(:stats) { double('stats', for_stage: stage_stats) }
@@ -166,18 +162,16 @@ RSpec.describe Minigun::Execution::ThreadPoolExecutor do
     let(:pipeline) do
       dag = double('dag', terminal?: false)
       double('pipeline',
-        name: 'test_pipeline',
-        dag: dag,
-        send: nil
-      )
+             name: 'test_pipeline',
+             dag: dag,
+             send: nil)
     end
     let(:stage) do
       double('stage',
-        name: :test,
-        execute_with_emit: nil,
-        execute: nil,
-        respond_to?: false
-      )
+             name: :test,
+             execute_with_emit: nil,
+             execute: nil,
+             respond_to?: false)
     end
     let(:stage_stats) { double('stage_stats', start!: nil, start_time: nil, increment_consumed: nil, increment_produced: nil, record_latency: nil) }
     let(:stats) { double('stats', for_stage: stage_stats) }
@@ -214,7 +208,7 @@ RSpec.describe Minigun::Execution::ThreadPoolExecutor do
       end
 
       # Start 5 concurrent executions with max_size=3
-      threads = 5.times.map do
+      threads = Array.new(5) do
         Thread.new do
           executor.execute_stage_item(stage: stage, item: 1, user_context: user_context, output_queue: output_queue, stats: stats, pipeline: pipeline)
         end
@@ -226,7 +220,7 @@ RSpec.describe Minigun::Execution::ThreadPoolExecutor do
 
     it 'propagates errors from thread' do
       output_queue = double('output_queue', items_produced: 0)
-      allow(stage).to receive(:execute).and_raise(StandardError, "boom")
+      allow(stage).to receive(:execute).and_raise(StandardError, 'boom')
 
       # Errors are caught and logged (no exception propagated)
       expect { executor.execute_stage_item(stage: stage, item: 1, user_context: user_context, output_queue: output_queue, stats: stats, pipeline: pipeline) }.not_to raise_error
@@ -253,18 +247,16 @@ RSpec.describe Minigun::Execution::ProcessPoolExecutor, skip: Gem.win_platform? 
     let(:dag) { double('dag', terminal?: false) }
     let(:pipeline) do
       double('pipeline',
-        name: 'test_pipeline',
-        dag: dag,
-        send: nil
-      )
+             name: 'test_pipeline',
+             dag: dag,
+             send: nil)
     end
     let(:stage) do
       double('stage',
-        name: :test,
-        execute_with_emit: nil,
-        execute: nil,
-        respond_to?: false
-      )
+             name: :test,
+             execute_with_emit: nil,
+             execute: nil,
+             respond_to?: false)
     end
     let(:stage_stats) { double('stage_stats', start!: nil, start_time: nil, increment_consumed: nil, increment_produced: nil, record_latency: nil) }
     let(:stats) { double('stats', for_stage: stage_stats) }
@@ -272,9 +264,7 @@ RSpec.describe Minigun::Execution::ProcessPoolExecutor, skip: Gem.win_platform? 
 
     before do
       # Mock fork hooks
-      allow(pipeline).to receive(:hooks).and_return({})
-      allow(pipeline).to receive(:stage_hooks).and_return({})
-      allow(pipeline).to receive(:dag).and_return(dag)
+      allow(pipeline).to receive_messages(hooks: {}, stage_hooks: {}, dag: dag)
     end
 
     it 'executes in forked process' do
@@ -301,7 +291,7 @@ RSpec.describe Minigun::Execution::ProcessPoolExecutor, skip: Gem.win_platform? 
 
     it 'propagates errors from child process' do
       allow(stage).to receive(:respond_to?).with(:execute_with_emit).and_return(true)
-      allow(stage).to receive(:execute_with_emit).and_raise(StandardError, "boom")
+      allow(stage).to receive(:execute_with_emit).and_raise(StandardError, 'boom')
 
       # Errors are caught and logged, returns []
       result = executor.execute_stage_item(stage: stage, item: 1, user_context: user_context, stats: stats, pipeline: pipeline)
@@ -321,14 +311,13 @@ RSpec.describe Minigun::Execution::RactorPoolExecutor do
 
   describe '#initialize' do
     it 'creates with max_size' do
-      expect(executor).to be_a(Minigun::Execution::RactorPoolExecutor)
+      expect(executor).to be_a(described_class)
     end
   end
 
   describe '#execute_stage_item' do
     it 'falls back to thread pool' do
-      skip "Ractor is experimental and flaky in full test suite (passes when run individually)"
+      skip 'Ractor is experimental and flaky in full test suite (passes when run individually)'
     end
   end
 end
-

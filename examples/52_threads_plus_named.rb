@@ -25,12 +25,12 @@ class ThreadsPlusNamed
 
     threads(5) do
       processor :work1 do |item, output|
-        output << item + 10
+        output << (item + 10)
       end
     end
 
     processor :work2, execution_context: :named_pool do |item|
-      output << item * 2
+      output << (item * 2)
     end
 
     consumer :save do |item|
@@ -39,9 +39,8 @@ class ThreadsPlusNamed
   end
 end
 
-puts "Testing: threads block + named context"
+puts 'Testing: threads block + named context'
 pipeline = ThreadsPlusNamed.new
 pipeline.run
 puts "Results: #{pipeline.results.size} items"
-puts "✓ Threads + named works" if pipeline.results.size == 20
-
+puts '✓ Threads + named works' if pipeline.results.size == 20

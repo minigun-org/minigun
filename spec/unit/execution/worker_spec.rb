@@ -21,7 +21,7 @@ RSpec.describe Minigun::Worker do
       'stage',
       name: :test_stage,
       execution_context: nil,
-      log_type: "Worker",
+      log_type: 'Worker',
       run_mode: :streaming
     )
   end
@@ -41,7 +41,7 @@ RSpec.describe Minigun::Worker do
       worker = described_class.new(pipeline, stage, config)
 
       expect(worker.stage_name).to eq(:test_stage)
-      expect(worker).to be_a(Minigun::Worker)
+      expect(worker).to be_a(described_class)
     end
 
     it 'does not start the worker thread immediately' do
@@ -119,7 +119,7 @@ RSpec.describe Minigun::Worker do
         worker = described_class.new(pipeline, stage, config)
 
         # Should not raise error
-        expect(worker).to be_a(Minigun::Worker)
+        expect(worker).to be_a(described_class)
       end
     end
 
@@ -131,7 +131,7 @@ RSpec.describe Minigun::Worker do
       it 'creates a thread pool executor' do
         worker = described_class.new(pipeline, stage, config)
 
-        expect(worker).to be_a(Minigun::Worker)
+        expect(worker).to be_a(described_class)
       end
     end
 
@@ -143,7 +143,7 @@ RSpec.describe Minigun::Worker do
       it 'creates a process pool executor' do
         worker = described_class.new(pipeline, stage, config)
 
-        expect(worker).to be_a(Minigun::Worker)
+        expect(worker).to be_a(described_class)
       end
     end
   end
@@ -178,7 +178,11 @@ RSpec.describe Minigun::Worker do
       worker.join
 
       # Should have sent END signal to downstream
-      msg = downstream_queue.pop(true) rescue nil
+      msg = begin
+        downstream_queue.pop(true)
+      rescue StandardError
+        nil
+      end
       expect(msg).to be_a(Minigun::Message) if msg
     end
   end
@@ -187,7 +191,7 @@ RSpec.describe Minigun::Worker do
     let(:router_stage) do
       Minigun::RouterBroadcastStage.new(
         name: :router,
-        targets: [:target_a, :target_b]
+        targets: %i[target_a target_b]
       )
     end
 
@@ -232,8 +236,12 @@ RSpec.describe Minigun::Worker do
       expect(executor).to receive(:shutdown)
 
       worker.start
-      sleep 0.02  # Give thread time to start and error
-      worker.join rescue nil
+      sleep 0.02 # Give thread time to start and error
+      begin
+        worker.join
+      rescue StandardError
+        nil
+      end
     end
   end
 
@@ -277,4 +285,3 @@ RSpec.describe Minigun::Worker do
     end
   end
 end
-

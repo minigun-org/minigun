@@ -21,7 +21,7 @@ class DiamondPipeline
 
   pipeline do
     # Producer splits to two processors
-    producer :source, to: [:path_a, :path_b] do |output|
+    producer :source, to: %i[path_a path_b] do |output|
       5.times { |i| output << (i + 1) }
     end
 
@@ -50,11 +50,10 @@ if __FILE__ == $PROGRAM_NAME
   pipeline = DiamondPipeline.new
   pipeline.run
 
-  puts "Diamond Pipeline Results:"
-  puts "Input: 1, 2, 3, 4, 5"
+  puts 'Diamond Pipeline Results:'
+  puts 'Input: 1, 2, 3, 4, 5'
   puts "Path A (x2): #{pipeline.results_a.sort.inspect}"
   puts "Path B (x3): #{pipeline.results_b.sort.inspect}"
   puts "Merged: #{pipeline.merged.sort.inspect}"
   puts "Total items: #{pipeline.merged.size}"
 end
-

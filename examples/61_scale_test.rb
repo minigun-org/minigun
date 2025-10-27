@@ -66,14 +66,14 @@ class ScaleTest
     end
 
     threads(2) do
-      consumer :upload do |item|
+      consumer :upload do |_item|
         @mutex.synchronize { @stats[:uploaded] += 1 }
       end
     end
   end
 end
 
-puts "Testing: scale with 200 items (like example 38)"
+puts 'Testing: scale with 200 items (like example 38)'
 pipeline = ScaleTest.new(items: 200, batch_size: 100, threads: 50)
 pipeline.run
 
@@ -83,5 +83,4 @@ puts "  Parsed: #{pipeline.stats[:parsed]}"
 puts "  Uploaded: #{pipeline.stats[:uploaded]}"
 
 success = pipeline.stats[:uploaded] == 200
-puts success ? "✓ Large scale works!" : "✗ Failed"
-
+puts success ? '✓ Large scale works!' : '✗ Failed'

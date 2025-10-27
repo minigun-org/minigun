@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 
 RSpec.describe 'Dynamic routing END signal propagation' do
@@ -104,4 +106,3 @@ RSpec.describe 'Dynamic routing END signal propagation' do
     expect(task.results.sort).to eq([1, 2, 3, 4])
   end
 end
-

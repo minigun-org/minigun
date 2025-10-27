@@ -18,8 +18,8 @@ class NestedPipelineExample
   pipeline do
     # Main pipeline contains a nested sub-pipeline
     producer :start do |output|
-      puts "[Main] Generating numbers 1-5"
-      5.times { |i| output << i + 1 }
+      puts '[Main] Generating numbers 1-5'
+      5.times { |i| output << (i + 1) }
     end
 
     # Nested sub-pipeline for transformation
@@ -46,7 +46,7 @@ class NestedPipelineExample
   end
 end
 
-if __FILE__ == $0
+if __FILE__ == $PROGRAM_NAME
   puts "=== Nested Pipeline Example ===\n\n"
   puts "Flow: start → transform_sub (double → add_ten) → collect\n\n"
 
@@ -55,9 +55,8 @@ if __FILE__ == $0
 
   puts "\n=== Results ===\n"
   puts "Collected: #{example.results.sort.inspect}"
-  puts "Expected: [12, 14, 16, 18, 20]"
+  puts 'Expected: [12, 14, 16, 18, 20]'
 
   success = example.results.sort == [12, 14, 16, 18, 20]
-  puts success ? "✓ Success!" : "✗ Failed"
+  puts success ? '✓ Success!' : '✗ Failed'
 end
-

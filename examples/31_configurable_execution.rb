@@ -15,9 +15,9 @@
 require_relative '../lib/minigun'
 
 # Example 1: Basic Configurable Pipeline
-puts "=" * 60
-puts "Example 1: Basic Configurable Thread Pool"
-puts "=" * 60
+puts '=' * 60
+puts 'Example 1: Basic Configurable Thread Pool'
+puts '=' * 60
 
 class ConfigurableDownloader
   include Minigun::DSL
@@ -68,9 +68,9 @@ puts "  Configuration: threads=#{large_pipeline.threads}, batch=#{large_pipeline
 
 # Example 2: Process Per Batch Configuration
 puts "\n"
-puts "=" * 60
-puts "Example 2: Configurable Process-Per-Batch"
-puts "=" * 60
+puts '=' * 60
+puts 'Example 2: Configurable Process-Per-Batch'
+puts '=' * 60
 
 class DataProcessor
   include Minigun::DSL
@@ -103,7 +103,7 @@ class DataProcessor
 
     # CPU-intensive processing per batch with process isolation
     process_per_batch(max: @processes) do
-      processor :parse do |batch, output|
+      processor :parse do |batch, _output|
         # Simulate CPU-intensive work
         batch.map { |item| item[:data].upcase }
       end
@@ -123,15 +123,15 @@ puts "  Threads for I/O: #{processor.threads}"
 puts "  Max processes: #{processor.processes}"
 puts "  Batch size: #{processor.batch_size}"
 puts "\nThis allows:"
-puts "  - 100 concurrent downloads (threads)"
-puts "  - Batches of 500 items"
-puts "  - Up to 8 concurrent processes for CPU work"
+puts '  - 100 concurrent downloads (threads)'
+puts '  - Batches of 500 items'
+puts '  - Up to 8 concurrent processes for CPU work'
 
 # Example 3: Environment-Based Configuration
 puts "\n"
-puts "=" * 60
-puts "Example 3: Environment-Based Configuration"
-puts "=" * 60
+puts '=' * 60
+puts 'Example 3: Environment-Based Configuration'
+puts '=' * 60
 
 class SmartPipeline
   include Minigun::DSL
@@ -165,15 +165,15 @@ class SmartPipeline
 
     threads(@threads) do
       processor :work do |item, output|
-        output << item * 2
+        output << (item * 2)
       end
     end
 
     batch @batch_size
 
     process_per_batch(max: @processes) do
-      processor :heavy_work do |batch, output|
-        batch.map { |x| x ** 2 }
+      processor :heavy_work do |batch, _output|
+        batch.map { |x| x**2 }
       end
     end
 
@@ -185,16 +185,16 @@ end
 
 smart = SmartPipeline.new
 puts "\nEnvironment: #{smart.env}"
-puts "Configuration:"
+puts 'Configuration:'
 puts "  Threads: #{smart.threads}"
 puts "  Processes: #{smart.processes}"
 puts "  Batch size: #{smart.batch_size}"
 
 # Example 4: Dynamic Configuration
 puts "\n"
-puts "=" * 60
-puts "Example 4: Dynamic Configuration Methods"
-puts "=" * 60
+puts '=' * 60
+puts 'Example 4: Dynamic Configuration Methods'
+puts '=' * 60
 
 class AdaptivePipeline
   include Minigun::DSL
@@ -227,7 +227,7 @@ class AdaptivePipeline
     case @concurrency_level
     when :low then 100
     when :medium then 1000
-    when :high then 10000
+    when :high then 10_000
     else 1000
     end
   end
@@ -239,14 +239,14 @@ class AdaptivePipeline
 
     threads(thread_count) do
       processor :fetch do |item, output|
-        output << { id: item, data: "fetched" }
+        output << { id: item, data: 'fetched' }
       end
     end
 
     batch batch_size
 
     process_per_batch(max: process_count) do
-      processor :process do |batch, output|
+      processor :process do |batch, _output|
         batch.map { |x| x[:data].upcase }
       end
     end
@@ -257,7 +257,7 @@ class AdaptivePipeline
   end
 end
 
-[:low, :medium, :high].each do |level|
+%i[low medium high].each do |level|
   pipeline = AdaptivePipeline.new(concurrency: level)
   puts "\nConcurrency level: #{level}"
   puts "  Threads: #{pipeline.thread_count}"
@@ -267,9 +267,9 @@ end
 
 # Example 5: Configuration Object Pattern
 puts "\n"
-puts "=" * 60
-puts "Example 5: Configuration Object Pattern"
-puts "=" * 60
+puts '=' * 60
+puts 'Example 5: Configuration Object Pattern'
+puts '=' * 60
 
 class PipelineConfig
   attr_accessor :thread_pool_size, :process_pool_size, :batch_size
@@ -280,7 +280,7 @@ class PipelineConfig
     @batch_size = 1000
   end
 
-  def self.from_yaml(file)
+  def self.from_yaml(_file)
     # Could load from YAML/JSON/ENV
     new
   end
@@ -300,14 +300,14 @@ class ConfigurablePipeline
 
     threads(@config.thread_pool_size) do
       processor :download do |item, output|
-        output << item * 2
+        output << (item * 2)
       end
     end
 
     batch @config.batch_size
 
     process_per_batch(max: @config.process_pool_size) do
-      processor :parse do |batch, output|
+      processor :parse do |batch, _output|
         batch.map { |x| x + 100 }
       end
     end
@@ -323,7 +323,7 @@ config.thread_pool_size = 100
 config.process_pool_size = 8
 config.batch_size = 500
 
-pipeline = ConfigurablePipeline.new(config: config)
+ConfigurablePipeline.new(config: config)
 puts "\nUsing configuration object:"
 puts "  Thread pool: #{config.thread_pool_size}"
 puts "  Process pool: #{config.process_pool_size}"
@@ -331,9 +331,9 @@ puts "  Batch size: #{config.batch_size}"
 
 # Summary
 puts "\n"
-puts "=" * 60
-puts "Summary"
-puts "=" * 60
+puts '=' * 60
+puts 'Summary'
+puts '=' * 60
 puts <<~SUMMARY
 
   Configurable Execution Contexts enable:
@@ -373,4 +373,3 @@ puts <<~SUMMARY
   ✓ Full access to instance variables and methods
   ✓ Clean, declarative DSL
 SUMMARY
-

@@ -29,7 +29,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
           end
 
           processor :transform do |num, output|
-            output << num * 2
+            output << (num * 2)
           end
 
           consumer :collect do |num|
@@ -100,7 +100,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
       Class.new(parent_class) do
         pipeline do
           processor :double do |num, output|
-            output << num * 2
+            output << (num * 2)
           end
 
           # Reroute: generate -> double -> collect (instead of generate -> collect)
@@ -288,7 +288,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
 
         pipeline do
           processor :double do |num, output|
-            output << num * 2
+            output << (num * 2)
           end
 
           # Reroute: generate -> double -> collect (instead of generate -> collect)
@@ -304,7 +304,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
 
         pipeline do
           processor :add_ten do |num, output|
-            output << num + 10
+            output << (num + 10)
           end
 
           # Reroute: generate -> double -> add_ten -> collect
@@ -368,7 +368,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
       Class.new(parent_class) do
         pipeline do
           processor :double do |num, output|
-            output << num * 2
+            output << (num * 2)
           end
 
           # Reroute: generate -> double -> collect
@@ -382,7 +382,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
       Class.new(parent_class) do
         pipeline do
           processor :triple do |num, output|
-            output << num * 3
+            output << (num * 3)
           end
 
           # Reroute: generate -> triple -> collect
@@ -451,12 +451,10 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
               end
             end
           end
-          
+
           after_run do
             # Read fork results from temp file
-            if File.exist?(@temp_file.path)
-              @published = File.readlines(@temp_file.path).map(&:strip)
-            end
+            @published = File.readlines(@temp_file.path).map(&:strip) if File.exist?(@temp_file.path)
           end
         end
 
@@ -481,7 +479,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
     let(:customer_publisher) do
       Class.new(base_publisher) do
         def items_to_publish
-          ['customer_1', 'customer_2']
+          %w[customer_1 customer_2]
         end
 
         def publish_item(item)
@@ -495,7 +493,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
         max_threads 20 # Override for more throughput
 
         def items_to_publish
-          ['order_1', 'order_2', 'order_3']
+          %w[order_1 order_2 order_3]
         end
 
         def publish_item(item)
@@ -533,4 +531,3 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
     end
   end
 end
-

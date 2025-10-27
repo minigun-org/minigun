@@ -21,16 +21,16 @@ class DataProcessingPipeline
 
   # Pipeline 1: Ingest - Receives raw data
   pipeline :ingest, to: :validate do
-    before_run { puts "Starting data processing pipeline..." }
+    before_run { puts 'Starting data processing pipeline...' }
 
     producer :receive_data do |output|
-      puts "[Ingest] Receiving data..."
+      puts '[Ingest] Receiving data...'
       10.times do |i|
         output << {
           id: i,
           data: "item_#{i}",
           priority: i % 3 == 0 ? :high : :normal,
-          valid: i % 4 != 0  # Every 4th item is invalid
+          valid: i % 4 != 0 # Every 4th item is invalid
         }
       end
     end
@@ -42,7 +42,7 @@ class DataProcessingPipeline
   end
 
   # Pipeline 2: Validate - Splits valid/invalid data
-  pipeline :validate, to: [:process_fast, :process_slow] do
+  pipeline :validate, to: %i[process_fast process_slow] do
     processor :check_validity do |item, output|
       if item[:valid]
         output << item
@@ -61,11 +61,9 @@ class DataProcessingPipeline
     consumer :output do |item, output|
       # Route based on priority
       if item[:priority] == :high
-        # Will go to process_fast
-        output << item
+        output.to(:process_fast) << item
       else
-        # Will go to both pipelines
-        output << item
+        output.to(:process_slow) << item
       end
     end
   end
@@ -81,14 +79,14 @@ class DataProcessingPipeline
       @mutex.synchronize { fast_processed << item }
     end
 
-    after_run { puts "Fast lane complete!" }
+    after_run { puts 'Fast lane complete!' }
   end
 
   # Pipeline 3b: Slow Processing (for normal items)
   pipeline :process_slow do
     processor :slow_transform do |item, output|
       puts "[Slow] Processing item #{item[:id]}"
-      sleep 0.01  # Simulate slower processing
+      sleep 0.01 # Simulate slower processing
       output << item.merge(processed_by: :slow_lane)
     end
 
@@ -96,11 +94,11 @@ class DataProcessingPipeline
       @mutex.synchronize { slow_processed << item }
     end
 
-    after_run { puts "Slow lane complete!" }
+    after_run { puts 'Slow lane complete!' }
   end
 end
 
-if __FILE__ == $0
+if __FILE__ == $PROGRAM_NAME
   puts "=== Multi-Pipeline Data Processing Example ===\n\n"
 
   processor = DataProcessingPipeline.new
@@ -113,6 +111,5 @@ if __FILE__ == $0
   puts "Fast Lane: #{processor.fast_processed.size} items"
   puts "Slow Lane: #{processor.slow_processed.size} items"
   puts "\nTotal Processed: #{processor.fast_processed.size + processor.slow_processed.size} items"
-  puts "✓ All pipelines executed successfully!"
+  puts '✓ All pipelines executed successfully!'
 end
-

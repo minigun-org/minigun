@@ -18,13 +18,13 @@ class SimplePipelineExample
   # First pipeline generates numbers
   pipeline :generator, to: :processor do
     producer :generate do |output|
-      puts "[Generator] Creating numbers..."
-      5.times { |i| output << i + 1 }
+      puts '[Generator] Creating numbers...'
+      5.times { |i| output << (i + 1) }
     end
 
     consumer :output do |num, output|
       puts "[Generator] Sending: #{num}"
-      output << num  # Send to next pipeline
+      output << num # Send to next pipeline
     end
   end
 
@@ -50,7 +50,7 @@ class SimplePipelineExample
   end
 end
 
-if __FILE__ == $0
+if __FILE__ == $PROGRAM_NAME
   puts "=== Simple Multi-Pipeline Example ===\n\n"
   puts "Three pipelines: Generator -> Processor -> Collector\n\n"
 
@@ -59,7 +59,6 @@ if __FILE__ == $0
 
   puts "\n=== Final Results ===\n"
   puts "Collected: #{example.results.sort.inspect}"
-  puts "Expected: [2, 4, 6, 8, 10]"
-  puts example.results.sort == [2, 4, 6, 8, 10] ? "✓ Success!" : "✗ Failed"
+  puts 'Expected: [2, 4, 6, 8, 10]'
+  puts example.results.sort == [2, 4, 6, 8, 10] ? '✓ Success!' : '✗ Failed'
 end
-

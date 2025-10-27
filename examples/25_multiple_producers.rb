@@ -18,29 +18,29 @@ class MultipleProducersExample
   pipeline do
     # Producer 1: Fetch from API
     producer :api_source do |output|
-      puts "[API Source] Fetching from REST API..."
+      puts '[API Source] Fetching from REST API...'
       5.times do |i|
         output << { source: 'api', id: i, data: "API record #{i}" }
       end
-      puts "[API Source] Fetched 5 records"
+      puts '[API Source] Fetched 5 records'
     end
 
     # Producer 2: Read from database
     producer :db_source do |output|
-      puts "[DB Source] Querying database..."
+      puts '[DB Source] Querying database...'
       3.times do |i|
         output << { source: 'database', id: i + 100, data: "DB record #{i}" }
       end
-      puts "[DB Source] Queried 3 records"
+      puts '[DB Source] Queried 3 records'
     end
 
     # Producer 3: Read from file
     producer :file_source do |output|
-      puts "[File Source] Reading from file..."
+      puts '[File Source] Reading from file...'
       4.times do |i|
         output << { source: 'file', id: i + 200, data: "File record #{i}" }
       end
-      puts "[File Source] Read 4 records"
+      puts '[File Source] Read 4 records'
     end
 
     # Shared processor - enriches all records
@@ -62,16 +62,16 @@ class MultipleProducersExample
   end
 end
 
-if __FILE__ == $0
-  puts "=== Multiple Producers Example ==="
+if __FILE__ == $PROGRAM_NAME
+  puts '=== Multiple Producers Example ==='
   puts "Running pipeline with 3 concurrent producers...\n\n"
 
   example = MultipleProducersExample.new
   example.run
 
-  puts "\n" + "=" * 60
-  puts "RESULTS"
-  puts "=" * 60
+  puts "\n#{'=' * 60}"
+  puts 'RESULTS'
+  puts '=' * 60
 
   puts "\nTotal records processed: #{example.results.size}"
 
@@ -93,14 +93,11 @@ if __FILE__ == $0
   stats = pipeline.stats
 
   puts "\n📊 Producer Statistics:"
-  [:api_source, :db_source, :file_source].each do |producer_name|
+  %i[api_source db_source file_source].each do |producer_name|
     producer_stats = stats.stage_stats[producer_name]
-    if producer_stats
-      puts "  #{producer_name}: #{producer_stats.items_produced} items (#{producer_stats.throughput.round(0)} items/s)"
-    end
+    puts "  #{producer_name}: #{producer_stats.items_produced} items (#{producer_stats.throughput.round(0)} items/s)" if producer_stats
   end
 
   puts "\n✓ Multiple producers example complete!"
   puts "All #{example.results.size} records from 3 different sources processed successfully"
 end
-

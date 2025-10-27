@@ -19,15 +19,13 @@ RSpec.configure do |config|
   config.disable_monkey_patching!
   config.warnings = false
 
-  if config.files_to_run.one?
-    config.default_formatter = 'doc'
-  end
+  config.default_formatter = 'doc' if config.files_to_run.one?
 
   config.order = :random
   Kernel.srand config.seed
 
   # Add timeout to all examples to prevent deadlocks
-  config.around(:each) do |example|
+  config.around do |example|
     timeout_seconds = example.metadata[:timeout] || 3
 
     begin
@@ -39,12 +37,12 @@ RSpec.configure do |config|
       location = example.metadata[:location]
       description = example.metadata[:full_description]
 
-      puts "\n" + "=" * 80
+      puts "\n#{'=' * 80}"
       puts "⚠️  TIMEOUT ERROR (#{timeout_seconds}s exceeded)"
-      puts "=" * 80
+      puts '=' * 80
       puts "Test: #{description}"
       puts "Location: #{location}"
-      puts "=" * 80 + "\n"
+      puts "#{'=' * 80}\n"
 
       # Re-raise with more context
       raise Timeout::Error, "Test timed out after #{timeout_seconds}s: #{description} (#{location})"

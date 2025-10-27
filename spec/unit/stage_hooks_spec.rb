@@ -35,7 +35,7 @@ RSpec.describe 'Stage-Specific Hooks' do
 
           processor :transform do |num, output|
             @events << :processor_run
-            output << num * 2
+            output << (num * 2)
           end
 
           before :transform do
@@ -46,7 +46,7 @@ RSpec.describe 'Stage-Specific Hooks' do
             @events << :after_transform
           end
 
-          consumer :collect do |num|
+          consumer :collect do |_num|
             @events << :consumer_run
           end
         end
@@ -86,7 +86,7 @@ RSpec.describe 'Stage-Specific Hooks' do
             output << 1
           end
 
-          consumer :collect do |num|
+          consumer :collect do |_num|
             @events << :collected
           end
         end
@@ -126,7 +126,7 @@ RSpec.describe 'Stage-Specific Hooks' do
           accumulator :batch
 
           process_per_batch(max: 1) do
-            consumer :process do |num|
+            consumer :process do |_num|
               @mutex.synchronize { @events << :process_run }
             end
           end
@@ -187,7 +187,7 @@ RSpec.describe 'Stage-Specific Hooks' do
             @events << :after_generate_stage
           end
 
-          consumer :collect do |num|
+          consumer :collect do |_num|
             @events << :collect_run
           end
         end
@@ -226,19 +226,15 @@ RSpec.describe 'Stage-Specific Hooks' do
 
           before :generate do
             @events << :before_1
-          end
-
-          before :generate do
             @events << :before_2
           end
 
-          after :generate do
-            @events << :after_1
-          end
 
           after :generate do
+            @events << :after_1
             @events << :after_2
           end
+
 
           consumer :collect do |num|
           end
@@ -261,4 +257,3 @@ RSpec.describe 'Stage-Specific Hooks' do
     end
   end
 end
-

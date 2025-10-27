@@ -44,7 +44,7 @@ RSpec.describe Minigun::Runner do
       # Capture original handlers
       original_int = Signal.trap('INT', 'DEFAULT')
 
-      runner = described_class.new(task, context)
+      described_class.new(task, context)
 
       # Check handler was set (just verify it doesn't error)
       current_handler = Signal.trap('INT', original_int)
@@ -155,7 +155,7 @@ RSpec.describe Minigun::Runner do
           before_run: [before_hook],
           after_run: []
         )
-        allow(context).to receive(:instance_eval) do |&block|
+        allow(context).to receive(:instance_eval) do
           hook_called << :before
         end
 
@@ -174,7 +174,7 @@ RSpec.describe Minigun::Runner do
           before_run: [],
           after_run: [after_hook]
         )
-        allow(context).to receive(:instance_eval) do |&block|
+        allow(context).to receive(:instance_eval) do
           hook_called << :after
         end
 
@@ -215,7 +215,7 @@ RSpec.describe Minigun::Runner do
       # Just verify the handler is set up
       original_int = Signal.trap('INT', 'DEFAULT')
 
-      runner = described_class.new(task, context)
+      described_class.new(task, context)
       current_handler = Signal.trap('INT', original_int)
 
       expect(current_handler).not_to eq('DEFAULT')
@@ -229,7 +229,7 @@ RSpec.describe Minigun::Runner do
       runner = described_class.new(task, context)
       runner.run
 
-      current_handler = Signal.trap('INT', original_int)
+      Signal.trap('INT', original_int)
       # Handler should be restored to original
 
       Signal.trap('INT', original_int)
@@ -255,4 +255,3 @@ RSpec.describe Minigun::Runner do
     end
   end
 end
-

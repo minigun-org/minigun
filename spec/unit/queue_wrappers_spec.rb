@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 require 'minigun/queue_wrappers'
 require 'benchmark'
@@ -44,13 +46,13 @@ RSpec.describe Minigun::OutputQueue do
     it 'returns an OutputQueue for the target stage' do
       result = output_queue.to(:stage_a)
 
-      expect(result).to be_a(Minigun::OutputQueue)
+      expect(result).to be_a(described_class)
     end
 
     it 'raises error for unknown stage' do
-      expect {
+      expect do
         output_queue.to(:unknown_stage)
-      }.to raise_error(ArgumentError, /Unknown target stage/)
+      end.to raise_error(ArgumentError, /Unknown target stage/)
     end
 
     it 'tracks runtime edge' do
@@ -65,7 +67,7 @@ RSpec.describe Minigun::OutputQueue do
         second_call = output_queue.to(:stage_a)
         third_call = output_queue.to(:stage_a)
 
-        expect(first_call).to be(second_call)  # Same object (object_id)
+        expect(first_call).to be(second_call) # Same object (object_id)
         expect(second_call).to be(third_call)
       end
 
@@ -81,13 +83,9 @@ RSpec.describe Minigun::OutputQueue do
 
       it 'caches even when called in different contexts' do
         # Simulate different code paths calling .to()
-        queue_from_branch_a = if true
-                                output_queue.to(:stage_a)
-                              end
+        queue_from_branch_a = output_queue.to(:stage_a)
 
-        queue_from_branch_b = if true
-                                output_queue.to(:stage_a)
-                              end
+        queue_from_branch_b = output_queue.to(:stage_a)
 
         expect(queue_from_branch_a).to be(queue_from_branch_b)
       end
@@ -150,7 +148,7 @@ RSpec.describe Minigun::OutputQueue do
       # Measure time without memoization (simulated by creating new instances)
       time_without_cache = Benchmark.realtime do
         iterations.times do
-          Minigun::OutputQueue.new(
+          described_class.new(
             stage_name,
             [all_stage_queues[:stage_a]],
             all_stage_queues,
@@ -188,7 +186,7 @@ end
 RSpec.describe Minigun::InputQueue do
   let(:raw_queue) { Queue.new }
   let(:stage_name) { :test_stage }
-  let(:sources_expected) { Set.new([:source_a, :source_b]) }
+  let(:sources_expected) { Set.new(%i[source_a source_b]) }
 
   let(:input_queue) do
     described_class.new(raw_queue, stage_name, sources_expected)
@@ -232,11 +230,10 @@ RSpec.describe Minigun::InputQueue do
 
       # Pop returns regular items, automatically consuming END signals
       expect(input_queue.pop).to eq(1)
-      expect(input_queue.pop).to eq(2)  # END signal from source_a is auto-consumed
+      expect(input_queue.pop).to eq(2) # END signal from source_a is auto-consumed
 
       # After both items, both END signals are consumed, returns AllUpstreamsDone
       expect(input_queue.pop).to be_a(Minigun::AllUpstreamsDone)
     end
   end
 end
-

@@ -15,13 +15,13 @@ class StatisticsDemo
 
   pipeline do
     producer :generate do |output|
-      puts "[Producer] Generating 20 items"
-      20.times { |i| output << i + 1 }
+      puts '[Producer] Generating 20 items'
+      20.times { |i| output << (i + 1) }
     end
 
     processor :process, to: :collect do |num, output|
-      sleep(0.001) if num % 5 == 0  # Small delay every 5th item
-      output << num * 2
+      sleep(0.001) if num % 5 == 0 # Small delay every 5th item
+      output << (num * 2)
     end
 
     consumer :collect do |num|
@@ -30,7 +30,7 @@ class StatisticsDemo
   end
 end
 
-if __FILE__ == $0
+if __FILE__ == $PROGRAM_NAME
   puts "=== Minigun Statistics Demo ===\n"
 
   demo = StatisticsDemo.new
@@ -60,11 +60,8 @@ if __FILE__ == $0
     puts "    Total items: #{stage_stats.total_items}"
     puts "    Throughput: #{stage_stats.throughput.round(2)} items/s"
 
-    if stage_stats.has_latency_data?
-      puts "    Latency P50/P90/P95: #{(stage_stats.p50 * 1000).round(2)}ms / #{(stage_stats.p90 * 1000).round(2)}ms / #{(stage_stats.p95 * 1000).round(2)}ms"
-    end
+    puts "    Latency P50/P90/P95: #{(stage_stats.p50 * 1000).round(2)}ms / #{(stage_stats.p90 * 1000).round(2)}ms / #{(stage_stats.p95 * 1000).round(2)}ms" if stage_stats.has_latency_data?
   end
 
   puts "\n✓ Statistics demo complete!"
 end
-

@@ -16,8 +16,8 @@ class RerouteBaseExample
 
   pipeline do
     producer :generate do |output|
-      puts "[Producer] Generating 5 items"
-      5.times { |i| output << i + 1 }
+      puts '[Producer] Generating 5 items'
+      5.times { |i| output << (i + 1) }
     end
 
     processor :double do |num, output|
@@ -56,38 +56,37 @@ class RerouteInsertExample < RerouteBaseExample
   end
 end
 
-if __FILE__ == $0
+if __FILE__ == $PROGRAM_NAME
   puts "=== Reroute Stage Example ===\n\n"
 
-  puts "--- Base Pipeline ---"
-  puts "Flow: generate -> double -> collect"
+  puts '--- Base Pipeline ---'
+  puts 'Flow: generate -> double -> collect'
   base = RerouteBaseExample.new
   base.run
   puts "Results: #{base.results.inspect}"
-  puts "Expected: [2, 4, 6, 8, 10]"
-  puts base.results == [2, 4, 6, 8, 10] ? "✓ Pass" : "✗ Fail"
+  puts 'Expected: [2, 4, 6, 8, 10]'
+  puts base.results == [2, 4, 6, 8, 10] ? '✓ Pass' : '✗ Fail'
 
   puts "\n--- Skip Stage (Reroute) ---"
-  puts "Flow: generate -> collect (skips double)"
+  puts 'Flow: generate -> collect (skips double)'
   skip = RerouteSkipExample.new
   skip.run
   puts "Results: #{skip.results.inspect}"
-  puts "Expected: [1, 2, 3, 4, 5]"
-  puts skip.results == [1, 2, 3, 4, 5] ? "✓ Pass" : "✗ Fail"
+  puts 'Expected: [1, 2, 3, 4, 5]'
+  puts skip.results == [1, 2, 3, 4, 5] ? '✓ Pass' : '✗ Fail'
 
   puts "\n--- Insert Stage (Reroute) ---"
-  puts "Flow: generate -> double -> triple -> collect"
+  puts 'Flow: generate -> double -> triple -> collect'
   insert = RerouteInsertExample.new
   insert.run
   puts "Results: #{insert.results.inspect}"
-  puts "Expected: [6, 12, 18, 24, 30] (double then triple)"
-  puts insert.results == [6, 12, 18, 24, 30] ? "✓ Pass" : "✗ Fail"
+  puts 'Expected: [6, 12, 18, 24, 30] (double then triple)'
+  puts insert.results == [6, 12, 18, 24, 30] ? '✓ Pass' : '✗ Fail'
 
   puts "\n=== Key Concepts ==="
-  puts "• reroute_stage modifies the DAG routing for a stage"
+  puts '• reroute_stage modifies the DAG routing for a stage'
   puts "• Useful for inheritance: child classes can change parent's routing"
-  puts "• Can skip stages, insert stages, or create new paths"
-  puts "• Works with the explicit routing system"
+  puts '• Can skip stages, insert stages, or create new paths'
+  puts '• Works with the explicit routing system'
   puts "\n✓ Reroute stage complete!"
 end
-

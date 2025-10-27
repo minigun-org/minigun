@@ -62,14 +62,14 @@ class ExactStructure
     end
 
     threads(2) do
-      consumer :upload do |item|
+      consumer :upload do |_item|
         @mutex.synchronize { @stats[:uploaded] += 1 }
       end
     end
   end
 end
 
-puts "Testing: exact structure of example 55"
+puts 'Testing: exact structure of example 55'
 pipeline = ExactStructure.new
 pipeline.run
 
@@ -82,5 +82,4 @@ success = pipeline.stats[:downloaded] == 20 &&
           pipeline.stats[:parsed] == 20 &&
           pipeline.stats[:uploaded] == 20
 
-puts success ? "✓ Exact structure works!" : "✗ Failed"
-
+puts success ? '✓ Exact structure works!' : '✗ Failed'

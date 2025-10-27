@@ -40,7 +40,7 @@ module Minigun
 
         # Handle END messages
         if item.is_a?(Message) && item.end_of_stream?
-          @sources_expected << item.source  # Discover dynamic sources
+          @sources_expected << item.source # Discover dynamic sources
           @sources_done << item.source
 
           # All sources done? Return sentinel
@@ -70,7 +70,7 @@ module Minigun
     # Send item to all downstream stages
     def <<(item)
       @downstream_queues.each { |queue| queue << item }
-      @stage_stats&.increment_produced  # Track in stats directly
+      @stage_stats&.increment_produced # Track in stats directly
       self
     end
 
@@ -97,4 +97,3 @@ module Minigun
     end
   end
 end
-

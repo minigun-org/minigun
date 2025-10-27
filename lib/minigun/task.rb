@@ -37,7 +37,7 @@ module Minigun
     # Get all named pipelines (composite stages in root_pipeline)
     def pipelines
       @root_pipeline.stages.select { |_name, stage| stage.run_mode == :composite }
-                           .transform_values(&:pipeline)
+                    .transform_values(&:pipeline)
     end
 
     # Get the DAG for pipeline-level routing
@@ -77,22 +77,19 @@ module Minigun
 
       # Extract routing if specified
       to_targets = options[:to]
-      if to_targets
-        Array(to_targets).each { |target| @root_pipeline.dag.add_edge(name, target) }
-      end
+      Array(to_targets).each { |target| @root_pipeline.dag.add_edge(name, target) } if to_targets
 
       pipeline_stage
     end
 
     # Define a named pipeline with routing
     # Pipelines are just PipelineStage objects in root_pipeline
-    def define_pipeline(name, options = {}, &block)
+    def define_pipeline(name, options = {})
       # Check if already exists
       if @root_pipeline.stages.key?(name)
         pipeline_stage = @root_pipeline.stages[name]
-        unless pipeline_stage.run_mode == :composite
-          raise Minigun::Error, "Stage #{name} already exists as a non-composite stage"
-        end
+        raise Minigun::Error, "Stage #{name} already exists as a non-composite stage" unless pipeline_stage.run_mode == :composite
+
         pipeline = pipeline_stage.pipeline
       else
         # Create new PipelineStage and add to root_pipeline
@@ -121,9 +118,7 @@ module Minigun
       end
 
       # Execute block in context of pipeline definition
-      if block_given?
-        yield pipeline
-      end
+      yield pipeline if block_given?
 
       pipeline
     end
@@ -156,6 +151,5 @@ module Minigun
     def dag
       @root_pipeline.dag
     end
-
   end
 end

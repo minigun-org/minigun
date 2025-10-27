@@ -25,19 +25,19 @@ class ProcessBatchNamed
     end
 
     processor :prep, execution_context: :before_pool do |item, output|
-      output << item + 1
+      output << (item + 1)
     end
 
     batch 5
 
     process_per_batch(max: 2) do
       processor :process_batch do |batch, output|
-        batch.each { |item| output << item * 2 }
+        batch.each { |item| output << (item * 2) }
       end
     end
 
     processor :post, execution_context: :after_pool do |item, output|
-      output << item + 100
+      output << (item + 100)
     end
 
     consumer :save do |item|
@@ -46,9 +46,8 @@ class ProcessBatchNamed
   end
 end
 
-puts "Testing: process_per_batch + named contexts"
+puts 'Testing: process_per_batch + named contexts'
 pipeline = ProcessBatchNamed.new
 pipeline.run
 puts "Results: #{pipeline.results.size} items"
-puts "✓ Process batch + named works" if pipeline.results.size == 20
-
+puts '✓ Process batch + named works' if pipeline.results.size == 20

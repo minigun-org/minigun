@@ -21,11 +21,11 @@ RSpec.describe 'From Keyword' do
           end
 
           processor :double do |item, output|
-            output << item * 2
+            output << (item * 2)
           end
 
           # Use from: to connect from source and double
-          consumer :collect, from: [:source, :double] do |item|
+          consumer :collect, from: %i[source double] do |item|
             @mutex.synchronize { @results << item }
           end
         end
@@ -84,7 +84,7 @@ RSpec.describe 'From Keyword' do
 
           # B receives from A using to:
           processor :b do |item, output|
-            output << item + 10
+            output << (item + 10)
           end
 
           producer :c do |output|
@@ -126,7 +126,7 @@ RSpec.describe 'From Keyword' do
 
           processor :forward do |item, output|
             @mutex.synchronize { @results_a << item }
-            output << item * 10
+            output << (item * 10)
           end
         end
 
@@ -177,7 +177,7 @@ RSpec.describe 'From Keyword' do
         end
 
         # Collect from both sources
-        pipeline :collector, from: [:source_a, :source_b] do
+        pipeline :collector, from: %i[source_a source_b] do
           consumer :collect do |item|
             @mutex.synchronize { @results << item }
           end
@@ -187,7 +187,7 @@ RSpec.describe 'From Keyword' do
       instance = test_class.new
       instance.run
 
-      expect(instance.results.sort).to eq(['A', 'B'])
+      expect(instance.results.sort).to eq(%w[A B])
     end
 
     it 'can mix to: and from: in pipelines' do
@@ -213,7 +213,7 @@ RSpec.describe 'From Keyword' do
 
         pipeline :b, to: :d do
           processor :transform do |item, output|
-            output << item + 10
+            output << (item + 10)
           end
 
           consumer :fwd do |item, output|
@@ -246,4 +246,3 @@ RSpec.describe 'From Keyword' do
     end
   end
 end
-

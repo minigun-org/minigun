@@ -16,9 +16,9 @@ class MessageRouterExample
 
   pipeline do
     producer :generate_messages do |output|
-      puts "\n" + "="*60
-      puts "MESSAGE ROUTER: Generating Messages"
-      puts "="*60
+      puts "\n#{'=' * 60}"
+      puts 'MESSAGE ROUTER: Generating Messages'
+      puts '=' * 60
 
       # Message types with different characteristics
       message_types = [
@@ -39,7 +39,7 @@ class MessageRouterExample
           content: "#{msg_type[:type].upcase} message ##{i + 1}",
           timestamp: Time.now.to_i + i,
           severity: %w[debug info warn error critical].sample,
-          source: ['app-server', 'database', 'cache', 'queue'].sample
+          source: %w[app-server database cache queue].sample
         }
 
         puts "#{message[:icon]} Generated #{message[:type]} message #{message[:id]}: #{message[:severity]}"
@@ -76,12 +76,12 @@ class MessageRouterExample
 
       when 'alert_processor'
         message[:notification_sent] = true
-        message[:channels] = message[:severity] == 'critical' ? ['email', 'sms', 'slack'] : ['email']
+        message[:channels] = message[:severity] == 'critical' ? %w[email sms slack] : ['email']
         puts "  🚨 ALERT: [#{message[:severity]}] → notify via #{message[:channels].join(', ')}"
 
       when 'metric_processor'
         message[:value] = rand(1..100)
-        message[:unit] = ['ms', 'bytes', 'count', 'percent'].sample
+        message[:unit] = %w[ms bytes count percent].sample
         puts "  📊 METRIC: #{message[:value]} #{message[:unit]} from #{message[:source]}"
 
       when 'event_processor'
@@ -114,13 +114,13 @@ class MessageRouterExample
       end
 
       # Simulate writing to database
-      puts "   ✓ Batch written to database"
+      puts '   ✓ Batch written to database'
     end
 
     after_run do
-      puts "\n" + "="*60
-      puts "MESSAGE ROUTER STATISTICS"
-      puts "="*60
+      puts "\n#{'=' * 60}"
+      puts 'MESSAGE ROUTER STATISTICS'
+      puts '=' * 60
 
       total = @message_counts.values.sum
       @message_counts.sort_by { |_, count| -count }.each do |type, count|
@@ -137,14 +137,11 @@ class MessageRouterExample
       end
 
       puts "\nTotal messages routed: #{total}"
-      puts "Message routing complete!"
-      puts "="*60
+      puts 'Message routing complete!'
+      puts '=' * 60
     end
   end
 end
 
 # Run if executed directly
-if __FILE__ == $PROGRAM_NAME
-  MessageRouterExample.new.run
-end
-
+MessageRouterExample.new.run if __FILE__ == $PROGRAM_NAME

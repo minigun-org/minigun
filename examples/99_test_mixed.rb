@@ -16,7 +16,7 @@ class TestMixedExample
   end
 
   pipeline do
-    producer :generate, to: [:path_a, :path_b] do |output|
+    producer :generate, to: %i[path_a path_b] do |output|
       3.times { |i| output << i }
     end
 
@@ -43,11 +43,10 @@ class TestMixedExample
   end
 end
 
-if __FILE__ == $0
+if __FILE__ == $PROGRAM_NAME
   example = TestMixedExample.new
   example.run
   puts "final: #{example.final.sort.inspect}"
-  puts "expected: [0, 1, 10, 20, 101, 201]"
-  puts example.final.sort == [0, 1, 10, 20, 101, 201] ? "✓ Pass" : "✗ Fail"
+  puts 'expected: [0, 1, 10, 20, 101, 201]'
+  puts example.final.sort == [0, 1, 10, 20, 101, 201] ? '✓ Pass' : '✗ Fail'
 end
-

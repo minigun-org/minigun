@@ -24,7 +24,7 @@ class SimpleNamedContext
     end
 
     processor :work, execution_context: :my_pool do |item, output|
-      output << item * 2
+      output << (item * 2)
     end
 
     consumer :save do |item|
@@ -33,9 +33,8 @@ class SimpleNamedContext
   end
 end
 
-puts "Testing: named context only"
+puts 'Testing: named context only'
 pipeline = SimpleNamedContext.new
 pipeline.run
 puts "Results: #{pipeline.results.size} items"
-puts "✓ Named context works" if pipeline.results.size == 10
-
+puts '✓ Named context works' if pipeline.results.size == 10

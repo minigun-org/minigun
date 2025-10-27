@@ -20,7 +20,7 @@ class SimpleETLExample
   pipeline do
     # Extract: Simulate extracting from database
     producer :extract do |output|
-      puts "[Extract] Fetching records from database..."
+      puts '[Extract] Fetching records from database...'
       5.times do |i|
         record = { id: i, value: i * 10, raw: true }
         @mutex.synchronize { extracted << record }
@@ -55,9 +55,9 @@ class SimpleETLExample
   end
 end
 
-if __FILE__ == $0
+if __FILE__ == $PROGRAM_NAME
   puts "=== Simple ETL Example ===\n\n"
-  puts "ETL Pipeline Pattern:"
+  puts 'ETL Pipeline Pattern:'
   puts "  Extract (from source) → Transform (clean/enrich) → Load (to destination)\n\n"
 
   example = SimpleETLExample.new
@@ -77,11 +77,10 @@ if __FILE__ == $0
   puts "\nAll records processed: #{example.loaded.all? { |r| r[:processed] } ? '✓' : '✗'}"
 
   puts "\n=== Use Cases ===\n"
-  puts "• Database → Data Warehouse migrations"
-  puts "• API data ingestion and transformation"
-  puts "• File format conversions"
-  puts "• Data cleaning and enrichment"
+  puts '• Database → Data Warehouse migrations'
+  puts '• API data ingestion and transformation'
+  puts '• File format conversions'
+  puts '• Data cleaning and enrichment'
   puts "\nFor more complex ETL with fan-out, see 06_multi_pipeline_etl.rb"
   puts "\n✓ ETL complete!"
 end
-

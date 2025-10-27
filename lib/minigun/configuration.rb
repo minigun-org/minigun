@@ -6,7 +6,7 @@ module Minigun
     attr_accessor :default_queue_size
 
     def initialize
-      @default_queue_size = 1000  # Default bounded queue size for backpressure
+      @default_queue_size = 1000 # Default bounded queue size for backpressure
     end
   end
 
@@ -25,5 +25,3 @@ module Minigun
     end
   end
 end
-
-

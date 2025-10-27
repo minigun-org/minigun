@@ -16,9 +16,9 @@ class PriorityRoutingExample
 
   pipeline do
     producer :generate_tasks do |output|
-      puts "\n" + "="*60
-      puts "PRIORITY ROUTER: Generating Tasks"
-      puts "="*60
+      puts "\n#{'=' * 60}"
+      puts 'PRIORITY ROUTER: Generating Tasks'
+      puts '=' * 60
 
       # Generate tasks with different priorities
       tasks = [
@@ -83,10 +83,10 @@ class PriorityRoutingExample
 
       # Simulate different processing speeds
       delay = case path
-              when 'critical_path' then 0.01  # Fast processing
+              when 'critical_path' then 0.01 # Fast processing
               when 'high_priority_path' then 0.02
               when 'normal_path' then 0.03
-              when 'low_priority_path' then 0.05  # Slower processing
+              when 'low_priority_path' then 0.05 # Slower processing
               end
 
       sleep(delay)
@@ -116,9 +116,9 @@ class PriorityRoutingExample
     end
 
     after_run do
-      puts "\n" + "="*60
-      puts "PRIORITY ROUTING STATISTICS"
-      puts "="*60
+      puts "\n#{'=' * 60}"
+      puts 'PRIORITY ROUTING STATISTICS'
+      puts '=' * 60
 
       total = @stats.values.sum
       @stats.sort_by { |_, count| -count }.each do |path, count|
@@ -127,13 +127,10 @@ class PriorityRoutingExample
       end
 
       puts "\nPriority routing complete!"
-      puts "="*60
+      puts '=' * 60
     end
   end
 end
 
 # Run if executed directly
-if __FILE__ == $PROGRAM_NAME
-  PriorityRoutingExample.new.run
-end
-
+PriorityRoutingExample.new.run if __FILE__ == $PROGRAM_NAME

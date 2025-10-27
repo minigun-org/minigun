@@ -135,7 +135,7 @@ RSpec.describe Minigun::DAG do
       dag.add_node(:a)
       dag.add_node(:b)
       dag.add_node(:c)
-      dag.add_edge(:a, :c)  # Skip b
+      dag.add_edge(:a, :c) # Skip b
 
       dag.fill_sequential_gaps!
 
@@ -182,4 +182,3 @@ RSpec.describe Minigun::DAG do
     end
   end
 end
-

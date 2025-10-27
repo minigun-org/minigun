@@ -7,9 +7,9 @@
 
 require_relative '../lib/minigun'
 
-puts "=" * 60
-puts "Complete Refactor 2 Feature Demonstration"
-puts "=" * 60
+puts '=' * 60
+puts 'Complete Refactor 2 Feature Demonstration'
+puts '=' * 60
 
 class ComprehensivePipeline
   include Minigun::DSL
@@ -75,7 +75,7 @@ class ComprehensivePipeline
     # Parse phase: CPU-bound, use process per batch
     process_per_batch(max: @parse_processes) do
       processor :parse_batch do |batch, output|
-        # Note: Stats incremented in parent process would not be visible here
+        # NOTE: Stats incremented in parent process would not be visible here
         # since this runs in a forked process
 
         # CPU-intensive parsing
@@ -84,7 +84,7 @@ class ComprehensivePipeline
             id: item[:id],
             parsed: item[:data].upcase,
             metadata: item[:metadata],
-            parse_pid: Process.pid  # Track which process did the work
+            parse_pid: Process.pid # Track which process did the work
           }
         end
       end
@@ -111,7 +111,7 @@ class ComprehensivePipeline
 end
 
 # Run with default configuration
-puts "Running with default configuration..."
+puts 'Running with default configuration...'
 pipeline = ComprehensivePipeline.new
 pipeline.run
 
@@ -122,15 +122,15 @@ puts "  Uploaded: #{pipeline.stats[:uploaded]} items"
 puts "  Parse PIDs: #{pipeline.stats[:parse_pids].uniq.size} unique processes"
 
 puts "\n✓ Named contexts (db_pool, cache_pool)"
-puts "✓ Thread pools (download_threads, upload_threads)"
-puts "✓ Process per batch (parse_processes)"
-puts "✓ Runtime configuration via instance variables"
-puts "✓ Batching for efficiency"
-puts "✓ All features working together seamlessly"
+puts '✓ Thread pools (download_threads, upload_threads)'
+puts '✓ Process per batch (parse_processes)'
+puts '✓ Runtime configuration via instance variables'
+puts '✓ Batching for efficiency'
+puts '✓ All features working together seamlessly'
 
-puts "\n" + "=" * 60
-puts "Running with high-concurrency configuration..."
-puts "=" * 60
+puts "\n#{'=' * 60}"
+puts 'Running with high-concurrency configuration...'
+puts '=' * 60
 
 high_concurrency = ComprehensivePipeline.new(
   download_threads: 100,
@@ -146,12 +146,12 @@ puts "  Parsed: #{high_concurrency.stats[:parsed]} items"
 puts "  Uploaded: #{high_concurrency.stats[:uploaded]} items"
 
 puts "\n✓ Same pipeline, different configuration"
-puts "✓ Adapt to available resources"
-puts "✓ Clean, declarative syntax"
+puts '✓ Adapt to available resources'
+puts '✓ Clean, declarative syntax'
 
-puts "\n" + "=" * 60
-puts "Summary of Refactor 2 Features"
-puts "=" * 60
+puts "\n#{'=' * 60}"
+puts 'Summary of Refactor 2 Features'
+puts '=' * 60
 puts <<~SUMMARY
 
   ✓ Execution Blocks:
@@ -191,4 +191,3 @@ puts <<~SUMMARY
   ✓ Type-safe context management
   ✓ Optimal resource utilization
 SUMMARY
-

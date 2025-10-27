@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 
 RSpec.describe 'Debug 16_mixed_routing' do
@@ -16,7 +18,7 @@ RSpec.describe 'Debug 16_mixed_routing' do
     example.run
 
     puts "\n=== AFTER RUN ==="
-    puts "DAG edges:"
+    puts 'DAG edges:'
     pipeline.dag.edges.each do |from, targets|
       puts "  #{from} -> #{targets.to_a.join(', ')}"
     end
@@ -25,7 +27,6 @@ RSpec.describe 'Debug 16_mixed_routing' do
     puts "  from_a: #{example.from_a.sort.inspect}"
     puts "  from_b: #{example.from_b.sort.inspect}"
     puts "  final: #{example.final.sort.inspect}"
-    puts "  expected final: [0, 1, 10, 20, 101, 201]"
+    puts '  expected final: [0, 1, 10, 20, 101, 201]'
   end
 end
-

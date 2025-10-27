@@ -8,7 +8,7 @@ require_relative '../lib/minigun'
 class LargeDatasetExample
   include Minigun::DSL
 
-  max_threads 10      # High thread count for parallelism
+  max_threads 10 # High thread count for parallelism
   max_processes 2
 
   attr_accessor :results
@@ -23,32 +23,30 @@ class LargeDatasetExample
     producer :generate do |output|
       puts "[Producer] Generating #{@item_count} items..."
       @item_count.times { |i| output << i }
-      puts "[Producer] Done generating items"
+      puts '[Producer] Done generating items'
     end
 
     consumer :collect do |item|
       @mutex.synchronize { results << item }
 
       # Log progress every 25 items
-      if results.size % 25 == 0
-        puts "[Consumer] Processed #{results.size}/#{@item_count} items..."
-      end
+      puts "[Consumer] Processed #{results.size}/#{@item_count} items..." if results.size % 25 == 0
     end
   end
 end
 
-if __FILE__ == $0
+if __FILE__ == $PROGRAM_NAME
   puts "=== Large Dataset Processing Example ===\n\n"
-  puts "This example demonstrates:"
-  puts "  • Processing 100+ items efficiently"
-  puts "  • Thread-safe collection with Mutex"
-  puts "  • Concurrent processing with thread pool"
+  puts 'This example demonstrates:'
+  puts '  • Processing 100+ items efficiently'
+  puts '  • Thread-safe collection with Mutex'
+  puts '  • Concurrent processing with thread pool'
   puts "  • Progress tracking\n\n"
 
   item_count = 100
   example = LargeDatasetExample.new(item_count)
 
-  puts "Configuration:"
+  puts 'Configuration:'
   puts "  Items: #{item_count}"
   puts "  Max threads: #{example.class._minigun_task.config[:max_threads]}"
   puts "\n"
@@ -65,10 +63,9 @@ if __FILE__ == $0
   puts "No items lost: #{example.results.size == item_count ? '✓' : '✗'}"
 
   puts "\n=== Performance Tips ===\n"
-  puts "• Increase max_threads for I/O-bound operations"
-  puts "• Use Mutex for thread-safe shared data structures"
-  puts "• For very large datasets (1M+), consider batching"
-  puts "• Monitor memory usage with large in-memory collections"
+  puts '• Increase max_threads for I/O-bound operations'
+  puts '• Use Mutex for thread-safe shared data structures'
+  puts '• For very large datasets (1M+), consider batching'
+  puts '• Monitor memory usage with large in-memory collections'
   puts "\n✓ Large dataset processing complete!"
 end
-

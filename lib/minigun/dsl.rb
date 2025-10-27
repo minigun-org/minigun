@@ -3,7 +3,6 @@
 module Minigun
   # DSL for defining Minigun pipelines
   module DSL
-
     module ClassMethods
       def _minigun_task
         @_minigun_task
@@ -75,7 +74,7 @@ module Minigun
       # When a subclass is created, duplicate the parent's task
       def base.inherited(subclass)
         super if defined?(super)
-        parent_task = self._minigun_task
+        parent_task = _minigun_task
         # Create a new task and copy the parent's configuration and pipelines
         new_task = Minigun::Task.new(
           config: parent_task.config.dup,
@@ -98,6 +97,7 @@ module Minigun
     # Creates an instance-level deep copy of the class task for execution isolation
     def _evaluate_pipeline_blocks!
       return if @_pipeline_blocks_evaluated
+
       @_pipeline_blocks_evaluated = true
 
       # Deep copy class-level task for this instance
@@ -112,7 +112,7 @@ module Minigun
       self.class._pipeline_definition_blocks.each do |entry|
         name = entry[:name]
         opts = entry[:options]
-        
+
         if name
           # Named pipeline - define on instance task, then evaluate block in PipelineDSL context
           @_minigun_task.define_pipeline(name, opts) do |pipeline|
@@ -147,13 +147,9 @@ module Minigun
       end
 
       # Execution context stack management
-      def _execution_context_stack
-        @_execution_context_stack
-      end
+      attr_reader :_execution_context_stack
 
-      def _named_contexts
-        @_named_contexts
-      end
+      attr_reader :_named_contexts
 
       def _current_execution_context
         _execution_context_stack.last
@@ -206,7 +202,7 @@ module Minigun
         }
 
         # Store in instance context if available, otherwise in PipelineDSL
-        if @context && @context.respond_to?(:_named_contexts)
+        if @context.respond_to?(:_named_contexts)
           @context._named_contexts[name] = ctx_def
         else
           _named_contexts[name] = ctx_def
@@ -216,13 +212,11 @@ module Minigun
       # Nested pipeline support
       def pipeline(name, options = {}, &block)
         # This handles nested pipeline stages within a pipeline block
-        if @context
-          # Get the task from context (instance or class)
-          task = @context._minigun_task
-          task.add_nested_pipeline(name, options, &block)
-        else
-          raise "Nested pipelines require instance context"
-        end
+        raise 'Nested pipelines require instance context' unless @context
+
+        # Get the task from context (instance or class)
+        task = @context._minigun_task
+        task.add_nested_pipeline(name, options, &block)
       end
 
       # Main unified stage method
@@ -243,7 +237,7 @@ module Minigun
       end
 
       # Processor - alias for consumer (both receive item and output)
-      alias processor consumer
+      alias_method :processor, :consumer
 
       # Generic stage - for advanced use (input loop), receives input and output queues
       def stage(name, options = {}, &block)
@@ -322,17 +316,18 @@ module Minigun
         # If @context exists (instance context), check its named contexts first
         if options[:execution_context]
           context_name = options[:execution_context]
-          named_ctx = if @context && @context.respond_to?(:_named_contexts)
-                       @context._named_contexts[context_name]
-                     else
-                       _named_contexts[context_name]
-                     end
+          named_ctx = if @context.respond_to?(:_named_contexts)
+                        @context._named_contexts[context_name]
+                      else
+                        _named_contexts[context_name]
+                      end
 
-          if named_ctx
-            options[:_execution_context] = named_ctx
-          else
-            raise ArgumentError, "Unknown execution context: #{context_name}"
-          end
+          raise ArgumentError, "Unknown execution context: #{context_name}" unless named_ctx
+
+          options[:_execution_context] = named_ctx
+
+
+
         elsif _current_execution_context
           # Use current context from stack
           options[:_execution_context] = _current_execution_context
@@ -354,10 +349,10 @@ module Minigun
     end
 
     # Convenience aliases
-    alias go_brr! run        # Fun production alias
-    alias go_brrr! run
-    alias go_brrrr! run
-    alias go_brrrrr! run
-    alias execute perform    # Formal direct execution alias
+    alias_method :go_brr!, :run        # Fun production alias
+    alias_method :go_brrr!, :run
+    alias_method :go_brrrr!, :run
+    alias_method :go_brrrrr!, :run
+    alias_method :execute, :perform    # Formal direct execution alias
   end
 end

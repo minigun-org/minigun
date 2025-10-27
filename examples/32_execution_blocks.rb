@@ -17,9 +17,9 @@
 
 require_relative '../lib/minigun'
 
-puts "=" * 60
-puts "Example 1: Basic Thread Pool"
-puts "=" * 60
+puts '=' * 60
+puts 'Example 1: Basic Thread Pool'
+puts '=' * 60
 
 class ThreadPoolExample
   include Minigun::DSL
@@ -39,11 +39,11 @@ class ThreadPoolExample
     # All stages within threads block use thread pool of 5
     threads(5) do
       processor :double do |item, output|
-        output << item * 2
+        output << (item * 2)
       end
 
       processor :add_ten do |item, output|
-        output << item + 10
+        output << (item + 10)
       end
 
       consumer :collect do |item|
@@ -59,9 +59,9 @@ puts "Results: #{pipeline.results.sort}"
 puts "✓ All stages executed in thread pool of 5\n\n"
 
 # Example 2: Batching with Process Per Batch
-puts "=" * 60
-puts "Example 2: Batch + Process Per Batch"
-puts "=" * 60
+puts '=' * 60
+puts 'Example 2: Batch + Process Per Batch'
+puts '=' * 60
 
 class BatchProcessExample
   include Minigun::DSL
@@ -106,9 +106,9 @@ puts "PIDs: #{pipeline.processed.map { |p| p[:pid] }.uniq.join(', ')}"
 puts "✓ Batched and processed in separate processes\n\n"
 
 # Example 3: Nested Execution Contexts
-puts "=" * 60
-puts "Example 3: Nested Contexts"
-puts "=" * 60
+puts '=' * 60
+puts 'Example 3: Nested Contexts'
+puts '=' * 60
 
 class NestedContextExample
   include Minigun::DSL
@@ -129,7 +129,7 @@ class NestedContextExample
     threads(20) do
       processor :fetch do |item, output|
         # Simulate fetch
-        output << item * 2
+        output << (item * 2)
       end
 
       # Batch within thread context
@@ -137,9 +137,9 @@ class NestedContextExample
 
       # Inner: process per batch for CPU work
       process_per_batch(max: 3) do
-        processor :compute do |batch, output|
+        processor :compute do |batch, _output|
           # CPU-intensive work in isolated process
-          batch.map { |x| x ** 2 }
+          batch.map { |x| x**2 }
         end
       end
 
@@ -157,9 +157,9 @@ puts "Processed #{pipeline.results.size} items"
 puts "✓ Nested contexts work correctly\n\n"
 
 # Example 4: Named Execution Contexts
-puts "=" * 60
-puts "Example 4: Named Execution Contexts"
-puts "=" * 60
+puts '=' * 60
+puts 'Example 4: Named Execution Contexts'
+puts '=' * 60
 
 class NamedContextExample
   include Minigun::DSL
@@ -183,7 +183,7 @@ class NamedContextExample
 
     # Use named context
     processor :download, execution_context: :io_pool do |item, output|
-      output << { id: item, data: "downloaded" }
+      output << { id: item, data: 'downloaded' }
     end
 
     # Use different named context
@@ -203,9 +203,9 @@ puts "Results: #{pipeline.cpu_results.size} items"
 puts "✓ Named contexts allow flexible assignment\n\n"
 
 # Example 5: Complex Real-World Pipeline
-puts "=" * 60
-puts "Example 5: Complex Real-World Pipeline"
-puts "=" * 60
+puts '=' * 60
+puts 'Example 5: Complex Real-World Pipeline'
+puts '=' * 60
 
 class ComplexPipeline
   include Minigun::DSL
@@ -227,12 +227,12 @@ class ComplexPipeline
     threads(50) do
       processor :download do |url, output|
         # Simulate HTTP request
-        output << { url: url, html: "<html>content</html>", size: 1024 }
+        output << { url: url, html: '<html>content</html>', size: 1024 }
       end
 
       processor :extract do |page, output|
         # Extract data from HTML
-        output << { url: page[:url], title: "Page", links: 10 }
+        output << { url: page[:url], title: 'Page', links: 10 }
       end
     end
 
@@ -241,7 +241,7 @@ class ComplexPipeline
 
     # Parse in separate processes (CPU-bound)
     process_per_batch(max: 4) do
-      processor :parse_batch do |batch, output|
+      processor :parse_batch do |batch, _output|
         # CPU-intensive parsing
         batch.map do |page|
           {
@@ -268,9 +268,9 @@ puts "Saved #{pipeline.saved_count} results"
 puts "✓ Complex pipeline with multiple execution contexts\n\n"
 
 # Example 6: Thread Per Batch
-puts "=" * 60
-puts "Example 6: Thread Per Batch"
-puts "=" * 60
+puts '=' * 60
+puts 'Example 6: Thread Per Batch'
+puts '=' * 60
 
 class ThreadPerBatchExample
   include Minigun::DSL
@@ -291,7 +291,7 @@ class ThreadPerBatchExample
 
     # Spawn a new thread for each batch
     thread_per_batch(max: 5) do
-      consumer :process do |batch|
+      consumer :process do |_batch|
         @mutex.synchronize { @batch_count += 1 }
       end
     end
@@ -304,9 +304,9 @@ puts "Processed #{pipeline.batch_count} batches"
 puts "✓ Thread per batch with max concurrency limit\n\n"
 
 # Summary
-puts "=" * 60
-puts "Summary"
-puts "=" * 60
+puts '=' * 60
+puts 'Summary'
+puts '=' * 60
 puts <<~SUMMARY
 
   Execution Block Syntax:
@@ -360,4 +360,3 @@ puts <<~SUMMARY
   ✓ Runtime configurable
   ✓ Type-safe context management
 SUMMARY
-

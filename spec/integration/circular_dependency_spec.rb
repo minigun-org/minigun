@@ -5,7 +5,7 @@ require 'spec_helper'
 RSpec.describe 'Circular Dependency Detection' do
   describe 'stage-level cycles' do
     it 'raises error for direct self-loop' do
-      expect {
+      expect do
         Class.new do
           include Minigun::DSL
 
@@ -16,11 +16,11 @@ RSpec.describe 'Circular Dependency Detection' do
             end
           end
         end.new.run
-      }.to raise_error(Minigun::Error, /Circular dependency/)
+      end.to raise_error(Minigun::Error, /Circular dependency/)
     end
 
     it 'raises error for simple A->B->A cycle' do
-      expect {
+      expect do
         Class.new do
           include Minigun::DSL
 
@@ -34,11 +34,11 @@ RSpec.describe 'Circular Dependency Detection' do
             end
           end
         end.new.run
-      }.to raise_error(Minigun::Error, /Circular dependency/)
+      end.to raise_error(Minigun::Error, /Circular dependency/)
     end
 
     it 'raises error for A->B->C->A cycle' do
-      expect {
+      expect do
         Class.new do
           include Minigun::DSL
 
@@ -56,11 +56,11 @@ RSpec.describe 'Circular Dependency Detection' do
             end
           end
         end.new.run
-      }.to raise_error(Minigun::Error, /Circular dependency/)
+      end.to raise_error(Minigun::Error, /Circular dependency/)
     end
 
     it 'raises error with from: causing cycle' do
-      expect {
+      expect do
         Class.new do
           include Minigun::DSL
 
@@ -79,7 +79,7 @@ RSpec.describe 'Circular Dependency Detection' do
             end
           end
         end.new.run
-      }.to raise_error(Minigun::Error, /Circular dependency/)
+      end.to raise_error(Minigun::Error, /Circular dependency/)
     end
 
     it 'allows diamond patterns (no cycle)' do
@@ -101,11 +101,11 @@ RSpec.describe 'Circular Dependency Detection' do
           # Diamond pattern: source -> left -> merge
           #                   source -> right -> merge
           processor :left, from: :source, to: :merge do |item, output|
-            output << item + 10
+            output << (item + 10)
           end
 
           processor :right, from: :source, to: :merge do |item, output|
-            output << item + 20
+            output << (item + 20)
           end
 
           consumer :merge do |item|
@@ -137,22 +137,22 @@ RSpec.describe 'Circular Dependency Detection' do
           end
 
           processor :a, from: :start do |item, output|
-            output << item + 1
+            output << (item + 1)
           end
 
           processor :b, from: :start do |item, output|
-            output << item + 2
+            output << (item + 2)
           end
 
-          processor :c, from: [:a, :b] do |item, output|
-            output << item + 10
+          processor :c, from: %i[a b] do |item, output|
+            output << (item + 10)
           end
 
           processor :d, from: :a do |item, output|
-            output << item + 20
+            output << (item + 20)
           end
 
-          consumer :end_stage, from: [:c, :d] do |item|
+          consumer :end_stage, from: %i[c d] do |item|
             @mutex.synchronize { @results << item }
           end
         end
@@ -169,7 +169,7 @@ RSpec.describe 'Circular Dependency Detection' do
 
   describe 'pipeline-level cycles' do
     it 'raises error for pipeline A->B->A cycle' do
-      expect {
+      expect do
         Class.new do
           include Minigun::DSL
 
@@ -189,11 +189,11 @@ RSpec.describe 'Circular Dependency Detection' do
             end
           end
         end.new.run
-      }.to raise_error(Minigun::Error, /Circular dependency/)
+      end.to raise_error(Minigun::Error, /Circular dependency/)
     end
 
     it 'raises error for pipeline self-loop' do
-      expect {
+      expect do
         Class.new do
           include Minigun::DSL
 
@@ -207,11 +207,11 @@ RSpec.describe 'Circular Dependency Detection' do
             end
           end
         end.new.run
-      }.to raise_error(Minigun::Error, /Circular dependency/)
+      end.to raise_error(Minigun::Error, /Circular dependency/)
     end
 
     it 'raises error with from: causing pipeline cycle' do
-      expect {
+      expect do
         Class.new do
           include Minigun::DSL
 
@@ -238,7 +238,7 @@ RSpec.describe 'Circular Dependency Detection' do
             end
           end
         end.new.run
-      }.to raise_error(Minigun::Error, /Circular dependency/)
+      end.to raise_error(Minigun::Error, /Circular dependency/)
     end
 
     it 'allows diamond pattern in pipelines' do
@@ -252,7 +252,7 @@ RSpec.describe 'Circular Dependency Detection' do
           @mutex = Mutex.new
         end
 
-        pipeline :source, to: [:left, :right] do
+        pipeline :source, to: %i[left right] do
           producer :gen do |output|
             output << 1
           end
@@ -264,7 +264,7 @@ RSpec.describe 'Circular Dependency Detection' do
 
         pipeline :left, to: :merge do
           processor :transform do |item, output|
-            output << item + 10
+            output << (item + 10)
           end
 
           consumer :fwd do |item, output|
@@ -274,7 +274,7 @@ RSpec.describe 'Circular Dependency Detection' do
 
         pipeline :right, to: :merge do
           processor :transform do |item, output|
-            output << item + 20
+            output << (item + 20)
           end
 
           consumer :fwd do |item, output|
@@ -296,4 +296,3 @@ RSpec.describe 'Circular Dependency Detection' do
     end
   end
 end
-

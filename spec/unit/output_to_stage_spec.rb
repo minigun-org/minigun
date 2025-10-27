@@ -41,8 +41,8 @@ RSpec.describe 'output.to(:stage) routing' do
       pipeline.run
 
       expect(results.size).to eq(3)
-      expect(results.select { |r| r[:stage] == :fast }.size).to eq(2)
-      expect(results.select { |r| r[:stage] == :slow }.size).to eq(1)
+      expect(results.count { |r| r[:stage] == :fast }).to eq(2)
+      expect(results.count { |r| r[:stage] == :slow }).to eq(1)
       expect(results.map { |r| r[:id] }.sort).to eq([1, 2, 3])
     end
 
@@ -64,9 +64,9 @@ RSpec.describe 'output.to(:stage) routing' do
 
           processor :router do |item, output|
             if item == 1
-              output << item * 10  # Regular output - goes to next stage via DAG
+              output << (item * 10) # Regular output - goes to next stage via DAG
             else
-              output.to(:special) << item * 100  # Targeted output
+              output.to(:special) << (item * 100) # Targeted output
             end
           end
 
@@ -241,8 +241,8 @@ RSpec.describe 'output.to(:stage) routing' do
       pipeline.run
 
       expect(results.size).to eq(5)
-      expect(results.select { |r| r[:type] == :even }.size).to eq(3)  # 0, 2, 4
-      expect(results.select { |r| r[:type] == :odd }.size).to eq(2)   # 1, 3
+      expect(results.count { |r| r[:type] == :even }).to eq(3)  # 0, 2, 4
+      expect(results.count { |r| r[:type] == :odd }).to eq(2)   # 1, 3
     end
 
     it 'works across different execution contexts' do
@@ -298,6 +298,7 @@ RSpec.describe 'output.to(:stage) routing' do
     it 'works with inline and threaded contexts mixed' do
       klass = Class.new do
         include Minigun::DSL
+
         attr_accessor :results
 
         def initialize
@@ -410,7 +411,7 @@ RSpec.describe 'output.to(:stage) routing' do
 
         expect(results.size).to eq(2)
         expect(results.map { |r| r['value'] }.sort).to eq([1, 2])
-        expect(results.map { |r| r['type'] }.sort).to eq(['process', 'thread'])
+        expect(results.map { |r| r['type'] }.sort).to eq(%w[process thread])
       ensure
         File.unlink(temp_file.path) if temp_file && File.exist?(temp_file.path)
       end
@@ -480,6 +481,7 @@ RSpec.describe 'output.to(:stage) routing' do
     it 'supports range-based conditional routing' do
       klass = Class.new do
         include Minigun::DSL
+
         attr_accessor :results
 
         def initialize
@@ -514,8 +516,8 @@ RSpec.describe 'output.to(:stage) routing' do
       pipeline.run
 
       expect(pipeline.results.size).to eq(5)
-      expect(pipeline.results.select { |r| r[:type] == :low }.size).to eq(3)
-      expect(pipeline.results.select { |r| r[:type] == :high }.size).to eq(2)
+      expect(pipeline.results.count { |r| r[:type] == :low }).to eq(3)
+      expect(pipeline.results.count { |r| r[:type] == :high }).to eq(2)
     end
 
     it 'supports load balancing pattern with round-robin' do
@@ -563,9 +565,9 @@ RSpec.describe 'output.to(:stage) routing' do
       expect(results.size).to eq(10)
 
       # Check distribution
-      worker_0_count = results.select { |r| r[:worker] == 0 }.size
-      worker_1_count = results.select { |r| r[:worker] == 1 }.size
-      worker_2_count = results.select { |r| r[:worker] == 2 }.size
+      worker_0_count = results.count { |r| r[:worker] == 0 }
+      worker_1_count = results.count { |r| r[:worker] == 1 }
+      worker_2_count = results.count { |r| r[:worker] == 2 }
 
       # Round robin should distribute relatively evenly (3-4 items per worker)
       expect(worker_0_count).to be_between(3, 4)
@@ -632,6 +634,7 @@ RSpec.describe 'output.to(:stage) routing' do
     it 'supports multi-level routing with processor chain' do
       klass = Class.new do
         include Minigun::DSL
+
         attr_accessor :results
 
         def initialize
@@ -671,8 +674,8 @@ RSpec.describe 'output.to(:stage) routing' do
       pipeline.run
 
       expect(pipeline.results.size).to eq(3)
-      expect(pipeline.results.select { |r| r[:priority] == :high }.size).to eq(1)
-      expect(pipeline.results.select { |r| r[:priority] == :low }.size).to eq(2)
+      expect(pipeline.results.count { |r| r[:priority] == :high }).to eq(1)
+      expect(pipeline.results.count { |r| r[:priority] == :low }).to eq(2)
     end
   end
 
@@ -738,6 +741,7 @@ RSpec.describe 'output.to(:stage) routing' do
     it 'supports batching with message type routing' do
       klass = Class.new do
         include Minigun::DSL
+
         attr_accessor :results
 
         def initialize
@@ -787,4 +791,3 @@ RSpec.describe 'output.to(:stage) routing' do
     end
   end
 end
-

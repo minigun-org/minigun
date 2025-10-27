@@ -26,74 +26,94 @@ RSpec.describe Minigun::DSL do
     end
 
     it 'raises error when defining a producer without pipeline do' do
-      expect {
-        test_class.producer(:test_producer) { "producer code" }
-      }.to raise_error(NoMethodError, /undefined method/)
+      expect do
+        test_class.producer(:test_producer) { 'producer code' }
+      end.to raise_error(NoMethodError, /undefined method/)
     end
 
     it 'raises error when defining processors without pipeline do' do
-      expect {
+      expect do
         test_class.processor(:test_processor) { |x| x }
-      }.to raise_error(NoMethodError, /undefined method/)
+      end.to raise_error(NoMethodError, /undefined method/)
     end
 
     it 'raises error when defining an accumulator without pipeline do' do
-      expect {
-        test_class.accumulator(:test_accumulator) { "accumulator code" }
-      }.to raise_error(NoMethodError, /undefined method/)
+      expect do
+        test_class.accumulator(:test_accumulator) { 'accumulator code' }
+      end.to raise_error(NoMethodError, /undefined method/)
     end
 
     it 'raises error when defining a consumer without pipeline do' do
-      expect {
+      expect do
         test_class.consumer(:test_consumer) { |x| x }
-      }.to raise_error(NoMethodError, /undefined method/)
+      end.to raise_error(NoMethodError, /undefined method/)
     end
 
     it 'allows defining before_run hook inside pipeline do' do
       test_class.pipeline do
-        before_run { "before run" }
+        before_run { 'before run' }
       end
       instance = test_class.new
-      instance.run rescue nil  # Trigger evaluation
+      begin
+        instance.run
+      rescue StandardError
+        nil
+      end
       expect(instance._minigun_task.root_pipeline.hooks[:before_run]).not_to be_empty
     end
 
     it 'allows defining after_run hook inside pipeline do' do
       test_class.pipeline do
-        after_run { "after run" }
+        after_run { 'after run' }
       end
       instance = test_class.new
-      instance.run rescue nil  # Trigger evaluation
+      begin
+        instance.run
+      rescue StandardError
+        nil
+      end
       expect(instance._minigun_task.root_pipeline.hooks[:after_run]).not_to be_empty
     end
 
     it 'allows defining before_fork hook inside pipeline do' do
       test_class.pipeline do
-        before_fork { "before fork" }
+        before_fork { 'before fork' }
       end
       instance = test_class.new
-      instance.run rescue nil  # Trigger evaluation
+      begin
+        instance.run
+      rescue StandardError
+        nil
+      end
       expect(instance._minigun_task.root_pipeline.hooks[:before_fork]).not_to be_empty
     end
 
     it 'allows defining after_fork hook inside pipeline do' do
       test_class.pipeline do
-        after_fork { "after fork" }
+        after_fork { 'after fork' }
       end
       instance = test_class.new
-      instance.run rescue nil  # Trigger evaluation
+      begin
+        instance.run
+      rescue StandardError
+        nil
+      end
       expect(instance._minigun_task.root_pipeline.hooks[:after_fork]).not_to be_empty
     end
 
     it 'allows defining pipeline block for grouping' do
       test_class.pipeline do
-        producer(:grouped_producer) { "code" }
+        producer(:grouped_producer) { 'code' }
         consumer(:grouped_consumer) { |x| x }
       end
 
       # Need to instantiate and run to trigger evaluation
       instance = test_class.new
-      instance.run rescue nil
+      begin
+        instance.run
+      rescue StandardError
+        nil
+      end
 
       producer = instance._minigun_task.root_pipeline.stages[:grouped_producer]
       consumer = instance._minigun_task.root_pipeline.stages[:grouped_consumer]
@@ -170,7 +190,11 @@ RSpec.describe Minigun::DSL do
     it 'correctly configures all components' do
       # Need to instantiate to trigger pipeline evaluation
       instance = test_class.new
-      instance.run rescue nil  # Trigger evaluation
+      begin
+        instance.run
+      rescue StandardError
+        nil
+      end
       task = instance._minigun_task
       pipeline = task.root_pipeline
 
@@ -206,7 +230,7 @@ RSpec.describe Minigun::DSL do
 
     it 'raises error when defining stages without pipeline block wrapper' do
       # Attempting to define pipeline WITHOUT explicit pipeline block should error
-      expect {
+      expect do
         Class.new do
           include Minigun::DSL
 
@@ -215,13 +239,14 @@ RSpec.describe Minigun::DSL do
             3.times { |i| output << (i + 1) }
           end
         end
-      }.to raise_error(NoMethodError, /undefined method/)
+      end.to raise_error(NoMethodError, /undefined method/)
     end
 
     it 'works correctly with pipeline block' do
       # WITH pipeline block - should work
       with_block = Class.new do
         include Minigun::DSL
+
         attr_accessor :results
 
         def initialize
@@ -247,62 +272,62 @@ RSpec.describe Minigun::DSL do
 
     it 'OLD TEST - WITHOUT pipeline block raises error' do
       # This test documents the old behavior is no longer supported
-      expect {
+      expect do
         Class.new do
           include Minigun::DSL
-        attr_accessor :results
 
-        def initialize
-          @results = []
-        end
+          attr_accessor :results
+
+          def initialize
+            @results = []
+          end
 
           # Stages without pipeline do should raise error
           producer :source do |output|
-            5.times { |i| output << (i) }
+            5.times { |i| output << i }
           end
         end
-      }.to raise_error(NoMethodError, /undefined method/)
+      end.to raise_error(NoMethodError, /undefined method/)
     end
 
     it 'requires pipeline do for all stages (mixing not allowed)' do
       # Attempting to mix styles should fail
-      expect {
+      expect do
         Class.new do
           include Minigun::DSL
 
           # Stage outside pipeline block - should raise error
           producer :start do |output|
-            output << (10)
+            output << 10
           end
         end
-      }.to raise_error(NoMethodError, /undefined method/)
+      end.to raise_error(NoMethodError, /undefined method/)
     end
 
     it 'requires pipeline do for complex routing' do
-      expect {
+      expect do
         Class.new do
           include Minigun::DSL
 
           # Routing without pipeline block - should raise error
-          producer :start, to: [:process_a, :process_b] do |output|
-            output << (5)
+          producer :start, to: %i[process_a process_b] do |output|
+            output << 5
           end
         end
-      }.to raise_error(NoMethodError, /undefined method/)
+      end.to raise_error(NoMethodError, /undefined method/)
     end
 
     it 'requires pipeline do for all stage types' do
-      expect {
+      expect do
         Class.new do
           include Minigun::DSL
 
           # Direct definition without pipeline block - should raise error
           producer :fetch do |output|
-            output << (1)
+            output << 1
           end
         end
-      }.to raise_error(NoMethodError, /undefined method/)
+      end.to raise_error(NoMethodError, /undefined method/)
     end
   end
 end
-

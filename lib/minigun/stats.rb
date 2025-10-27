@@ -5,8 +5,7 @@ require 'concurrent'
 module Minigun
   # Tracks execution statistics for a single stage
   class Stats
-    attr_reader :stage_name, :start_time, :end_time
-    attr_reader :latency_samples, :latency_count
+    attr_reader :stage_name, :start_time, :end_time, :latency_samples, :latency_count
 
     # Latency tracking - reservoir sampling for uniform distribution
     RESERVOIR_SIZE = 1000
@@ -22,7 +21,7 @@ module Minigun
 
       # Latency tracking - reservoir sampling
       @latency_samples = []
-      @latency_count = 0  # Total number of latency observations
+      @latency_count = 0 # Total number of latency observations
       @mutex = Mutex.new
     end
 
@@ -75,9 +74,7 @@ module Minigun
           # Reservoir is full, randomly replace an existing sample
           # Each item has probability RESERVOIR_SIZE / @latency_count of being kept
           random_index = rand(@latency_count)
-          if random_index < RESERVOIR_SIZE
-            @latency_samples[random_index] = duration
-          end
+          @latency_samples[random_index] = duration if random_index < RESERVOIR_SIZE
         end
       end
     end
@@ -85,18 +82,21 @@ module Minigun
     # Calculate runtime
     def runtime
       return 0 if @start_time.nil?
+
       (@end_time || Time.now) - @start_time
     end
 
     # Calculate items per second
     def throughput
       return 0 if runtime.zero?
+
       total_items / runtime
     end
 
     # Calculate average time per item
     def time_per_item
       return 0 if total_items.zero?
+
       runtime / total_items.to_f
     end
 
@@ -110,6 +110,7 @@ module Minigun
     # Success rate
     def success_rate
       return 100.0 if total_items.zero?
+
       ((total_items - items_failed) / total_items.to_f) * 100
     end
 
@@ -160,12 +161,12 @@ module Minigun
       }.tap do |h|
         if has_latency_data?
           h[:latency] = {
-            p50: (p50 * 1000).round(2),  # Convert to ms
+            p50: (p50 * 1000).round(2), # Convert to ms
             p90: (p90 * 1000).round(2),
             p95: (p95 * 1000).round(2),
             p99: (p99 * 1000).round(2),
             samples: @latency_samples.size,
-            observations: @latency_count  # Total items measured
+            observations: @latency_count # Total items measured
           }
         end
       end
@@ -180,13 +181,9 @@ module Minigun
         "Throughput: #{throughput.round(2)} items/s"
       ]
 
-      if items_failed > 0
-        parts << "Failed: #{items_failed} (#{(100 - success_rate).round(2)}%)"
-      end
+      parts << "Failed: #{items_failed} (#{(100 - success_rate).round(2)}%)" if items_failed > 0
 
-      if has_latency_data?
-        parts << "Latency P50/P90/P95: #{(p50*1000).round(1)}/#{(p90*1000).round(1)}/#{(p95*1000).round(1)}ms"
-      end
+      parts << "Latency P50/P90/P95: #{(p50 * 1000).round(1)}/#{(p90 * 1000).round(1)}/#{(p95 * 1000).round(1)}ms" if has_latency_data?
 
       parts.join(', ')
     end
@@ -222,6 +219,7 @@ module Minigun
     # Total pipeline runtime
     def runtime
       return 0 if @start_time.nil?
+
       (@end_time || Time.now) - @start_time
     end
 
@@ -245,6 +243,7 @@ module Minigun
     # Pipeline throughput (items/second)
     def throughput
       return 0 if runtime.zero?
+
       total_produced / runtime
     end
 
@@ -252,12 +251,12 @@ module Minigun
     def bottleneck
       return nil if @stage_stats.empty?
 
-      @stage_stats.values.min_by { |stats| stats.throughput }
+      @stage_stats.values.min_by(&:throughput)
     end
 
     # Get stats for stages in topological order
     def stages_in_order
-      @dag.topological_sort.map { |name| @stage_stats[name] }.compact
+      @dag.topological_sort.filter_map { |name| @stage_stats[name] }
     end
 
     # Generate summary hash
@@ -300,4 +299,3 @@ module Minigun
     end
   end
 end
-

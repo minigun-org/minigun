@@ -27,8 +27,8 @@ class StrategyPerStageExample
 
   pipeline do
     producer :generate do |output|
-      puts "[Producer] Generating 10 items"
-      10.times { |i| output << i + 1 }
+      puts '[Producer] Generating 10 items'
+      10.times { |i| output << (i + 1) }
     end
 
     # Light processor uses threads (default)
@@ -38,13 +38,13 @@ class StrategyPerStageExample
     end
 
     # Accumulator batches items before spawning workers
-    accumulator :batch, max_size: 3, to: [:heavy_save, :light_log]
+    accumulator :batch, max_size: 3, to: %i[heavy_save light_log]
 
     # Heavy consumer spawns forks per batch (COW fork pattern)
     process_per_batch(max: 2) do
       consumer :heavy_save do |batch|
         puts "[HeavySave:process_per_batch:#{Process.pid}] Processing batch of #{batch.size}"
-        sleep 0.01  # Simulate heavy work
+        sleep 0.01 # Simulate heavy work
 
         # Write results to temp file (fork-safe)
         File.open(@temp_file.path, 'a') do |f|
@@ -65,14 +65,12 @@ class StrategyPerStageExample
 
     after_run do
       # Read fork results from temp file
-      if File.exist?(@temp_file.path)
-        @fork_results = File.readlines(@temp_file.path).map { |line| line.strip.to_i }
-      end
+      @fork_results = File.readlines(@temp_file.path).map { |line| line.strip.to_i } if File.exist?(@temp_file.path)
     end
   end
 end
 
-if __FILE__ == $0
+if __FILE__ == $PROGRAM_NAME
   puts "=== Strategy Per Stage Example ===\n\n"
   puts "Producer → Validator → Batch (accumulator) → [HeavySave (process_per_batch), LightLog (threads)]\n\n"
 
@@ -87,9 +85,8 @@ if __FILE__ == $0
 
     success = example.fork_results.sort == (1..10).to_a &&
               example.thread_results.sort == (1..10).to_a
-    puts success ? "✓ Success!" : "✗ Check results"
+    puts success ? '✓ Success!' : '✗ Check results'
   ensure
     example.cleanup
   end
 end
-

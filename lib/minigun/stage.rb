@@ -40,7 +40,7 @@ module Minigun
       size = Minigun.default_queue_size if size.nil?
 
       # Check for unbounded indicators
-      return nil if size == 0 || size == Float::INFINITY || size == false
+      return nil if [0, Float::INFINITY, false].include?(size)
 
       size.to_i
     end
@@ -49,6 +49,7 @@ module Minigun
     # For loop-based stages, this receives input_queue and output_queue
     def execute(context, input_queue: nil, output_queue: nil)
       return unless @block
+
       context.instance_exec(input_queue, output_queue, &@block)
     end
 
@@ -72,51 +73,51 @@ module Minigun
       context = stage_ctx.pipeline.context
       execute(context, input_queue: wrapped_input, output_queue: wrapped_output)
 
-    # Send END signals to downstream
-    send_end_signals(stage_ctx)
-  end
-
-  # Get execution context configuration for this stage
-  def execution_context
-    @options[:_execution_context]
-  end
-
-  # Hash representation (for test compatibility)
-  def to_h
-    hash = { name: @name, options: @options }
-    hash[:block] = @block if @block
-    hash
-  end
-
-  # Hash-like access (for test compatibility)
-  def [](key)
-    case key
-    when :name then @name
-    when :options then @options
-    when :block then @block
-    else nil
+      # Send END signals to downstream
+      send_end_signals(stage_ctx)
     end
-  end
 
-  # Type name for logging purposes
-  def log_type
-    "Worker"
-  end
+    # Get execution context configuration for this stage
+    def execution_context
+      @options[:_execution_context]
+    end
 
-  # Execution strategy: :autonomous, :streaming, or :composite
-  def run_mode
-    :streaming  # Default: process stream of items in worker loop
-  end
+    # Hash representation (for test compatibility)
+    def to_h
+      hash = { name: @name, options: @options }
+      hash[:block] = @block if @block
+      hash
+    end
 
-  private
+    # Hash-like access (for test compatibility)
+    def [](key)
+      case key
+      when :name then @name
+      when :options then @options
+      when :block then @block
+      end
+    end
 
-  def send_end_signals(stage_ctx)
+    # Type name for logging purposes
+    def log_type
+      'Worker'
+    end
+
+    # Execution strategy: :autonomous, :streaming, or :composite
+    def run_mode
+      :streaming # Default: process stream of items in worker loop
+    end
+
+    private
+
+    def send_end_signals(stage_ctx)
       dag_downstream = stage_ctx.dag.downstream(stage_ctx.stage_name)
       dynamic_targets = stage_ctx.runtime_edges[stage_ctx.stage_name].to_a
       all_targets = (dag_downstream + dynamic_targets).uniq
 
       all_targets.each do |target|
         next unless stage_ctx.stage_input_queues[target]
+
         stage_ctx.stage_input_queues[target] << Message.end_signal(source: stage_ctx.stage_name)
       end
     end
@@ -126,23 +127,22 @@ module Minigun
   class ProducerStage < Stage
     def execute(context, item: nil, input_queue: nil, output_queue: nil)
       return unless @block
+
       context.instance_exec(output_queue, &@block)
     end
 
     def log_type
-      "Producer"
+      'Producer'
     end
 
     def run_mode
-      :autonomous  # Generates data independently
+      :autonomous # Generates data independently
     end
 
     def run_worker_loop(stage_ctx)
       stage_stats = stage_ctx.stats.for_stage(stage_ctx.stage_name, is_terminal: false)
       stage_stats.start!
-
-      is_pipeline = false
-      log_info(stage_ctx, "Starting")
+      log_info(stage_ctx, 'Starting')
 
       begin
         # Execute before hooks
@@ -157,12 +157,12 @@ module Minigun
 
         # Execute after hooks
         execute_hooks(stage_ctx, :after)
-      rescue => e
+      rescue StandardError => e
         log_error(stage_ctx, "Error: #{e.message}")
         log_error(stage_ctx, e.backtrace.join("\n"))
       ensure
         stage_stats.finish!
-        log_info(stage_ctx, "Done")
+        log_info(stage_ctx, 'Done')
         send_end_signals(stage_ctx)
       end
     end
@@ -171,7 +171,7 @@ module Minigun
 
     def create_output_queue(ctx)
       downstream = ctx.dag.downstream(ctx.stage_name)
-      downstream_queues = downstream.map { |to| ctx.stage_input_queues[to] }.compact
+      downstream_queues = downstream.filter_map { |to| ctx.stage_input_queues[to] }
       stage_stats = ctx.stats.for_stage(ctx.stage_name, is_terminal: ctx.dag.terminal?(ctx.stage_name))
       OutputQueue.new(ctx.stage_name, downstream_queues, ctx.stage_input_queues, ctx.runtime_edges, stage_stats: stage_stats)
     end
@@ -203,6 +203,7 @@ module Minigun
   class ConsumerStage < Stage
     def execute(context, item: nil, input_queue: nil, output_queue: nil)
       return unless @block
+
       context.instance_exec(item, output_queue, &@block)
     end
 
@@ -211,7 +212,7 @@ module Minigun
       stage_stats = stage_ctx.stats.for_stage(stage_ctx.stage_name, is_terminal: stage_ctx.dag.terminal?(stage_ctx.stage_name))
 
       # Create wrapped queues
-      wrapped_input = InputQueue.new(stage_ctx.input_queue, stage_ctx.stage_name, stage_ctx.sources_expected)
+      InputQueue.new(stage_ctx.input_queue, stage_ctx.stage_name, stage_ctx.sources_expected)
       wrapped_output = OutputQueue.new(
         stage_ctx.stage_name,
         stage_ctx.dag.downstream(stage_ctx.stage_name).map { |ds| stage_ctx.stage_input_queues[ds] },
@@ -239,6 +240,7 @@ module Minigun
           stage_ctx.sources_expected << msg.source
           stage_ctx.sources_done << msg.source
           break if stage_ctx.sources_done == stage_ctx.sources_expected
+
           next
         end
 
@@ -276,11 +278,11 @@ module Minigun
 
       all_targets.each do |target|
         next unless stage_ctx.stage_input_queues[target]
+
         stage_ctx.stage_input_queues[target] << Message.end_signal(source: stage_ctx.stage_name)
       end
     end
   end
-
 
   # Accumulator stage - batches items before passing to consumer
   # Collects N items, then emits them as a batch
@@ -290,7 +292,7 @@ module Minigun
     def initialize(name:, block: nil, options: {})
       super
       @max_size = options[:max_size] || 100
-      @max_wait = options[:max_wait] || nil  # Future: time-based batching
+      @max_wait = options[:max_wait] || nil # Future: time-based batching
       @buffer = []
       @mutex = Mutex.new
     end
@@ -310,14 +312,14 @@ module Minigun
         end
       end
 
-      if batch_to_emit && output_queue
-        if @block
-          # Accumulator block receives |batch, output| like other stages
-          context.instance_exec(batch_to_emit, output_queue, &@block)
-        else
-          # No block - just pass through
-          output_queue << batch_to_emit
-        end
+      return unless batch_to_emit && output_queue
+
+      if @block
+        # Accumulator block receives |batch, output| like other stages
+        context.instance_exec(batch_to_emit, output_queue, &@block)
+      else
+        # No block - just pass through
+        output_queue << batch_to_emit
       end
     end
 
@@ -332,14 +334,14 @@ module Minigun
         end
       end
 
-      if batch_to_emit && output_queue
-        if @block
-          # Accumulator block receives |batch, output| like other stages
-          context.instance_exec(batch_to_emit, output_queue, &@block)
-        else
-          # No block - just pass through
-          output_queue << batch_to_emit
-        end
+      return unless batch_to_emit && output_queue
+
+      if @block
+        # Accumulator block receives |batch, output| like other stages
+        context.instance_exec(batch_to_emit, output_queue, &@block)
+      else
+        # No block - just pass through
+        output_queue << batch_to_emit
       end
     end
   end
@@ -354,7 +356,7 @@ module Minigun
       @targets = targets
     end
 
-    def execute(context, item)
+    def execute(_context, item)
       # Router doesn't transform, just passes through
       [item]
     end
@@ -377,9 +379,10 @@ module Minigun
 
         # Handle END signal
         if msg.is_a?(Message) && msg.end_of_stream?
-          worker_ctx.sources_expected << msg.source  # Discover dynamic source
+          worker_ctx.sources_expected << msg.source # Discover dynamic source
           worker_ctx.sources_done << msg.source
           break if worker_ctx.sources_done == worker_ctx.sources_expected
+
           next
         end
 
@@ -404,9 +407,10 @@ module Minigun
 
         # Handle END signal
         if msg.is_a?(Message) && msg.end_of_stream?
-          worker_ctx.sources_expected << msg.source  # Discover dynamic source
+          worker_ctx.sources_expected << msg.source # Discover dynamic source
           worker_ctx.sources_done << msg.source
           break if worker_ctx.sources_done == worker_ctx.sources_expected
+
           next
         end
 
@@ -423,17 +427,17 @@ module Minigun
     attr_reader :pipeline, :stages_to_add
 
     def initialize(name:, options: {})
-      super(name: name, options: options)
+      super
 
       # PipelineStage wraps a Pipeline instance for execution
       # We'll inject the pipeline later when we have the config
       @pipeline = nil
-      @stages_to_add = []  # Queue of stages to add when pipeline is created
-      @temp_collector = nil  # Track temp collector stage if added
+      @stages_to_add = [] # Queue of stages to add when pipeline is created
+      @temp_collector = nil # Track temp collector stage if added
     end
 
     def run_mode
-      :composite  # Manages internal stages
+      :composite # Manages internal stages
     end
 
     # Execute method for when PipelineStage is used as a processor/consumer
@@ -463,7 +467,10 @@ module Minigun
         current_items.each do |current_item|
           # Create a temporary output queue for this stage
           stage_output = []
-          stage_output.define_singleton_method(:<<) { |i| push(i); self }
+          stage_output.define_singleton_method(:<<) do |i|
+            push(i)
+            self
+          end
 
           # Execute stage with temporary output queue
           stage.execute(context, item: current_item, output_queue: stage_output)
@@ -502,6 +509,7 @@ module Minigun
 
         all_targets.each do |target|
           next unless stage_ctx.stage_input_queues[target]
+
           stage_ctx.stage_input_queues[target] << Message.end_signal(source: stage_ctx.stage_name)
         end
         return
@@ -509,7 +517,7 @@ module Minigun
 
       # Consumer mode: process items from upstream
       stage_stats = stage_ctx.stats.for_stage(stage_ctx.stage_name, is_terminal: stage_ctx.dag.terminal?(stage_ctx.stage_name))
-      wrapped_input = InputQueue.new(stage_ctx.input_queue, stage_ctx.stage_name, stage_ctx.sources_expected)
+      InputQueue.new(stage_ctx.input_queue, stage_ctx.stage_name, stage_ctx.sources_expected)
       wrapped_output = OutputQueue.new(
         stage_ctx.stage_name,
         stage_ctx.dag.downstream(stage_ctx.stage_name).map { |ds| stage_ctx.stage_input_queues[ds] },
@@ -524,9 +532,10 @@ module Minigun
 
         # Handle END signal
         if msg.is_a?(Message) && msg.end_of_stream?
-          stage_ctx.sources_expected << msg.source  # Discover dynamic source
+          stage_ctx.sources_expected << msg.source # Discover dynamic source
           stage_ctx.sources_done << msg.source
           break if stage_ctx.sources_done == stage_ctx.sources_expected
+
           next
         end
 
@@ -566,7 +575,7 @@ module Minigun
       # Add a temporary consumer to collect items if not already present
       if @temp_collector.nil?
         @pipeline.instance_eval do
-          add_stage(:stage, :_temp_collector, stage_type: :consumer) do |item, output|
+          add_stage(:stage, :_temp_collector, stage_type: :consumer) do |item, _output|
             collected_items << item
           end
         end
@@ -580,10 +589,10 @@ module Minigun
       collected_items.each { |item| output_queue << item } if output_queue
 
       # Clean up temporary collector
-      if @temp_collector
-        @pipeline.stages.delete(:_temp_collector)
-        @temp_collector = nil
-      end
+      return unless @temp_collector
+
+      @pipeline.stages.delete(:_temp_collector)
+      @temp_collector = nil
     end
 
     # Set the wrapped pipeline (called by Task)
@@ -608,5 +617,3 @@ module Minigun
     end
   end
 end
-
-

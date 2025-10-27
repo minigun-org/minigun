@@ -30,19 +30,17 @@ module Minigun
     private
 
     def run
-      log_info "Starting"
+      log_info 'Starting'
 
       stage_ctx = create_stage_context
 
       # Check for disconnected stages (no upstream, not a producer, not a PipelineStage)
-      if handle_disconnected_stage(stage_ctx)
-        return
-      end
+      return if handle_disconnected_stage(stage_ctx)
 
       @stage.run_worker_loop(stage_ctx)
 
-      log_info "Done"
-    rescue => e
+      log_info 'Done'
+    rescue StandardError => e
       log_error "Unhandled error: #{e.message}"
       log_error e.backtrace.join("\n")
     ensure
@@ -55,7 +53,7 @@ module Minigun
 
       # If no upstream sources, this stage is disconnected
       if stage_ctx.sources_expected.empty?
-        log_info "No upstream sources, sending END signals and exiting"
+        log_info 'No upstream sources, sending END signals and exiting'
 
         # Send END to all downstream stages so they don't deadlock
         downstream = stage_ctx.dag.downstream(stage_ctx.stage_name)
@@ -63,7 +61,7 @@ module Minigun
           stage_ctx.stage_input_queues[target] << Message.end_signal(source: stage_ctx.stage_name)
         end
 
-        log_info "Done"
+        log_info 'Done'
         return true
       end
 
@@ -76,10 +74,10 @@ module Minigun
 
       # Calculate sources for workers (empty for autonomous stages)
       sources_expected = if @stage.run_mode == :autonomous
-                          Set.new
-                        else
-                          Set.new(dag.upstream(@stage_name))
-                        end
+                           Set.new
+                         else
+                           Set.new(dag.upstream(@stage_name))
+                         end
 
       StageContext.new(
         pipeline: @pipeline,

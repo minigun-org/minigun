@@ -9,8 +9,8 @@ require_relative '../lib/minigun'
 puts "=== Execution Context Examples ===\n\n"
 
 # Example 1: InlineContext - Synchronous execution
-puts "1. InlineContext (synchronous, same thread)"
-puts "-" * 50
+puts '1. InlineContext (synchronous, same thread)'
+puts '-' * 50
 
 class InlineExample
   include Minigun::DSL
@@ -28,7 +28,7 @@ class InlineExample
 
     # No execution context specified = inline (synchronous)
     processor :process do |item, output|
-      output << item * 2
+      output << (item * 2)
     end
 
     consumer :collect do |item|
@@ -44,8 +44,8 @@ puts "  Results: #{example.results.inspect}"
 puts "  ✓ Inline execution completes immediately\n\n"
 
 # Example 2: ThreadContext - Lightweight concurrency
-puts "2. ThreadContext (lightweight parallelism)"
-puts "-" * 50
+puts '2. ThreadContext (lightweight parallelism)'
+puts '-' * 50
 
 class ThreadExample
   include Minigun::DSL
@@ -65,8 +65,8 @@ class ThreadExample
     # Use thread pool for concurrent processing
     threads(5) do
       processor :process do |item, output|
-        sleep 0.01  # Simulate work
-        output << item * 2
+        sleep 0.01 # Simulate work
+        output << (item * 2)
       end
     end
 
@@ -83,8 +83,8 @@ puts "  Results (first 5): #{example.results.sort.first(5).inspect}"
 puts "  ✓ Thread execution with concurrency\n\n"
 
 # Example 3: RactorContext - True parallelism
-puts "3. RactorContext (true parallelism, Ruby 3+)"
-puts "-" * 50
+puts '3. RactorContext (true parallelism, Ruby 3+)'
+puts '-' * 50
 
 class RactorExample
   include Minigun::DSL
@@ -104,7 +104,7 @@ class RactorExample
     # Ractors provide true parallelism (falls back to threads if unavailable)
     ractors(2) do
       processor :process do |item, output|
-        output << item ** 2
+        output << (item**2)
       end
     end
 
@@ -122,8 +122,8 @@ puts "  ✓ Ractor execution (or thread fallback)\n\n"
 
 # Example 4: Process Isolation
 if Process.respond_to?(:fork)
-  puts "4. Process Isolation"
-  puts "-" * 50
+  puts '4. Process Isolation'
+  puts '-' * 50
 
   class ProcessExample
     include Minigun::DSL
@@ -167,8 +167,8 @@ else
 end
 
 # Example 5: Parallel Execution
-puts "5. Parallel Execution"
-puts "-" * 50
+puts '5. Parallel Execution'
+puts '-' * 50
 
 class ParallelExample
   include Minigun::DSL
@@ -187,8 +187,8 @@ class ParallelExample
 
     threads(5) do
       processor :process do |item, output|
-        sleep 0.01  # Simulate work
-        output << item * 3
+        sleep 0.01 # Simulate work
+        output << (item * 3)
       end
     end
 
@@ -208,8 +208,8 @@ puts "  Results: #{example.results.sort.inspect}"
 puts "  ✓ Parallel execution with multiple workers\n\n"
 
 # Example 6: Error Handling and Propagation
-puts "6. Error Handling and Propagation"
-puts "-" * 50
+puts '6. Error Handling and Propagation'
+puts '-' * 50
 
 class ErrorExample
   include Minigun::DSL
@@ -229,10 +229,9 @@ class ErrorExample
 
     threads(2) do
       processor :process do |item, output|
-        if item == 2
-          raise StandardError, "Error on item #{item}"
-        end
-        output << item * 2
+        raise StandardError, "Error on item #{item}" if item == 2
+
+        output << (item * 2)
       end
     end
 
@@ -249,8 +248,8 @@ puts "  Results: #{example.results.sort.inspect}"
 puts "  ✓ Error handling built-in\n\n"
 
 # Example 7: Context Termination
-puts "7. Context Termination"
-puts "-" * 50
+puts '7. Context Termination'
+puts '-' * 50
 
 class TerminationExample
   include Minigun::DSL
@@ -273,7 +272,7 @@ class TerminationExample
       end
     end
 
-    consumer :collect do |item|
+    consumer :collect do |_item|
       @mutex.synchronize { @count += 1 }
     end
   end
@@ -284,13 +283,13 @@ example.run
 puts "  Processed #{example.count} items"
 puts "  ✓ Clean termination\n\n"
 
-puts "=" * 50
-puts "Summary:"
-puts "  ✓ Unified API for all concurrency models"
-puts "  ✓ :inline - synchronous execution (default)"
-puts "  ✓ threads(N) - thread pool with N workers"
-puts "  ✓ ractors(N) - true parallelism (Ruby 3+)"
-puts "  ✓ process_per_item/batch - process isolation"
-puts "  ✓ Error handling built-in"
-puts "  ✓ Clean shutdown and resource management"
-puts "=" * 50
+puts '=' * 50
+puts 'Summary:'
+puts '  ✓ Unified API for all concurrency models'
+puts '  ✓ :inline - synchronous execution (default)'
+puts '  ✓ threads(N) - thread pool with N workers'
+puts '  ✓ ractors(N) - true parallelism (Ruby 3+)'
+puts '  ✓ process_per_item/batch - process isolation'
+puts '  ✓ Error handling built-in'
+puts '  ✓ Clean shutdown and resource management'
+puts '=' * 50

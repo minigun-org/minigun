@@ -18,9 +18,9 @@ class EtlPipelineExample
   pipeline do
     # EXTRACT: Read data from source
     producer :extract_data do |output|
-      puts "\n" + "="*60
-      puts "ETL PIPELINE: Extract Phase"
-      puts "="*60
+      puts "\n#{'=' * 60}"
+      puts 'ETL PIPELINE: Extract Phase'
+      puts '=' * 60
 
       # Simulate extracting data from multiple sources
       records = [
@@ -148,26 +148,23 @@ class EtlPipelineExample
         end
 
         @mutex.synchronize { @load_stats[:batches_loaded] += 1 }
-        puts "   ✓ Batch load complete"
+        puts '   ✓ Batch load complete'
       end
     end
 
     after_run do
-      puts "\n" + "="*60
-      puts "ETL PIPELINE STATISTICS"
-      puts "="*60
+      puts "\n#{'=' * 60}"
+      puts 'ETL PIPELINE STATISTICS'
+      puts '=' * 60
       puts "Records extracted: #{@load_stats[:records_extracted]}"
       puts "Records transformed: #{@load_stats[:records_transformed]}"
       puts "Batches loaded: #{@load_stats[:batches_loaded]}"
       puts "Transform rate: #{((@load_stats[:records_transformed].to_f / @load_stats[:records_extracted]) * 100).round(1)}%"
       puts "\nETL pipeline complete!"
-      puts "="*60
+      puts '=' * 60
     end
   end
 end
 
 # Run if executed directly
-if __FILE__ == $PROGRAM_NAME
-  EtlPipelineExample.new.run
-end
-
+EtlPipelineExample.new.run if __FILE__ == $PROGRAM_NAME

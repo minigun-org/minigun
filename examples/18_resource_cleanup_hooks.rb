@@ -33,31 +33,31 @@ class ResourceCleanupExample
     # Open file before producer starts
     before :read_file do
       @file_handle = open_file_handle
-      @resource_events << "Opened file handle"
+      @resource_events << 'Opened file handle'
     end
 
     # Close file after producer finishes
     after :read_file do
       close_file_handle
-      @resource_events << "Closed file handle"
+      @resource_events << 'Closed file handle'
     end
 
     producer :read_file do |output|
       # Simulate reading from file
-      @resource_events << "Reading from file..."
+      @resource_events << 'Reading from file...'
       10.times { |i| output << "record_#{i}" }
     end
 
     # Initialize API client before processing
     before :enrich_data do
       @api_client = initialize_api_client
-      @resource_events << "Initialized API client"
+      @resource_events << 'Initialized API client'
     end
 
     # Cleanup API client after processing
     after :enrich_data do
       shutdown_api_client
-      @resource_events << "Shutdown API client"
+      @resource_events << 'Shutdown API client'
     end
 
     processor :enrich_data do |record, output|
@@ -72,7 +72,7 @@ class ResourceCleanupExample
     process_per_batch(max: 2) do
       # Close connections before forking
       before_fork :save_to_db do
-        @resource_events << "Closing connections before fork"
+        @resource_events << 'Closing connections before fork'
       end
 
       # Reopen connections after forking
@@ -80,7 +80,7 @@ class ResourceCleanupExample
         # Log to temp file (child process can't mutate parent's array)
         File.open(@temp_events_file.path, 'a') do |f|
           f.flock(File::LOCK_EX)
-          f.puts("Reopening connections in child process")
+          f.puts('Reopening connections in child process')
           f.flock(File::LOCK_UN)
         end
       end
@@ -97,9 +97,7 @@ class ResourceCleanupExample
 
     after_run do
       # Read fork results from temp files
-      if File.exist?(@temp_file.path)
-        @results = File.readlines(@temp_file.path).map(&:strip)
-      end
+      @results = File.readlines(@temp_file.path).map(&:strip) if File.exist?(@temp_file.path)
       if File.exist?(@temp_events_file.path)
         fork_events = File.readlines(@temp_events_file.path).map(&:strip)
         @resource_events.concat(fork_events)
@@ -110,22 +108,22 @@ class ResourceCleanupExample
   private
 
   def open_file_handle
-    @resource_events << "Opening file..."
+    @resource_events << 'Opening file...'
     "FILE_HANDLE_#{Process.pid}"
   end
 
   def close_file_handle
-    @resource_events << "Closing file..."
+    @resource_events << 'Closing file...'
     @file_handle = nil
   end
 
   def initialize_api_client
-    @resource_events << "Connecting to API..."
+    @resource_events << 'Connecting to API...'
     "API_CLIENT_#{Process.pid}"
   end
 
   def shutdown_api_client
-    @resource_events << "Disconnecting from API..."
+    @resource_events << 'Disconnecting from API...'
     @api_client = nil
   end
 
@@ -154,4 +152,3 @@ if __FILE__ == $PROGRAM_NAME
     example.cleanup
   end
 end
-

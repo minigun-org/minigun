@@ -9,8 +9,8 @@ require_relative '../lib/minigun'
 puts "=== Context Pool Examples ===\n\n"
 
 # Example 1: Basic Context Pool
-puts "1. Basic Context Pool"
-puts "-" * 50
+puts '1. Basic Context Pool'
+puts '-' * 50
 
 class BasicPoolExample
   include Minigun::DSL
@@ -31,7 +31,7 @@ class BasicPoolExample
     threads(3) do
       processor :process do |item, output|
         sleep 0.05
-        output << item * 2
+        output << (item * 2)
       end
     end
 
@@ -48,8 +48,8 @@ puts "  Results: #{example.results.sort.first(5).inspect}..."
 puts "  ✓ Pool manages concurrency automatically\n\n"
 
 # Example 2: Pool Capacity Management
-puts "2. Pool Capacity Management"
-puts "-" * 50
+puts '2. Pool Capacity Management'
+puts '-' * 50
 
 class CapacityExample
   include Minigun::DSL
@@ -89,8 +89,8 @@ puts "  Processed #{example.results.size} items in #{elapsed.round(2)}s"
 puts "  ✓ Pool limits concurrency as expected\n\n"
 
 # Example 3: Pooled Parallel Execution
-puts "3. Pooled Parallel Execution"
-puts "-" * 50
+puts '3. Pooled Parallel Execution'
+puts '-' * 50
 
 class ParallelExample
   include Minigun::DSL
@@ -109,7 +109,7 @@ class ParallelExample
 
     threads(10) do
       processor :process do |item, output|
-        output << item * 2
+        output << (item * 2)
       end
     end
 
@@ -125,8 +125,8 @@ puts "  Processed #{example.results.size} items with 10-worker pool"
 puts "  ✓ Efficient parallel processing\n\n"
 
 # Example 4: Context Reuse
-puts "4. Context Reuse"
-puts "-" * 50
+puts '4. Context Reuse'
+puts '-' * 50
 
 class ReuseExample
   include Minigun::DSL
@@ -163,8 +163,8 @@ puts "  Executed 20 tasks using #{unique_threads} unique threads"
 puts "  ✓ Threads are reused efficiently\n\n"
 
 # Example 5: Bulk Operations
-puts "5. Bulk Operations"
-puts "-" * 50
+puts '5. Bulk Operations'
+puts '-' * 50
 
 class BulkExample
   include Minigun::DSL
@@ -183,7 +183,7 @@ class BulkExample
 
     threads(20) do
       processor :process do |item, output|
-        output << item ** 2
+        output << (item**2)
       end
     end
 
@@ -203,8 +203,8 @@ puts "  Throughput: #{(example.results.size / elapsed).round(0)} items/sec"
 puts "  ✓ High-throughput bulk processing\n\n"
 
 # Example 6: Emergency Termination
-puts "6. Emergency Termination"
-puts "-" * 50
+puts '6. Emergency Termination'
+puts '-' * 50
 
 class TerminationExample
   include Minigun::DSL
@@ -223,12 +223,12 @@ class TerminationExample
 
     threads(5) do
       processor :process do |item, output|
-        sleep 0.01  # Simulate work
+        sleep 0.01 # Simulate work
         output << item
       end
     end
 
-    consumer :collect do |item|
+    consumer :collect do |_item|
       @mutex.synchronize { @completed += 1 }
     end
   end
@@ -240,8 +240,8 @@ puts "  Completed #{example.completed} tasks"
 puts "  ✓ Clean shutdown and resource cleanup\n\n"
 
 # Example 7: Real-World: Batch Processing
-puts "7. Real-World: Batch Processing"
-puts "-" * 50
+puts '7. Real-World: Batch Processing'
+puts '-' * 50
 
 class BatchProcessor
   include Minigun::DSL
@@ -281,11 +281,11 @@ puts "  Processed: #{processor.processed_count} items"
 puts "  Results: #{processor.results.map { |r| r[:result] }.join(', ')}"
 puts "  ✓ Production-ready batch processing\n\n"
 
-puts "=" * 50
-puts "Summary:"
-puts "  ✓ Prevents resource exhaustion"
-puts "  ✓ Automatic capacity management"
-puts "  ✓ Thread/process reuse"
-puts "  ✓ Clean lifecycle management"
-puts "  ✓ Production-ready patterns"
-puts "=" * 50
+puts '=' * 50
+puts 'Summary:'
+puts '  ✓ Prevents resource exhaustion'
+puts '  ✓ Automatic capacity management'
+puts '  ✓ Thread/process reuse'
+puts '  ✓ Clean lifecycle management'
+puts '  ✓ Production-ready patterns'
+puts '=' * 50

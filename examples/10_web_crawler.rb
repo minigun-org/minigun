@@ -9,7 +9,7 @@ require 'set'
 class WebCrawler
   include Minigun::DSL
 
-  max_threads 20  # High concurrency for I/O-bound web fetching
+  max_threads 20 # High concurrency for I/O-bound web fetching
 
   attr_reader :visited_urls, :pages_fetched, :links_extracted, :pages_processed, :start_url
 
@@ -38,13 +38,13 @@ class WebCrawler
   # Simulate fetching a web page
   def fetch_page(url)
     # In a real crawler, this would use Net::HTTP or similar
-    sleep 0.01  # Simulate network delay
+    sleep 0.01 # Simulate network delay
 
     # Simulate realistic page content
     paragraphs = rand(2..5)
     content = []
     paragraphs.times do |i|
-      content << "This is paragraph #{i + 1} of content from #{url}. " * rand(3..8)
+      content << ("This is paragraph #{i + 1} of content from #{url}. " * rand(3..8))
     end
 
     {
@@ -57,21 +57,19 @@ class WebCrawler
   end
 
   # Extract links from page content
-  def extract_links_from_page(source_url, content)
+  def extract_links_from_page(_source_url, _content)
     # In a real crawler, this would parse HTML with Nokogiri
     # For demo, generate plausible links based on the source URL
     num_links = rand(2..5)
 
     links = []
-    num_links.times do |i|
-      path = ['article', 'page', 'blog', 'post', 'category', 'product'].sample
+    num_links.times do |_i|
+      path = %w[article page blog post category product].sample
       links << "http://#{@domain}/#{path}/#{rand(1..100)}"
     end
 
     # Add some cross-domain links occasionally
-    if rand < 0.3
-      links << "http://external-site.com/page/#{rand(1..10)}"
-    end
+    links << "http://external-site.com/page/#{rand(1..10)}" if rand < 0.3
 
     links
   end
@@ -98,10 +96,10 @@ class WebCrawler
   pipeline do
     # Stage 1: Seed with initial URLs
     producer :seed_urls do |output|
-      puts "\n" + "="*60
+      puts "\n#{'=' * 60}"
       puts "WEB CRAWLER: Starting from #{@start_url}"
       puts "Max pages: #{@max_pages}, Max depth: #{@max_depth}"
-      puts "="*60
+      puts '=' * 60
 
       @seed_urls.each do |url|
         output << { url: url, depth: 0 }
@@ -171,7 +169,7 @@ class WebCrawler
       # Emit the page for storage
       output << page
 
-      # Note: In a real recursive crawler, we would emit links back to fetch_pages
+      # NOTE: In a real recursive crawler, we would emit links back to fetch_pages
       # For this demo, we just extract and track them to avoid complexity
       # To enable recursive crawling:
       # links.each do |link|
@@ -188,21 +186,19 @@ class WebCrawler
     end
 
     after_run do
-      puts "\n" + "="*60
-      puts "WEB CRAWLER STATISTICS"
-      puts "="*60
+      puts "\n#{'=' * 60}"
+      puts 'WEB CRAWLER STATISTICS'
+      puts '=' * 60
       puts "Start URL: #{@start_url}"
       puts "Pages crawled: #{@pages_crawled}"
       puts "Links found: #{@links_found}"
       puts "Unique URLs visited: #{@visited_urls.size}"
       puts "Pages processed: #{@pages_processed.size}"
 
-      if @pages_crawled > 0
-        puts "Average links per page: #{(@links_found.to_f / @pages_crawled).round(1)}"
-      end
+      puts "Average links per page: #{(@links_found.to_f / @pages_crawled).round(1)}" if @pages_crawled > 0
 
       puts "\nCrawling complete!"
-      puts "="*60
+      puts '=' * 60
     end
   end
 
@@ -232,4 +228,3 @@ if __FILE__ == $PROGRAM_NAME
   crawler2 = WebCrawler.new(seed_urls)
   crawler2.run
 end
-

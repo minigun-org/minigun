@@ -7,9 +7,9 @@
 
 require_relative '../lib/minigun'
 
-puts "=" * 60
-puts "threads(N) Block - Thread Pool Execution"
-puts "=" * 60
+puts '=' * 60
+puts 'threads(N) Block - Thread Pool Execution'
+puts '=' * 60
 
 class WebScraper
   include Minigun::DSL
@@ -31,12 +31,12 @@ class WebScraper
       processor :download do |url, output|
         # Simulate HTTP request
         sleep 0.01
-        output << { url: url, html: "<html>...</html>", fetched_at: Time.now }
+        output << { url: url, html: '<html>...</html>', fetched_at: Time.now }
       end
 
       processor :extract_links do |page, output|
         # Extract data
-        output << { url: page[:url], links: 5, title: "Page" }
+        output << { url: page[:url], links: 5, title: 'Page' }
       end
 
       consumer :store do |page|
@@ -53,6 +53,5 @@ puts "\nResults:"
 puts "  Downloaded: #{scraper.pages.size} pages"
 puts "  Total links: #{scraper.pages.sum { |p| p[:links] }}"
 puts "\n✓ All stages executed in shared thread pool of 10"
-puts "✓ Efficient for I/O-bound work"
-puts "✓ Threads reused across stages"
-
+puts '✓ Efficient for I/O-bound work'
+puts '✓ Threads reused across stages'

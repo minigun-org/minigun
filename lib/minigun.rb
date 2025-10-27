@@ -4,6 +4,7 @@ require 'set'
 require 'concurrent'
 require 'securerandom'
 require 'logger'
+require 'English'
 
 module Minigun
   class Error < StandardError; end

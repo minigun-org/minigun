@@ -9,9 +9,9 @@
 require_relative '../lib/minigun'
 require 'tempfile'
 
-puts "=" * 60
-puts "Batch + Process Per Batch Pattern"
-puts "=" * 60
+puts '=' * 60
+puts 'Batch + Process Per Batch Pattern'
+puts '=' * 60
 
 class BatchProcessor
   include Minigun::DSL
@@ -42,25 +42,23 @@ class BatchProcessor
     # Max 4 concurrent processes
     process_per_batch(max: 4) do
       consumer :process_in_isolation do |batch|
-        pid = Process.pid
+        Process.pid
 
         # Write to temp file (fork-safe)
         File.open(@temp_file.path, 'a') do |f|
           f.flock(File::LOCK_EX)
-          f.puts("1")  # Count one batch
+          f.puts('1') # Count one batch
           f.flock(File::LOCK_UN)
         end
 
         # Simulate CPU-intensive work
-        batch.each { |item| item ** 2 }
+        batch.each { |item| item**2 }
       end
     end
 
     after_run do
       # Read fork results from temp file
-      if File.exist?(@temp_file.path)
-        @batches_processed = File.readlines(@temp_file.path).size
-      end
+      @batches_processed = File.readlines(@temp_file.path).size if File.exist?(@temp_file.path)
     end
   end
 end
@@ -73,13 +71,13 @@ puts "  Batches processed: #{pipeline.batches_processed}"
 puts "  Unique PIDs: #{pipeline.unique_pids.size}"
 puts "  PIDs: #{pipeline.unique_pids.join(', ')}"
 puts "\n✓ Copy-on-Write optimization"
-puts "✓ Each batch in isolated process"
-puts "✓ Max 4 concurrent processes enforced"
-puts "✓ Efficient for CPU-bound work"
+puts '✓ Each batch in isolated process'
+puts '✓ Max 4 concurrent processes enforced'
+puts '✓ Efficient for CPU-bound work'
 
-puts "\n" + "=" * 60
-puts "Example 2: Dynamic Batch Sizes"
-puts "=" * 60
+puts "\n#{'=' * 60}"
+puts 'Example 2: Dynamic Batch Sizes'
+puts '=' * 60
 
 class DynamicBatching
   include Minigun::DSL
@@ -101,7 +99,7 @@ class DynamicBatching
     batch 25
 
     process_per_batch(max: 8) do
-      processor :quick_process do |batch, output|
+      processor :quick_process do |batch, _output|
         @mutex.synchronize { @small_batches += 1 }
         batch.map { |x| x * 2 }
       end
@@ -111,7 +109,7 @@ class DynamicBatching
     batch 100
 
     process_per_batch(max: 2) do
-      consumer :heavy_process do |batch|
+      consumer :heavy_process do |_batch|
         @mutex.synchronize { @large_batches += 1 }
       end
     end
@@ -125,12 +123,12 @@ puts "\nResults:"
 puts "  Small batches (25 items): #{pipeline.small_batches}"
 puts "  Large batches (100 items): #{pipeline.large_batches}"
 puts "\n✓ Multiple batch stages in one pipeline"
-puts "✓ Different batch sizes for different purposes"
-puts "✓ Flexible work distribution"
+puts '✓ Different batch sizes for different purposes'
+puts '✓ Flexible work distribution'
 
-puts "\n" + "=" * 60
-puts "Example 3: Configurable Batch Processing"
-puts "=" * 60
+puts "\n#{'=' * 60}"
+puts 'Example 3: Configurable Batch Processing'
+puts '=' * 60
 
 class ConfigurableBatching
   include Minigun::DSL
@@ -175,6 +173,5 @@ end
 end
 
 puts "\n✓ Runtime-configurable batching"
-puts "✓ Adapt to workload and resources"
-puts "✓ Instance variables accessible in pipeline"
-
+puts '✓ Adapt to workload and resources'
+puts '✓ Instance variables accessible in pipeline'

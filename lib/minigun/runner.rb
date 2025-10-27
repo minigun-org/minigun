@@ -13,7 +13,7 @@ module Minigun
       @job_start = nil
       @job_end = nil
       @original_handlers = {}
-      @pipeline_stats = []  # Collect stats from all pipelines
+      @pipeline_stats = [] # Collect stats from all pipelines
 
       setup_signal_handlers
     end
@@ -58,7 +58,6 @@ module Minigun
 
       result
     end
-
 
     def setup_signal_handlers
       # Only set up handlers in the main process
@@ -149,4 +148,3 @@ module Minigun
     end
   end
 end
-

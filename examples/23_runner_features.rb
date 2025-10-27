@@ -20,8 +20,8 @@ class RunnerFeaturesExample
 
   pipeline do
     producer :generate do |output|
-      puts "[Producer] Generating 10 items"
-      10.times { |i| output << i + 1 }
+      puts '[Producer] Generating 10 items'
+      10.times { |i| output << (i + 1) }
     end
 
     processor :double do |num, output|
@@ -38,24 +38,24 @@ class RunnerFeaturesExample
         # On Unix systems, run 'ps aux | grep minigun' while this is running
         # You'll see: "minigun-default-consumer-12345"
         puts "[Fork:#{Process.pid}] Processing batch of #{batch.size} items"
-        sleep 0.5  # Keep process alive briefly so you can see it in ps
+        sleep 0.5 # Keep process alive briefly so you can see it in ps
         batch.each { |num| @results << num }
       end
     end
   end
 end
 
-if __FILE__ == $0
+if __FILE__ == $PROGRAM_NAME
   puts "=== Runner Features Demo ===\n\n"
 
   example = RunnerFeaturesExample.new
 
-  puts "--- Using run() - Full Production Execution ---"
-  puts "Features:"
-  puts "  • Job ID in logs: [Job:abc123]"
-  puts "  • Signal handling: Try Ctrl+C (graceful shutdown)"
+  puts '--- Using run() - Full Production Execution ---'
+  puts 'Features:'
+  puts '  • Job ID in logs: [Job:abc123]'
+  puts '  • Signal handling: Try Ctrl+C (graceful shutdown)'
   puts "  • Process title: Run 'ps aux | grep minigun' in another terminal"
-  puts "  • Statistics: items/min at completion"
+  puts '  • Statistics: items/min at completion'
   puts "  • GC before fork: Memory optimized\n\n"
 
   example.run
@@ -65,12 +65,11 @@ if __FILE__ == $0
   puts "Use this for testing or embedding (no Runner overhead)\n\n"
 
   example2 = RunnerFeaturesExample.new
-  count = example2.perform  # Direct, no job ID, no signals
+  count = example2.perform # Direct, no job ID, no signals
   puts "\nDirect execution complete: #{count} items"
 
   puts "\n=== Key Differences ==="
-  puts "run()     - Production: signals, job ID, stats, cleanup"
-  puts "perform() - Testing: lightweight, no overhead"
+  puts 'run()     - Production: signals, job ID, stats, cleanup'
+  puts 'perform() - Testing: lightweight, no overhead'
   puts "\n✓ Runner features demonstrated!"
 end
-

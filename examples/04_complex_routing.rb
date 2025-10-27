@@ -23,14 +23,14 @@ class ComplexRoutingPipeline
 
   pipeline do
     # Producer splits to validator and logger
-    producer :fetch, to: [:validate, :log] do |output|
+    producer :fetch, to: %i[validate log] do |output|
       10.times { |i| output << (i + 1) }
     end
 
     # Validator splits to transform and archive
-    processor :validate, to: [:transform, :archive] do |num, output|
+    processor :validate, to: %i[transform archive] do |num, output|
       @mutex.synchronize { validated << num }
-      output << num if num.even?  # Only process even numbers
+      output << num if num.even? # Only process even numbers
     end
 
     # Transform and store
@@ -61,7 +61,7 @@ if __FILE__ == $PROGRAM_NAME
   pipeline = ComplexRoutingPipeline.new
   pipeline.run
 
-  puts "Complex Routing Pipeline Results:"
+  puts 'Complex Routing Pipeline Results:'
   puts "\nInput: 1-10"
   puts "Logged (all): #{pipeline.logged.sort.inspect}"
   puts "Validated (all): #{pipeline.validated.sort.inspect}"
@@ -69,4 +69,3 @@ if __FILE__ == $PROGRAM_NAME
   puts "Transformed (evens x10): #{pipeline.transformed.sort.inspect}"
   puts "Stored (evens x10): #{pipeline.stored.sort.inspect}"
 end
-

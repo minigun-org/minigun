@@ -48,25 +48,23 @@ class InlineHookExample
 
     # Inline hooks with multiple operations
     processor :validate,
-              before: -> {
+              before: lambda {
                 @events << :validate_start
                 @validation_count = 0
               },
-              after: -> {
+              after: lambda {
                 @events << :validate_end
                 puts "Validated #{@validation_count} items"
               } do |num, output|
       @validation_count += 1
-      if num > 0
-        output << num
-      end
+      output << num if num > 0
     end
 
     # Inline hooks for processors
     processor :transform,
               before: -> { @events << :transform_start },
               after: -> { @events << :transform_end } do |num, output|
-      output << num * 2
+      output << (num * 2)
     end
 
     # Accumulator batches items
@@ -77,11 +75,11 @@ class InlineHookExample
       consumer :save_data,
                before: -> { @timer[:save_start] = Time.now },
                after: -> { @timer[:save_end] = Time.now },
-               before_fork: -> {
+               before_fork: lambda {
                  @events << :before_fork
-                 puts "About to fork..."
+                 puts 'About to fork...'
                },
-               after_fork: -> {
+               after_fork: lambda {
                  # Write event to file (child process can't mutate parent's @events)
                  File.open(@events_file.path, 'a') do |f|
                    f.flock(File::LOCK_EX)
@@ -101,9 +99,7 @@ class InlineHookExample
 
     after_run do
       # Read fork results from temp file
-      if File.exist?(@temp_file.path)
-        @results = File.readlines(@temp_file.path).map { |line| line.strip.to_i }
-      end
+      @results = File.readlines(@temp_file.path).map { |line| line.strip.to_i } if File.exist?(@temp_file.path)
 
       # Read fork events from events file
       if File.exist?(@events_file.path)
@@ -129,16 +125,11 @@ if __FILE__ == $PROGRAM_NAME
     example.events.each { |event| puts "  - #{event}" }
 
     puts "\n=== Timing ==="
-    if example.timer[:fetch_start] && example.timer[:fetch_end]
-      puts "Fetch duration: #{(example.timer[:fetch_end] - example.timer[:fetch_start]).round(3)}s"
-    end
-    if example.timer[:save_start] && example.timer[:save_end]
-      puts "Save duration:  #{(example.timer[:save_end] - example.timer[:save_start]).round(3)}s"
-    end
+    puts "Fetch duration: #{(example.timer[:fetch_end] - example.timer[:fetch_start]).round(3)}s" if example.timer[:fetch_start] && example.timer[:fetch_end]
+    puts "Save duration:  #{(example.timer[:save_end] - example.timer[:save_start]).round(3)}s" if example.timer[:save_start] && example.timer[:save_end]
 
     puts "\n✓ Inline hook procs example complete!"
   ensure
     example.cleanup
   end
 end
-

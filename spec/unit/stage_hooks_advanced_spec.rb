@@ -38,7 +38,7 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
 
           processor :proc do |item, output|
             @execution_order << '7_processor_block'
-            output << item * 2
+            output << (item * 2)
           end
 
           before(:proc) { @execution_order << '6_processor_before' }
@@ -48,7 +48,7 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
 
           # Use process_per_batch so forking actually happens
           process_per_batch(max: 1) do
-            consumer :cons do |item|
+            consumer :cons do |_item|
               # Write to temp file (fork-safe)
               File.open(@temp_order_file.path, 'a') do |f|
                 f.flock(File::LOCK_EX)
@@ -76,7 +76,7 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
               f.flock(File::LOCK_UN)
             end
           end
-          
+
           after_run do
             # Read fork events from temp file
             if File.exist?(@temp_order_file.path)
@@ -91,7 +91,7 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
 
     it 'executes hooks in correct order' do
       pipeline = complex_pipeline.new
-      
+
       begin
         pipeline.run
 
@@ -149,11 +149,9 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
           end
 
           after :gen do
-            begin
-              raise StandardError, "Error in hook"
-            rescue StandardError => e
-              @hook_error_caught = true
-            end
+            raise StandardError, 'Error in hook'
+          rescue StandardError
+            @hook_error_caught = true
           end
 
           consumer :collect do |item|
@@ -200,16 +198,16 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
           end
 
           before :transform do
-            @items_seen << "about to transform"
+            @items_seen << 'about to transform'
           end
 
           processor :transform do |item, output|
             @items_seen << item
-            output << item * 2
+            output << (item * 2)
           end
 
           after :transform do
-            @items_seen << "transformed"
+            @items_seen << 'transformed'
           end
 
           consumer :collect do |item|
@@ -224,7 +222,7 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
       pipeline.run
 
       expect(pipeline.counter).to eq(11) # +1 before, +10 after
-      expect(pipeline.items_seen).to include("about to transform", 10, 20, "transformed")
+      expect(pipeline.items_seen).to include('about to transform', 10, 20, 'transformed')
       expect(pipeline.results).to contain_exactly(20, 40)
     end
   end
@@ -247,23 +245,18 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
 
           before :gen do
             @events << :before_1
-          end
-
-          before :gen do
             @events << :before_2
-          end
 
-          before :gen do
             @events << :before_3
           end
 
-          after :gen do
-            @events << :after_1
-          end
+
 
           after :gen do
+            @events << :after_1
             @events << :after_2
           end
+
 
           consumer :collect do |item|
           end
@@ -364,14 +357,14 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
         end
 
         pipeline do
-          producer :gen, to: [:proc1, :proc2] do |output|
+          producer :gen, to: %i[proc1 proc2] do |output|
             output << 1
             output << 2
           end
 
           # Both processors get data from gen via fan-out routing
           processor :proc1, to: :collect do |item, output|
-            output << item * 10
+            output << (item * 10)
           end
 
           before(:proc1) do
@@ -379,7 +372,7 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
           end
 
           processor :proc2, to: :collect do |item, output|
-            output << item * 100
+            output << (item * 100)
           end
 
           before(:proc2) do
@@ -434,7 +427,7 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
           end
 
           processor :transform do |item, output|
-            output << item * 2
+            output << (item * 2)
           end
 
           consumer :collect do |item|
@@ -453,4 +446,3 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
     end
   end
 end
-

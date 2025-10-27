@@ -19,14 +19,14 @@ class NewDslExample
   pipeline :generator, to: :processor do
     # Producer: gets output queue
     producer :generate do |output|
-      puts "[Generator] Creating numbers..."
+      puts '[Generator] Creating numbers...'
       5.times { |i| output << (i + 1) }
     end
 
     # Processor: gets item and output queue
     processor :output do |num, output|
       puts "[Generator] Sending: #{num}"
-      output << num  # Send to next pipeline
+      output << num # Send to next pipeline
     end
   end
 
@@ -35,7 +35,7 @@ class NewDslExample
     processor :double do |num, output|
       doubled = num * 2
       puts "[Processor] #{num} * 2 = #{doubled}"
-      output << doubled  # Fixed: was outputting num instead of doubled
+      output << doubled # Fixed: was outputting num instead of doubled
     end
   end
 
@@ -49,16 +49,15 @@ class NewDslExample
   end
 end
 
-if __FILE__ == $0
+if __FILE__ == $PROGRAM_NAME
   puts "=== New DSL Example ===\n\n"
   puts "Three pipelines: Generator -> Processor -> Collector\n\n"
 
-  example = NewDslExample.new  # Fixed: was SimplePipelineExample
+  example = NewDslExample.new # Fixed: was SimplePipelineExample
   example.run
 
   puts "\n=== Final Results ===\n"
   puts "Collected: #{example.results.sort.inspect}"
-  puts "Expected: [2, 4, 6, 8, 10]"
-  puts example.results.sort == [2, 4, 6, 8, 10] ? "✓ Success!" : "✗ Failed"
+  puts 'Expected: [2, 4, 6, 8, 10]'
+  puts example.results.sort == [2, 4, 6, 8, 10] ? '✓ Success!' : '✗ Failed'
 end
-

@@ -66,7 +66,7 @@ class DatabaseConnectionExample
     end
 
     producer :fetch_user_ids do |output|
-      @connection_events << "Producer using DB connection"
+      @connection_events << 'Producer using DB connection'
       # Simulate fetching IDs from database
       (1..10).each { |id| output << id }
     end
@@ -94,9 +94,7 @@ class DatabaseConnectionExample
 
     after_run do
       # Read fork results from temp files
-      if File.exist?(@temp_file.path)
-        @results = File.readlines(@temp_file.path).map(&:strip)
-      end
+      @results = File.readlines(@temp_file.path).map(&:strip) if File.exist?(@temp_file.path)
       if File.exist?(@temp_events_file.path)
         fork_events = File.readlines(@temp_events_file.path).map(&:strip)
         @connection_events.concat(fork_events)
@@ -127,7 +125,8 @@ class DatabaseConnectionExample
   end
 
   def save_to_database(user_id)
-    raise "Not connected to database!" unless @db_connected
+    raise 'Not connected to database!' unless @db_connected
+
     "User #{user_id} saved"
   end
 end
@@ -148,4 +147,3 @@ if __FILE__ == $PROGRAM_NAME
     example.cleanup
   end
 end
-

@@ -18,7 +18,7 @@ module Minigun
         use_ipc: config[:use_ipc] || false
       }
 
-      @stages = stages || {}  # { stage_name => Stage }
+      @stages = stages || {} # { stage_name => Stage }
 
       # Pipeline-level hooks (run once per pipeline)
       @hooks = hooks || {
@@ -40,16 +40,15 @@ module Minigun
       @stage_order = stage_order || []
 
       # Statistics tracking
-      @stats = stats  # Will be initialized in run() if nil
-
+      @stats = stats # Will be initialized in run() if nil
     end
 
     # Duplicate this pipeline for inheritance
     def dup
-      new_pipeline = Pipeline.new(
+      Pipeline.new(
         @name,
         @config.dup,
-        stages: @stages.transform_values(&:dup),  # Deep copy - dup each stage object
+        stages: @stages.transform_values(&:dup), # Deep copy - dup each stage object
         hooks: {
           before_run: @hooks[:before_run].dup,
           after_run: @hooks[:after_run].dup,
@@ -65,8 +64,6 @@ module Minigun
         dag: @dag.dup,
         stage_order: @stage_order.dup
       )
-
-      new_pipeline
     end
 
     # Add a stage to this pipeline
@@ -74,15 +71,11 @@ module Minigun
     def add_stage(type, name, options = {}, &block)
       # Extract routing information
       to_targets = options.delete(:to)
-      if to_targets
-        Array(to_targets).each { |target| @dag.add_edge(name, target) }
-      end
+      Array(to_targets).each { |target| @dag.add_edge(name, target) } if to_targets
 
       # Extract reverse routing (from:)
       from_sources = options.delete(:from)
-      if from_sources
-        Array(from_sources).each { |source| @dag.add_edge(source, name) }
-      end
+      Array(from_sources).each { |source| @dag.add_edge(source, name) } if from_sources
 
       # Extract inline hook procs (Option 3)
       if (before_proc = options.delete(:before))
@@ -125,9 +118,7 @@ module Minigun
               end
 
       # Check for name collision
-      if @stages.key?(name)
-        raise Minigun::Error, "Stage name collision: '#{name}' is already defined in pipeline '#{@name}'"
-      end
+      raise Minigun::Error, "Stage name collision: '#{name}' is already defined in pipeline '#{@name}'" if @stages.key?(name)
 
       # Store stage by name
       @stages[name] = stage
@@ -205,7 +196,7 @@ module Minigun
     end
 
     # Main pipeline execution logic
-    def run_pipeline(context)
+    def run_pipeline(_context)
       # Insert router stages for fan-out
       insert_router_stages_for_fan_out
 
@@ -219,7 +210,7 @@ module Minigun
       @runtime_edges = Concurrent::Hash.new { |h, k| h[k] = Concurrent::Set.new }
 
       # Start unified workers for ALL stages (producers and consumers)
-      @stages.each do |stage_name, stage|
+      @stages.each_value do |stage|
         worker = Worker.new(self, stage, @config)
         worker.start
         @stage_threads << worker
@@ -240,9 +231,9 @@ module Minigun
         # Use stage's queue_size setting (bounded SizedQueue or unbounded Queue)
         size = stage.queue_size
         queues[stage_name] = if size.nil?
-                               Queue.new  # Unbounded queue
+                               Queue.new # Unbounded queue
                              else
-                               SizedQueue.new(size)  # Bounded queue with backpressure
+                               SizedQueue.new(size) # Bounded queue with backpressure
                              end
       end
 
@@ -258,28 +249,28 @@ module Minigun
         downstream = @dag.downstream(stage_name)
 
         # Fan-out: stage has multiple downstream consumers
-        if downstream.size > 1
-          # Get explicit routing strategy from stage options, or default to :broadcast
-          routing_strategy = stage.options[:routing] || :broadcast
+        next unless downstream.size > 1
 
-          # Create the appropriate router subclass
-          router_name = :"#{stage_name}_router"
-          router_stage = if routing_strategy == :round_robin
-                           RouterRoundRobinStage.new(name: router_name, targets: downstream.dup)
-                         else
-                           RouterBroadcastStage.new(name: router_name, targets: downstream.dup)
-                         end
-          stages_to_add << [router_name, router_stage]
+        # Get explicit routing strategy from stage options, or default to :broadcast
+        routing_strategy = stage.options[:routing] || :broadcast
 
-          # Update DAG: stage -> router -> [downstream targets]
-          dag_updates << {
-            remove_edges: downstream.map { |target| [stage_name, target] },
-            add_edge: [stage_name, router_name],
-            add_router_edges: downstream.map { |target| [router_name, target] }
-          }
+        # Create the appropriate router subclass
+        router_name = :"#{stage_name}_router"
+        router_stage = if routing_strategy == :round_robin
+                         RouterRoundRobinStage.new(name: router_name, targets: downstream.dup)
+                       else
+                         RouterBroadcastStage.new(name: router_name, targets: downstream.dup)
+                       end
+        stages_to_add << [router_name, router_stage]
 
-          log_info "[Pipeline:#{@name}] Inserting RouterStage '#{router_name}' (#{routing_strategy}) for fan-out: #{stage_name} -> #{downstream.join(', ')}"
-        end
+        # Update DAG: stage -> router -> [downstream targets]
+        dag_updates << {
+          remove_edges: downstream.map { |target| [stage_name, target] },
+          add_edge: [stage_name, router_name],
+          add_router_edges: downstream.map { |target| [router_name, target] }
+        }
+
+        log_info "[Pipeline:#{@name}] Inserting RouterStage '#{router_name}' (#{routing_strategy}) for fan-out: #{stage_name} -> #{downstream.join(', ')}"
       end
 
       # Apply DAG updates
@@ -307,9 +298,7 @@ module Minigun
       targets = @dag.downstream(stage_name)
 
       # If no targets and we have output queues, this is an output stage
-      if targets.empty? && !@output_queues.empty? && !is_terminal_stage?(stage_name)
-        return [:output]
-      end
+      return [:output] if targets.empty? && !@output_queues.empty? && !is_terminal_stage?(stage_name)
 
       targets
     end
@@ -330,20 +319,17 @@ module Minigun
       end
     end
 
-
     private
-
-
 
     def build_dag_routing!
       # Handle multiple producers specially - they should all connect to first non-producer
-      puts "[DAG BUILD] BEFORE handle_multiple_producers: edges=#{@dag.edges.map {|k,v| "#{k}->#{v.to_a.join(',')}"}.join(' | ')}"
+      puts "[DAG BUILD] BEFORE handle_multiple_producers: edges=#{@dag.edges.map { |k, v| "#{k}->#{v.to_a.join(',')}" }.join(' | ')}"
       handle_multiple_producers_routing!
-      puts "[DAG BUILD] AFTER handle_multiple_producers: edges=#{@dag.edges.map {|k,v| "#{k}->#{v.to_a.join(',')}"}.join(' | ')}"
+      puts "[DAG BUILD] AFTER handle_multiple_producers: edges=#{@dag.edges.map { |k, v| "#{k}->#{v.to_a.join(',')}" }.join(' | ')}"
 
       # Fill any remaining sequential gaps (handles fan-out, siblings, cycles)
       fill_sequential_gaps_by_definition_order!
-      puts "[DAG BUILD] AFTER fill_sequential_gaps: edges=#{@dag.edges.map {|k,v| "#{k}->#{v.to_a.join(',')}"}.join(' | ')}"
+      puts "[DAG BUILD] AFTER fill_sequential_gaps: edges=#{@dag.edges.map { |k, v| "#{k}->#{v.to_a.join(',')}" }.join(' | ')}"
 
       @dag.validate!
       validate_stages_exist!
@@ -353,9 +339,7 @@ module Minigun
 
     def validate_stages_exist!
       @dag.nodes.each do |node_name|
-        unless find_stage(node_name)
-          raise Minigun::Error, "[Pipeline:#{@name}] Routing references non-existent stage '#{node_name}'"
-        end
+        raise Minigun::Error, "[Pipeline:#{@name}] Routing references non-existent stage '#{node_name}'" unless find_stage(node_name)
       end
     end
 
@@ -369,11 +353,9 @@ module Minigun
 
         # Find the next non-autonomous stage after this producer
         producer_index = @stage_order.index(producer_name)
-        next_stage = @stage_order[(producer_index + 1)..-1].find { |s| find_stage(s)&.run_mode != :autonomous }
+        next_stage = @stage_order[(producer_index + 1)..].find { |s| find_stage(s)&.run_mode != :autonomous }
 
-        if next_stage
-          @dag.add_edge(producer_name, next_stage)
-        end
+        @dag.add_edge(producer_name, next_stage) if next_stage
       end
     end
 
@@ -406,9 +388,7 @@ module Minigun
 
         # Skip if BOTH current and next are composite stages (isolated pipelines)
         current_stage = find_stage(stage_name)
-        if current_stage.run_mode == :composite && next_stage_obj.run_mode == :composite
-          next
-        end
+        next if current_stage.run_mode == :composite && next_stage_obj.run_mode == :composite
 
         # Skip if this is a fan-out pattern (next_stage is a sibling)
         next if @dag.fan_out_siblings?(stage_name, next_stage)

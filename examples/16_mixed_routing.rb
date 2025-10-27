@@ -19,8 +19,8 @@ class MixedRoutingExample
 
   pipeline do
     # Explicit routing: producer fans out to two paths
-    producer :generate, to: [:path_a, :path_b] do |output|
-      puts "[Producer] Generating 3 items"
+    producer :generate, to: %i[path_a path_b] do |output|
+      puts '[Producer] Generating 3 items'
       3.times { |i| output << i }
     end
 
@@ -54,17 +54,17 @@ class MixedRoutingExample
   end
 end
 
-if __FILE__ == $0
+if __FILE__ == $PROGRAM_NAME
   puts "=== Mixed Routing Example ===\n\n"
-  puts "This demonstrates combining explicit and sequential routing:"
-  puts "  • Producer explicitly routes to [:path_a, :path_b]"
-  puts "  • path_a explicitly routes to :collect"
-  puts "  • path_b uses sequential routing to :transform"
+  puts 'This demonstrates combining explicit and sequential routing:'
+  puts '  • Producer explicitly routes to [:path_a, :path_b]'
+  puts '  • path_a explicitly routes to :collect'
+  puts '  • path_b uses sequential routing to :transform'
   puts "  • transform explicitly routes to :collect\n\n"
 
-  puts "Flow diagram:"
-  puts "                    ┌─→ path_a (to: :collect) ─→ collect"
-  puts "  generate (to:...) ┤"
+  puts 'Flow diagram:'
+  puts '                    ┌─→ path_a (to: :collect) ─→ collect'
+  puts '  generate (to:...) ┤'
   puts "                    └─→ path_b → transform (to: :collect) → collect\n\n"
 
   example = MixedRoutingExample.new
@@ -76,18 +76,17 @@ if __FILE__ == $0
   puts "Final results: #{example.final.sort.inspect}"
 
   puts "\nExpected final results:"
-  puts "  • From Path A: 0*10=0, 1*10=10, 2*10=20"
-  puts "  • From Path B→Transform: (0*100)+1=1, (1*100)+1=101, (2*100)+1=201"
+  puts '  • From Path A: 0*10=0, 1*10=10, 2*10=20'
+  puts '  • From Path B→Transform: (0*100)+1=1, (1*100)+1=101, (2*100)+1=201'
   puts "  • Combined: #{[0, 1, 10, 20, 101, 201].inspect}"
 
   success = example.final.sort == [0, 1, 10, 20, 101, 201]
   puts "\nVerification: #{success ? '✓' : '✗'}"
 
   puts "\n=== Key Concepts ===\n"
-  puts "• Explicit routing (to: :target) takes precedence"
-  puts "• Sequential routing fills gaps where explicit routing is not defined"
-  puts "• You can mix both styles in the same pipeline"
-  puts "• This provides flexibility for complex routing patterns"
+  puts '• Explicit routing (to: :target) takes precedence'
+  puts '• Sequential routing fills gaps where explicit routing is not defined'
+  puts '• You can mix both styles in the same pipeline'
+  puts '• This provides flexibility for complex routing patterns'
   puts "\n✓ Mixed routing complete!"
 end
-

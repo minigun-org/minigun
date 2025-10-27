@@ -12,8 +12,8 @@ module Minigun
 
     def initialize(nodes: [], edges: nil, reverse_edges: nil)
       @nodes = nodes.dup # Track insertion order
-      @edges = edges ? edges.dup : Hash.new { |h, k| h[k] = [] }  # stage_name => [downstream_stage_names]
-      @reverse_edges = reverse_edges ? reverse_edges.dup : Hash.new { |h, k| h[k] = [] }  # stage_name => [upstream_stage_names]
+      @edges = edges ? edges.dup : Hash.new { |h, k| h[k] = [] } # stage_name => [downstream_stage_names]
+      @reverse_edges = reverse_edges ? reverse_edges.dup : Hash.new { |h, k| h[k] = [] } # stage_name => [upstream_stage_names]
     end
 
     # Duplicate this DAG
@@ -36,9 +36,7 @@ module Minigun
       add_node(to)
 
       # Check for circular dependencies
-      if would_create_cycle?(from, to)
-        raise Minigun::Error, "Circular dependency detected: adding edge #{from} -> #{to} would create a cycle"
-      end
+      raise Minigun::Error, "Circular dependency detected: adding edge #{from} -> #{to} would create a cycle" if would_create_cycle?(from, to)
 
       @edges[from] << to unless @edges[from].include?(to)
       @reverse_edges[to] << from unless @reverse_edges[to].include?(from)
@@ -85,15 +83,13 @@ module Minigun
       # First check that all edges point to existing nodes
       @edges.each_value do |targets|
         targets.each do |target|
-          unless @nodes.include?(target)
-            raise Minigun::Error, "Stage routes to non-existent stage '#{target}'"
-          end
+          raise Minigun::Error, "Stage routes to non-existent stage '#{target}'" unless @nodes.include?(target)
         end
       end
 
       # Check for cycles using TSort
       begin
-        tsort  # This will raise TSort::Cyclic if there's a cycle
+        tsort # This will raise TSort::Cyclic if there's a cycle
       rescue TSort::Cyclic => e
         raise Minigun::Error, "Pipeline contains a cycle: #{e.message}"
       end
@@ -102,9 +98,9 @@ module Minigun
     # Topological sort (provided by TSort)
     # Returns nodes in dependency order (sources first, sinks last)
     def topological_sort
-      tsort.reverse  # TSort returns reverse order, so we flip it
+      tsort.reverse # TSort returns reverse order, so we flip it
     rescue TSort::Cyclic
-      []  # Return empty if cyclic
+      [] # Return empty if cyclic
     end
 
     # Build default sequential routing
@@ -141,6 +137,7 @@ module Minigun
       while queue.any?
         current = queue.shift
         next if visited.include?(current)
+
         visited.add(current)
 
         return true if current == from
@@ -154,6 +151,7 @@ module Minigun
     # Check if two nodes are fan-out siblings (share upstream and don't connect to each other)
     def fan_out_siblings?(node1, node2)
       return false unless siblings(node1).include?(node2)
+
       # They're siblings - check if one routes to the other
       !downstream(node1).include?(node2) && !downstream(node2).include?(node1)
     end
@@ -169,7 +167,7 @@ module Minigun
       until remaining.empty?
         # Find all nodes with no incoming edges
         current_group = remaining.select { |n| in_degree[n] == 0 }
-        break if current_group.empty?  # Cycle detected
+        break if current_group.empty? # Cycle detected
 
         groups << current_group
 
@@ -187,11 +185,11 @@ module Minigun
     def to_s
       lines = ["DAG with #{@nodes.size} nodes:"]
       @edges.each do |from, targets|
-        if targets.empty?
-          lines << "  #{from} → (terminal)"
-        else
-          lines << "  #{from} → #{targets.join(', ')}"
-        end
+        lines << if targets.empty?
+                   "  #{from} → (terminal)"
+                 else
+                   "  #{from} → #{targets.join(', ')}"
+                 end
       end
       lines.join("\n")
     end
@@ -207,4 +205,3 @@ module Minigun
     end
   end
 end
-

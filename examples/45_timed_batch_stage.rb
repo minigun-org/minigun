@@ -13,7 +13,7 @@ class TimedBatchStage < Minigun::Stage
   end
 
   def run_mode
-    :streaming  # Processes items from input queue
+    :streaming # Processes items from input queue
   end
 
   def run_worker_loop(stage_ctx)
@@ -25,9 +25,9 @@ class TimedBatchStage < Minigun::Stage
     # Create wrapped output queue
     wrapped_output = Minigun::OutputQueue.new(
       stage_ctx.stage_name,
-      stage_ctx.dag.downstream(stage_ctx.stage_name).map { |ds|
+      stage_ctx.dag.downstream(stage_ctx.stage_name).map do |ds|
         stage_ctx.stage_input_queues[ds]
-      },
+      end,
       stage_ctx.stage_input_queues,
       stage_ctx.runtime_edges,
       stage_stats: stage_stats
@@ -54,7 +54,7 @@ class TimedBatchStage < Minigun::Stage
 
         # Handle END signal
         if msg.is_a?(Minigun::Message) && msg.end_of_stream?
-          stage_ctx.sources_expected << msg.source  # Discover dynamic sources
+          stage_ctx.sources_expected << msg.source # Discover dynamic sources
           sources_done << msg.source
 
           # All sources done?
@@ -93,26 +93,25 @@ class TimedBatchExample
     producer :generate do |output|
       20.times do |i|
         output << i
-        sleep 0.05  # Simulate slow production
+        sleep 0.05 # Simulate slow production
       end
     end
 
     # Use custom stage class with small batch size and short timeout
     custom_stage TimedBatchStage, :batch, batch_size: 5, timeout: 0.3
 
-    consumer :process do |batch, output|
+    consumer :process do |batch, _output|
       puts "Processing batch of #{batch.size} items: #{batch.inspect}"
     end
   end
 end
 
-if __FILE__ == $0
+if __FILE__ == $PROGRAM_NAME
   puts "\n=== Timed Batch Stage Example ==="
-  puts "Batches items with size limit (5) and timeout (0.3s)"
+  puts 'Batches items with size limit (5) and timeout (0.3s)'
   puts "Watch how batches are flushed both when full and on timeout\n\n"
 
   TimedBatchExample.new.run
 
   puts "\n=== Example Complete ==="
 end
-

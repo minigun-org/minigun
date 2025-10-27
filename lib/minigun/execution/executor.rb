@@ -13,7 +13,7 @@ module Minigun
       # @param output_queue [OutputQueue] Wrapped output queue for the stage
       # @param stats [Stats] The stats object for tracking
       # @param pipeline [Pipeline] The pipeline instance (for hooks)
-      def execute_stage_item(stage:, item:, user_context:, input_queue: nil, output_queue: nil, stats:, pipeline:)
+      def execute_stage_item(stage:, item:, user_context:, stats:, pipeline:, input_queue: nil, output_queue: nil)
         # Check if stage is terminal
         dag = pipeline.dag
         is_terminal = dag.terminal?(stage.name)
@@ -36,7 +36,7 @@ module Minigun
 
         # Execute after hooks for this stage
         pipeline.send(:execute_stage_hooks, :after, stage.name)
-      rescue => e
+      rescue StandardError => e
         Minigun.logger.error "[Pipeline:#{pipeline.name}][Stage:#{stage.name}] Error: #{e.message}"
         Minigun.logger.error e.backtrace.join("\n")
       end
@@ -64,7 +64,7 @@ module Minigun
     class InlineExecutor < Executor
       protected
 
-      def execute_with_strategy(stage, item, user_context, pipeline, input_queue, output_queue)
+      def execute_with_strategy(stage, item, user_context, _pipeline, input_queue, output_queue)
         run_stage_logic(stage, item, user_context, input_queue, output_queue)
       end
     end
@@ -88,19 +88,17 @@ module Minigun
 
       protected
 
-      def execute_with_strategy(stage, item, user_context, pipeline, input_queue, output_queue)
+      def execute_with_strategy(stage, item, user_context, _pipeline, input_queue, output_queue)
         wait_for_slot
 
         thread = Thread.new do
-          begin
-            run_stage_logic(stage, item, user_context, input_queue, output_queue)
-          ensure
-            @mutex.synchronize { @active_threads.delete(Thread.current) }
-          end
+          run_stage_logic(stage, item, user_context, input_queue, output_queue)
+        ensure
+          @mutex.synchronize { @active_threads.delete(Thread.current) }
         end
 
         @mutex.synchronize { @active_threads << thread }
-        thread.value  # Wait for completion
+        thread.value # Wait for completion
       end
 
       private
@@ -108,6 +106,7 @@ module Minigun
       def wait_for_slot
         loop do
           return if @mutex.synchronize { @active_threads.size } < @max_size
+
           sleep 0.01
         end
       end
@@ -125,23 +124,25 @@ module Minigun
 
       def shutdown
         @mutex.synchronize { @active_pids.dup }.each do |pid|
-          Process.kill('TERM', pid) rescue nil
+          Process.kill('TERM', pid)
+        rescue StandardError
+          nil
         end
         @active_pids.clear
       end
 
       protected
 
-      def execute_with_strategy(stage, item, user_context, pipeline, input_queue, output_queue)
+      def execute_with_strategy(stage, item, user_context, _pipeline, input_queue, output_queue)
         unless Process.respond_to?(:fork)
-          warn "[Minigun] Process forking not available, falling back to inline"
+          warn '[Minigun] Process forking not available, falling back to inline'
           return run_stage_logic(stage, item, user_context, input_queue, output_queue)
         end
 
         # NOTE: Queue-based DSL doesn't work with process pools since queues can't cross process boundaries
         # This would require implementing IPC for queue operations
         # For now, process pools execute stages but can't properly route via queues
-        raise NotImplementedError, "Process pools are not yet compatible with queue-based DSL. Use threads or inline execution."
+        raise NotImplementedError, 'Process pools are not yet compatible with queue-based DSL. Use threads or inline execution.'
 
         # Keeping old implementation commented for reference
         # wait_for_slot
@@ -186,6 +187,7 @@ module Minigun
       def wait_for_slot
         loop do
           return if @mutex.synchronize { @active_pids.size } < @max_size
+
           sleep 0.01
         end
       end
@@ -215,7 +217,7 @@ module Minigun
 
       def execute_with_strategy(stage, item, user_context, pipeline, input_queue, output_queue)
         unless defined?(::Ractor)
-          warn "[Minigun] Ractors not available, falling back to thread pool"
+          warn '[Minigun] Ractors not available, falling back to thread pool'
           return @fallback.send(:execute_with_strategy, stage, item, user_context, pipeline, input_queue, output_queue)
         end
 
@@ -242,4 +244,3 @@ module Minigun
     end
   end
 end
-

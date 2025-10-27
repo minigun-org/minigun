@@ -20,7 +20,7 @@ class LoadBalancedWorkers
   pipeline do
     # Producer with explicit round-robin routing to multiple consumers
     # routing: :round_robin distributes items evenly across workers for load balancing
-    producer :generate_work, to: [:worker1, :worker2, :worker3], routing: :round_robin do
+    producer :generate_work, to: %i[worker1 worker2 worker3], routing: :round_robin do
       puts "\n[Producer] Generating 10 work items..."
       10.times { |i| output << i }
     end
@@ -58,9 +58,9 @@ pipeline = LoadBalancedWorkers.new
 pipeline.run
 
 # Display results
-puts "\n" + "=" * 60
-puts "ROUND-ROBIN LOAD BALANCING RESULTS"
-puts "=" * 60
+puts "\n#{'=' * 60}"
+puts 'ROUND-ROBIN LOAD BALANCING RESULTS'
+puts '=' * 60
 
 puts "\nProcessing order:"
 pipeline.results.sort_by { |r| r[:item] }.each do |r|
@@ -72,5 +72,4 @@ puts "\nWorker distribution:"
 worker_counts.each { |worker, count| puts "  Worker #{worker}: #{count} items" }
 
 puts "\nNote: Items are evenly distributed across workers using round-robin strategy."
-puts "This happens automatically when a stage fans out to multiple terminal consumers."
-
+puts 'This happens automatically when a stage fans out to multiple terminal consumers.'

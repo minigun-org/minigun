@@ -135,9 +135,7 @@ class StatisticsGatheringExample
 
     after_run do
       # Read fork results from temp files
-      if File.exist?(@temp_pids_file.path)
-        @stats[:child_processes] = File.readlines(@temp_pids_file.path).map { |line| line.strip.to_i }.uniq
-      end
+      @stats[:child_processes] = File.readlines(@temp_pids_file.path).map { |line| line.strip.to_i }.uniq if File.exist?(@temp_pids_file.path)
       if File.exist?(@temp_results_file.path)
         @results = File.readlines(@temp_results_file.path).map { |line| JSON.parse(line.strip) }
         @stats[:consumer_count] = @results.size
@@ -153,39 +151,38 @@ if __FILE__ == $PROGRAM_NAME
   begin
     example.run
 
-  puts "\n=== Pipeline Statistics ==="
-  puts "Total Duration:      #{example.stats[:total_duration]&.round(3)}s"
-  puts ""
+    puts "\n=== Pipeline Statistics ==="
+    puts "Total Duration:      #{example.stats[:total_duration]&.round(3)}s"
+    puts ''
 
-  puts "Producer:"
-  puts "  Items Generated:   #{example.stats[:producer_count]}"
-  puts "  Duration:          #{example.stats[:producer_duration]&.round(3)}s"
-  puts "  Rate:              #{(example.stats[:producer_count] / example.stats[:producer_duration]).round(0)} items/sec" if example.stats[:producer_duration]
-  puts ""
+    puts 'Producer:'
+    puts "  Items Generated:   #{example.stats[:producer_count]}"
+    puts "  Duration:          #{example.stats[:producer_duration]&.round(3)}s"
+    puts "  Rate:              #{(example.stats[:producer_count] / example.stats[:producer_duration]).round(0)} items/sec" if example.stats[:producer_duration]
+    puts ''
 
-  puts "Validator:"
-  puts "  Items Passed:      #{example.stats[:validator_passed]}"
-  puts "  Items Failed:      #{example.stats[:validator_failed]}"
-  puts "  Pass Rate:         #{(100.0 * example.stats[:validator_passed] / example.stats[:producer_count]).round(1)}%"
-  puts "  Duration:          #{example.stats[:validator_duration]&.round(3)}s"
-  puts ""
+    puts 'Validator:'
+    puts "  Items Passed:      #{example.stats[:validator_passed]}"
+    puts "  Items Failed:      #{example.stats[:validator_failed]}"
+    puts "  Pass Rate:         #{(100.0 * example.stats[:validator_passed] / example.stats[:producer_count]).round(1)}%"
+    puts "  Duration:          #{example.stats[:validator_duration]&.round(3)}s"
+    puts ''
 
-  puts "Transformer:"
-  puts "  Items Transformed: #{example.stats[:transformer_count]}"
-  puts ""
+    puts 'Transformer:'
+    puts "  Items Transformed: #{example.stats[:transformer_count]}"
+    puts ''
 
-  puts "Consumer:"
-  puts "  Items Consumed:    #{example.stats[:consumer_count]}"
-  puts "  Forks Created:     #{example.stats[:forks_created]}"
-  puts "  Child PIDs:        #{example.stats[:child_processes].uniq.join(', ')}"
-  puts "  Duration:          #{example.stats[:consumer_duration]&.round(3)}s"
-  puts ""
+    puts 'Consumer:'
+    puts "  Items Consumed:    #{example.stats[:consumer_count]}"
+    puts "  Forks Created:     #{example.stats[:forks_created]}"
+    puts "  Child PIDs:        #{example.stats[:child_processes].uniq.join(', ')}"
+    puts "  Duration:          #{example.stats[:consumer_duration]&.round(3)}s"
+    puts ''
 
-  puts "Final Results:       #{example.results.size} items saved"
-  puts ""
-  puts "✓ Statistics gathering example complete!"
+    puts "Final Results:       #{example.results.size} items saved"
+    puts ''
+    puts '✓ Statistics gathering example complete!'
   ensure
     example.cleanup
   end
 end
-

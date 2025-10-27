@@ -21,7 +21,7 @@ class BroadcastPipeline
     # Producer with explicit broadcast routing to multiple consumers
     # routing: :broadcast sends each item to ALL branches (default behavior)
     # This is useful for ETL where the same data needs multiple transformations
-    producer :data_source, to: [:validate, :transform, :analyze], routing: :broadcast do
+    producer :data_source, to: %i[validate transform analyze], routing: :broadcast do
       puts "\n[Producer] Generating data..."
       3.times { |i| output << { id: i, value: i * 10 } }
     end
@@ -61,9 +61,9 @@ pipeline = BroadcastPipeline.new
 pipeline.run
 
 # Display results
-puts "\n" + "=" * 60
-puts "BROADCAST FAN-OUT RESULTS"
-puts "=" * 60
+puts "\n#{'=' * 60}"
+puts 'BROADCAST FAN-OUT RESULTS'
+puts '=' * 60
 
 puts "\nEach item was processed by ALL branches:"
 pipeline.results.group_by { |r| r[:data][:id] }.sort.each do |id, branches|
@@ -78,5 +78,4 @@ puts "\nItems per branch:"
 branch_counts.each { |branch, count| puts "  #{branch}: #{count} items" }
 
 puts "\nNote: Each item reaches ALL branches (broadcast), not just one."
-puts "This happens because routing: :broadcast was specified (also the default)."
-
+puts 'This happens because routing: :broadcast was specified (also the default).'

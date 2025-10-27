@@ -25,7 +25,7 @@ class WithMiddleNamed
 
     threads(3) do
       processor :work do |item, output|
-        output << item * 2
+        output << (item * 2)
       end
     end
 
@@ -33,7 +33,7 @@ class WithMiddleNamed
 
     process_per_batch(max: 2) do
       processor :process_batch do |batch, output|
-        batch.each { |item| output << item + 100 }
+        batch.each { |item| output << (item + 100) }
       end
     end
 
@@ -49,9 +49,8 @@ class WithMiddleNamed
   end
 end
 
-puts "Testing: threads + batch + process_per_batch + named + threads(consumer)"
+puts 'Testing: threads + batch + process_per_batch + named + threads(consumer)'
 pipeline = WithMiddleNamed.new
 pipeline.run
 puts "Results: #{pipeline.results.size} items"
-puts pipeline.results.size == 20 ? "✓ Works!" : "✗ Failed"
-
+puts pipeline.results.size == 20 ? '✓ Works!' : '✗ Failed'

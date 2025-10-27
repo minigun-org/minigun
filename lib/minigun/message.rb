@@ -20,4 +20,3 @@ module Minigun
     end
   end
 end
-

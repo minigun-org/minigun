@@ -22,11 +22,11 @@ class SequentialPipeline
     end
 
     processor :double do |num, output|
-      output << num * 2
+      output << (num * 2)
     end
 
     processor :add_ten do |num, output|
-      output << num + 10
+      output << (num + 10)
     end
 
     consumer :collect do |num|
@@ -39,10 +39,9 @@ if __FILE__ == $PROGRAM_NAME
   pipeline = SequentialPipeline.new
   pipeline.run
 
-  puts "Sequential Pipeline Results:"
-  puts "Input: 1, 2, 3"
-  puts "After double: 2, 4, 6"
-  puts "After add_ten: 12, 14, 16"
+  puts 'Sequential Pipeline Results:'
+  puts 'Input: 1, 2, 3'
+  puts 'After double: 2, 4, 6'
+  puts 'After add_ten: 12, 14, 16'
   puts "Actual results: #{pipeline.results.inspect}"
 end
-

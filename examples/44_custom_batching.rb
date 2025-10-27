@@ -16,9 +16,9 @@ class CustomBatchingExample
 
   pipeline do
     producer :generate_emails do |output|
-      puts "\n" + "="*60
-      puts "CUSTOM BATCHING: Generating Emails"
-      puts "="*60
+      puts "\n#{'=' * 60}"
+      puts 'CUSTOM BATCHING: Generating Emails'
+      puts '=' * 60
 
       # Generate mixed email types
       emails = [
@@ -56,7 +56,7 @@ class CustomBatchingExample
       # Add email to its type's batch
       type = email[:type]
       @batches[type] << email
-      threshold = @thresholds[type] || 5  # Default threshold
+      threshold = @thresholds[type] || 5 # Default threshold
 
       puts "  → Buffered #{type} email (#{@batches[type].size}/#{threshold})"
 
@@ -133,10 +133,10 @@ class CustomBatchingExample
 
     after_run do
       # Flush any remaining batches
-      if @batches && @batches.any? { |_, v| v.any? }
-        puts "\n" + "="*60
-        puts "FLUSHING REMAINING BATCHES"
-        puts "="*60
+      if @batches&.any? { |_, v| v.any? }
+        puts "\n#{'=' * 60}"
+        puts 'FLUSHING REMAINING BATCHES'
+        puts '=' * 60
 
         @batches.each do |type, emails|
           next if emails.empty?
@@ -146,9 +146,9 @@ class CustomBatchingExample
         end
       end
 
-      puts "\n" + "="*60
-      puts "CUSTOM BATCHING STATISTICS"
-      puts "="*60
+      puts "\n#{'=' * 60}"
+      puts 'CUSTOM BATCHING STATISTICS'
+      puts '=' * 60
 
       total = @sent_counts.values.sum
       @sent_counts.sort_by { |type, _| type }.each do |type, count|
@@ -158,7 +158,7 @@ class CustomBatchingExample
 
       puts "\nTotal emails sent: #{total}"
       puts "\nCustom batching complete!"
-      puts "="*60
+      puts '=' * 60
     end
   end
 end
@@ -176,16 +176,16 @@ class AdvancedCustomBatchingExample
 
   pipeline do
     producer :generate_messages do |output|
-      puts "\n" + "="*60
-      puts "ADVANCED CUSTOM BATCHING: Priority + Type Routing"
-      puts "="*60
+      puts "\n#{'=' * 60}"
+      puts 'ADVANCED CUSTOM BATCHING: Priority + Type Routing'
+      puts '=' * 60
 
       # Generate messages with priority
       20.times do |i|
         message = {
           id: i + 1,
-          type: ['email', 'sms', 'push'].sample,
-          priority: ['low', 'normal', 'high', 'urgent'].sample,
+          type: %w[email sms push].sample,
+          priority: %w[low normal high urgent].sample,
           content: "Message #{i + 1}",
           timestamp: Time.now.to_i + i
         }
@@ -212,7 +212,7 @@ class AdvancedCustomBatchingExample
 
       # Different thresholds based on priority
       threshold = case message[:priority]
-                  when 'urgent' then 1  # Send immediately
+                  when 'urgent' then 1 # Send immediately
                   when 'high' then 2
                   when 'normal' then 3
                   when 'low' then 5
@@ -254,30 +254,29 @@ class AdvancedCustomBatchingExample
     end
 
     after_run do
-      puts "\n" + "="*60
-      puts "ADVANCED BATCHING STATISTICS"
-      puts "="*60
+      puts "\n#{'=' * 60}"
+      puts 'ADVANCED BATCHING STATISTICS'
+      puts '=' * 60
       puts "Batches sent: #{@batch_stats[:batches_sent]}"
       puts "Messages sent: #{@batch_stats[:emails_sent]}"
       puts "Message types: #{@batch_stats[:types_processed].to_a.join(', ')}"
       puts "\nAdvanced batching complete!"
-      puts "="*60
+      puts '=' * 60
     end
   end
 end
 
 # Run if executed directly
 if __FILE__ == $PROGRAM_NAME
-  puts "="*60
-  puts "Example 1: Type-Based Custom Batching"
-  puts "="*60
+  puts '=' * 60
+  puts 'Example 1: Type-Based Custom Batching'
+  puts '=' * 60
   CustomBatchingExample.new.run
 
   puts "\n\n"
 
-  puts "="*60
-  puts "Example 2: Priority + Type Custom Batching"
-  puts "="*60
+  puts '=' * 60
+  puts 'Example 2: Priority + Type Custom Batching'
+  puts '=' * 60
   AdvancedCustomBatchingExample.new.run
 end
-

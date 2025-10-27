@@ -18,7 +18,7 @@ class HooksExample
   pipeline do
     # Hook: Called before the pipeline starts
     before_run do
-      puts "[Hook] before_run - Setting up resources..."
+      puts '[Hook] before_run - Setting up resources...'
       events << :before_run
 
       # Example: Open database connections, initialize caches, etc.
@@ -27,7 +27,7 @@ class HooksExample
 
     # Hook: Called after the pipeline completes
     after_run do
-      puts "[Hook] after_run - Cleaning up resources..."
+      puts '[Hook] after_run - Cleaning up resources...'
       events << :after_run
 
       # Example: Close database connections, write final logs, etc.
@@ -37,7 +37,7 @@ class HooksExample
 
     # Hook: Called before forking a process (COW fork strategy)
     before_fork do
-      puts "[Hook] before_fork - Preparing to fork..."
+      puts '[Hook] before_fork - Preparing to fork...'
       events << :before_fork
 
       # Example: Close database connections before fork to avoid shared sockets
@@ -54,7 +54,7 @@ class HooksExample
     end
 
     producer :generate do |output|
-      puts "[Producer] Generating 5 items..."
+      puts '[Producer] Generating 5 items...'
       5.times { |i| output << (i + 1) }
     end
 
@@ -62,7 +62,7 @@ class HooksExample
       puts "[Processor] Processing item #{item}"
       # Simulate some work
       sleep 0.05
-      output << item * 10
+      output << (item * 10)
     end
 
     consumer :collect do |item|
@@ -72,12 +72,12 @@ class HooksExample
   end
 end
 
-if __FILE__ == $0
+if __FILE__ == $PROGRAM_NAME
   puts "=== Hooks Example ===\n\n"
   puts "This example demonstrates the 4 lifecycle hooks:\n"
-  puts "  1. before_run  - Called before pipeline starts"
-  puts "  2. after_run   - Called after pipeline completes"
-  puts "  3. before_fork - Called before forking (COW strategy only)"
+  puts '  1. before_run  - Called before pipeline starts'
+  puts '  2. after_run   - Called after pipeline completes'
+  puts '  3. before_fork - Called before forking (COW strategy only)'
   puts "  4. after_fork  - Called after forking (COW strategy only)\n\n"
 
   example = HooksExample.new
@@ -89,9 +89,8 @@ if __FILE__ == $0
   puts "Results: #{example.results.inspect}"
 
   puts "\n=== Notes ===\n"
-  puts "• before_fork/after_fork hooks are only triggered with process_per_batch execution"
-  puts "• Hooks are useful for resource management (connections, files, etc.)"
-  puts "• after_fork runs in the child process, before_fork in the parent"
+  puts '• before_fork/after_fork hooks are only triggered with process_per_batch execution'
+  puts '• Hooks are useful for resource management (connections, files, etc.)'
+  puts '• after_fork runs in the child process, before_fork in the parent'
   puts "\n✓ Hooks demonstration complete!"
 end
-

@@ -16,9 +16,9 @@ class LoadBalancerExample
 
   pipeline do
     producer :request_generator do |output|
-      puts "\n" + "="*60
-      puts "LOAD BALANCER: Generating HTTP Requests"
-      puts "="*60
+      puts "\n#{'=' * 60}"
+      puts 'LOAD BALANCER: Generating HTTP Requests'
+      puts '=' * 60
 
       # Generate 15 sample HTTP requests
       15.times do |i|
@@ -80,9 +80,9 @@ class LoadBalancerExample
     end
 
     after_run do
-      puts "\n" + "="*60
-      puts "LOAD BALANCER STATISTICS"
-      puts "="*60
+      puts "\n#{'=' * 60}"
+      puts 'LOAD BALANCER STATISTICS'
+      puts '=' * 60
 
       @server_stats.sort.each do |server_id, stats|
         avg_time = (stats[:total_time] / stats[:requests]).round(3)
@@ -90,13 +90,10 @@ class LoadBalancerExample
       end
 
       puts "\nLoad balancing complete!"
-      puts "="*60
+      puts '=' * 60
     end
   end
 end
 
 # Run if executed directly
-if __FILE__ == $PROGRAM_NAME
-  LoadBalancerExample.new.run
-end
-
+LoadBalancerExample.new.run if __FILE__ == $PROGRAM_NAME

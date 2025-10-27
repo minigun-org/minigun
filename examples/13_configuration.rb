@@ -29,7 +29,7 @@ class ConfigurationExample
 
   pipeline do
     producer :generate do |output|
-      puts "[Producer] Generating 20 items..."
+      puts '[Producer] Generating 20 items...'
       20.times { |i| output << (i + 1) }
     end
 
@@ -57,13 +57,13 @@ class ConfigurationExample
   end
 end
 
-if __FILE__ == $0
+if __FILE__ == $PROGRAM_NAME
   puts "=== Configuration Example ===\n\n"
 
-  puts "Available Configuration Options:"
-  puts "  max_threads(n)    - Thread pool size for concurrent processing"
-  puts "  max_processes(n)  - Max forked processes (process_per_batch execution)"
-  puts "  max_retries(n)    - Max retry attempts for failed operations"
+  puts 'Available Configuration Options:'
+  puts '  max_threads(n)    - Thread pool size for concurrent processing'
+  puts '  max_processes(n)  - Max forked processes (process_per_batch execution)'
+  puts '  max_retries(n)    - Max retry attempts for failed operations'
   puts "\n"
 
   example = ConfigurationExample.new
@@ -71,7 +71,7 @@ if __FILE__ == $0
   # Access the underlying task configuration
   task = ConfigurationExample._minigun_task
 
-  puts "Current Configuration:"
+  puts 'Current Configuration:'
   puts "  max_threads:   #{task.config[:max_threads]}"
   puts "  max_processes: #{task.config[:max_processes]}"
   puts "  max_retries:   #{task.config[:max_retries]}"
@@ -79,10 +79,10 @@ if __FILE__ == $0
 
   puts "Running pipeline with these settings...\n\n"
 
-  result = example.run
+  example.run
 
   puts "\n=== Results ===\n"
-  puts "Total items emitted by producer: 20"
+  puts 'Total items emitted by producer: 20'
   puts "Items filtered out (multiples of 7): #{[7, 14].size}"
   puts "Items successfully processed: #{example.results.size}"
   puts "Expected: #{20 - 2} items (20 minus 2 filtered)"
@@ -90,11 +90,10 @@ if __FILE__ == $0
   puts "\nFirst 10 results: #{example.results.first(10).inspect}"
 
   puts "\n=== Configuration Tips ===\n"
-  puts "• max_threads: Set higher for I/O-bound work (network, database)"
-  puts "• max_threads: Set lower for CPU-bound work to avoid context switching"
-  puts "• max_processes: Useful with process_per_batch for memory-intensive batches"
-  puts "• max_processes: Each process is a separate OS process (more isolation)"
-  puts "• Balance threads vs processes based on your workload characteristics"
+  puts '• max_threads: Set higher for I/O-bound work (network, database)'
+  puts '• max_threads: Set lower for CPU-bound work to avoid context switching'
+  puts '• max_processes: Useful with process_per_batch for memory-intensive batches'
+  puts '• max_processes: Each process is a separate OS process (more isolation)'
+  puts '• Balance threads vs processes based on your workload characteristics'
   puts "\n✓ Configuration example complete!"
 end
-

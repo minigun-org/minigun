@@ -21,7 +21,7 @@ class FanOutPipeline
 
   pipeline do
     # Producer fans out to three consumers
-    producer :generate_notifications, to: [:email_sender, :sms_sender, :push_sender] do |output|
+    producer :generate_notifications, to: %i[email_sender sms_sender push_sender] do |output|
       users = [
         { id: 1, name: 'Alice', message: 'Hello Alice' },
         { id: 2, name: 'Bob', message: 'Hello Bob' },
@@ -57,7 +57,7 @@ if __FILE__ == $PROGRAM_NAME
   pipeline = FanOutPipeline.new
   pipeline.run
 
-  puts "Fan-Out Pipeline Results:"
+  puts 'Fan-Out Pipeline Results:'
   puts "\nEmails sent: #{pipeline.emails.size}"
   pipeline.emails.each { |e| puts "  - #{e}" }
 
@@ -67,4 +67,3 @@ if __FILE__ == $PROGRAM_NAME
   puts "\nPush notifications sent: #{pipeline.push_notifications.size}"
   pipeline.push_notifications.each { |p| puts "  - #{p}" }
 end
-

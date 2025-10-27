@@ -4,7 +4,7 @@ require 'spec_helper'
 
 RSpec.describe Minigun::Pipeline do
   let(:config) { { max_threads: 3, max_processes: 2 } }
-  let(:pipeline) { Minigun::Pipeline.new(:test_pipeline, config) }
+  let(:pipeline) { described_class.new(:test_pipeline, config) }
 
   describe '#initialize' do
     it 'creates a pipeline with a name' do
@@ -17,7 +17,7 @@ RSpec.describe Minigun::Pipeline do
     end
 
     it 'uses default config for missing options' do
-      default_pipeline = Minigun::Pipeline.new(:default)
+      default_pipeline = described_class.new(:default)
       expect(default_pipeline.config[:max_threads]).to eq(5)
     end
 
@@ -32,7 +32,7 @@ RSpec.describe Minigun::Pipeline do
 
   describe '#add_stage' do
     it 'adds a producer stage' do
-      pipeline.add_stage(:producer, :fetch) { "fetch data" }
+      pipeline.add_stage(:producer, :fetch) { 'fetch data' }
       expect(pipeline.stages[:fetch]).to be_a(Minigun::ProducerStage)
       expect(pipeline.stages[:fetch].name).to eq(:fetch)
     end
@@ -55,7 +55,7 @@ RSpec.describe Minigun::Pipeline do
     end
 
     it 'handles stage routing with :to option' do
-      pipeline.add_stage(:producer, :source, to: :transform) { "data" }
+      pipeline.add_stage(:producer, :source, to: :transform) { 'data' }
       pipeline.add_stage(:processor, :transform, to: :save) { |item| item }
       pipeline.add_stage(:consumer, :save) { |item| puts item }
 
@@ -64,31 +64,31 @@ RSpec.describe Minigun::Pipeline do
     end
 
     it 'raises error on duplicate stage name' do
-      pipeline.add_stage(:producer, :fetch) { |output| output << "first" }
+      pipeline.add_stage(:producer, :fetch) { |output| output << 'first' }
 
-      expect {
-        pipeline.add_stage(:producer, :fetch) { |output| output << "second" }
-      }.to raise_error(Minigun::Error, /Stage name collision.*fetch/)
+      expect do
+        pipeline.add_stage(:producer, :fetch) { |output| output << 'second' }
+      end.to raise_error(Minigun::Error, /Stage name collision.*fetch/)
     end
 
     it 'raises error on duplicate stage name across different types' do
-      pipeline.add_stage(:producer, :my_stage) { |output| output << "data" }
+      pipeline.add_stage(:producer, :my_stage) { |output| output << 'data' }
 
-      expect {
+      expect do
         pipeline.add_stage(:consumer, :my_stage) { |item| puts item }
-      }.to raise_error(Minigun::Error, /Stage name collision.*my_stage/)
+      end.to raise_error(Minigun::Error, /Stage name collision.*my_stage/)
     end
   end
 
   describe '#add_hook' do
     it 'adds before_run hooks' do
-      pipeline.add_hook(:before_run) { puts "starting" }
+      pipeline.add_hook(:before_run) { puts 'starting' }
       expect(pipeline.hooks[:before_run].size).to eq(1)
     end
 
     it 'adds multiple hooks of the same type' do
-      pipeline.add_hook(:before_run) { puts "hook 1" }
-      pipeline.add_hook(:before_run) { puts "hook 2" }
+      pipeline.add_hook(:before_run) { puts 'hook 1' }
+      pipeline.add_hook(:before_run) { puts 'hook 2' }
       expect(pipeline.hooks[:before_run].size).to eq(2)
     end
   end
@@ -101,6 +101,7 @@ RSpec.describe Minigun::Pipeline do
     it 'executes a simple pipeline' do
       context = Class.new do
         attr_accessor :results
+
         def initialize
           @results = []
         end
@@ -122,6 +123,7 @@ RSpec.describe Minigun::Pipeline do
     it 'executes hooks in order' do
       context = Class.new do
         attr_accessor :events
+
         def initialize
           @events = []
         end
@@ -131,7 +133,7 @@ RSpec.describe Minigun::Pipeline do
       pipeline.add_hook(:after_run) { events << :after }
 
       pipeline.add_stage(:producer, :source) { |output| output << 1 }
-      pipeline.add_stage(:consumer, :sink) { |item| events << :process }
+      pipeline.add_stage(:consumer, :sink) { |_item| events << :process }
 
       pipeline.run(context)
       expect(context.events.first).to eq(:before)
@@ -142,6 +144,7 @@ RSpec.describe Minigun::Pipeline do
     it 'processes items through processors' do
       context = Class.new do
         attr_accessor :results
+
         def initialize
           @results = []
         end
@@ -152,7 +155,7 @@ RSpec.describe Minigun::Pipeline do
       end
 
       pipeline.add_stage(:processor, :double) do |item, output|
-        output << item * 2
+        output << (item * 2)
       end
 
       pipeline.add_stage(:consumer, :sink) do |item|
@@ -178,7 +181,7 @@ RSpec.describe Minigun::Pipeline do
     it 'finds PipelineStages with no upstream as producers' do
       # Add a PipelineStage
       pipeline_stage = Minigun::PipelineStage.new(name: :nested)
-      nested_pipeline = Minigun::Pipeline.new(:nested, config)
+      nested_pipeline = described_class.new(:nested, config)
       pipeline_stage.pipeline = nested_pipeline
       pipeline.stages[:nested] = pipeline_stage
 
@@ -198,7 +201,7 @@ RSpec.describe Minigun::Pipeline do
 
       # Add a PipelineStage with upstream
       pipeline_stage = Minigun::PipelineStage.new(name: :nested)
-      nested_pipeline = Minigun::Pipeline.new(:nested, config)
+      nested_pipeline = described_class.new(:nested, config)
       pipeline_stage.pipeline = nested_pipeline
       pipeline.stages[:nested] = pipeline_stage
       pipeline.stage_order << :nested
@@ -219,7 +222,7 @@ RSpec.describe Minigun::Pipeline do
 
       # Add PipelineStage producer
       pipeline_stage = Minigun::PipelineStage.new(name: :pipeline_source)
-      nested_pipeline = Minigun::Pipeline.new(:nested, config)
+      nested_pipeline = described_class.new(:nested, config)
       pipeline_stage.pipeline = nested_pipeline
       pipeline.stages[:pipeline_source] = pipeline_stage
       pipeline.stage_order << :pipeline_source
@@ -244,9 +247,9 @@ RSpec.describe Minigun::Pipeline do
 
     it 'connects each producer to its next sequential non-producer' do
       pipeline.add_stage(:producer, :source_a) { output << 1 }
-      pipeline.add_stage(:processor, :process_a) { |item| output << item * 10 }
+      pipeline.add_stage(:processor, :process_a) { |item| output << (item * 10) }
       pipeline.add_stage(:producer, :source_b) { output << 2 }
-      pipeline.add_stage(:processor, :process_b) { |item| output << item * 20 }
+      pipeline.add_stage(:processor, :process_b) { |item| output << (item * 20) }
 
       pipeline.send(:build_dag_routing!)
 
@@ -258,9 +261,9 @@ RSpec.describe Minigun::Pipeline do
 
     it 'does not connect producers that already have explicit routing' do
       pipeline.add_stage(:producer, :source_a) { output << 1 }
-      pipeline.add_stage(:processor, :process_a, from: :source_a) { |item| output << item * 10 }
+      pipeline.add_stage(:processor, :process_a, from: :source_a) { |item| output << (item * 10) }
       pipeline.add_stage(:producer, :source_b) { output << 2 }
-      pipeline.add_stage(:processor, :process_b) { |item| output << item * 20 }
+      pipeline.add_stage(:processor, :process_b) { |item| output << (item * 20) }
 
       pipeline.send(:build_dag_routing!)
 
@@ -285,9 +288,9 @@ RSpec.describe Minigun::Pipeline do
 
     it 'connects multiple producers to different stages, not all to first' do
       pipeline.add_stage(:producer, :source_a) { output << 1 }
-      pipeline.add_stage(:processor, :process_a) { |item| output << item * 10 }
+      pipeline.add_stage(:processor, :process_a) { |item| output << (item * 10) }
       pipeline.add_stage(:producer, :source_b) { output << 2 }
-      pipeline.add_stage(:processor, :process_b) { |item| output << item * 20 }
+      pipeline.add_stage(:processor, :process_b) { |item| output << (item * 20) }
       pipeline.add_stage(:producer, :source_c) { output << 3 }
       pipeline.add_stage(:consumer, :sink) { |item| item }
 
@@ -302,11 +305,11 @@ RSpec.describe Minigun::Pipeline do
     it 'handles mixed AtomicStage and PipelineStage producers' do
       # Atomic producer
       pipeline.add_stage(:producer, :atomic_source) { output << 1 }
-      pipeline.add_stage(:processor, :process_atomic) { |item| output << item * 10 }
+      pipeline.add_stage(:processor, :process_atomic) { |item| output << (item * 10) }
 
       # PipelineStage producer
       pipeline_stage = Minigun::PipelineStage.new(name: :pipeline_source)
-      nested_pipeline = Minigun::Pipeline.new(:nested, config)
+      nested_pipeline = described_class.new(:nested, config)
       pipeline_stage.pipeline = nested_pipeline
       pipeline.stages[:pipeline_source] = pipeline_stage
       pipeline.stage_order << :pipeline_source
@@ -331,6 +334,7 @@ RSpec.describe Minigun::Pipeline do
     it 'executes PipelineStages as producers' do
       context = Class.new do
         attr_accessor :results
+
         def initialize
           @results = []
         end
@@ -338,10 +342,10 @@ RSpec.describe Minigun::Pipeline do
 
       # Create PipelineStage that acts as a producer
       pipeline_stage = Minigun::PipelineStage.new(name: :source_pipeline)
-      source_pipeline = Minigun::Pipeline.new(:source, config)
+      source_pipeline = described_class.new(:source, config)
       pipeline_stage.pipeline = source_pipeline
       source_pipeline.add_stage(:producer, :gen) { |output| 3.times { |i| output << i } }
-      source_pipeline.add_stage(:processor, :double) { |item, output| output << item * 2 }
+      source_pipeline.add_stage(:processor, :double) { |item, output| output << (item * 2) }
 
       pipeline.stages[:source_pipeline] = pipeline_stage
       pipeline.stage_order.unshift(:source_pipeline)
@@ -360,6 +364,7 @@ RSpec.describe Minigun::Pipeline do
     it 'executes PipelineStages as processors' do
       context = Class.new do
         attr_accessor :results
+
         def initialize
           @results = []
         end
@@ -370,10 +375,10 @@ RSpec.describe Minigun::Pipeline do
 
       # PipelineStage as processor
       pipeline_stage = Minigun::PipelineStage.new(name: :processor_pipeline)
-      proc_pipeline = Minigun::Pipeline.new(:processor, config)
+      proc_pipeline = described_class.new(:processor, config)
       pipeline_stage.pipeline = proc_pipeline
-      proc_pipeline.add_stage(:processor, :multiply) { |item, output| output << item * 10 }
-      proc_pipeline.add_stage(:processor, :add_one) { |item, output| output << item + 1 }
+      proc_pipeline.add_stage(:processor, :multiply) { |item, output| output << (item * 10) }
+      proc_pipeline.add_stage(:processor, :add_one) { |item, output| output << (item + 1) }
 
       pipeline.stages[:processor_pipeline] = pipeline_stage
       pipeline.stage_order << :processor_pipeline
@@ -393,6 +398,7 @@ RSpec.describe Minigun::Pipeline do
     it 'handles multiple PipelineStage producers with different outputs' do
       context = Class.new do
         attr_accessor :results
+
         def initialize
           @results = []
         end
@@ -400,10 +406,10 @@ RSpec.describe Minigun::Pipeline do
 
       # First PipelineStage producer
       ps1 = Minigun::PipelineStage.new(name: :pipeline_a)
-      p1 = Minigun::Pipeline.new(:pa, config)
+      p1 = described_class.new(:pa, config)
       ps1.pipeline = p1
       p1.add_stage(:producer, :gen) { |output| output << 10 }
-      p1.add_stage(:processor, :double) { |item, output| output << item * 2 }
+      p1.add_stage(:processor, :double) { |item, output| output << (item * 2) }
 
       pipeline.stages[:pipeline_a] = ps1
       pipeline.stage_order << :pipeline_a
@@ -411,10 +417,10 @@ RSpec.describe Minigun::Pipeline do
 
       # Second PipelineStage producer
       ps2 = Minigun::PipelineStage.new(name: :pipeline_b)
-      p2 = Minigun::Pipeline.new(:pb, config)
+      p2 = described_class.new(:pb, config)
       ps2.pipeline = p2
       p2.add_stage(:producer, :gen) { |output| output << 5 }
-      p2.add_stage(:processor, :triple) { |item, output| output << item * 3 }
+      p2.add_stage(:processor, :triple) { |item, output| output << (item * 3) }
 
       pipeline.stages[:pipeline_b] = ps2
       pipeline.stage_order << :pipeline_b
@@ -431,6 +437,4 @@ RSpec.describe Minigun::Pipeline do
       expect(context.results.sort).to eq([15, 20])
     end
   end
-
 end
-

@@ -51,7 +51,7 @@ RSpec.describe Minigun::Stats do
 
     it 'is thread-safe' do
       stats = described_class.new(:test_stage)
-      threads = 10.times.map do
+      threads = Array.new(10) do
         Thread.new { 100.times { stats.increment_produced } }
       end
       threads.each(&:join)
@@ -74,7 +74,7 @@ RSpec.describe Minigun::Stats do
 
     it 'is thread-safe' do
       stats = described_class.new(:test_stage)
-      threads = 10.times.map do
+      threads = Array.new(10) do
         Thread.new { 100.times { stats.increment_consumed } }
       end
       threads.each(&:join)
@@ -91,7 +91,7 @@ RSpec.describe Minigun::Stats do
 
     it 'is thread-safe' do
       stats = described_class.new(:test_stage)
-      threads = 10.times.map do
+      threads = Array.new(10) do
         Thread.new { 50.times { stats.increment_failed } }
       end
       threads.each(&:join)
@@ -154,7 +154,7 @@ RSpec.describe Minigun::Stats do
       sleep(0.1)
       stats.finish!
       expect(stats.throughput).to be > 0
-      expect(stats.throughput).to be < 10000
+      expect(stats.throughput).to be < 10_000
     end
   end
 
@@ -271,7 +271,7 @@ RSpec.describe Minigun::Stats do
     it 'is thread-safe with concurrent latency recording' do
       stats = described_class.new(:test_stage)
 
-      threads = 10.times.map do
+      threads = Array.new(10) do
         Thread.new do
           100.times do |i|
             stats.record_latency(0.001 * i)
@@ -624,7 +624,7 @@ RSpec.describe Minigun::AggregatedStats do
       agg_stats.finish!
 
       expect(agg_stats.throughput).to be > 0
-      expect(agg_stats.throughput).to be < 10000
+      expect(agg_stats.throughput).to be < 10_000
     end
   end
 
@@ -673,7 +673,7 @@ RSpec.describe Minigun::AggregatedStats do
       agg_stats.for_stage(:consumer)
 
       stages = agg_stats.stages_in_order
-      expect(stages.map(&:stage_name)).to eq([:producer, :processor, :consumer])
+      expect(stages.map(&:stage_name)).to eq(%i[producer processor consumer])
     end
 
     it 'skips stages without stats' do
@@ -684,7 +684,7 @@ RSpec.describe Minigun::AggregatedStats do
       # processor is skipped
 
       stages = agg_stats.stages_in_order
-      expect(stages.map(&:stage_name)).to eq([:producer, :consumer])
+      expect(stages.map(&:stage_name)).to eq(%i[producer consumer])
     end
   end
 

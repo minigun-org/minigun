@@ -23,7 +23,7 @@ class QuickStartExample
 
     # Step 2: Transform items
     processor :transform do |number, output|
-      output << number * 2
+      output << (number * 2)
     end
 
     # Step 3: Collect results
@@ -33,22 +33,21 @@ class QuickStartExample
   end
 end
 
-if __FILE__ == $0
+if __FILE__ == $PROGRAM_NAME
   puts "=== Quick Start Example ===\n\n"
-  puts "This is the simplest Minigun pipeline:"
+  puts 'This is the simplest Minigun pipeline:'
   puts "  Producer (generate) → Processor (transform) → Consumer (collect)\n\n"
 
   example = QuickStartExample.new
   example.run
 
   puts "\n=== Results ===\n"
-  puts "Input:  0, 1, 2, 3, 4, 5, 6, 7, 8, 9"
+  puts 'Input:  0, 1, 2, 3, 4, 5, 6, 7, 8, 9'
   puts "Output: #{example.results.sort.join(', ')}"
   puts "\nAll values doubled: #{example.results.sort == [0, 2, 4, 6, 8, 10, 12, 14, 16, 18] ? '✓' : '✗'}"
   puts "\n✓ Quick start complete!"
   puts "\nNext steps:"
-  puts "  • Try 13_configuration.rb to learn about configuration options"
-  puts "  • Try 11_hooks_example.rb to learn about lifecycle hooks"
-  puts "  • Try 02_diamond_pattern.rb to learn about routing"
+  puts '  • Try 13_configuration.rb to learn about configuration options'
+  puts '  • Try 11_hooks_example.rb to learn about lifecycle hooks'
+  puts '  • Try 02_diamond_pattern.rb to learn about routing'
 end
-

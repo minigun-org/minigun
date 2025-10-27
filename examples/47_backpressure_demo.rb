@@ -9,17 +9,17 @@ class BackpressureDemo
   pipeline do
     # Fast producer - generates 1000 items immediately
     producer :fast_producer do |output|
-      puts "Producer: Starting to generate 1000 items..."
+      puts 'Producer: Starting to generate 1000 items...'
       1000.times do |i|
         output << i
-        print "." if (i % 100) == 0
+        print '.' if (i % 100) == 0
       end
       puts "\nProducer: Done! (Would finish instantly without backpressure)"
     end
 
     # Slow consumer with small queue (creates backpressure)
-    consumer :slow_consumer, queue_size: 10 do |item, output|
-      sleep 0.01  # Simulate slow processing
+    consumer :slow_consumer, queue_size: 10 do |item, _output|
+      sleep 0.01 # Simulate slow processing
       puts "Consumer: Processed item #{item}" if (item % 100) == 0
     end
   end
@@ -35,21 +35,21 @@ class MultiStageBackpressure
       puts "\n=== Bursty Producer ==="
       5.times do |burst|
         puts "Burst #{burst + 1}: Sending 20 items..."
-        20.times { |i| output << (burst * 20) + i }
-        sleep 0.5  # Pause between bursts
+        20.times { |i| output << ((burst * 20) + i) }
+        sleep 0.5 # Pause between bursts
       end
     end
 
     # First stage with small queue - immediate backpressure
     processor :stage1, queue_size: 5 do |item, output|
-      sleep 0.05  # Moderate processing time
-      output << item * 2
+      sleep 0.05 # Moderate processing time
+      output << (item * 2)
     end
 
     # Second stage with large queue - buffers bursts
     processor :stage2, queue_size: 50 do |item, output|
-      sleep 0.01  # Fast processing
-      output << item + 1
+      sleep 0.01 # Fast processing
+      output << (item + 1)
     end
 
     # Final consumer
@@ -66,7 +66,7 @@ class BoundedExample
   pipeline do
     producer :producer do |output|
       start = Time.now
-      puts "Producer: Starting..."
+      puts 'Producer: Starting...'
       100.times do |i|
         output << i
         puts "Producer: Sent #{i + 1} items (#{Time.now - start}s)" if (i + 1) % 20 == 0
@@ -75,7 +75,7 @@ class BoundedExample
       puts "Producer: Done in #{elapsed.round(2)}s (throttled by backpressure)"
     end
 
-    consumer :slow_consumer, queue_size: 10 do |item, output|
+    consumer :slow_consumer, queue_size: 10 do |_item, _output|
       sleep 0.05  # 50ms per item
     end
   end
@@ -87,7 +87,7 @@ class UnboundedExample
   pipeline do
     producer :producer do |output|
       start = Time.now
-      puts "Producer: Starting..."
+      puts 'Producer: Starting...'
       100.times do |i|
         output << i
         puts "Producer: Sent #{i + 1} items (#{Time.now - start}s)" if (i + 1) % 20 == 0
@@ -96,7 +96,7 @@ class UnboundedExample
       puts "Producer: Done in #{elapsed.round(2)}s (no backpressure!)"
     end
 
-    consumer :slow_consumer, queue_size: Float::INFINITY do |item, output|
+    consumer :slow_consumer, queue_size: Float::INFINITY do |_item, _output|
       sleep 0.05  # 50ms per item
     end
   end
@@ -109,15 +109,15 @@ class GlobalConfigSmallExample
   pipeline do
     producer :source do |output|
       start = Time.now
-      puts "Producing 50 items..."
+      puts 'Producing 50 items...'
       50.times { |i| output << i }
       elapsed = Time.now - start
       puts "Producer done in #{elapsed.round(2)}s"
     end
 
     # This stage uses the global default
-    consumer :sink do |item, output|
-      sleep 0.02  # 20ms per item
+    consumer :sink do |_item, _output|
+      sleep 0.02 # 20ms per item
     end
   end
 end
@@ -128,78 +128,77 @@ class GlobalConfigLargeExample
   pipeline do
     producer :source do |output|
       start = Time.now
-      puts "Producing 50 items..."
+      puts 'Producing 50 items...'
       50.times { |i| output << i }
       elapsed = Time.now - start
       puts "Producer done in #{elapsed.round(2)}s"
     end
 
     # This stage uses the global default
-    consumer :sink do |item, output|
-      sleep 0.02  # 20ms per item
+    consumer :sink do |_item, _output|
+      sleep 0.02 # 20ms per item
     end
   end
 end
 
-if __FILE__ == $0
-  puts "\n" + ("=" * 70)
-  puts "BACKPRESSURE DEMONSTRATION"
-  puts "=" * 70
+if __FILE__ == $PROGRAM_NAME
+  puts "\n#{'=' * 70}"
+  puts 'BACKPRESSURE DEMONSTRATION'
+  puts '=' * 70
   puts "\nThis example shows how queue sizing affects pipeline behavior:"
-  puts "- Bounded queues create backpressure (slow consumers throttle producers)"
-  puts "- Unbounded queues allow producers to finish immediately"
-  puts "- Small queues provide tight coupling"
-  puts "- Large queues buffer bursts"
+  puts '- Bounded queues create backpressure (slow consumers throttle producers)'
+  puts '- Unbounded queues allow producers to finish immediately'
+  puts '- Small queues provide tight coupling'
+  puts '- Large queues buffer bursts'
 
   # Example 1: Simple backpressure
-  puts "\n" + ("=" * 70)
-  puts "Example 1: Fast Producer + Slow Consumer (queue_size: 10)"
-  puts "=" * 70
-  puts "Watch how the producer is throttled by the small queue"
+  puts "\n#{'=' * 70}"
+  puts 'Example 1: Fast Producer + Slow Consumer (queue_size: 10)'
+  puts '=' * 70
+  puts 'Watch how the producer is throttled by the small queue'
   BackpressureDemo.new.run
 
   # Example 2: Multi-stage with different queue sizes
-  puts "\n" + ("=" * 70)
-  puts "Example 2: Multiple Stages with Different Queue Sizes"
-  puts "=" * 70
+  puts "\n#{'=' * 70}"
+  puts 'Example 2: Multiple Stages with Different Queue Sizes'
+  puts '=' * 70
   MultiStageBackpressure.new.run
 
   # Example 3: Bounded vs Unbounded comparison
-  puts "\n" + ("=" * 70)
-  puts "Example 3A: BOUNDED QUEUE (queue_size: 10)"
-  puts "=" * 70
+  puts "\n#{'=' * 70}"
+  puts 'Example 3A: BOUNDED QUEUE (queue_size: 10)'
+  puts '=' * 70
   puts "Producer will be throttled by slow consumer\n\n"
   BoundedExample.new.run
 
-  puts "\n" + ("=" * 70)
-  puts "Example 3B: UNBOUNDED QUEUE (queue_size: Float::INFINITY)"
-  puts "=" * 70
+  puts "\n#{'=' * 70}"
+  puts 'Example 3B: UNBOUNDED QUEUE (queue_size: Float::INFINITY)'
+  puts '=' * 70
   puts "Producer will finish immediately, queue will grow\n\n"
   UnboundedExample.new.run
 
   # Example 4: Global configuration
-  puts "\n" + ("=" * 70)
-  puts "Example 4A: Global Configuration (default_queue_size: 5)"
-  puts "=" * 70
+  puts "\n#{'=' * 70}"
+  puts 'Example 4A: Global Configuration (default_queue_size: 5)'
+  puts '=' * 70
   puts "Tight backpressure\n\n"
   Minigun.configure { |config| config.default_queue_size = 5 }
   GlobalConfigSmallExample.new.run
 
-  puts "\n" + ("=" * 70)
-  puts "Example 4B: Global Configuration (default_queue_size: 100)"
-  puts "=" * 70
+  puts "\n#{'=' * 70}"
+  puts 'Example 4B: Global Configuration (default_queue_size: 100)'
+  puts '=' * 70
   puts "Loose backpressure\n\n"
   Minigun.configure { |config| config.default_queue_size = 100 }
   GlobalConfigLargeExample.new.run
 
-  puts "\n" + ("=" * 70)
-  puts "KEY TAKEAWAYS:"
-  puts "=" * 70
-  puts "✓ Bounded queues (SizedQueue) provide automatic backpressure"
-  puts "✓ Small queues (5-50) = tight coupling, immediate throttling"
-  puts "✓ Large queues (1000+) = buffering for bursty workloads"
-  puts "✓ Unbounded queues = no backpressure, potential memory issues"
-  puts "✓ Default (1000) is a good balance for most use cases"
+  puts "\n#{'=' * 70}"
+  puts 'KEY TAKEAWAYS:'
+  puts '=' * 70
+  puts '✓ Bounded queues (SizedQueue) provide automatic backpressure'
+  puts '✓ Small queues (5-50) = tight coupling, immediate throttling'
+  puts '✓ Large queues (1000+) = buffering for bursty workloads'
+  puts '✓ Unbounded queues = no backpressure, potential memory issues'
+  puts '✓ Default (1000) is a good balance for most use cases'
   puts "\nChoose queue sizes based on your producer/consumer speed ratio!"
 end
-

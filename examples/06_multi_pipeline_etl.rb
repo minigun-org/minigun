@@ -21,7 +21,7 @@ class MultiPipelineETL
   # Pipeline 1: Extract - Fetches raw data
   pipeline :extract, to: :transform do
     producer :fetch_data do |output|
-      puts "[Extract] Fetching data from source..."
+      puts '[Extract] Fetching data from source...'
       5.times do |i|
         output << { id: i, value: i * 10 }
       end
@@ -34,7 +34,7 @@ class MultiPipelineETL
   end
 
   # Pipeline 2: Transform - Cleans and transforms data
-  pipeline :transform, to: [:load_db, :load_cache] do
+  pipeline :transform, to: %i[load_db load_cache] do
     processor :clean do |item, output|
       puts "[Transform] Cleaning item #{item[:id]}"
       output << item.merge(cleaned: true)
@@ -68,7 +68,7 @@ class MultiPipelineETL
   end
 end
 
-if __FILE__ == $0
+if __FILE__ == $PROGRAM_NAME
   puts "=== Multi-Pipeline ETL Example ===\n\n"
 
   etl = MultiPipelineETL.new
@@ -81,4 +81,3 @@ if __FILE__ == $0
   puts "Loaded to Cache: #{etl.loaded_cache.size} items"
   puts "\nAll pipelines completed successfully! ✓"
 end
-
