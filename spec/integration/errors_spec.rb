@@ -20,7 +20,7 @@ RSpec.describe 'Error Handling' do
         end
 
         pipeline do
-          producer :generate do
+          producer :generate do |output|
             5.times { |i| output << i }
           end
 
@@ -51,7 +51,7 @@ RSpec.describe 'Error Handling' do
         include Minigun::DSL
 
         pipeline do
-          producer :generate, to: :nonexistent do
+          producer :generate, to: :nonexistent do |output|
             output << 1
           end
         end

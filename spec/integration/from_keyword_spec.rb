@@ -16,11 +16,11 @@ RSpec.describe 'From Keyword' do
         end
 
         pipeline do
-          producer :source, to: :double do
+          producer :source, to: :double do |output|
             3.times { |i| output << i }
           end
 
-          processor :double do |item|
+          processor :double do |item, output|
             output << item * 2
           end
 
@@ -49,7 +49,7 @@ RSpec.describe 'From Keyword' do
         end
 
         pipeline do
-          producer :gen do
+          producer :gen do |output|
             output << 10
             output << 20
           end
@@ -78,16 +78,16 @@ RSpec.describe 'From Keyword' do
         end
 
         pipeline do
-          producer :a do
+          producer :a do |output|
             output << 1
           end
 
           # B receives from A using to:
-          processor :b, to: :d do |item|
+          processor :b do |item, output|
             output << item + 10
           end
 
-          producer :c do
+          producer :c do |output|
             output << 2
           end
 
@@ -120,7 +120,7 @@ RSpec.describe 'From Keyword' do
         end
 
         pipeline :generate do
-          producer :source do
+          producer :source do |output|
             2.times { |i| output << i }
           end
 
@@ -157,7 +157,7 @@ RSpec.describe 'From Keyword' do
         end
 
         pipeline :source_a do
-          producer :gen_a do
+          producer :gen_a do |output|
             output << 'A'
           end
 
@@ -167,7 +167,7 @@ RSpec.describe 'From Keyword' do
         end
 
         pipeline :source_b do
-          producer :gen_b do
+          producer :gen_b do |output|
             output << 'B'
           end
 
@@ -202,7 +202,7 @@ RSpec.describe 'From Keyword' do
         end
 
         pipeline :a, to: :b do
-          producer :gen do
+          producer :gen do |output|
             output << 1
           end
 
@@ -212,7 +212,7 @@ RSpec.describe 'From Keyword' do
         end
 
         pipeline :b, to: :d do
-          processor :transform do |item|
+          processor :transform do |item, output|
             output << item + 10
           end
 
@@ -222,7 +222,7 @@ RSpec.describe 'From Keyword' do
         end
 
         pipeline :c do
-          producer :gen do
+          producer :gen do |output|
             output << 2
           end
 

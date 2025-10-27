@@ -11,7 +11,7 @@ RSpec.describe 'Circular Dependency Detection' do
 
           pipeline do
             # A stage that routes to itself
-            processor :loop_stage, to: :loop_stage do |item|
+            processor :loop_stage, to: :loop_stage do |item, output|
               output << item
             end
           end
@@ -25,11 +25,11 @@ RSpec.describe 'Circular Dependency Detection' do
           include Minigun::DSL
 
           pipeline do
-            processor :a, to: :b do |item|
+            processor :a, to: :b do |item, output|
               output << item
             end
 
-            processor :b, to: :a do |item|
+            processor :b, to: :a do |item, output|
               output << item
             end
           end
@@ -43,15 +43,15 @@ RSpec.describe 'Circular Dependency Detection' do
           include Minigun::DSL
 
           pipeline do
-            processor :a, to: :b do |item|
+            processor :a, to: :b do |item, output|
               output << item
             end
 
-            processor :b, to: :c do |item|
+            processor :b, to: :c do |item, output|
               output << item
             end
 
-            processor :c, to: :a do |item|
+            processor :c, to: :a do |item, output|
               output << item
             end
           end
@@ -65,16 +65,16 @@ RSpec.describe 'Circular Dependency Detection' do
           include Minigun::DSL
 
           pipeline do
-            processor :a, to: :b do |item|
+            processor :a, to: :b do |item, output|
               output << item
             end
 
             # from: :c means c->b, creating b->c and c->b cycle when combined with b->c
-            processor :b, to: :c, from: :c do |item|
+            processor :b, to: :c, from: :c do |item, output|
               output << item
             end
 
-            processor :c do |item|
+            processor :c do |item, output|
               output << item
             end
           end
@@ -94,17 +94,17 @@ RSpec.describe 'Circular Dependency Detection' do
         end
 
         pipeline do
-          producer :source do
+          producer :source do |output|
             output << 1
           end
 
           # Diamond pattern: source -> left -> merge
           #                   source -> right -> merge
-          processor :left, from: :source, to: :merge do |item|
+          processor :left, from: :source, to: :merge do |item, output|
             output << item + 10
           end
 
-          processor :right, from: :source, to: :merge do |item|
+          processor :right, from: :source, to: :merge do |item, output|
             output << item + 20
           end
 
@@ -132,23 +132,23 @@ RSpec.describe 'Circular Dependency Detection' do
         end
 
         pipeline do
-          producer :start do
+          producer :start do |output|
             output << 1
           end
 
-          processor :a, from: :start do |item|
+          processor :a, from: :start do |item, output|
             output << item + 1
           end
 
-          processor :b, from: :start do |item|
+          processor :b, from: :start do |item, output|
             output << item + 2
           end
 
-          processor :c, from: [:a, :b] do |item|
+          processor :c, from: [:a, :b] do |item, output|
             output << item + 10
           end
 
-          processor :d, from: :a do |item|
+          processor :d, from: :a do |item, output|
             output << item + 20
           end
 
@@ -174,7 +174,7 @@ RSpec.describe 'Circular Dependency Detection' do
           include Minigun::DSL
 
           pipeline :a, to: :b do
-            producer :gen do
+            producer :gen do |output|
               output << 1
             end
 
@@ -198,7 +198,7 @@ RSpec.describe 'Circular Dependency Detection' do
           include Minigun::DSL
 
           pipeline :loop, to: :loop do
-            producer :gen do
+            producer :gen do |output|
               output << 1
             end
 
@@ -216,7 +216,7 @@ RSpec.describe 'Circular Dependency Detection' do
           include Minigun::DSL
 
           pipeline :a, to: :b do
-            producer :gen do
+            producer :gen do |output|
               output << 1
             end
 
@@ -253,7 +253,7 @@ RSpec.describe 'Circular Dependency Detection' do
         end
 
         pipeline :source, to: [:left, :right] do
-          producer :gen do
+          producer :gen do |output|
             output << 1
           end
 
@@ -263,7 +263,7 @@ RSpec.describe 'Circular Dependency Detection' do
         end
 
         pipeline :left, to: :merge do
-          processor :transform do |item|
+          processor :transform do |item, output|
             output << item + 10
           end
 
@@ -273,7 +273,7 @@ RSpec.describe 'Circular Dependency Detection' do
         end
 
         pipeline :right, to: :merge do
-          processor :transform do |item|
+          processor :transform do |item, output|
             output << item + 20
           end
 
