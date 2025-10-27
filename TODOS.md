@@ -10,9 +10,15 @@ OK. wait, what if we changed it so:
 - fan-in without fan-out (i.e. a producer connects to 1 consumer, even if MULTIPLE producers connect to that consumer) is done by directly having the producer insert to the consumer's queue
 - emit_to_stage emits DIRECTLY to the consumer input queue
 
+=========================
+
+extract the various loops into classes
+
+merge producer and consumer
+
 ==================
 
-use IDs instead of names
+use stage object_ids instead of names
 
 ============================
 

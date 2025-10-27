@@ -4,7 +4,7 @@ require 'spec_helper'
 require 'tempfile'
 require 'json'
 
-RSpec.describe 'emit_to_stage' do
+RSpec.describe 'output.to(:stage) routing' do
   describe 'basic functionality' do
     it 'routes items to explicitly named stage' do
       results = []
@@ -46,7 +46,7 @@ RSpec.describe 'emit_to_stage' do
       expect(results.map { |r| r[:id] }.sort).to eq([1, 2, 3])
     end
 
-    it 'allows mixing emit and emit_to_stage in same stage' do
+    it 'allows mixing default routing and explicit routing in same stage' do
       results = []
 
       klass = Class.new do
@@ -64,9 +64,9 @@ RSpec.describe 'emit_to_stage' do
 
           processor :router do |item, output|
             if item == 1
-              output << item * 10  # Regular emit - goes to next stage via DAG
+              output << item * 10  # Regular output - goes to next stage via DAG
             else
-              output.to(:special) << item * 100  # Targeted emit
+              output.to(:special) << item * 100  # Targeted output
             end
           end
 
@@ -88,7 +88,7 @@ RSpec.describe 'emit_to_stage' do
       expect(results).to include({ stage: :special, value: 200 })
     end
 
-    it 'can emit_to_stage multiple times in single stage' do
+    it 'can route to multiple stages in single stage block' do
       results = []
 
       klass = Class.new do
@@ -134,7 +134,7 @@ RSpec.describe 'emit_to_stage' do
   end
 
   describe 'error handling' do
-    it 'logs error when target stage does not exist' do
+    it 'logs warning when target stage does not exist' do
       klass = Class.new do
         include Minigun::DSL
 
@@ -155,7 +155,7 @@ RSpec.describe 'emit_to_stage' do
 
       pipeline = klass.new
 
-      # Should log error but not crash
+      # Should log warning but not crash
       expect { pipeline.run }.not_to raise_error
     end
 
@@ -279,7 +279,7 @@ RSpec.describe 'emit_to_stage' do
             end
           end
 
-          # Heavy processor in thread pool (not fork - simpler for this test)
+          # Heavy processor in thread pool
           threads(1) do
             consumer :heavy_processor do |item|
               @mutex.synchronize { @results << { type: :thread_heavy, value: item[:value] } }
@@ -295,9 +295,57 @@ RSpec.describe 'emit_to_stage' do
       expect(results.map { |r| r[:value] }.sort).to eq([1, 2])
     end
 
+    it 'works with inline and threaded contexts mixed' do
+      klass = Class.new do
+        include Minigun::DSL
+        attr_accessor :results
+
+        def initialize
+          @results = []
+          @mutex = Mutex.new
+        end
+
+        pipeline do
+          producer :gen do |output|
+            2.times { |i| output << i }
+          end
+
+          # Inline router
+          processor :router do |item, output|
+            if item == 0
+              output.to(:threaded_consumer) << item
+            else
+              output.to(:inline_consumer) << item
+            end
+          end
+
+          threads(1) do
+            consumer :threaded_consumer do |item|
+              @mutex.synchronize do
+                @results << { type: 'threaded', value: item }
+              end
+            end
+          end
+
+          consumer :inline_consumer do |item|
+            @mutex.synchronize do
+              @results << { type: 'inline', value: item }
+            end
+          end
+        end
+      end
+
+      pipeline = klass.new
+      pipeline.run
+
+      expect(pipeline.results.size).to eq(2)
+      expect(pipeline.results).to include({ type: 'threaded', value: 0 })
+      expect(pipeline.results).to include({ type: 'inline', value: 1 })
+    end
+
     it 'works across different execution contexts with forked processes' do
       results = []
-      temp_file = Tempfile.new(['minigun_emit_to_stage_fork', '.json'])
+      temp_file = Tempfile.new(['minigun_output_to_stage_fork', '.json'])
       temp_file.close
 
       klass = Class.new do
@@ -342,7 +390,7 @@ RSpec.describe 'emit_to_stage' do
               end
             end
           end
-          
+
           after_run do
             # Read fork results from temp file (only once!)
             unless @fork_results_read
@@ -370,7 +418,7 @@ RSpec.describe 'emit_to_stage' do
   end
 
   describe 'complex routing patterns' do
-    it 'supports conditional routing logic' do
+    it 'supports conditional routing logic with multiple conditions' do
       results = []
 
       klass = Class.new do
@@ -429,7 +477,48 @@ RSpec.describe 'emit_to_stage' do
       expect(results).to include({ priority: :low, data: 'delayed' })
     end
 
-    it 'supports load balancing pattern' do
+    it 'supports range-based conditional routing' do
+      klass = Class.new do
+        include Minigun::DSL
+        attr_accessor :results
+
+        def initialize
+          @results = []
+        end
+
+        pipeline do
+          producer :gen do |output|
+            5.times { |i| output << i }
+          end
+
+          processor :router do |item, output|
+            case item
+            when 0..2
+              output.to(:low) << item
+            when 3..4
+              output.to(:high) << item
+            end
+          end
+
+          consumer :low do |item|
+            @results << { type: :low, value: item }
+          end
+
+          consumer :high do |item|
+            @results << { type: :high, value: item }
+          end
+        end
+      end
+
+      pipeline = klass.new
+      pipeline.run
+
+      expect(pipeline.results.size).to eq(5)
+      expect(pipeline.results.select { |r| r[:type] == :low }.size).to eq(3)
+      expect(pipeline.results.select { |r| r[:type] == :high }.size).to eq(2)
+    end
+
+    it 'supports load balancing pattern with round-robin' do
       results = []
       mutex = Mutex.new
 
@@ -484,7 +573,7 @@ RSpec.describe 'emit_to_stage' do
       expect(worker_2_count).to be_between(3, 4)
     end
 
-    it 'supports multi-level routing' do
+    it 'supports multi-level routing (cascade)' do
       results = []
 
       klass = Class.new do
@@ -539,10 +628,56 @@ RSpec.describe 'emit_to_stage' do
       expect(results).to include({ handler: :email_marketing, id: 2 })
       expect(results).to include({ handler: :sms, id: 3 })
     end
+
+    it 'supports multi-level routing with processor chain' do
+      klass = Class.new do
+        include Minigun::DSL
+        attr_accessor :results
+
+        def initialize
+          @results = []
+        end
+
+        pipeline do
+          producer :gen do |output|
+            output << { type: 'A', priority: :high }
+            output << { type: 'B', priority: :low }
+            output << { type: 'A', priority: :low }
+          end
+
+          processor :type_router do |item, output|
+            output.to(:"#{item[:type].downcase}_processor") << item
+          end
+
+          processor :a_processor do |item, output|
+            output.to(:"#{item[:priority]}_priority") << item.merge(processed: 'A')
+          end
+
+          processor :b_processor do |item, output|
+            output.to(:"#{item[:priority]}_priority") << item.merge(processed: 'B')
+          end
+
+          consumer :high_priority do |item|
+            @results << item
+          end
+
+          consumer :low_priority do |item|
+            @results << item
+          end
+        end
+      end
+
+      pipeline = klass.new
+      pipeline.run
+
+      expect(pipeline.results.size).to eq(3)
+      expect(pipeline.results.select { |r| r[:priority] == :high }.size).to eq(1)
+      expect(pipeline.results.select { |r| r[:priority] == :low }.size).to eq(2)
+    end
   end
 
-  describe 'batching with emit_to_stage' do
-    it 'supports custom batching with dynamic routing' do
+  describe 'batching with dynamic routing' do
+    it 'supports custom batching with type-based routing' do
       results = []
 
       klass = Class.new do
@@ -599,52 +734,56 @@ RSpec.describe 'emit_to_stage' do
       expect(type_b_batch[:batch_size]).to eq(2)
       expect(type_b_batch[:values]).to eq([2, 4])
     end
-  end
 
-  describe 'AtomicStage#execute_with_emit' do
-    it 'returns plain items when only emit is used' do
-      stage = Minigun::AtomicStage.new(
-        name: :test,
-        block: proc { |item| output << item * 2 }
-      )
+    it 'supports batching with message type routing' do
+      klass = Class.new do
+        include Minigun::DSL
+        attr_accessor :results
 
-      context = Object.new
-      results = stage.execute_with_output << context, 5
-
-      expect(results).to eq([10])
-    end
-
-    it 'returns hash with target when emit_to_stage is used' do
-      stage = Minigun::AtomicStage.new(
-        name: :test,
-        block: proc { |item| output.to(:target) << item * 2 }
-      )
-
-      context = Object.new
-      results = stage.execute_with_output << context, 5
-
-      expect(results.size).to eq(1)
-      expect(results.first).to eq({ item: 10, target: :target })
-    end
-
-    it 'returns array with both plain items and targeted items' do
-      stage = Minigun::AtomicStage.new(
-        name: :test,
-        block: proc do |item|
-          output << item * 2
-          output.to(:specific) << item * 3
-          output << item * 4
+        def initialize
+          @results = []
+          @mutex = Mutex.new
         end
-      )
 
-      context = Object.new
-      results = stage.execute_with_output << context, 5
+        pipeline do
+          producer :gen do |output|
+            output << { type: 'email', id: 1 }
+            output << { type: 'sms', id: 2 }
+            output << { type: 'email', id: 3 }
+            output << { type: 'sms', id: 4 }
+          end
 
-      expect(results.size).to eq(3)
-      # All items in emissions array, mixed types
-      expect(results[0]).to eq(10)  # Plain item from emit
-      expect(results[1]).to eq({ item: 15, target: :specific })  # Targeted item
-      expect(results[2]).to eq(20)  # Plain item from emit
+          processor :message_batcher do |message, output|
+            @batches ||= Hash.new { |h, k| h[k] = [] }
+
+            @batches[message[:type]] << message
+
+            if @batches[message[:type]].size >= 2
+              output.to(:"#{message[:type]}_sender") << @batches[message[:type]].dup
+              @batches[message[:type]].clear
+            end
+          end
+
+          consumer :email_sender do |batch|
+            @mutex.synchronize do
+              @results << { type: 'email', count: batch.size }
+            end
+          end
+
+          consumer :sms_sender do |batch|
+            @mutex.synchronize do
+              @results << { type: 'sms', count: batch.size }
+            end
+          end
+        end
+      end
+
+      pipeline = klass.new
+      pipeline.run
+
+      expect(pipeline.results.size).to eq(2)
+      expect(pipeline.results).to include({ type: 'email', count: 2 })
+      expect(pipeline.results).to include({ type: 'sms', count: 2 })
     end
   end
 end

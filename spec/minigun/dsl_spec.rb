@@ -230,7 +230,7 @@ RSpec.describe Minigun::DSL do
 
         pipeline do
           producer :source do |output|
-            5.times { |i| emit(i) }
+            5.times { |i| output << i }
           end
 
           consumer :sink do |num|
