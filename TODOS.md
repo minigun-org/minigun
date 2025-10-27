@@ -11,24 +11,7 @@ ADD to README / DOCS:
 add to architecture
 - multi-parents --> how do we know end of queues?
 
-======================
-
-This creates a new OutputQueue everytime
-
-    # Magic sauce: explicit routing to specific stage
-    # Returns a new OutputQueue that routes only to that stage
-    def to(target_stage)
-      target_queue = @all_stage_queues[target_stage]
-      raise ArgumentError, "Unknown target stage: #{target_stage}" unless target_queue
-
-      # Track this as a runtime edge for END signal handling
-      @runtime_edges[@stage_name].add(target_stage)
-
-      # Return new OutputQueue that shares the same stats object
-      OutputQueue.new(@stage_name, [target_queue], @all_stage_queues, @runtime_edges, stage_stats: @stage_stats)
-    end
-
-==============
+========================================================================================
 
 - flush timers on batch
 - consolidate accumulator and batch
@@ -53,11 +36,6 @@ use stage object_ids instead of names
 ============================
 
 ProcessPoolExecutor --> cow_fork
-
-============================
-
-Remove instance variable get stuff
-allow(pipeline).to receive(:instance_variable_get).with(:@runtime_edges).and_return({})
 
 ================================
 
