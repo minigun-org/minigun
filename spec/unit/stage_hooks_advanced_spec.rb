@@ -28,7 +28,7 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
         pipeline do
           before_run { @execution_order << '1_pipeline_before_run' }
 
-          producer :gen do
+          producer :gen do |output|
             @execution_order << '4_producer_block'
             output << 1
           end
@@ -36,7 +36,7 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
           before(:gen) { @execution_order << '3_producer_before' }
           after(:gen) { @execution_order << '5_producer_after' }
 
-          processor :proc do |item|
+          processor :proc do |item, output|
             @execution_order << '7_processor_block'
             output << item * 2
           end
@@ -144,7 +144,7 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
         end
 
         pipeline do
-          producer :gen do
+          producer :gen do |output|
             output << 1
           end
 
@@ -190,7 +190,7 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
             @counter += 1
           end
 
-          producer :gen do
+          producer :gen do |output|
             output << 10
             output << 20
           end
@@ -203,7 +203,7 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
             @items_seen << "about to transform"
           end
 
-          processor :transform do |item|
+          processor :transform do |item, output|
             @items_seen << item
             output << item * 2
           end
@@ -241,7 +241,7 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
         end
 
         pipeline do
-          producer :gen do
+          producer :gen do |output|
             output << 1
           end
 
@@ -306,7 +306,7 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
           # Inline hook
           producer :gen,
                    before: -> { @events << :inline_before },
-                   after: -> { @events << :inline_after } do
+                   after: -> { @events << :inline_after } do |output|
             @events << :gen_block
             output << 1
           end
@@ -364,13 +364,13 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
         end
 
         pipeline do
-          producer :gen, to: [:proc1, :proc2] do
+          producer :gen, to: [:proc1, :proc2] do |output|
             output << 1
             output << 2
           end
 
           # Both processors get data from gen via fan-out routing
-          processor :proc1, to: :collect do |item|
+          processor :proc1, to: :collect do |item, output|
             output << item * 10
           end
 
@@ -378,7 +378,7 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
             @proc1_count += 1
           end
 
-          processor :proc2, to: :collect do |item|
+          processor :proc2, to: :collect do |item, output|
             output << item * 100
           end
 
@@ -420,7 +420,7 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
         end
 
         pipeline do
-          producer :gen do
+          producer :gen do |output|
             10.times { |i| output << i }
           end
 
@@ -433,7 +433,7 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
             end
           end
 
-          processor :transform do |item|
+          processor :transform do |item, output|
             output << item * 2
           end
 

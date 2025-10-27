@@ -146,12 +146,12 @@ RSpec.describe Minigun::DSL do
           before_run { @start_time = Time.now }
           after_run { @end_time = Time.now }
 
-          producer :generate do
-            3.times { |i| emit(i + 1) }
+          producer :generate do |output|
+            3.times { |i| output << (i + 1) }
           end
 
-          processor :double do |num|
-            emit(num * 2)
+          processor :double do |num, output|
+            output << (num * 2)
           end
 
           consumer :collect do |num|
@@ -211,8 +211,8 @@ RSpec.describe Minigun::DSL do
           include Minigun::DSL
 
           # No pipeline do...end wrapper - should raise error!
-          producer :generate do
-            3.times { |i| emit(i + 1) }
+          producer :generate do |output|
+            3.times { |i| output << (i + 1) }
           end
         end
       }.to raise_error(NoMethodError, /undefined method/)
@@ -229,7 +229,7 @@ RSpec.describe Minigun::DSL do
         end
 
         pipeline do
-          producer :source do
+          producer :source do |output|
             5.times { |i| emit(i) }
           end
 
@@ -257,8 +257,8 @@ RSpec.describe Minigun::DSL do
         end
 
           # Stages without pipeline do should raise error
-          producer :source do
-            5.times { |i| emit(i) }
+          producer :source do |output|
+            5.times { |i| output << (i) }
           end
         end
       }.to raise_error(NoMethodError, /undefined method/)
@@ -271,8 +271,8 @@ RSpec.describe Minigun::DSL do
           include Minigun::DSL
 
           # Stage outside pipeline block - should raise error
-          producer :start do
-            emit(10)
+          producer :start do |output|
+            output << (10)
           end
         end
       }.to raise_error(NoMethodError, /undefined method/)
@@ -284,8 +284,8 @@ RSpec.describe Minigun::DSL do
           include Minigun::DSL
 
           # Routing without pipeline block - should raise error
-          producer :start, to: [:process_a, :process_b] do
-            emit(5)
+          producer :start, to: [:process_a, :process_b] do |output|
+            output << (5)
           end
         end
       }.to raise_error(NoMethodError, /undefined method/)
@@ -297,8 +297,8 @@ RSpec.describe Minigun::DSL do
           include Minigun::DSL
 
           # Direct definition without pipeline block - should raise error
-          producer :fetch do
-            emit(1)
+          producer :fetch do |output|
+            output << (1)
           end
         end
       }.to raise_error(NoMethodError, /undefined method/)

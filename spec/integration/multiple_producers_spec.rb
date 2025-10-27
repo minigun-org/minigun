@@ -16,13 +16,13 @@ RSpec.describe 'Multiple Producers' do
         end
 
         pipeline do
-          producer :source_a do
+          producer :source_a do |output|
             5.times do |i|
               output << "A#{i}"
             end
           end
 
-          producer :source_b do
+          producer :source_b do |output|
             5.times do |i|
               output << "B#{i}"
             end
@@ -56,31 +56,31 @@ RSpec.describe 'Multiple Producers' do
         end
 
         pipeline do
-          producer :source_x, to: :process_x do
+          producer :source_x, to: :process_x do |output|
             3.times do |i|
               output << i
             end
           end
 
-          producer :source_y, to: :process_y do
+          producer :source_y, to: :process_y do |output|
             3.times do |i|
               output << i + 100
             end
           end
 
-          processor :process_x, to: :collect_x do |item|
+          processor :process_x, to: :collect_x do |item, output|
             output << item * 10
           end
 
-          processor :process_y, to: :collect_y do |item|
+          processor :process_y, to: :collect_y do |item, output|
             output << item * 2
           end
 
-          consumer :collect_x do |item|
+          consumer :collect_x do |item, output|
             @mutex.synchronize { @results_x << item }
           end
 
-          consumer :collect_y do |item|
+          consumer :collect_y do |item, output|
             @mutex.synchronize { @results_y << item }
           end
         end
@@ -107,11 +107,11 @@ RSpec.describe 'Multiple Producers' do
         end
 
         pipeline do
-          producer :fast_producer do
+          producer :fast_producer do |output|
             10.times { |i| output << i }
           end
 
-          producer :slow_producer do
+          producer :slow_producer do |output|
             5.times { |i| output << i + 100 }
           end
 
@@ -155,11 +155,11 @@ RSpec.describe 'Multiple Producers' do
         end
 
         pipeline do
-          producer :good_producer do
+          producer :good_producer do |output|
             3.times { |i| output << i }
           end
 
-          producer :bad_producer do
+          producer :bad_producer do |output|
             raise StandardError, "Producer error"
           end
 
@@ -191,7 +191,7 @@ RSpec.describe 'Multiple Producers' do
         end
 
         pipeline do
-          producer :source do
+          producer :source do |output|
             5.times { |i| output << i }
           end
 

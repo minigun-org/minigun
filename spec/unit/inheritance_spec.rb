@@ -23,12 +23,12 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
         end
 
         pipeline do
-          producer :generate do
+          producer :generate do |output|
             output << 1
             output << 2
           end
 
-          processor :transform do |num|
+          processor :transform do |num, output|
             output << num * 2
           end
 
@@ -84,7 +84,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
         end
 
         pipeline do
-          producer :generate do
+          producer :generate do |output|
             output << 1
             output << 2
           end
@@ -99,7 +99,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
     let(:child_class) do
       Class.new(parent_class) do
         pipeline do
-          processor :double do |num|
+          processor :double do |num, output|
             output << num * 2
           end
 
@@ -147,7 +147,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
             @events << :parent_after_run
           end
 
-          producer :generate do
+          producer :generate do |output|
             @events << :generate
             output << 1
           end
@@ -188,7 +188,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
         end
 
         pipeline do
-          producer :generate do
+          producer :generate do |output|
             @events << :generate
             output << 1
           end
@@ -231,7 +231,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
         max_processes 2
 
         pipeline do
-          producer :generate do
+          producer :generate do |output|
             output << 1
           end
 
@@ -271,7 +271,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
         end
 
         pipeline do
-          producer :generate do
+          producer :generate do |output|
             output << 1
           end
 
@@ -287,7 +287,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
         max_threads 20
 
         pipeline do
-          processor :double do |num|
+          processor :double do |num, output|
             output << num * 2
           end
 
@@ -303,7 +303,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
         max_threads 30
 
         pipeline do
-          processor :add_ten do |num|
+          processor :add_ten do |num, output|
             output << num + 10
           end
 
@@ -353,7 +353,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
         end
 
         pipeline do
-          producer :generate do
+          producer :generate do |output|
             output << 10
           end
 
@@ -367,7 +367,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
     let(:child_a) do
       Class.new(parent_class) do
         pipeline do
-          processor :double do |num|
+          processor :double do |num, output|
             output << num * 2
           end
 
@@ -381,7 +381,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
     let(:child_b) do
       Class.new(parent_class) do
         pipeline do
-          processor :triple do |num|
+          processor :triple do |num, output|
             output << num * 3
           end
 
@@ -434,7 +434,7 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
             connect_db
           end
 
-          producer :fetch_ids do
+          producer :fetch_ids do |output|
             items_to_publish.each { |item| output << item }
           end
 

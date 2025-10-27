@@ -14,13 +14,13 @@ RSpec.describe 'emit_to_stage v2' do
         end
 
         pipeline do
-          producer :gen do
+          producer :gen do |output|
             output << { id: 1, route: :fast }
             output << { id: 2, route: :slow }
             output << { id: 3, route: :fast }
           end
 
-          stage :router do |item|
+          processor :router do |item, output|
             output.to(item[:route]) << item
           end
 
@@ -53,12 +53,12 @@ RSpec.describe 'emit_to_stage v2' do
         end
 
         pipeline do
-          producer :gen do
+          producer :gen do |output|
             output << 1
             output << 2
           end
 
-          stage :router do |item|
+          processor :router do |item, output|
             if item == 1
               output << item * 10  # Regular emit - goes to next stage via DAG
             else
@@ -94,11 +94,11 @@ RSpec.describe 'emit_to_stage v2' do
         end
 
         pipeline do
-          producer :gen do
+          producer :gen do |output|
             output << { value: 100 }
           end
 
-          stage :splitter do |item|
+          processor :splitter do |item, output|
             output.to(:consumer_a) << { stage: 'A', value: item[:value] }
             output.to(:consumer_b) << { stage: 'B', value: item[:value] * 2 }
             output.to(:consumer_c) << { stage: 'C', value: item[:value] * 3 }
@@ -139,11 +139,11 @@ RSpec.describe 'emit_to_stage v2' do
         end
 
         pipeline do
-          producer :gen do
+          producer :gen do |output|
             5.times { |i| output << i }
           end
 
-          stage :router do |item|
+          processor :router do |item, output|
             case item
             when 0..2
               output.to(:low) << item
@@ -181,11 +181,11 @@ RSpec.describe 'emit_to_stage v2' do
         end
 
         pipeline do
-          producer :gen do
+          producer :gen do |output|
             10.times { |i| output << i }
           end
 
-          stage :load_balancer do |item|
+          processor :load_balancer do |item, output|
             worker = :"worker_#{@current_worker}"
             @current_worker = (@current_worker + 1) % 3
             output.to(worker) << item
@@ -224,21 +224,21 @@ RSpec.describe 'emit_to_stage v2' do
         end
 
         pipeline do
-          producer :gen do
+          producer :gen do |output|
             output << { type: 'A', priority: :high }
             output << { type: 'B', priority: :low }
             output << { type: 'A', priority: :low }
           end
 
-          stage :type_router do |item|
+          processor :type_router do |item, output|
             output.to(:"#{item[:type].downcase}_processor") << item
           end
 
-          stage :a_processor do |item|
+          processor :a_processor do |item, output|
             output.to(:"#{item[:priority]}_priority") << item.merge(processed: 'A')
           end
 
-          stage :b_processor do |item|
+          processor :b_processor do |item, output|
             output.to(:"#{item[:priority]}_priority") << item.merge(processed: 'B')
           end
 
@@ -273,11 +273,11 @@ RSpec.describe 'emit_to_stage v2' do
         end
 
         pipeline do
-          producer :gen do
+          producer :gen do |output|
             5.times { |i| output << i }
           end
 
-          stage :router do |item|
+          processor :router do |item, output|
             if item < 3
               output.to(:worker1) << item
             else
@@ -320,12 +320,12 @@ RSpec.describe 'emit_to_stage v2' do
         end
 
         pipeline do
-          producer :gen do
+          producer :gen do |output|
             2.times { |i| output << i }
           end
 
           # Inline router
-          stage :router do |item|
+          processor :router do |item, output|
             if item == 0
               output.to(:threaded_consumer) << item
             else
@@ -370,14 +370,14 @@ RSpec.describe 'emit_to_stage v2' do
         end
 
         pipeline do
-          producer :gen do
+          producer :gen do |output|
             output << { type: 'email', id: 1 }
             output << { type: 'sms', id: 2 }
             output << { type: 'email', id: 3 }
             output << { type: 'sms', id: 4 }
           end
 
-          stage :message_batcher do |message|
+          processor :message_batcher do |message, output|
             @batches ||= Hash.new { |h, k| h[k] = [] }
 
             @batches[message[:type]] << message
