@@ -228,8 +228,8 @@ module Minigun
       queues = {}
 
       @stages.each do |stage_name, stage|
-        # Skip producers - they don't have input queues
-        next if stage.producer?
+        # Skip autonomous stages - they don't have input queues
+        next if stage.run_mode == :autonomous
 
         queues[stage_name] = Queue.new  # Unbounded to prevent deadlock
       end
@@ -304,16 +304,16 @@ module Minigun
 
     # Helper methods to find stages by characteristics
     def find_producer
-      @stages.values.find { |stage| stage.producer? }
+      @stages.values.find { |stage| stage.run_mode == :autonomous }
     end
 
     def find_all_producers
       @stages.values.select do |stage|
-        if stage.is_a?(PipelineStage)
-          # PipelineStage is a producer if it has no upstream
+        if stage.run_mode == :composite
+          # Composite stage is a producer if it has no upstream
           @dag.upstream(stage.name).empty?
         else
-          stage.producer?
+          stage.run_mode == :autonomous
         end
       end
     end
@@ -348,16 +348,16 @@ module Minigun
     end
 
     def handle_multiple_producers_routing!
-      producers = @stage_order.select { |s| find_stage(s)&.producer? }
+      producers = @stage_order.select { |s| find_stage(s)&.run_mode == :autonomous }
 
       # Each producer without explicit routing should connect to its next stage in definition order
       producers.each do |producer_name|
         # Skip if this producer already has explicit downstream edges
         next unless @dag.downstream(producer_name).empty?
 
-        # Find the next non-producer stage after this producer
+        # Find the next non-autonomous stage after this producer
         producer_index = @stage_order.index(producer_name)
-        next_stage = @stage_order[(producer_index + 1)..-1].find { |s| !find_stage(s)&.producer? }
+        next_stage = @stage_order[(producer_index + 1)..-1].find { |s| find_stage(s)&.run_mode != :autonomous }
 
         if next_stage
           @dag.add_edge(producer_name, next_stage)
@@ -380,8 +380,8 @@ module Minigun
           candidate = @stage_order[next_index]
           candidate_obj = find_stage(candidate)
 
-          # Skip producers
-          next if candidate_obj.producer?
+          # Skip autonomous stages
+          next if candidate_obj.run_mode == :autonomous
 
           # Found a valid non-producer stage
           next_stage = candidate
@@ -392,9 +392,9 @@ module Minigun
         # No valid next stage found
         next unless next_stage
 
-        # Skip if BOTH current and next are PipelineStages (isolated pipelines)
+        # Skip if BOTH current and next are composite stages (isolated pipelines)
         current_stage = find_stage(stage_name)
-        if current_stage.is_a?(PipelineStage) && next_stage_obj.is_a?(PipelineStage)
+        if current_stage.run_mode == :composite && next_stage_obj.run_mode == :composite
           next
         end
 

@@ -16,7 +16,7 @@ RSpec.describe Minigun::PipelineStage do
   describe '#composite?' do
     it 'returns true' do
       stage = described_class.new(name: :my_pipeline)
-      expect(stage.composite?).to be true
+      expect(stage).to be_a(Minigun::PipelineStage)
     end
   end
 
@@ -61,7 +61,7 @@ RSpec.describe Minigun::PipelineStage do
 
       stage.add_stage(:producer, :source) { emit(1) }
 
-      expect(pipeline.stages[:source]).to be_a(Minigun::AtomicStage)
+      expect(pipeline.stages[:source]).to be_a(Minigun::ProducerStage)
     end
   end
 

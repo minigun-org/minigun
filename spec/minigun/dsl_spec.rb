@@ -187,10 +187,10 @@ RSpec.describe Minigun::DSL do
       double_stage = pipeline.stages[:double]
       collect_stage = pipeline.stages[:collect]
 
-      expect(gen_stage.producer?).to be true
-      expect(double_stage.producer?).to be false
+      expect(gen_stage).to be_a(Minigun::ProducerStage)
+      expect(double_stage).to be_a(Minigun::ConsumerStage)
       expect(double_stage).not_to be_a(Minigun::AccumulatorStage)
-      expect(collect_stage.producer?).to be false
+      expect(collect_stage).to be_a(Minigun::ConsumerStage)
 
       # Verify we have 3 stages total
       expect(pipeline.stages.size).to eq(3)

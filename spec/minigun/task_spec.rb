@@ -41,7 +41,7 @@ RSpec.describe Minigun::Task do
       expect(task.stages[:test_producer]).not_to be_nil
       expect(task.stages[:test_producer].name).to eq(:test_producer)
       expect(task.stages[:test_producer].block).to eq(block)
-      expect(task.stages[:test_producer].producer?).to be true
+      expect(task.stages[:test_producer]).to be_a(Minigun::ProducerStage)
     end
 
     it 'adds processor stages' do

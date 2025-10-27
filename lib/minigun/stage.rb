@@ -55,62 +55,45 @@ module Minigun
       context = stage_ctx.pipeline.instance_variable_get(:@context)
       execute(context, input_queue: wrapped_input, output_queue: wrapped_output)
 
-      # Send END signals to downstream
-      send_end_signals(stage_ctx)
+    # Send END signals to downstream
+    send_end_signals(stage_ctx)
+  end
+
+  # Get execution context configuration for this stage
+  def execution_context
+    @options[:_execution_context]
+  end
+
+  # Hash representation (for test compatibility)
+  def to_h
+    hash = { name: @name, options: @options }
+    hash[:block] = @block if @block
+    hash
+  end
+
+  # Hash-like access (for test compatibility)
+  def [](key)
+    case key
+    when :name then @name
+    when :options then @options
+    when :block then @block
+    else nil
     end
+  end
 
-    # Whether this stage is a producer (no input)
-    def producer?
-      false
-    end
+  # Type name for logging purposes
+  def log_type
+    "Worker"
+  end
 
-    # Router? - only RouterStage returns true
-    def router?
-      false
-    end
+  # Execution strategy: :autonomous, :streaming, or :composite
+  def run_mode
+    :streaming  # Default: process stream of items in worker loop
+  end
 
-    # Consumer? - default false, overridden by AtomicStage
-    def consumer?
-      false
-    end
+  private
 
-    # Processor? - default false, overridden by AtomicStage
-    def processor?
-      false
-    end
-
-    # Stage with input loop? - true for loop-based stages
-    def stage_with_loop?
-      !@block.nil?
-    end
-
-    # Whether this stage is composite (contains other stages)
-    def composite?
-      false
-    end
-
-    # Get execution context configuration for this stage
-    def execution_context
-      @options[:_execution_context]
-    end
-
-    # Hash representation (for test compatibility)
-    def to_h
-      { name: @name, options: @options }
-    end
-
-    # Hash-like access (for test compatibility)
-    def [](key)
-      case key
-      when :name then @name
-      when :options then @options
-      else nil
-      end
-    end
-
-    private
-
-    def send_end_signals(stage_ctx)
+  def send_end_signals(stage_ctx)
       dag_downstream = stage_ctx.dag.downstream(stage_ctx.stage_name)
       dynamic_targets = stage_ctx.runtime_edges[stage_ctx.stage_name].to_a
       all_targets = (dag_downstream + dynamic_targets).uniq
@@ -122,47 +105,19 @@ module Minigun
     end
   end
 
-  # Atomic stages - leaf nodes that execute a single block
-  # Base class for executable stages (producer, consumer)
-  # These process individual items, not managing their own loops
-  class AtomicStage < Stage
-    def initialize(name:, block:, options: {})
-      super(name: name, block: block, options: options)
-    end
-
-    # Execute stage logic - subclasses implement specific behavior
-    def execute(context, item: nil, input_queue: nil, output_queue: nil)
-      raise NotImplementedError, "Subclass must implement #execute"
-    end
-
-    # Override: AtomicStages don't manage their own loops
-    def stage_with_loop?
-      false
-    end
-
-    # Hash representation (for test compatibility)
-    def to_h
-      super.merge(block: @block)
-    end
-
-    # Hash-like access (for test compatibility)
-    def [](key)
-      case key
-      when :block then @block
-      else super
-      end
-    end
-  end
-
   # Producer stage - executes once, no input
-  class ProducerStage < AtomicStage
-    def producer?
-      true
-    end
-
+  class ProducerStage < Stage
     def execute(context, item: nil, input_queue: nil, output_queue: nil)
       return unless @block
       context.instance_exec(output_queue, &@block)
+    end
+
+    def log_type
+      "Producer"
+    end
+
+    def run_mode
+      :autonomous  # Generates data independently
     end
 
     def run_worker_loop(stage_ctx)
@@ -234,11 +189,7 @@ module Minigun
   end
 
   # Consumer/Processor stage - loops on input, processes items
-  class ConsumerStage < AtomicStage
-    def producer?
-      false
-    end
-
+  class ConsumerStage < Stage
     def execute(context, item: nil, input_queue: nil, output_queue: nil)
       return unless @block
       context.instance_exec(item, output_queue, &@block)
@@ -390,10 +341,6 @@ module Minigun
       @targets = targets
     end
 
-    def router?
-      true
-    end
-
     def execute(context, item)
       # Router doesn't transform, just passes through
       [item]
@@ -471,8 +418,8 @@ module Minigun
       @stages_to_add = []  # Queue of stages to add when pipeline is created
     end
 
-    def composite?
-      true
+    def run_mode
+      :composite  # Manages internal stages
     end
 
     # Execute method for when PipelineStage is used as a processor/consumer
@@ -493,8 +440,8 @@ module Minigun
       current_items = [item]
 
       @pipeline.stages.each_value do |stage|
-        # Skip producers - we're feeding items in from upstream
-        next if stage.producer? || stage.is_a?(PipelineStage)
+        # Only feed to streaming stages
+        next unless stage.run_mode == :streaming
 
         break if current_items.empty?
 
@@ -602,7 +549,7 @@ module Minigun
 
       # Add a temporary consumer to collect items
       temp_consumer_added = false
-      unless @pipeline.stages.values.any? { |s| s.consumer? && s.name.to_s.start_with?('_temp_collector') }
+      unless @pipeline.stages.values.any? { |s| s.is_a?(ConsumerStage) && s.name.to_s.start_with?('_temp_collector') }
         @pipeline.instance_eval do
           add_stage(:stage, :_temp_collector, stage_type: :consumer) do |item, output|
             collected_items << item

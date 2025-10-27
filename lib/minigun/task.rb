@@ -34,9 +34,9 @@ module Minigun
       end
     end
 
-    # Get all named pipelines (PipelineStage objects in root_pipeline)
+    # Get all named pipelines (composite stages in root_pipeline)
     def pipelines
-      @root_pipeline.stages.select { |_name, stage| stage.is_a?(PipelineStage) }
+      @root_pipeline.stages.select { |_name, stage| stage.run_mode == :composite }
                            .transform_values(&:pipeline)
     end
 
@@ -90,8 +90,8 @@ module Minigun
       # Check if already exists
       if @root_pipeline.stages.key?(name)
         pipeline_stage = @root_pipeline.stages[name]
-        unless pipeline_stage.is_a?(PipelineStage)
-          raise Minigun::Error, "Stage #{name} already exists as a non-pipeline stage"
+        unless pipeline_stage.run_mode == :composite
+          raise Minigun::Error, "Stage #{name} already exists as a non-composite stage"
         end
         pipeline = pipeline_stage.pipeline
       else

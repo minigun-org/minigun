@@ -17,7 +17,9 @@ RSpec.describe Minigun::Execution::Worker do
       producer?: false,
       router?: false,
       stage_with_loop?: false,
-      execution_context: nil
+      execution_context: nil,
+      log_type: "Worker",
+      run_mode: :streaming
     )
   end
 
@@ -114,7 +116,6 @@ RSpec.describe Minigun::Execution::Worker do
     context 'with inline execution context' do
       before do
         allow(stage).to receive(:execution_context).and_return(nil)
-        allow(stage).to receive(:producer?).and_return(false)
       end
 
       it 'creates an inline executor' do
@@ -128,7 +129,6 @@ RSpec.describe Minigun::Execution::Worker do
     context 'with thread execution context' do
       before do
         allow(stage).to receive(:execution_context).and_return({ type: :threads, pool_size: 5 })
-        allow(stage).to receive(:producer?).and_return(false)
       end
 
       it 'creates a thread pool executor' do
@@ -141,7 +141,6 @@ RSpec.describe Minigun::Execution::Worker do
     context 'with process execution context' do
       before do
         allow(stage).to receive(:execution_context).and_return({ type: :fork, max: 2 })
-        allow(stage).to receive(:producer?).and_return(false)
       end
 
       it 'creates a process pool executor' do
@@ -158,8 +157,6 @@ RSpec.describe Minigun::Execution::Worker do
         .and_return({ test_stage: Queue.new })
       allow(dag).to receive(:upstream).with(:test_stage).and_return([])
       allow(dag).to receive(:downstream).with(:test_stage).and_return([])
-      allow(stage).to receive(:producer?).and_return(false)
-      allow(stage).to receive(:is_a?).with(Minigun::PipelineStage).and_return(false)
 
       worker = described_class.new(pipeline, stage, config)
 

@@ -33,9 +33,8 @@ RSpec.describe Minigun::Pipeline do
   describe '#add_stage' do
     it 'adds a producer stage' do
       pipeline.add_stage(:producer, :fetch) { "fetch data" }
-      expect(pipeline.stages[:fetch]).to be_a(Minigun::AtomicStage)
+      expect(pipeline.stages[:fetch]).to be_a(Minigun::ProducerStage)
       expect(pipeline.stages[:fetch].name).to eq(:fetch)
-      expect(pipeline.stages[:fetch].producer?).to be true
     end
 
     it 'adds multiple processor stages' do

@@ -53,9 +53,8 @@ module Minigun
       end
 
       def handle_disconnected_stage(stage_ctx)
-        # Only check non-producers and non-PipelineStages
-        return false if @stage.producer?
-        return false if @stage.is_a?(PipelineStage)
+        # Only check streaming stages (autonomous and composite manage their own execution)
+        return false unless @stage.run_mode == :streaming
 
         # If no upstream sources, this stage is disconnected
         if stage_ctx.sources_expected.empty?
@@ -78,8 +77,8 @@ module Minigun
         dag = @pipeline.instance_variable_get(:@dag)
         stage_input_queues = @pipeline.instance_variable_get(:@stage_input_queues)
 
-        # Calculate sources for workers (empty for producers)
-        sources_expected = if @stage.producer?
+        # Calculate sources for workers (empty for autonomous stages)
+        sources_expected = if @stage.run_mode == :autonomous
                             Set.new
                           else
                             Set.new(dag.upstream(@stage_name))
@@ -101,7 +100,7 @@ module Minigun
       end
 
       def create_executor_if_needed
-        return nil if @stage.producer?
+        return nil if @stage.run_mode == :autonomous
 
         exec_ctx = @stage.execution_context
         return InlineExecutor.new if exec_ctx.nil?
@@ -132,14 +131,12 @@ module Minigun
 
       def log_info(msg)
         pipeline_name = @pipeline.instance_variable_get(:@name)
-        worker_type = @stage.producer? ? "Producer" : "Worker"
-        Minigun.logger.info "[Pipeline:#{pipeline_name}][#{worker_type}:#{@stage_name}] #{msg}"
+        Minigun.logger.info "[Pipeline:#{pipeline_name}][#{@stage.log_type}:#{@stage_name}] #{msg}"
       end
 
       def log_error(msg)
         pipeline_name = @pipeline.instance_variable_get(:@name)
-        worker_type = @stage.producer? ? "Producer" : "Worker"
-        Minigun.logger.error "[Pipeline:#{pipeline_name}][#{worker_type}:#{@stage_name}] #{msg}"
+        Minigun.logger.error "[Pipeline:#{pipeline_name}][#{@stage.log_type}:#{@stage_name}] #{msg}"
       end
     end
   end

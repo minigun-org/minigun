@@ -27,8 +27,8 @@ RSpec.describe Minigun::ProducerStage do
   describe 'producer behavior' do
     let(:stage) { described_class.new(name: :test, block: proc { |output| }) }
 
-    it 'is a producer' do
-      expect(stage.producer?).to be true
+    it 'is a ProducerStage' do
+      expect(stage).to be_a(Minigun::ProducerStage)
     end
 
     it 'executes without an item argument' do
@@ -50,8 +50,8 @@ RSpec.describe Minigun::ConsumerStage do
   describe 'processor behavior' do
     let(:stage) { described_class.new(name: :test, block: proc { |_x, _output| }) }
 
-    it 'is not a producer' do
-      expect(stage.producer?).to be false
+    it 'is a ConsumerStage' do
+      expect(stage).to be_a(Minigun::ConsumerStage)
     end
 
     it 'executes with queue-based output' do
@@ -83,8 +83,8 @@ RSpec.describe Minigun::ConsumerStage do
       )
     end
 
-    it 'is not a producer' do
-      expect(stage.producer?).to be false
+    it 'is a ConsumerStage' do
+      expect(stage).to be_a(Minigun::ConsumerStage)
     end
 
     it 'has execution context' do
@@ -106,7 +106,7 @@ RSpec.describe 'Stage common behavior' do
   describe '#initialize' do
     it 'creates a stage with required attributes' do
       expect(stage.name).to eq(:test)
-      expect(stage.producer?).to be false
+      expect(stage).to be_a(Minigun::ConsumerStage)
       expect(stage.block).to be_a(Proc)
       expect(stage.options).to eq({ foo: 'bar' })
     end
