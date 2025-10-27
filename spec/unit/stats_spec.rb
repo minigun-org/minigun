@@ -16,7 +16,7 @@ RSpec.describe Minigun::Stats do
 
     it 'accepts is_terminal parameter' do
       stats = described_class.new(:test_stage, is_terminal: true)
-      stats.instance_variable_get(:@items_consumed) # Just verify it was set
+      stats.items_consumed # Just verify it was set
       expect(stats.stage_name).to eq(:test_stage)
     end
   end
@@ -208,7 +208,7 @@ RSpec.describe Minigun::Stats do
 
       # Should have sampled data
       expect(stats.has_latency_data?).to be true
-      samples = stats.instance_variable_get(:@latency_samples)
+      samples = stats.latency_samples
 
       # Should have up to 200 samples (less than reservoir size)
       expect(samples.size).to eq(200)
@@ -226,14 +226,14 @@ RSpec.describe Minigun::Stats do
         stats.record_latency(0.001 * i)
       end
 
-      samples = stats.instance_variable_get(:@latency_samples)
+      samples = stats.latency_samples
       reservoir_size = described_class::RESERVOIR_SIZE
 
       # Should not exceed reservoir size
       expect(samples.size).to eq(reservoir_size)
 
       # Should have recorded all 2000 observations
-      expect(stats.instance_variable_get(:@latency_count)).to eq(2000)
+      expect(stats.latency_count).to eq(2000)
     end
 
     it 'maintains uniform probability distribution' do
@@ -244,7 +244,7 @@ RSpec.describe Minigun::Stats do
         stats.record_latency(i.to_f)
       end
 
-      samples = stats.instance_variable_get(:@latency_samples)
+      samples = stats.latency_samples
       reservoir_size = described_class::RESERVOIR_SIZE
 
       # Should have exactly reservoir_size samples
@@ -281,10 +281,10 @@ RSpec.describe Minigun::Stats do
       threads.each(&:join)
 
       # Should have recorded all 1000 observations
-      expect(stats.instance_variable_get(:@latency_count)).to eq(1000)
+      expect(stats.latency_count).to eq(1000)
 
       # Should have up to 1000 samples (less than reservoir size)
-      samples = stats.instance_variable_get(:@latency_samples)
+      samples = stats.latency_samples
       expect(samples.size).to eq(1000)
     end
 
@@ -299,10 +299,10 @@ RSpec.describe Minigun::Stats do
       reservoir_size = described_class::RESERVOIR_SIZE
 
       # Samples should be capped at reservoir size
-      expect(stats.instance_variable_get(:@latency_samples).size).to eq(reservoir_size)
+      expect(stats.latency_samples.size).to eq(reservoir_size)
 
       # But total observations should be tracked
-      expect(stats.instance_variable_get(:@latency_count)).to eq(10_000)
+      expect(stats.latency_count).to eq(10_000)
     end
 
     it 'works correctly with very large datasets (1 million items)' do
@@ -314,13 +314,13 @@ RSpec.describe Minigun::Stats do
       end
 
       reservoir_size = described_class::RESERVOIR_SIZE
-      samples = stats.instance_variable_get(:@latency_samples)
+      samples = stats.latency_samples
 
       # Should have exactly reservoir_size samples
       expect(samples.size).to eq(reservoir_size)
 
       # Should have tracked all observations
-      expect(stats.instance_variable_get(:@latency_count)).to eq(1_000_000)
+      expect(stats.latency_count).to eq(1_000_000)
 
       # Samples should be in expected range
       expect(samples.min).to be >= 0

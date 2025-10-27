@@ -22,7 +22,7 @@ puts "=" * 60
 class ConfigurableDownloader
   include Minigun::DSL
 
-  attr_reader :results
+  attr_reader :results, :threads, :batch_size
 
   def initialize(threads: 10, batch_size: 100)
     @threads = threads
@@ -61,10 +61,10 @@ small_pipeline = ConfigurableDownloader.new(threads: 5, batch_size: 10)
 large_pipeline = ConfigurableDownloader.new(threads: 20, batch_size: 50)
 
 puts "\nSmall pipeline (5 threads, batch 10):"
-puts "  Configuration: threads=#{small_pipeline.instance_variable_get(:@threads)}, batch=#{small_pipeline.instance_variable_get(:@batch_size)}"
+puts "  Configuration: threads=#{small_pipeline.threads}, batch=#{small_pipeline.batch_size}"
 
 puts "\nLarge pipeline (20 threads, batch 50):"
-puts "  Configuration: threads=#{large_pipeline.instance_variable_get(:@threads)}, batch=#{large_pipeline.instance_variable_get(:@batch_size)}"
+puts "  Configuration: threads=#{large_pipeline.threads}, batch=#{large_pipeline.batch_size}"
 
 # Example 2: Process Per Batch Configuration
 puts "\n"
@@ -75,7 +75,7 @@ puts "=" * 60
 class DataProcessor
   include Minigun::DSL
 
-  attr_reader :processed_count
+  attr_reader :processed_count, :threads, :processes, :batch_size
 
   def initialize(threads: 50, processes: 4, batch_size: 1000)
     @threads = threads
@@ -119,9 +119,9 @@ end
 
 processor = DataProcessor.new(threads: 100, processes: 8, batch_size: 500)
 puts "\nProcessor configuration:"
-puts "  Threads for I/O: #{processor.instance_variable_get(:@threads)}"
-puts "  Max processes: #{processor.instance_variable_get(:@processes)}"
-puts "  Batch size: #{processor.instance_variable_get(:@batch_size)}"
+puts "  Threads for I/O: #{processor.threads}"
+puts "  Max processes: #{processor.processes}"
+puts "  Batch size: #{processor.batch_size}"
 puts "\nThis allows:"
 puts "  - 100 concurrent downloads (threads)"
 puts "  - Batches of 500 items"
@@ -135,6 +135,8 @@ puts "=" * 60
 
 class SmartPipeline
   include Minigun::DSL
+
+  attr_reader :env, :threads, :processes, :batch_size
 
   def initialize
     # Configure based on environment
@@ -182,11 +184,11 @@ class SmartPipeline
 end
 
 smart = SmartPipeline.new
-puts "\nEnvironment: #{smart.instance_variable_get(:@env)}"
+puts "\nEnvironment: #{smart.env}"
 puts "Configuration:"
-puts "  Threads: #{smart.instance_variable_get(:@threads)}"
-puts "  Processes: #{smart.instance_variable_get(:@processes)}"
-puts "  Batch size: #{smart.instance_variable_get(:@batch_size)}"
+puts "  Threads: #{smart.threads}"
+puts "  Processes: #{smart.processes}"
+puts "  Batch size: #{smart.batch_size}"
 
 # Example 4: Dynamic Configuration
 puts "\n"

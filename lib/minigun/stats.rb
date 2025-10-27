@@ -5,6 +5,7 @@ module Minigun
   class Stats
     attr_reader :stage_name, :start_time, :end_time
     attr_reader :items_produced, :items_consumed, :items_failed
+    attr_reader :latency_samples, :latency_count
 
     # Latency tracking - reservoir sampling for uniform distribution
     RESERVOIR_SIZE = 1000

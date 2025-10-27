@@ -74,8 +74,8 @@ module Minigun
       end
 
       def create_stage_context
-        dag = @pipeline.instance_variable_get(:@dag)
-        stage_input_queues = @pipeline.instance_variable_get(:@stage_input_queues)
+        dag = @pipeline.dag
+        stage_input_queues = @pipeline.stage_input_queues
 
         # Calculate sources for workers (empty for autonomous stages)
         sources_expected = if @stage.run_mode == :autonomous
@@ -88,9 +88,9 @@ module Minigun
           pipeline: @pipeline,
           stage_name: @stage_name,
           dag: dag,
-          runtime_edges: @pipeline.instance_variable_get(:@runtime_edges),
+          runtime_edges: @pipeline.runtime_edges,
           stage_input_queues: stage_input_queues,
-          stats: @pipeline.instance_variable_get(:@stats),
+          stats: @pipeline.stats,
           # Worker-specific (nil/empty for producers)
           input_queue: stage_input_queues[@stage_name],
           sources_expected: sources_expected,
@@ -130,13 +130,11 @@ module Minigun
       end
 
       def log_info(msg)
-        pipeline_name = @pipeline.instance_variable_get(:@name)
-        Minigun.logger.info "[Pipeline:#{pipeline_name}][#{@stage.log_type}:#{@stage_name}] #{msg}"
+        Minigun.logger.info "[Pipeline:#{@pipeline.name}][#{@stage.log_type}:#{@stage_name}] #{msg}"
       end
 
       def log_error(msg)
-        pipeline_name = @pipeline.instance_variable_get(:@name)
-        Minigun.logger.error "[Pipeline:#{pipeline_name}][#{@stage.log_type}:#{@stage_name}] #{msg}"
+        Minigun.logger.error "[Pipeline:#{@pipeline.name}][#{@stage.log_type}:#{@stage_name}] #{msg}"
       end
     end
   end

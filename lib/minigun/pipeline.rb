@@ -7,7 +7,8 @@ module Minigun
   # Pipeline represents a single data processing pipeline with stages
   # A Pipeline can be standalone or part of a multi-pipeline Task
   class Pipeline
-    attr_reader :name, :config, :stages, :hooks, :dag, :input_queue, :output_queues, :stage_order, :stats
+    attr_reader :name, :config, :stages, :hooks, :dag, :input_queue, :output_queues, :stage_order, :stats,
+                :context, :stage_hooks, :stage_input_queues, :runtime_edges
 
     def initialize(name, config = {})
       @name = name
@@ -143,8 +144,8 @@ module Minigun
       # Remove existing outgoing edges from this stage
       old_targets = @dag.downstream(from_stage).dup
       old_targets.each do |target|
-        @dag.instance_variable_get(:@edges)[from_stage].delete(target)
-        @dag.instance_variable_get(:@reverse_edges)[target].delete(from_stage)
+        @dag.edges[from_stage].delete(target)
+        @dag.reverse_edges[target].delete(from_stage)
       end
 
       # Add new edges

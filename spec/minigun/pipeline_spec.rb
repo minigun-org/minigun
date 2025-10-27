@@ -184,7 +184,7 @@ RSpec.describe Minigun::Pipeline do
       nested_pipeline = Minigun::Pipeline.new(:nested, config)
       pipeline_stage.pipeline = nested_pipeline
       pipeline.stages[:nested] = pipeline_stage
-      pipeline.instance_variable_get(:@stage_order) << :nested
+      pipeline.stage_order << :nested
 
       # Add to DAG with upstream from source
       pipeline.dag.add_node(:nested)
@@ -205,7 +205,7 @@ RSpec.describe Minigun::Pipeline do
       nested_pipeline = Minigun::Pipeline.new(:nested, config)
       pipeline_stage.pipeline = nested_pipeline
       pipeline.stages[:pipeline_source] = pipeline_stage
-      pipeline.instance_variable_get(:@stage_order) << :pipeline_source
+      pipeline.stage_order << :pipeline_source
       pipeline.dag.add_node(:pipeline_source)
 
       producers = pipeline.send(:find_all_producers)
@@ -292,7 +292,7 @@ RSpec.describe Minigun::Pipeline do
       nested_pipeline = Minigun::Pipeline.new(:nested, config)
       pipeline_stage.pipeline = nested_pipeline
       pipeline.stages[:pipeline_source] = pipeline_stage
-      pipeline.instance_variable_get(:@stage_order) << :pipeline_source
+      pipeline.stage_order << :pipeline_source
       pipeline.dag.add_node(:pipeline_source)
 
       pipeline.add_stage(:consumer, :sink) { |item| item }
@@ -327,7 +327,7 @@ RSpec.describe Minigun::Pipeline do
       source_pipeline.add_stage(:processor, :double) { |item, output| output << item * 2 }
 
       pipeline.stages[:source_pipeline] = pipeline_stage
-      pipeline.instance_variable_get(:@stage_order).unshift(:source_pipeline)
+      pipeline.stage_order.unshift(:source_pipeline)
       pipeline.dag.add_node(:source_pipeline)
 
       # Add consumer to main pipeline
@@ -359,7 +359,7 @@ RSpec.describe Minigun::Pipeline do
       proc_pipeline.add_stage(:processor, :add_one) { |item, output| output << item + 1 }
 
       pipeline.stages[:processor_pipeline] = pipeline_stage
-      pipeline.instance_variable_get(:@stage_order) << :processor_pipeline
+      pipeline.stage_order << :processor_pipeline
       pipeline.dag.add_node(:processor_pipeline)
       pipeline.dag.add_edge(:source, :processor_pipeline)
 
@@ -389,7 +389,7 @@ RSpec.describe Minigun::Pipeline do
       p1.add_stage(:processor, :double) { |item, output| output << item * 2 }
 
       pipeline.stages[:pipeline_a] = ps1
-      pipeline.instance_variable_get(:@stage_order) << :pipeline_a
+      pipeline.stage_order << :pipeline_a
       pipeline.dag.add_node(:pipeline_a)
 
       # Second PipelineStage producer
@@ -400,7 +400,7 @@ RSpec.describe Minigun::Pipeline do
       p2.add_stage(:processor, :triple) { |item, output| output << item * 3 }
 
       pipeline.stages[:pipeline_b] = ps2
-      pipeline.instance_variable_get(:@stage_order) << :pipeline_b
+      pipeline.stage_order << :pipeline_b
       pipeline.dag.add_node(:pipeline_b)
 
       # Consumer

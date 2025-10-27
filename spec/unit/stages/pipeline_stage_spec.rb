@@ -51,7 +51,7 @@ RSpec.describe Minigun::PipelineStage do
 
       stage.add_stage(:producer, :source) { emit(1) }
 
-      expect(stage.instance_variable_get(:@stages_to_add).size).to eq(1)
+      expect(stage.stages_to_add.size).to eq(1)
     end
 
     it 'adds stages directly when pipeline exists' do

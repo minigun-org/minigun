@@ -102,7 +102,7 @@ RSpec.describe Minigun::DAG do
     it 'raises error for non-existent target' do
       # Manually create invalid state (can't happen through normal API)
       dag.add_node(:a)
-      dag.instance_variable_get(:@edges)[:a] << :nonexistent
+      dag.edges[:a] << :nonexistent
 
       expect { dag.validate! }.to raise_error(Minigun::Error, /nonexistent/)
     end

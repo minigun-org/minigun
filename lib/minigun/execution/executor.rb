@@ -15,7 +15,7 @@ module Minigun
       # @param pipeline [Pipeline] The pipeline instance (for hooks)
       def execute_stage_item(stage:, item:, user_context:, input_queue: nil, output_queue: nil, stats:, pipeline:)
         # Check if stage is terminal
-        dag = pipeline.instance_variable_get(:@dag)
+        dag = pipeline.dag
         is_terminal = dag.terminal?(stage.name)
         stage_stats = stats.for_stage(stage.name, is_terminal: is_terminal)
         stage_stats.start! unless stage_stats.start_time
@@ -200,11 +200,11 @@ module Minigun
       end
 
       def execute_fork_hooks(hook_type, stage, pipeline)
-        user_context = pipeline.instance_variable_get(:@context)
-        stage_hooks = pipeline.instance_variable_get(:@stage_hooks)
+        user_context = pipeline.context
+        stage_hooks = pipeline.stage_hooks
 
         # Pipeline-level fork hooks
-        hooks = pipeline.instance_variable_get(:@hooks)[hook_type] || []
+        hooks = pipeline.hooks[hook_type] || []
         hooks.each { |h| user_context.instance_eval(&h) }
 
         # Stage-specific fork hooks

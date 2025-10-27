@@ -133,8 +133,13 @@ RSpec.describe 'Stage common behavior' do
     end
 
     it 'has access to context instance variables' do
-      context = Object.new
-      context.instance_variable_set(:@value, 100)
+      context_class = Class.new do
+        attr_reader :value
+        def initialize(value)
+          @value = value
+        end
+      end
+      context = context_class.new(100)
 
       stage = Minigun::ConsumerStage.new(
         name: :test,
@@ -143,7 +148,7 @@ RSpec.describe 'Stage common behavior' do
 
       stage.execute(context, item: 23)
       # Note: execute doesn't return values for consumers in new DSL
-      expect(context.instance_variable_get(:@value)).to eq(100) # unchanged
+      expect(context.value).to eq(100) # unchanged
     end
   end
 

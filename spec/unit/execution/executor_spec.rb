@@ -34,7 +34,7 @@ RSpec.describe Minigun::Execution::Executor do
       dag = double('dag', terminal?: false)
       double('pipeline',
         name: 'test_pipeline',
-        instance_variable_get: dag,
+        dag: dag,
         send: nil
       )
     end
@@ -106,7 +106,7 @@ RSpec.describe Minigun::Execution::InlineExecutor do
     dag = double('dag', terminal?: false)
     double('pipeline',
       name: 'test_pipeline',
-      instance_variable_get: dag,
+      dag: dag,
       send: nil
     )
   end
@@ -165,7 +165,7 @@ RSpec.describe Minigun::Execution::ThreadPoolExecutor do
       dag = double('dag', terminal?: false)
       double('pipeline',
         name: 'test_pipeline',
-        instance_variable_get: dag,
+        dag: dag,
         send: nil
       )
     end
@@ -252,7 +252,7 @@ RSpec.describe Minigun::Execution::ProcessPoolExecutor, skip: Gem.win_platform? 
     let(:pipeline) do
       double('pipeline',
         name: 'test_pipeline',
-        instance_variable_get: dag,
+        dag: dag,
         send: nil
       )
     end
@@ -270,9 +270,9 @@ RSpec.describe Minigun::Execution::ProcessPoolExecutor, skip: Gem.win_platform? 
 
     before do
       # Mock fork hooks
-      allow(pipeline).to receive(:instance_variable_get).with(:@hooks).and_return({})
-      allow(pipeline).to receive(:instance_variable_get).with(:@stage_hooks).and_return({})
-      allow(pipeline).to receive(:instance_variable_get).with(:@dag).and_return(dag)
+      allow(pipeline).to receive(:hooks).and_return({})
+      allow(pipeline).to receive(:stage_hooks).and_return({})
+      allow(pipeline).to receive(:dag).and_return(dag)
     end
 
     it 'executes in forked process' do

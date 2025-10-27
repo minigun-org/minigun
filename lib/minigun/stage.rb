@@ -67,7 +67,7 @@ module Minigun
       )
 
       # Execute with both queues (block manages its own loop)
-      context = stage_ctx.pipeline.instance_variable_get(:@context)
+      context = stage_ctx.pipeline.context
       execute(context, input_queue: wrapped_input, output_queue: wrapped_output)
 
     # Send END signals to downstream
@@ -152,7 +152,7 @@ module Minigun
         output_queue = create_output_queue(stage_ctx)
 
         # Execute producer block
-        context = stage_ctx.pipeline.instance_variable_get(:@context)
+        context = stage_ctx.pipeline.context
         execute(context, item: nil, input_queue: nil, output_queue: output_queue)
 
         # Update stats
@@ -193,13 +193,11 @@ module Minigun
     end
 
     def log_info(ctx, msg)
-      pipeline_name = ctx.pipeline.instance_variable_get(:@name)
-      Minigun.logger.info "[Pipeline:#{pipeline_name}][Producer:#{ctx.stage_name}] #{msg}"
+      Minigun.logger.info "[Pipeline:#{ctx.pipeline.name}][Producer:#{ctx.stage_name}] #{msg}"
     end
 
     def log_error(ctx, msg)
-      pipeline_name = ctx.pipeline.instance_variable_get(:@name)
-      Minigun.logger.error "[Pipeline:#{pipeline_name}][Producer:#{ctx.stage_name}] #{msg}"
+      Minigun.logger.error "[Pipeline:#{ctx.pipeline.name}][Producer:#{ctx.stage_name}] #{msg}"
     end
   end
 
@@ -250,7 +248,7 @@ module Minigun
     end
 
     def execute_item(stage_ctx, item, wrapped_output)
-      context = stage_ctx.pipeline.instance_variable_get(:@context)
+      context = stage_ctx.pipeline.context
       stats = stage_ctx.stats
 
       stage_ctx.executor.execute_stage_item(
@@ -267,7 +265,7 @@ module Minigun
     def flush_if_needed(stage_ctx, wrapped_output)
       return unless respond_to?(:flush)
 
-      context = stage_ctx.pipeline.instance_variable_get(:@context)
+      context = stage_ctx.pipeline.context
       flush(context, wrapped_output)
     end
 
@@ -422,7 +420,7 @@ module Minigun
   end
 
   class PipelineStage < Stage
-    attr_reader :pipeline
+    attr_reader :pipeline, :stages_to_add
 
     def initialize(name:, options: {})
       super(name: name, options: options)
@@ -494,7 +492,7 @@ module Minigun
           stage_ctx.runtime_edges
         )
 
-        context = stage_ctx.pipeline.instance_variable_get(:@context)
+        context = stage_ctx.pipeline.context
         execute(context, item: nil, input_queue: nil, output_queue: wrapped_output)
 
         # Send END signals to downstream
@@ -531,7 +529,7 @@ module Minigun
         end
 
         # Execute the stage with queue wrappers
-        context = stage_ctx.pipeline.instance_variable_get(:@context)
+        context = stage_ctx.pipeline.context
         stats = stage_ctx.stats
 
         stage_ctx.executor.execute_stage_item(

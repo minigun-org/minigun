@@ -72,7 +72,7 @@ module Minigun
 
       # Add the pipeline stage to the implicit pipeline
       @root_pipeline.stages[name] = pipeline_stage
-      @root_pipeline.instance_variable_get(:@stage_order) << name
+      @root_pipeline.stage_order << name
       @root_pipeline.dag.add_node(name)
 
       # Extract routing if specified
@@ -101,7 +101,7 @@ module Minigun
         pipeline_stage.pipeline = pipeline
 
         @root_pipeline.stages[name] = pipeline_stage
-        @root_pipeline.instance_variable_get(:@stage_order) << name
+        @root_pipeline.stage_order << name
         @root_pipeline.dag.add_node(name)
       end
 
