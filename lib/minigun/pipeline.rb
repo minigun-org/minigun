@@ -10,7 +10,7 @@ module Minigun
     attr_reader :name, :config, :stages, :hooks, :dag, :input_queue, :output_queues, :stage_order, :stats,
                 :context, :stage_hooks, :stage_input_queues, :runtime_edges
 
-    def initialize(name, config = {})
+    def initialize(name, config = {}, stages: nil, hooks: nil, stage_hooks: nil, dag: nil, stage_order: nil)
       @name = name
       @config = {
         max_threads: config[:max_threads] || 5,
@@ -19,10 +19,10 @@ module Minigun
         use_ipc: config[:use_ipc] || false
       }
 
-      @stages = {}  # { stage_name => Stage }
+      @stages = stages || {}  # { stage_name => Stage }
 
       # Pipeline-level hooks (run once per pipeline)
-      @hooks = {
+      @hooks = hooks || {
         before_run: [],
         after_run: [],
         before_fork: [],
@@ -30,15 +30,15 @@ module Minigun
       }
 
       # Stage-specific hooks (run per stage execution)
-      @stage_hooks = {
+      @stage_hooks = stage_hooks || {
         before: {},   # { stage_name => [blocks] }
         after: {},    # { stage_name => [blocks] }
         before_fork: {},
         after_fork: {}
       }
 
-      @dag = DAG.new
-      @stage_order = []
+      @dag = dag || DAG.new
+      @stage_order = stage_order || []
 
       # Statistics tracking
       @stats = nil  # Will be initialized in run()
@@ -47,31 +47,25 @@ module Minigun
 
     # Duplicate this pipeline for inheritance
     def dup
-      new_pipeline = Pipeline.new(@name, @config.dup)
-
-      # Copy stages hash (shallow copy - stages themselves are shared)
-      new_pipeline.instance_variable_set(:@stages, @stages.dup)
-
-      # Copy hooks (keep references to blocks)
-      new_pipeline.instance_variable_set(:@hooks, {
-        before_run: @hooks[:before_run].dup,
-        after_run: @hooks[:after_run].dup,
-        before_fork: @hooks[:before_fork].dup,
-        after_fork: @hooks[:after_fork].dup
-      })
-
-      # Copy stage hooks
-      new_pipeline.instance_variable_set(:@stage_hooks, {
-        before: @stage_hooks[:before].transform_values(&:dup),
-        after: @stage_hooks[:after].transform_values(&:dup),
-        before_fork: @stage_hooks[:before_fork].transform_values(&:dup),
-        after_fork: @stage_hooks[:after_fork].transform_values(&:dup)
-      })
-
-      # Duplicate the DAG with all nodes and edges
-      new_dag = @dag.dup
-      new_pipeline.instance_variable_set(:@dag, new_dag)
-      new_pipeline.instance_variable_set(:@stage_order, @stage_order.dup)
+      new_pipeline = Pipeline.new(
+        @name,
+        @config.dup,
+        stages: @stages.dup,  # Shallow copy - stages themselves are shared
+        hooks: {
+          before_run: @hooks[:before_run].dup,
+          after_run: @hooks[:after_run].dup,
+          before_fork: @hooks[:before_fork].dup,
+          after_fork: @hooks[:after_fork].dup
+        },
+        stage_hooks: {
+          before: @stage_hooks[:before].transform_values(&:dup),
+          after: @stage_hooks[:after].transform_values(&:dup),
+          before_fork: @stage_hooks[:before_fork].transform_values(&:dup),
+          after_fork: @stage_hooks[:after_fork].transform_values(&:dup)
+        },
+        dag: @dag.dup,
+        stage_order: @stage_order.dup
+      )
 
       new_pipeline
     end
@@ -174,10 +168,10 @@ module Minigun
     end
 
     # Run this pipeline
-    def run(context)
+    def run(context, job_id: nil)
       @context = context
       @job_start = Time.now
-      @job_id ||= nil  # Job ID may be set by Runner
+      @job_id = job_id
 
       # Initialize statistics tracking
       @stats = AggregatedStats.new(@name, @dag)

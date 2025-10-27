@@ -58,12 +58,11 @@ RSpec.describe Minigun::Runner do
   describe '#run' do
     before do
       allow(Minigun.logger).to receive(:info)
-      allow(pipeline).to receive(:run).with(context).and_return([1, 2, 3])
-      allow(pipeline).to receive(:instance_variable_set)
+      allow(pipeline).to receive(:run).with(context, job_id: anything).and_return([1, 2, 3])
     end
 
     it 'executes the pipeline' do
-      expect(pipeline).to receive(:run).with(context)
+      expect(pipeline).to receive(:run).with(context, job_id: anything)
 
       runner.run
     end
@@ -98,8 +97,8 @@ RSpec.describe Minigun::Runner do
       runner.run
     end
 
-    it 'sets job_id on pipeline' do
-      expect(pipeline).to receive(:instance_variable_set).with(:@job_id, runner.job_id)
+    it 'passes job_id to pipeline.run' do
+      expect(pipeline).to receive(:run).with(anything, job_id: runner.job_id)
 
       runner.run
     end
@@ -208,8 +207,7 @@ RSpec.describe Minigun::Runner do
   describe 'signal handling' do
     before do
       allow(Minigun.logger).to receive(:info)
-      allow(pipeline).to receive(:run).with(context)
-      allow(pipeline).to receive(:instance_variable_set)
+      allow(pipeline).to receive(:run).with(context, job_id: anything)
     end
 
     it 'handles INT signal gracefully' do

@@ -53,8 +53,7 @@ module Minigun
     def run_single_pipeline
       # Pass job_id to pipeline for logging
       pipeline = @task.root_pipeline
-      pipeline.instance_variable_set(:@job_id, @job_id)
-      result = pipeline.run(@context)
+      result = pipeline.run(@context, job_id: @job_id)
 
       # Collect statistics
       @pipeline_stats << pipeline.stats if pipeline.stats
