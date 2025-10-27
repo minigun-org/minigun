@@ -17,13 +17,13 @@ class QuickStartExample
 
   pipeline do
     # Step 1: Generate items
-    producer :generate do
-      10.times { |i| emit(i) }
+    producer :generate do |output|
+      10.times { |i| output << i }
     end
 
     # Step 2: Transform items
-    processor :transform do |number|
-      emit(number * 2)
+    processor :transform do |number, output|
+      output << number * 2
     end
 
     # Step 3: Collect results

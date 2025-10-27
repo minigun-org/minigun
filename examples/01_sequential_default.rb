@@ -17,16 +17,16 @@ class SequentialPipeline
   end
 
   pipeline do
-    producer :generate do
-      3.times { |i| emit(i + 1) }
+    producer :generate do |output|
+      3.times { |i| output << (i + 1) }
     end
 
-    processor :double do |num|
-      emit(num * 2)
+    processor :double do |num, output|
+      output << num * 2
     end
 
-    processor :add_ten do |num|
-      emit(num + 10)
+    processor :add_ten do |num, output|
+      output << num + 10
     end
 
     consumer :collect do |num|

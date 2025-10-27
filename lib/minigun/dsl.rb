@@ -110,15 +110,12 @@ module Minigun
         # Mode 1: Main pipeline - use PipelineDSL
         pipeline_dsl = PipelineDSL.new(self.class._minigun_task.root_pipeline, self)
         pipeline_dsl.instance_eval(&block)
-      elsif options[:to] || options[:from] || self.class._minigun_task.pipelines.any?
-        # Mode 2: Multi-pipeline mode
+      else
+        # Mode 2: Named pipeline (standalone or multi-pipeline)
         self.class._minigun_task.define_pipeline(name, options) do |pipeline|
           pipeline_dsl = PipelineDSL.new(pipeline, self)
           pipeline_dsl.instance_eval(&block) if block_given?
         end
-      else
-        # Mode 3: Nested pipeline stage
-        self.class._minigun_task.add_nested_pipeline(name, options, &block)
       end
     end
 
@@ -220,14 +217,33 @@ module Minigun
 
       # Main unified stage method
       # Stage determines its own type based on block arity
-      def stage(name, options = {}, &block)
+      # Producer - generates items, receives output queue
+      def producer(name, options = {}, &block)
         options = _apply_execution_context(options)
-        # Just pass generic :stage type - Pipeline will create AtomicStage which knows its own type
+        options[:stage_type] = :producer
         @pipeline.add_stage(:stage, name, options, &block)
       end
-      alias producer stage
-      alias processor stage # TODO: rename to producer_consumer?
-      alias consumer stage
+
+      # Processor - transforms items, receives item and output queue
+      def processor(name, options = {}, &block)
+        options = _apply_execution_context(options)
+        options[:stage_type] = :processor
+        @pipeline.add_stage(:stage, name, options, &block)
+      end
+
+      # Consumer - terminal stage, receives item only (no output)
+      def consumer(name, options = {}, &block)
+        options = _apply_execution_context(options)
+        options[:stage_type] = :consumer
+        @pipeline.add_stage(:stage, name, options, &block)
+      end
+
+      # Generic stage - for advanced use (input loop), receives input and output queues
+      def stage(name, options = {}, &block)
+        options = _apply_execution_context(options)
+        options[:stage_type] = :stage
+        @pipeline.add_stage(:stage, name, options, &block)
+      end
 
       # Accumulator is special - kept explicit
       def accumulator(name = :accumulator, options = {}, &block)

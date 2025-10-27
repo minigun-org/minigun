@@ -354,59 +354,24 @@ module Minigun
           # Execute before hooks for this producer
           execute_stage_hooks(:before, producer_name) unless is_pipeline
 
-          # Create producer context with emit methods
-          producer_context = @context.dup
-
           # Get downstream stage input queues
           downstream = @dag.downstream(producer_name)
           downstream_queues = downstream.map { |to| stage_input_queues[to] }.compact
 
+          # Create OutputQueue wrapper for the new DSL
+          output_queue = OutputQueue.new(producer_name, downstream_queues, stage_input_queues, runtime_edges)
+
           if is_pipeline
-            # Pipeline producers: collect items, then emit all at once
-            emitted_items = []
-            emit_mutex = Mutex.new
-
-            producer_context.define_singleton_method(:emit) do |item|
-              emit_mutex.synchronize { emitted_items << item }
-            end
-
-            # Run the nested pipeline
+            # Pipeline producers: run nested pipeline with output queue
             producer_stage.pipeline.instance_variable_set(:@job_id, @job_id)
-            producer_stage.pipeline.run(producer_context)
+            producer_stage.pipeline.run(@context)
 
-            # Emit all collected items to downstream queues
-            # Don't track in runtime_edges - DAG already knows these connections
-            emitted_items.each do |item|
-              downstream.each do |target|
-                stage_input_queues[target] << item
-              end
-              produced_count.increment
-              stage_stats.increment_produced
-            end
+            # TODO: Nested pipelines need refactoring to use OutputQueue
+            # For now, this won't work correctly with the new DSL
+            raise NotImplementedError, "PipelineStage producers not yet compatible with queue-based DSL"
           else
-            # Atomic producers: emit directly to downstream queues as they produce
-            # Don't track regular emits - only emit_to_stage
-            producer_context.define_singleton_method(:emit) do |item|
-              downstream.each do |target|
-                stage_input_queues[target] << item
-              end
-              produced_count.increment
-              stage_stats.increment_produced
-            end
-
-            producer_context.define_singleton_method(:emit_to_stage) do |target_stage, item|
-              # emit_to_stage writes DIRECTLY to target's input queue and tracks edge
-              queue = stage_input_queues[target_stage]
-              if queue
-                runtime_edges[producer_name].add(target_stage)
-                queue << item
-                produced_count.increment
-                stage_stats.increment_produced
-              end
-            end
-
-            # Run producer block
-            producer_context.instance_eval(&producer_stage.block)
+            # Atomic producers: execute with OutputQueue
+            producer_stage.execute(@context, item: nil, input_queue: nil, output_queue: output_queue)
           end
 
           # Execute after hooks for this producer
@@ -417,7 +382,7 @@ module Minigun
           # Don't propagate error - other producers should continue
         ensure
           stage_stats.finish!
-          log_info "[Pipeline:#{@name}][Producer:#{producer_name}] Done. Produced #{stage_stats.items_produced} items"
+          log_info "[Pipeline:#{@name}][Producer:#{producer_name}] Done"
 
           # Send END signal to ALL connections: DAG downstream + dynamic emit_to_stage targets
           # This must happen even if producer failed, so downstream stages don't hang

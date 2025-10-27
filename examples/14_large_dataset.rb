@@ -20,9 +20,9 @@ class LargeDatasetExample
   end
 
   pipeline do
-    producer :generate do
+    producer :generate do |output|
       puts "[Producer] Generating #{@item_count} items..."
-      @item_count.times { |i| emit(i) }
+      @item_count.times { |i| output << i }
       puts "[Producer] Done generating items"
     end
 

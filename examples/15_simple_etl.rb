@@ -19,18 +19,18 @@ class SimpleETLExample
 
   pipeline do
     # Extract: Simulate extracting from database
-    producer :extract do
+    producer :extract do |output|
       puts "[Extract] Fetching records from database..."
       5.times do |i|
         record = { id: i, value: i * 10, raw: true }
         @mutex.synchronize { extracted << record }
-        emit(record)
+        output << record
       end
       puts "[Extract] Extracted #{@extracted.size} records"
     end
 
     # Transform: Clean and enrich the data
-    processor :transform do |record|
+    processor :transform do |record, output|
       puts "[Transform] Processing record #{record[:id]}"
 
       transformed_record = {
@@ -42,7 +42,7 @@ class SimpleETLExample
       }
 
       @mutex.synchronize { transformed << transformed_record }
-      emit(transformed_record)
+      output << transformed_record
     end
 
     # Load: Save to destination (database, file, API, etc.)

@@ -21,13 +21,13 @@ class FanOutPipeline
 
   pipeline do
     # Producer fans out to three consumers
-    producer :generate_notifications, to: [:email_sender, :sms_sender, :push_sender] do
+    producer :generate_notifications, to: [:email_sender, :sms_sender, :push_sender] do |output|
       users = [
         { id: 1, name: 'Alice', message: 'Hello Alice' },
         { id: 2, name: 'Bob', message: 'Hello Bob' },
         { id: 3, name: 'Charlie', message: 'Hello Charlie' }
       ]
-      users.each { |user| emit(user) }
+      users.each { |user| output << user }
     end
 
     # Email consumer

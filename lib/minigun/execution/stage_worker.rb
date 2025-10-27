@@ -131,64 +131,48 @@ module Minigun
 
       # Regular processor/consumer stage: executes items and routes results
       def run_processor_loop(input_queue, sources_expected, sources_done, dag, runtime_edges, stage_input_queues)
-        loop do
-          msg = input_queue.pop
+        # Create wrapped queues for the new DSL
+        wrapped_input = create_input_queue_wrapper(input_queue, sources_expected)
+        wrapped_output = create_output_queue_wrapper(dag, runtime_edges, stage_input_queues)
 
-          # Handle END signal
-          if msg.is_a?(Message) && msg.end_of_stream?
-            sources_expected << msg.source  # Discover dynamic source
-            sources_done << msg.source
-            break if sources_done == sources_expected
-            next
+        # If stage has input loop, pass both queues and let it manage its own loop
+        if @stage.stage_with_loop?
+          execute_stage_with_queues(@stage, input_queue: wrapped_input, output_queue: wrapped_output)
+
+          # Flush accumulator stages before sending END signals
+          flush_stage(wrapped_output) if @stage.respond_to?(:flush)
+
+          # Send END signals
+          send_end_signals(dag, runtime_edges, stage_input_queues)
+        else
+          # Traditional item-by-item processing
+          loop do
+            msg = input_queue.pop
+
+            # Handle END signal
+            if msg.is_a?(Message) && msg.end_of_stream?
+              sources_expected << msg.source  # Discover dynamic source
+              sources_done << msg.source
+              break if sources_done == sources_expected
+              next
+            end
+
+            # Execute the stage with queue wrappers (stages push to output directly)
+            item = msg  # msg is unwrapped data
+            execute_stage_item(@stage, item, input_queue: nil, output_queue: wrapped_output)
           end
 
-          # Execute the stage (single item, no batch)
-          item = msg  # msg is unwrapped data
-          results = execute_item(@stage, item)
+          # Flush accumulator stages before sending END signals
+          flush_stage(wrapped_output) if @stage.respond_to?(:flush)
 
-          # Route results to downstream stages
-          route_results(results, dag, runtime_edges, stage_input_queues)
-        end
-
-        # Flush accumulator stages before sending END signals
-        flush_stage(dag, stage_input_queues) if @stage.respond_to?(:flush)
-
-        # Send END to ALL connections: DAG downstream + dynamic emit_to_stage targets
-        send_end_signals(dag, runtime_edges, stage_input_queues)
-      end
-
-      def route_results(results, dag, runtime_edges, stage_input_queues)
-        results.each do |result|
-          if result.is_a?(Hash) && result.key?(:item) && result.key?(:target)
-            # Targeted emit via emit_to_stage - route DIRECTLY to target's input queue
-            target_stage = result[:target]
-            output_queue = stage_input_queues[target_stage]
-            if output_queue
-              runtime_edges[@stage_name].add(target_stage)
-              output_queue << result[:item]
-            end
-          else
-            # Regular emit - uses DAG routing to all downstream
-            downstream = dag.downstream(@stage_name)
-            downstream.each do |downstream_stage|
-              output_queue = stage_input_queues[downstream_stage]
-              output_queue << result if output_queue
-            end
-          end
+          # Send END to ALL connections: DAG downstream + dynamic emit_to_stage targets
+          send_end_signals(dag, runtime_edges, stage_input_queues)
         end
       end
 
-      def flush_stage(dag, stage_input_queues)
+      def flush_stage(output_queue_wrapper)
         context = @pipeline.instance_variable_get(:@context)
-        flushed_items = @stage.flush(context)
-        flushed_items.each do |batch|
-          # Route flushed batches to downstream stages
-          downstream = dag.downstream(@stage_name)
-          downstream.each do |downstream_stage|
-            output_queue = stage_input_queues[downstream_stage]
-            output_queue << batch if output_queue
-          end
-        end
+        @stage.flush(context, output_queue_wrapper)
       end
 
       def send_end_signals(dag, runtime_edges, stage_input_queues)
@@ -212,15 +196,42 @@ module Minigun
         Execution.create_executor(type: type, max_size: pool_size)
       end
 
-      # Execute a single item for this stage
-      def execute_item(stage, item)
+      # Execute a single item for this stage with queue wrappers
+      def execute_stage_item(stage, item, input_queue: nil, output_queue: nil)
         @executor.execute_stage_item(
           stage: stage,
           item: item,
           user_context: @user_context,
+          input_queue: input_queue,
+          output_queue: output_queue,
           stats: @stats,
           pipeline: @pipeline
         )
+      end
+
+      # Execute a stage that manages its own input loop
+      def execute_stage_with_queues(stage, input_queue:, output_queue:)
+        @executor.execute_stage_item(
+          stage: stage,
+          item: nil,
+          user_context: @user_context,
+          input_queue: input_queue,
+          output_queue: output_queue,
+          stats: @stats,
+          pipeline: @pipeline
+        )
+      end
+
+      # Create InputQueue wrapper for the new DSL
+      def create_input_queue_wrapper(raw_queue, sources_expected)
+        InputQueue.new(raw_queue, @stage_name, sources_expected)
+      end
+
+      # Create OutputQueue wrapper for the new DSL
+      def create_output_queue_wrapper(dag, runtime_edges, stage_input_queues)
+        downstream = dag.downstream(@stage_name)
+        downstream_queues = downstream.map { |target| stage_input_queues[target] }.compact
+        OutputQueue.new(@stage_name, downstream_queues, stage_input_queues, runtime_edges)
       end
 
       # Normalize execution strategy type names

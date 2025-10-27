@@ -28,26 +28,26 @@ class ConfigurationExample
   end
 
   pipeline do
-    producer :generate do
+    producer :generate do |output|
       puts "[Producer] Generating 20 items..."
-      20.times { |i| emit(i + 1) }
+      20.times { |i| output << (i + 1) }
     end
 
-    processor :validate do |item|
+    processor :validate do |item, output|
       # Simulate validation with occasional failure
       if item % 7 == 0
         puts "[Processor] Skipping invalid item: #{item}"
         # Don't emit - this stops the item from propagating
       else
-        emit(item)
+        output << item
       end
     end
 
-    processor :transform do |item|
+    processor :transform do |item, output|
       # Simulate some work
       result = item * 2
       puts "[Processor] Transformed #{item} -> #{result}"
-      emit(result)
+      output << result
     end
 
     consumer :collect do |item|

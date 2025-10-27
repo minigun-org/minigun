@@ -22,6 +22,25 @@ module Minigun
       false
     end
 
+    # Router? - only RouterStage returns true
+    def router?
+      false
+    end
+
+    # Consumer? - default false, overridden by AtomicStage
+    def consumer?
+      false
+    end
+
+    # Processor? - default false, overridden by AtomicStage
+    def processor?
+      false
+    end
+
+    # Stage with input loop? - default false, overridden by AtomicStage
+    def stage_with_loop?
+      false
+    end
 
     # Whether this stage is composite (contains other stages)
     def composite?
@@ -33,19 +52,6 @@ module Minigun
       @options[:_execution_context]
     end
 
-    # Convert to hash (for backward compatibility)
-    def to_h
-      { name: @name, options: @options }
-    end
-
-    # Allow hash-like access for backward compatibility
-    def [](key)
-      case key
-      when :name then @name
-      when :options then @options
-      else nil
-      end
-    end
   end
 
   # Atomic stages - leaf nodes that execute a single block
@@ -54,88 +60,57 @@ module Minigun
   # - DAG.terminal?(name) checks if it's a consumer (doesn't emit)
   # - Everything else is a processor (transforms items)
   class AtomicStage < Stage
-    attr_reader :block
+    attr_reader :block, :stage_type
 
     def initialize(name:, block:, options: {})
       super(name: name, options: options)
       @block = block
+      @stage_type = options[:stage_type] || :processor  # Default to processor
     end
 
-    # Producer? - no block argument
+    # Producer? - determined by DSL method used
     def producer?
-      @block && (@block.arity == 0 || @block.arity == -1)
+      @stage_type == :producer
     end
 
-    # Execute stage logic
-    def execute(context, item = nil)
+    # Consumer? - terminal stage with no output
+    def consumer?
+      @stage_type == :consumer
+    end
+
+    # Processor? - transforms items
+    def processor?
+      @stage_type == :processor
+    end
+
+    # Stage with input loop?
+    def stage_with_loop?
+      @stage_type == :stage
+    end
+
+    # Execute stage logic with queue-based arguments
+    # Stage type determines arguments:
+    #   :producer = producer do |output|
+    #   :consumer = consumer do |item|
+    #   :processor = processor do |item, output|
+    #   :stage = stage do |input, output|
+    def execute(context, item: nil, input_queue: nil, output_queue: nil)
       return unless @block
 
-      if producer?
-        # Producer - no item argument
-        context.instance_eval(&@block)
-      else
-        # Processor/Consumer - has item argument
+      case @stage_type
+      when :producer
+        # Producer: do |output|
+        context.instance_exec(output_queue, &@block)
+      when :consumer
+        # Consumer: do |item|
         context.instance_exec(item, &@block)
+      when :processor
+        # Processor: do |item, output|
+        context.instance_exec(item, output_queue, &@block)
+      when :stage
+        # Stage with input loop: do |input, output|
+        context.instance_exec(input_queue, output_queue, &@block)
       end
-    end
-
-    # Execute and return emitted items (for non-terminal stages)
-    # Returns array of emission results, where each result is either:
-    #   - A plain item (uses DAG routing)
-    #   - A hash { item:, target: } (uses explicit routing)
-    def execute_with_emit(context, item)
-      emissions = []
-
-      # Save original emit methods if they exist (for nested pipeline support)
-      has_original_emit = context.respond_to?(:emit)
-      has_original_emit_to_stage = context.respond_to?(:emit_to_stage)
-
-      original_emit = context.method(:emit) if has_original_emit
-      original_emit_to_stage = context.method(:emit_to_stage) if has_original_emit_to_stage
-
-      # Check if we're about to wrap an already-wrapped method (prevents infinite recursion)
-      already_wrapped = has_original_emit && original_emit.source_location&.first&.include?('stage.rb')
-
-      # emit() - collects locally and forwards to original only if not already wrapped
-      context.define_singleton_method(:emit) do |emitted_item|
-        emissions << emitted_item
-        original_emit.call(emitted_item) if original_emit && !already_wrapped
-      end
-
-      # emit_to_stage() - collects locally and forwards to original only if not already wrapped
-      context.define_singleton_method(:emit_to_stage) do |target_stage, emitted_item|
-        emissions << { item: emitted_item, target: target_stage }
-        original_emit_to_stage.call(target_stage, emitted_item) if original_emit_to_stage && !already_wrapped
-      end
-
-      begin
-        execute(context, item)
-      ensure
-        # Clean up singleton methods
-        if has_original_emit
-          context.define_singleton_method(:emit, original_emit)
-        else
-          context.singleton_class.remove_method(:emit) rescue nil
-        end
-
-        if has_original_emit_to_stage
-          context.define_singleton_method(:emit_to_stage, original_emit_to_stage)
-        else
-          context.singleton_class.remove_method(:emit_to_stage) rescue nil
-        end
-      end
-
-      emissions
-    end
-
-    # For backward compatibility
-    def to_h
-      super.merge(block: @block)
-    end
-
-    def [](key)
-      return @block if key == :block
-      super
     end
   end
 
@@ -152,9 +127,10 @@ module Minigun
       @mutex = Mutex.new
     end
 
-    # Process items one at a time, buffering internally
-    # Returns an array (with batch) if buffer is full, empty array otherwise
-    def execute_with_emit(context, item)
+    # Override execute to buffer items and emit batches via output queue
+    def execute(context, item: nil, input_queue: nil, output_queue: nil)
+      return unless item
+
       batch_to_emit = nil
 
       @mutex.synchronize do
@@ -166,21 +142,19 @@ module Minigun
         end
       end
 
-      if batch_to_emit
+      if batch_to_emit && output_queue
         # Process the batch with custom logic if provided
         processed_batch = if @block
           context.instance_exec(batch_to_emit, &@block)
         else
           batch_to_emit
         end
-        [processed_batch]
-      else
-        []
+        output_queue << processed_batch
       end
     end
 
     # Called at end of pipeline to flush remaining items
-    def flush(context)
+    def flush(context, output_queue)
       batch_to_emit = nil
 
       @mutex.synchronize do
@@ -190,15 +164,13 @@ module Minigun
         end
       end
 
-      if batch_to_emit
+      if batch_to_emit && output_queue
         processed_batch = if @block
           context.instance_exec(batch_to_emit, &@block)
         else
           batch_to_emit
         end
-        [processed_batch]
-      else
-        []
+        output_queue << processed_batch
       end
     end
   end
@@ -250,9 +222,29 @@ module Minigun
     end
 
     # Execute method for when PipelineStage is used as a processor/consumer
-    def execute(context, item)
-      # Return results from execute_with_emit so they can flow downstream
-      execute_with_emit(context, item)
+    def execute(context, item: nil, input_queue: nil, output_queue: nil)
+      return unless @pipeline && item
+
+      # Process item through the pipeline's stages sequentially (in-process, no full pipeline infrastructure)
+      current_items = [item]
+
+      @pipeline.stages.each_value do |stage|
+        # Skip producers - we're feeding items in from upstream
+        next if stage.producer? || stage.is_a?(PipelineStage)
+
+        break if current_items.empty?
+
+        next_items = []
+        current_items.each do |current_item|
+          # Execute stage without emit - just collect returned value
+          result = stage.execute(context, item: current_item, output_queue: nil)
+          next_items << result if result
+        end
+        current_items = next_items.flatten
+      end
+
+      # Output results to output queue
+      current_items.each { |result_item| output_queue << result_item } if output_queue
     end
 
     # Set the wrapped pipeline (called by Task)
@@ -276,34 +268,5 @@ module Minigun
       end
     end
 
-    # Execute this pipeline stage (processes an item through the nested pipeline)
-    def execute_with_emit(context, item)
-      return [item] unless @pipeline
-
-      # Process item through the pipeline's stages sequentially (in-process, no full pipeline infrastructure)
-      # This is for PipelineStages used as processors/consumers in a DAG
-      current_items = [item]
-
-      @pipeline.stages.each_value do |stage|
-        # Skip producers - we're feeding items in from upstream
-        next if stage.producer? || stage.is_a?(PipelineStage)
-
-        break if current_items.empty?
-
-        next_items = []
-        current_items.each do |current_item|
-          if stage.respond_to?(:execute_with_emit)
-            results = stage.execute_with_emit(context, current_item)
-            next_items.concat(results)
-          else
-            # Consumer - execute but don't collect output
-            stage.execute(context, current_item)
-          end
-        end
-        current_items = next_items
-      end
-
-      current_items
-    end
   end
 end

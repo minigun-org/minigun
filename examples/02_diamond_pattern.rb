@@ -21,22 +21,22 @@ class DiamondPipeline
 
   pipeline do
     # Producer splits to two processors
-    producer :source, to: [:path_a, :path_b] do
-      5.times { |i| emit(i + 1) }
+    producer :source, to: [:path_a, :path_b] do |output|
+      5.times { |i| output << (i + 1) }
     end
 
     # Path A: multiply by 2
-    processor :path_a, to: :merge do |num|
+    processor :path_a, to: :merge do |num, output|
       result = num * 2
       @mutex.synchronize { results_a << result }
-      emit(result)
+      output << result
     end
 
     # Path B: multiply by 3
-    processor :path_b, to: :merge do |num|
+    processor :path_b, to: :merge do |num, output|
       result = num * 3
       @mutex.synchronize { results_b << result }
-      emit(result)
+      output << result
     end
 
     # Merge results from both paths

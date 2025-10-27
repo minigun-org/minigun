@@ -23,21 +23,21 @@ class ComplexRoutingPipeline
 
   pipeline do
     # Producer splits to validator and logger
-    producer :fetch, to: [:validate, :log] do
-      10.times { |i| emit(i + 1) }
+    producer :fetch, to: [:validate, :log] do |output|
+      10.times { |i| output << (i + 1) }
     end
 
     # Validator splits to transform and archive
-    processor :validate, to: [:transform, :archive] do |num|
+    processor :validate, to: [:transform, :archive] do |num, output|
       @mutex.synchronize { validated << num }
-      emit(num) if num.even?  # Only process even numbers
+      output << num if num.even?  # Only process even numbers
     end
 
     # Transform and store
-    processor :transform, to: :store do |num|
+    processor :transform, to: :store do |num, output|
       result = num * 10
       @mutex.synchronize { transformed << result }
-      emit(result)
+      output << result
     end
 
     # Store consumer

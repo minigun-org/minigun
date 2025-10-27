@@ -53,16 +53,16 @@ class HooksExample
       # Each forked process needs its own connection
     end
 
-    producer :generate do
+    producer :generate do |output|
       puts "[Producer] Generating 5 items..."
-      5.times { |i| emit(i + 1) }
+      5.times { |i| output << (i + 1) }
     end
 
-    processor :transform do |item|
+    processor :transform do |item, output|
       puts "[Processor] Processing item #{item}"
       # Simulate some work
       sleep 0.05
-      emit(item * 10)
+      output << item * 10
     end
 
     consumer :collect do |item|
