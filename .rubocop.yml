@@ -1,0 +1,83 @@
+inherit_from: .rubocop_todo.yml
+
+plugins:
+  - rubocop-performance
+  - rubocop-rake
+  - rubocop-rspec
+
+AllCops:
+  TargetRubyVersion: 2.7
+  NewCops: enable
+  SuggestExtensions: false
+
+Gemspec/RequiredRubyVersion:
+  Enabled: false
+
+Layout/LineLength:
+  Enabled: false
+
+Metrics/AbcSize:
+  Enabled: false
+
+Metrics/ClassLength:
+  Max: 310
+
+Metrics/CyclomaticComplexity:
+  Enabled: false
+
+Metrics/MethodLength:
+  Enabled: false
+
+Metrics/ParameterLists:
+  Enabled: false
+
+Metrics/PerceivedComplexity:
+  Enabled: false
+
+Performance/CollectionLiteralInLoop:
+  Exclude:
+    - 'spec/**/*'
+
+RSpec/ExampleLength:
+  Enabled: false
+
+RSpec/InstanceVariable:
+  Enabled: false
+
+RSpec/LeakyConstantDeclaration:
+  Enabled: false
+
+RSpec/MessageSpies:
+  EnforcedStyle: receive
+
+RSpec/MultipleExpectations:
+  Enabled: false
+
+RSpec/MultipleMemoizedHelpers:
+  Enabled: false
+
+RSpec/NamedSubject:
+  Enabled: false
+
+RSpec/NestedGroups:
+  Enabled: false
+
+RSpec/SubjectStub:
+  Enabled: false
+
+Style/Alias:
+  EnforcedStyle: prefer_alias_method
+
+Style/Documentation:
+  Exclude:
+    - 'spec/**/*'
+
+Style/ModuleFunction:
+  EnforcedStyle: extend_self
+
+Style/NumericPredicate:
+  Enabled: false
+
+Naming/VariableNumber:
+  Exclude:
+    - 'spec/**/*'
