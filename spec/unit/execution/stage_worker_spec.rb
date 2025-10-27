@@ -78,6 +78,15 @@ RSpec.describe Minigun::Execution::StageWorker do
       allow(dag).to receive(:upstream).with(:test_stage).and_return([:upstream])
       allow(dag).to receive(:downstream).with(:test_stage).and_return([])
 
+      # Stub run_worker_loop to simulate stage execution
+      allow(stage).to receive(:run_worker_loop) do |worker_ctx|
+        # Simulate basic loop: wait for END signal
+        loop do
+          msg = worker_ctx.input_queue.pop
+          break if msg.is_a?(Minigun::Message) && msg.end_of_stream?
+        end
+      end
+
       worker = described_class.new(pipeline, :test_stage, stage, config)
 
       worker.start
@@ -193,13 +202,10 @@ RSpec.describe Minigun::Execution::StageWorker do
 
   describe 'router stage' do
     let(:router_stage) do
-      double(
-        'router_stage',
-        producer?: false,
-        router?: true,
-        round_robin?: false,
+      Minigun::RouterStage.new(
+        name: :router,
         targets: [:target_a, :target_b],
-        execution_context: nil
+        routing_strategy: :broadcast
       )
     end
 
@@ -269,6 +275,14 @@ RSpec.describe Minigun::Execution::StageWorker do
         .and_return({ test_stage: input_queue })
       allow(dag).to receive(:upstream).with(:test_stage).and_return([:upstream])
       allow(dag).to receive(:downstream).with(:test_stage).and_return([])
+
+      # Stub run_worker_loop to simulate stage execution
+      allow(stage).to receive(:run_worker_loop) do |worker_ctx|
+        loop do
+          msg = worker_ctx.input_queue.pop
+          break if msg.is_a?(Minigun::Message) && msg.end_of_stream?
+        end
+      end
 
       input_queue << Minigun::Message.end_signal(source: :upstream)
 

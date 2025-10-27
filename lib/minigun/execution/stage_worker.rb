@@ -67,126 +67,27 @@ module Minigun
           return
         end
 
-        # Route based on stage type
-        if @stage.respond_to?(:router?) && @stage.router?
-          run_router_loop(input_queue, sources_expected, sources_done, stage_input_queues)
-        else
-          run_processor_loop(input_queue, sources_expected, sources_done, dag, runtime_edges, stage_input_queues)
-        end
+        # Create worker context for the stage
+        worker_ctx = WorkerContext.new(
+          input_queue: input_queue,
+          sources_expected: sources_expected,
+          sources_done: sources_done,
+          dag: dag,
+          runtime_edges: runtime_edges,
+          stage_input_queues: stage_input_queues,
+          executor: @executor,
+          pipeline: @pipeline,
+          stage_name: @stage_name
+        )
+
+        # Delegate to the stage's run_worker_loop method
+        @stage.run_worker_loop(worker_ctx)
 
         log_info "Done"
       ensure
         @executor&.shutdown
       end
 
-      # Router stage: routes items without executing them
-      def run_router_loop(input_queue, sources_expected, sources_done, stage_input_queues)
-        target_queues = @stage.targets.map { |target| stage_input_queues[target] }
-
-        if @stage.round_robin?
-          # Round-robin load balancing
-          round_robin_index = 0
-
-          loop do
-            msg = input_queue.pop
-
-            # Handle END signal
-            if msg.is_a?(Message) && msg.end_of_stream?
-              sources_expected << msg.source  # Discover dynamic source
-              sources_done << msg.source
-              break if sources_done == sources_expected
-              next
-            end
-
-            # Round-robin to downstream stages
-            target = @stage.targets[round_robin_index]
-            target_queues[round_robin_index] << msg
-            round_robin_index = (round_robin_index + 1) % target_queues.size
-          end
-        else
-          # Broadcast (default)
-          loop do
-            msg = input_queue.pop
-
-            # Handle END signal
-            if msg.is_a?(Message) && msg.end_of_stream?
-              sources_expected << msg.source  # Discover dynamic source
-              sources_done << msg.source
-              break if sources_done == sources_expected
-              next
-            end
-
-            # Broadcast to all downstream stages (fan-out semantics)
-            @stage.targets.each do |target|
-              stage_input_queues[target] << msg
-            end
-          end
-        end
-
-        # Broadcast END to ALL router targets (even for round-robin)
-        @stage.targets.each do |target|
-          stage_input_queues[target] << Message.end_signal(source: @stage_name)
-        end
-      end
-
-      # Regular processor/consumer stage: executes items and routes results
-      def run_processor_loop(input_queue, sources_expected, sources_done, dag, runtime_edges, stage_input_queues)
-        # Create wrapped queues for the new DSL
-        wrapped_input = create_input_queue_wrapper(input_queue, sources_expected)
-        wrapped_output = create_output_queue_wrapper(dag, runtime_edges, stage_input_queues)
-
-        # If stage has input loop, pass both queues and let it manage its own loop
-        if @stage.stage_with_loop?
-          execute_stage_with_queues(@stage, input_queue: wrapped_input, output_queue: wrapped_output)
-
-          # Flush accumulator stages before sending END signals
-          flush_stage(wrapped_output) if @stage.respond_to?(:flush)
-
-          # Send END signals
-          send_end_signals(dag, runtime_edges, stage_input_queues)
-        else
-          # Traditional item-by-item processing
-          loop do
-            msg = input_queue.pop
-
-            # Handle END signal
-            if msg.is_a?(Message) && msg.end_of_stream?
-              sources_expected << msg.source  # Discover dynamic source
-              sources_done << msg.source
-              break if sources_done == sources_expected
-              next
-            end
-
-            # Execute the stage with queue wrappers (stages push to output directly)
-            item = msg  # msg is unwrapped data
-            execute_stage_item(@stage, item, input_queue: nil, output_queue: wrapped_output)
-          end
-
-          # Flush accumulator stages before sending END signals
-          flush_stage(wrapped_output) if @stage.respond_to?(:flush)
-
-          # Send END to ALL connections: DAG downstream + dynamic emit_to_stage targets
-          send_end_signals(dag, runtime_edges, stage_input_queues)
-        end
-      end
-
-      def flush_stage(output_queue_wrapper)
-        context = @pipeline.instance_variable_get(:@context)
-        @stage.flush(context, output_queue_wrapper)
-      end
-
-      def send_end_signals(dag, runtime_edges, stage_input_queues)
-        dag_downstream = dag.downstream(@stage_name)
-        dynamic_targets = runtime_edges[@stage_name].to_a
-        all_targets = (dag_downstream + dynamic_targets).uniq
-
-        all_targets.each do |target|
-          # Skip if target doesn't have an input queue (e.g., producers)
-          next unless stage_input_queues[target]
-
-          stage_input_queues[target] << Message.end_signal(source: @stage_name)
-        end
-      end
 
       # Create executor for this stage based on its execution context
       def create_executor_for_stage
@@ -200,42 +101,6 @@ module Minigun
       end
 
       # Execute a single item for this stage with queue wrappers
-      def execute_stage_item(stage, item, input_queue: nil, output_queue: nil)
-        @executor.execute_stage_item(
-          stage: stage,
-          item: item,
-          user_context: @user_context,
-          input_queue: input_queue,
-          output_queue: output_queue,
-          stats: @stats,
-          pipeline: @pipeline
-        )
-      end
-
-      # Execute a stage that manages its own input loop
-      def execute_stage_with_queues(stage, input_queue:, output_queue:)
-        @executor.execute_stage_item(
-          stage: stage,
-          item: nil,
-          user_context: @user_context,
-          input_queue: input_queue,
-          output_queue: output_queue,
-          stats: @stats,
-          pipeline: @pipeline
-        )
-      end
-
-      # Create InputQueue wrapper for the new DSL
-      def create_input_queue_wrapper(raw_queue, sources_expected)
-        InputQueue.new(raw_queue, @stage_name, sources_expected)
-      end
-
-      # Create OutputQueue wrapper for the new DSL
-      def create_output_queue_wrapper(dag, runtime_edges, stage_input_queues)
-        downstream = dag.downstream(@stage_name)
-        downstream_queues = downstream.map { |target| stage_input_queues[target] }.compact
-        OutputQueue.new(@stage_name, downstream_queues, stage_input_queues, runtime_edges)
-      end
 
       # Normalize execution strategy type names
       def normalize_type(type)
