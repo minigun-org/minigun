@@ -3,21 +3,13 @@ ADD to README:
 - stages route to each other sequentially, unless you add :to or :from keywords
 - execute in paralle, and do NOT route to each other, unless unless you add :to or :from keywords.
 
-OK. wait, what if we changed it so:
-
 - every consumer has an input queue
 - if there is fan-out (multiple consumers for any 1 producer), add producer output queues and an intermediate router (load balancer) object. the router has an input queue and round-robin allocates to the consumers.
 - fan-in without fan-out (i.e. a producer connects to 1 consumer, even if MULTIPLE producers connect to that consumer) is done by directly having the producer insert to the consumer's queue
 - emit_to_stage emits DIRECTLY to the consumer input queue
 
-=========================
-
-extract the various loops into classes
-
-==================
-
-- look at the producer look, make it into a class
-- also pipeline producers def execute_as_producer(context, output_queue)
+add to architecture
+- multi-parents --> how do we know end of queues?
 
 ======================
 
@@ -34,11 +26,8 @@ allow(pipeline).to receive(:instance_variable_get).with(:@runtime_edges).and_ret
 
 ================================
 
-look at emit method
-
-================================
-
 configs
+- configurable queue length
 
 =====================================
 
@@ -46,12 +35,9 @@ hooks
 
 ===============================
 
-configurable queue length
-
-=========================
+signals
 
 result.is_a?(Hash) && result.key?(:item) && result.key?(:target)
-
 --> tmake this a signal
 
 ====================================
@@ -67,8 +53,6 @@ weighted routing (load balancing)
 
 ==================================
 
-multi-parents --> how do we know end of queues?
-
 ========================================
 
 redundant with stats, stats should use Concurrent::AtomicFixnum no?
@@ -80,27 +64,14 @@ stats needs IPC back to parent
 are there reliability issues with IPC
 consider threading model vs fork model, we have lots of thread spawn/join we need an abstraction for concurrent execution -- ractor, thread, fork
 
-      if has_multi_pipeline?
-        # Multi-pipeline mode: run all named pipelines
-        run_multi_pipeline(context)
-      else
-        # Single-pipeline mode: run root pipeline
-        @root_pipeline.run(context)
-      end
-
-
-
-from keyword in pipelines (connects pipelines)
-from keyword in stages
-ensure that to and from don't create circular deps, but allow it to be somewhat liberal
-
+-----------------------------------------------
 
 pipeline to stage
 stage to pipeline
 pipeline from stage
 stage from pipeline
 
-    def promote_nested_to_multi_pipeline(name) <-- this is weird
+-------------------------------------------------
 
 ipc, process, etc. for childs in dag
 

@@ -8,7 +8,7 @@ module Minigun
   class DAG
     include TSort
 
-    attr_reader :nodes, :edges
+    attr_reader :nodes, :edges, :reverse_edges
 
     def initialize
       @nodes = [] # Track insertion order
