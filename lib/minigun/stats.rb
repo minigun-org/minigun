@@ -115,11 +115,11 @@ module Minigun
     end
 
     # Calculate percentile from latency samples
-    def percentile(p)
+    def percentile(p_value)
       return 0 if @latency_samples.empty?
 
       sorted = @latency_samples.sort
-      index = ((p / 100.0) * sorted.length).ceil - 1
+      index = ((p_value / 100.0) * sorted.length).ceil - 1
       index = index.clamp(0, sorted.length - 1)
       sorted[index]
     end
@@ -142,7 +142,7 @@ module Minigun
     end
 
     # Check if we have latency data
-    def has_latency_data?
+    def latency_data?
       @latency_samples.any?
     end
 
@@ -159,7 +159,7 @@ module Minigun
         time_per_item: time_per_item.round(4),
         success_rate: success_rate.round(2)
       }.tap do |h|
-        if has_latency_data?
+        if latency_data?
           h[:latency] = {
             p50: (p50 * 1000).round(2), # Convert to ms
             p90: (p90 * 1000).round(2),
@@ -183,7 +183,7 @@ module Minigun
 
       parts << "Failed: #{items_failed} (#{(100 - success_rate).round(2)}%)" if items_failed > 0
 
-      parts << "Latency P50/P90/P95: #{(p50 * 1000).round(1)}/#{(p90 * 1000).round(1)}/#{(p95 * 1000).round(1)}ms" if has_latency_data?
+      parts << "Latency P50/P90/P95: #{(p50 * 1000).round(1)}/#{(p90 * 1000).round(1)}/#{(p95 * 1000).round(1)}ms" if latency_data?
 
       parts.join(', ')
     end

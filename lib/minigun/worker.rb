@@ -47,7 +47,7 @@ module Minigun
       @executor&.shutdown
     end
 
-    def handle_disconnected_stage(stage_ctx)
+    def handle_disconnected_stage(stage_ctx) # rubocop:disable Naming/PredicateMethod
       # Only check streaming stages (autonomous and composite manage their own execution)
       return false unless @stage.run_mode == :streaming
 

@@ -207,7 +207,7 @@ RSpec.describe Minigun::Stats do
       end
 
       # Should have sampled data
-      expect(stats.has_latency_data?).to be true
+      expect(stats.latency_data?).to be true
       samples = stats.latency_samples
 
       # Should have up to 200 samples (less than reservoir size)
@@ -340,14 +340,14 @@ RSpec.describe Minigun::Stats do
       s
     end
 
-    describe '#has_latency_data?' do
+    describe '#latency_data?' do
       it 'returns false when no samples' do
         stats = described_class.new(:test_stage)
-        expect(stats.has_latency_data?).to be false
+        expect(stats.latency_data?).to be false
       end
 
       it 'returns true when samples exist' do
-        expect(stats.has_latency_data?).to be true
+        expect(stats.latency_data?).to be true
       end
     end
 

@@ -290,7 +290,7 @@ module Minigun
       @stages[name]
     end
 
-    def is_terminal_stage?(stage_name)
+    def terminal_stage?(stage_name)
       @dag.terminal?(stage_name)
     end
 
@@ -298,7 +298,7 @@ module Minigun
       targets = @dag.downstream(stage_name)
 
       # If no targets and we have output queues, this is an output stage
-      return [:output] if targets.empty? && !@output_queues.empty? && !is_terminal_stage?(stage_name)
+      return [:output] if targets.empty? && !@output_queues.empty? && !terminal_stage?(stage_name)
 
       targets
     end

@@ -88,7 +88,7 @@ class WebCrawler
   end
 
   # Save page data
-  def save_page(page)
+  def save_page_data(page)
     # In a real crawler, this would save to database or file
     # For now, just track it
   end
@@ -181,7 +181,7 @@ class WebCrawler
     # Stage 4: Process and store pages
     consumer :process_pages do |page|
       @mutex.synchronize { @pages_processed << page }
-      save_page(page)
+      save_page_data(page)
       puts "✓ Stored: #{page[:url]} (depth: #{page[:depth]})"
     end
 

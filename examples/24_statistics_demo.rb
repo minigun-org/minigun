@@ -60,7 +60,7 @@ if __FILE__ == $PROGRAM_NAME
     puts "    Total items: #{stage_stats.total_items}"
     puts "    Throughput: #{stage_stats.throughput.round(2)} items/s"
 
-    puts "    Latency P50/P90/P95: #{(stage_stats.p50 * 1000).round(2)}ms / #{(stage_stats.p90 * 1000).round(2)}ms / #{(stage_stats.p95 * 1000).round(2)}ms" if stage_stats.has_latency_data?
+    puts "    Latency P50/P90/P95: #{(stage_stats.p50 * 1000).round(2)}ms / #{(stage_stats.p90 * 1000).round(2)}ms / #{(stage_stats.p95 * 1000).round(2)}ms" if stage_stats.latency_data?
   end
 
   puts "\n✓ Statistics demo complete!"
