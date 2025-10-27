@@ -224,19 +224,16 @@ module Minigun
         @pipeline.add_stage(:stage, name, options, &block)
       end
 
-      # Processor - transforms items, receives item and output queue
-      def processor(name, options = {}, &block)
-        options = _apply_execution_context(options)
-        options[:stage_type] = :processor
-        @pipeline.add_stage(:stage, name, options, &block)
-      end
-
-      # Consumer - terminal stage, receives item only (no output)
+      # Consumer - processes items, receives item and output queue
+      # Whether it uses output or not is up to the stage implementation
       def consumer(name, options = {}, &block)
         options = _apply_execution_context(options)
         options[:stage_type] = :consumer
         @pipeline.add_stage(:stage, name, options, &block)
       end
+
+      # Processor - alias for consumer (both receive item and output)
+      alias processor consumer
 
       # Generic stage - for advanced use (input loop), receives input and output queues
       def stage(name, options = {}, &block)

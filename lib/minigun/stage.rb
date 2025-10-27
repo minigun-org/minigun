@@ -104,8 +104,7 @@ module Minigun
     # Execute stage logic with queue-based arguments
     # Stage type determines arguments:
     #   :producer = producer do |output|
-    #   :consumer = consumer do |item|
-    #   :processor = processor do |item, output|
+    #   :consumer = consumer do |item, output|  (processor is alias for consumer)
     #   :stage = stage do |input, output|
     def execute(context, item: nil, input_queue: nil, output_queue: nil)
       return unless @block
@@ -114,11 +113,9 @@ module Minigun
       when :producer
         # Producer: do |output|
         context.instance_exec(output_queue, &@block)
-      when :consumer
-        # Consumer: do |item|
-        context.instance_exec(item, &@block)
-      when :processor
-        # Processor: do |item, output|
+      when :consumer, :processor
+        # Consumer/Processor: do |item, output|
+        # Whether they use output or not is up to the stage implementation
         context.instance_exec(item, output_queue, &@block)
       when :stage
         # Stage with input loop: do |input, output|

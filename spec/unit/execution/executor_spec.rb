@@ -63,18 +63,24 @@ RSpec.describe Minigun::Execution::Executor do
 
     it 'tracks consumption and production' do
       executor = Minigun::Execution::InlineExecutor.new
-      allow(stage).to receive(:respond_to?).with(:execute_with_emit).and_return(true)
-      allow(stage).to receive(:execute_with_emit).and_return([42, 84])
+      items_produced_count = 0
+      output_queue = double('output_queue')
+      allow(output_queue).to receive(:items_produced) { items_produced_count }
+      allow(output_queue).to receive(:<<) { items_produced_count += 1; output_queue }
+      
+      allow(stage).to receive(:execute) do |_context, **kwargs|
+        kwargs[:output_queue] << 42
+        kwargs[:output_queue] << 84
+      end
 
       expect(stage_stats).to receive(:increment_consumed).once
-      expect(stage_stats).to receive(:increment_produced).with(2)
+      expect(stage_stats).to receive(:increment_produced).exactly(2).times
 
-      executor.execute_stage_item(stage: stage, item: 1, user_context: user_context, stats: stats, pipeline: pipeline)
+      executor.execute_stage_item(stage: stage, item: 1, user_context: user_context, output_queue: output_queue, stats: stats, pipeline: pipeline)
     end
 
     it 'records latency' do
       executor = Minigun::Execution::InlineExecutor.new
-      allow(stage).to receive(:respond_to?).with(:execute_with_emit).and_return(false)
       allow(stage).to receive(:execute).and_return(nil)
 
       expect(stage_stats).to receive(:record_latency).with(kind_of(Numeric))
@@ -84,11 +90,12 @@ RSpec.describe Minigun::Execution::Executor do
 
     it 'handles errors gracefully' do
       executor = Minigun::Execution::InlineExecutor.new
-      allow(stage).to receive(:respond_to?).with(:execute_with_emit).and_return(true)
-      allow(stage).to receive(:execute_with_emit).and_raise(StandardError, "test error")
+      allow(stage).to receive(:execute).and_raise(StandardError, "test error")
 
-      result = executor.execute_stage_item(stage: stage, item: 1, user_context: user_context, stats: stats, pipeline: pipeline)
-      expect(result).to eq([])
+      # Should not raise, errors are logged
+      expect {
+        executor.execute_stage_item(stage: stage, item: 1, user_context: user_context, stats: stats, pipeline: pipeline)
+      }.not_to raise_error
     end
   end
 end

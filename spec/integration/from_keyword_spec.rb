@@ -119,12 +119,12 @@ RSpec.describe 'From Keyword' do
           @mutex = Mutex.new
         end
 
-        pipeline :generate do
+        pipeline :generate, to: :process do
           producer :source do |output|
             2.times { |i| output << i }
           end
 
-          consumer :forward do |item|
+          processor :forward do |item, output|
             @mutex.synchronize { @results_a << item }
             output << item * 10
           end
@@ -161,7 +161,7 @@ RSpec.describe 'From Keyword' do
             output << 'A'
           end
 
-          consumer :out_a do |item|
+          consumer :out_a do |item, output|
             output << item
           end
         end
@@ -171,7 +171,7 @@ RSpec.describe 'From Keyword' do
             output << 'B'
           end
 
-          consumer :out_b do |item|
+          consumer :out_b do |item, output|
             output << item
           end
         end
@@ -206,7 +206,7 @@ RSpec.describe 'From Keyword' do
             output << 1
           end
 
-          consumer :fwd do |item|
+          consumer :fwd do |item, output|
             output << item
           end
         end
@@ -216,7 +216,7 @@ RSpec.describe 'From Keyword' do
             output << item + 10
           end
 
-          consumer :fwd do |item|
+          consumer :fwd do |item, output|
             output << item
           end
         end
@@ -226,7 +226,7 @@ RSpec.describe 'From Keyword' do
             output << 2
           end
 
-          consumer :fwd do |item|
+          consumer :fwd do |item, output|
             output << item
           end
         end
