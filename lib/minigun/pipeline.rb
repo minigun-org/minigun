@@ -251,13 +251,13 @@ module Minigun
           # Get explicit routing strategy from stage options, or default to :broadcast
           routing_strategy = stage.options[:routing] || :broadcast
 
-          # Create a RouterStage
+          # Create the appropriate router subclass
           router_name = :"#{stage_name}_router"
-          router_stage = RouterStage.new(
-            name: router_name,
-            targets: downstream.dup,
-            routing_strategy: routing_strategy
-          )
+          router_stage = if routing_strategy == :round_robin
+                           RouterRoundRobinStage.new(name: router_name, targets: downstream.dup)
+                         else
+                           RouterBroadcastStage.new(name: router_name, targets: downstream.dup)
+                         end
           stages_to_add << [router_name, router_stage]
 
           # Update DAG: stage -> router -> [downstream targets]

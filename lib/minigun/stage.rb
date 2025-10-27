@@ -305,28 +305,18 @@ module Minigun
     end
   end
 
-  # Pipeline stage - composite stage that wraps a Pipeline
-  # This is the key to the composite pattern!
-  # Router stage for fan-out (broadcast or round-robin)
+  # Router stages for fan-out patterns
+  # Base functionality for all routers
   class RouterStage < Stage
-    attr_accessor :targets, :routing_strategy
+    attr_accessor :targets
 
-    def initialize(name:, targets:, routing_strategy: :broadcast)
+    def initialize(name:, targets:)
       super(name: name, options: {})
       @targets = targets
-      @routing_strategy = routing_strategy  # :broadcast or :round_robin
     end
 
     def router?
       true
-    end
-
-    def broadcast?
-      @routing_strategy == :broadcast
-    end
-
-    def round_robin?
-      @routing_strategy == :round_robin
     end
 
     def execute(context, item)
@@ -334,25 +324,44 @@ module Minigun
       [item]
     end
 
-    # Run the worker loop for router stages
-    def run_worker_loop(worker_ctx)
-      target_queues = @targets.map { |target| worker_ctx.stage_input_queues[target] }
+    protected
 
-      if round_robin?
-        run_round_robin_loop(worker_ctx, target_queues)
-      else
-        run_broadcast_loop(worker_ctx, target_queues)
-      end
-
-      # Broadcast END to ALL router targets (even for round-robin)
+    def send_end_signals(worker_ctx)
+      # Broadcast END to ALL router targets
       @targets.each do |target|
         worker_ctx.stage_input_queues[target] << Message.end_signal(source: worker_ctx.stage_name)
       end
     end
+  end
 
-    private
+  # Broadcast router - sends each item to ALL downstream stages
+  class RouterBroadcastStage < RouterStage
+    def run_worker_loop(worker_ctx)
+      loop do
+        msg = worker_ctx.input_queue.pop
 
-    def run_round_robin_loop(worker_ctx, target_queues)
+        # Handle END signal
+        if msg.is_a?(Message) && msg.end_of_stream?
+          worker_ctx.sources_expected << msg.source  # Discover dynamic source
+          worker_ctx.sources_done << msg.source
+          break if worker_ctx.sources_done == worker_ctx.sources_expected
+          next
+        end
+
+        # Broadcast to all downstream stages (fan-out semantics)
+        @targets.each do |target|
+          worker_ctx.stage_input_queues[target] << msg
+        end
+      end
+
+      send_end_signals(worker_ctx)
+    end
+  end
+
+  # Round-robin router - distributes items across downstream stages
+  class RouterRoundRobinStage < RouterStage
+    def run_worker_loop(worker_ctx)
+      target_queues = @targets.map { |target| worker_ctx.stage_input_queues[target] }
       round_robin_index = 0
 
       loop do
@@ -370,25 +379,8 @@ module Minigun
         target_queues[round_robin_index] << msg
         round_robin_index = (round_robin_index + 1) % target_queues.size
       end
-    end
 
-    def run_broadcast_loop(worker_ctx, target_queues)
-      loop do
-        msg = worker_ctx.input_queue.pop
-
-        # Handle END signal
-        if msg.is_a?(Message) && msg.end_of_stream?
-          worker_ctx.sources_expected << msg.source  # Discover dynamic source
-          worker_ctx.sources_done << msg.source
-          break if worker_ctx.sources_done == worker_ctx.sources_expected
-          next
-        end
-
-        # Broadcast to all downstream stages (fan-out semantics)
-        @targets.each do |target|
-          worker_ctx.stage_input_queues[target] << msg
-        end
-      end
+      send_end_signals(worker_ctx)
     end
   end
 

@@ -202,10 +202,9 @@ RSpec.describe Minigun::Execution::StageWorker do
 
   describe 'router stage' do
     let(:router_stage) do
-      Minigun::RouterStage.new(
+      Minigun::RouterBroadcastStage.new(
         name: :router,
-        targets: [:target_a, :target_b],
-        routing_strategy: :broadcast
+        targets: [:target_a, :target_b]
       )
     end
 
