@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
-require 'concurrent'
-require 'logger'
 require 'set'
+require 'concurrent'
+require 'securerandom'
+require 'logger'
 
 module Minigun
   class Error < StandardError; end
@@ -20,6 +21,7 @@ require_relative 'minigun/version'
 require_relative 'minigun/configuration'
 require_relative 'minigun/message'
 require_relative 'minigun/queue_wrappers'
+require_relative 'minigun/worker'
 require_relative 'minigun/execution/executor'
 require_relative 'minigun/stats'
 require_relative 'minigun/stage'

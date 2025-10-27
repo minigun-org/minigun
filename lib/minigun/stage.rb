@@ -55,8 +55,6 @@ module Minigun
     # Run the worker loop for loop-based stages
     # Loop-based stages manage their own input loop
     def run_worker_loop(stage_ctx)
-      require_relative 'queue_wrappers'
-
       # Get stage stats for tracking
       stage_stats = stage_ctx.stats.for_stage(stage_ctx.stage_name, is_terminal: stage_ctx.dag.terminal?(stage_ctx.stage_name))
 
@@ -140,8 +138,6 @@ module Minigun
     end
 
     def run_worker_loop(stage_ctx)
-      require_relative 'queue_wrappers'
-
       stage_stats = stage_ctx.stats.for_stage(stage_ctx.stage_name, is_terminal: false)
       stage_stats.start!
 
@@ -211,8 +207,6 @@ module Minigun
     end
 
     def run_worker_loop(stage_ctx)
-      require_relative 'queue_wrappers'
-
       # Get stage stats for tracking
       stage_stats = stage_ctx.stats.for_stage(stage_ctx.stage_name, is_terminal: stage_ctx.dag.terminal?(stage_ctx.stage_name))
 
@@ -486,8 +480,6 @@ module Minigun
 
     # Run the worker loop for pipeline stages
     def run_worker_loop(stage_ctx)
-      require_relative 'queue_wrappers'
-
       # Check if this PipelineStage is acting as a producer (no upstream)
       if stage_ctx.sources_expected.empty?
         # Producer mode: run the nested pipeline once

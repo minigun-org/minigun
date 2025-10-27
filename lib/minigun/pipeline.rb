@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'set'
-require_relative 'execution/worker'
 
 module Minigun
   # Pipeline represents a single data processing pipeline with stages
@@ -221,7 +220,7 @@ module Minigun
 
       # Start unified workers for ALL stages (producers and consumers)
       @stages.each do |stage_name, stage|
-        worker = Execution::Worker.new(self, stage, @config)
+        worker = Worker.new(self, stage, @config)
         worker.start
         @stage_threads << worker
       end

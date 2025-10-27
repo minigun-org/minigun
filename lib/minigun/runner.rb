@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'securerandom'
-
 module Minigun
   # The Runner class handles the full lifecycle of a Minigun job
   # Including signal handling, statistics, and cleanup

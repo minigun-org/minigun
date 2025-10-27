@@ -2,7 +2,7 @@
 
 require 'spec_helper'
 
-RSpec.describe Minigun::Execution::Worker do
+RSpec.describe Minigun::Worker do
   let(:pipeline) do
     instance_double(
       Minigun::Pipeline,
@@ -44,7 +44,7 @@ RSpec.describe Minigun::Execution::Worker do
       worker = described_class.new(pipeline, stage, config)
 
       expect(worker.stage_name).to eq(:test_stage)
-      expect(worker).to be_a(Minigun::Execution::Worker)
+      expect(worker).to be_a(Minigun::Worker)
     end
 
     it 'does not start the worker thread immediately' do
@@ -122,7 +122,7 @@ RSpec.describe Minigun::Execution::Worker do
         worker = described_class.new(pipeline, stage, config)
 
         # Should not raise error
-        expect(worker).to be_a(Minigun::Execution::Worker)
+        expect(worker).to be_a(Minigun::Worker)
       end
     end
 
@@ -134,7 +134,7 @@ RSpec.describe Minigun::Execution::Worker do
       it 'creates a thread pool executor' do
         worker = described_class.new(pipeline, stage, config)
 
-        expect(worker).to be_a(Minigun::Execution::Worker)
+        expect(worker).to be_a(Minigun::Worker)
       end
     end
 
@@ -146,7 +146,7 @@ RSpec.describe Minigun::Execution::Worker do
       it 'creates a process pool executor' do
         worker = described_class.new(pipeline, stage, config)
 
-        expect(worker).to be_a(Minigun::Execution::Worker)
+        expect(worker).to be_a(Minigun::Worker)
       end
     end
   end
