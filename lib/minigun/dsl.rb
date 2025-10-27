@@ -67,6 +67,12 @@ module Minigun
     # Hook when DSL is included in a class
     def self.included(base)
       base.extend(ClassMethods)
+
+      # Add class-level attribute accessors to set when inheriting
+      class << base
+        attr_accessor :_minigun_task, :_pipeline_definition_blocks
+      end
+
       base.class_eval do
         # Create a single task instance for the class
         @_minigun_task = Minigun::Task.new
@@ -79,13 +85,14 @@ module Minigun
         super if defined?(super)
         parent_task = self._minigun_task
         # Create a new task and copy the parent's configuration and pipelines
-        new_task = Minigun::Task.new
-        new_task.instance_variable_set(:@config, parent_task.config.dup)
-        new_task.instance_variable_set(:@root_pipeline, parent_task.root_pipeline.dup) # Duplicate the pipeline
-        subclass.instance_variable_set(:@_minigun_task, new_task)
+        new_task = Minigun::Task.new(
+          config: parent_task.config.dup,
+          root_pipeline: parent_task.root_pipeline.dup
+        )
+        subclass._minigun_task = new_task
 
         # Inherit pipeline definition blocks
-        subclass.instance_variable_set(:@_pipeline_definition_blocks, (@_pipeline_definition_blocks || []).dup)
+        subclass._pipeline_definition_blocks = (@_pipeline_definition_blocks || []).dup
       end
     end
 

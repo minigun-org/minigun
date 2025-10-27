@@ -6,8 +6,8 @@ module Minigun
   class Task
     attr_reader :config, :root_pipeline
 
-    def initialize
-      @config = {
+    def initialize(config: nil, root_pipeline: nil)
+      @config = config || {
         max_threads: 5,
         max_processes: 2,
         max_retries: 3,
@@ -18,7 +18,7 @@ module Minigun
       }
 
       # Root pipeline - all stages and nested pipelines live here
-      @root_pipeline = Pipeline.new(:default, @config)
+      @root_pipeline = root_pipeline || Pipeline.new(:default, @config)
     end
 
     # Set config value (applies to all pipelines)
