@@ -22,21 +22,21 @@ class WebScraper
   end
 
   pipeline do
-    producer :generate_urls do
-      20.times { |i| emit("https://example.com/page-#{i}") }
+    producer :generate_urls do |output|
+      20.times { |i| output << "https://example.com/page-#{i}" }
     end
 
     # All stages in this block use a pool of 10 threads
     threads(10) do
-      processor :download do |url|
+      processor :download do |url, output|
         # Simulate HTTP request
         sleep 0.01
-        emit({ url: url, html: "<html>...</html>", fetched_at: Time.now })
+        output << { url: url, html: "<html>...</html>", fetched_at: Time.now }
       end
 
-      processor :extract_links do |page|
+      processor :extract_links do |page, output|
         # Extract data
-        emit({ url: page[:url], links: 5, title: "Page" })
+        output << { url: page[:url], links: 5, title: "Page" }
       end
 
       consumer :store do |page|

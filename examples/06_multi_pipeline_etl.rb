@@ -20,34 +20,34 @@ class MultiPipelineETL
 
   # Pipeline 1: Extract - Fetches raw data
   pipeline :extract, to: :transform do
-    producer :fetch_data do
+    producer :fetch_data do |output|
       puts "[Extract] Fetching data from source..."
       5.times do |i|
-        emit({ id: i, value: i * 10 })
+        output << { id: i, value: i * 10 }
       end
     end
 
     consumer :output do |item|
       @mutex.synchronize { extracted << item }
-      emit(item) # Send to next pipeline
+      output << item # Send to next pipeline
     end
   end
 
   # Pipeline 2: Transform - Cleans and transforms data
   pipeline :transform, to: [:load_db, :load_cache] do
-    processor :clean do |item|
+    processor :clean do |item, output|
       puts "[Transform] Cleaning item #{item[:id]}"
-      emit(item.merge(cleaned: true))
+      output << item.merge(cleaned: true)
     end
 
-    processor :enrich do |item|
+    processor :enrich do |item, output|
       puts "[Transform] Enriching item #{item[:id]}"
-      emit(item.merge(enriched_at: Time.now))
+      output << item.merge(enriched_at: Time.now)
     end
 
     consumer :output do |item|
       @mutex.synchronize { transformed << item }
-      emit(item) # Send to both load pipelines
+      output << item # Send to both load pipelines
     end
   end
 

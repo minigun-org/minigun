@@ -91,12 +91,12 @@ class DatabasePublisher
     end
 
     # Stage 1: Fetch customer IDs from database
-    producer :fetch_customers do
+    producer :fetch_customers do |output|
       puts "[Producer] Fetching customers from #{@model_class.name}..."
 
       @model_class.find_each do |customer|
         # Emit [model_class, id] tuple for downstream processing
-        emit([customer.to_h, customer.id])
+        output << [customer.to_h, customer.id]
       end
 
       puts "[Producer] Finished fetching customers"
@@ -110,7 +110,7 @@ class DatabasePublisher
       @mutex.synchronize { @enriched_count += 1 }
 
       # Emit enriched data for publishing
-      emit(enriched)
+      output << enriched
     end
 
     # Stage 3: Publish to external service

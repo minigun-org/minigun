@@ -19,15 +19,15 @@ class RunnerFeaturesExample
   end
 
   pipeline do
-    producer :generate do
+    producer :generate do |output|
       puts "[Producer] Generating 10 items"
-      10.times { |i| emit(i + 1) }
+      10.times { |i| output << i + 1 }
     end
 
-    processor :double do |num|
+    processor :double do |num, output|
       result = num * 2
       puts "[Processor] #{num} * 2 = #{result}"
-      emit(result)
+      output << result
     end
 
     # Use accumulator + process_per_batch to see process title in action

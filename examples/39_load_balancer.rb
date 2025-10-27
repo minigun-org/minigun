@@ -15,7 +15,7 @@ class LoadBalancerExample
   end
 
   pipeline do
-    producer :request_generator do
+    producer :request_generator do |output|
       puts "\n" + "="*60
       puts "LOAD BALANCER: Generating HTTP Requests"
       puts "="*60
@@ -31,23 +31,23 @@ class LoadBalancerExample
         }
 
         puts "Generated request #{request[:id]}: #{request[:method]} #{request[:path]}"
-        emit(request)
+        output << request
       end
     end
 
     # Round-robin router distributes to three servers
-    processor :router do |request|
+    processor :router do |request, output|
       # Simple round-robin load balancing
       server_id = (request[:id] - 1) % 3
       request[:assigned_server] = server_id
 
       puts "→ Routing request #{request[:id]} to server #{server_id}"
-      emit(request)
+      output << request
     end
 
     # Simulate three server processors with different speeds
     threads(3) do
-      processor :process_request do |request|
+      processor :process_request do |request, output|
         server_id = request[:assigned_server]
         server_name = "Server-#{server_id}"
 
@@ -69,7 +69,7 @@ class LoadBalancerExample
         }
 
         puts "  #{server_name} processed request #{request[:id]} (#{response[:status]}) in #{processing_time.round(3)}s"
-        emit(response)
+        output << response
       end
     end
 

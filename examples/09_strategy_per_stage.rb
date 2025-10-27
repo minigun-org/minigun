@@ -26,15 +26,15 @@ class StrategyPerStageExample
   end
 
   pipeline do
-    producer :generate do
+    producer :generate do |output|
       puts "[Producer] Generating 10 items"
-      10.times { |i| emit(i + 1) }
+      10.times { |i| output << i + 1 }
     end
 
     # Light processor uses threads (default)
-    processor :validate, to: :batch do |num|
+    processor :validate, to: :batch do |num, output|
       puts "[Validator] Validating #{num}"
-      emit(num) if num > 0
+      output << num if num > 0
     end
 
     # Accumulator batches items before spawning workers

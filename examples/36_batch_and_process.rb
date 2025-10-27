@@ -31,8 +31,8 @@ class BatchProcessor
   end
 
   pipeline do
-    producer :generate_data do
-      1000.times { |i| emit(i) }
+    producer :generate_data do |output|
+      1000.times { |i| output << i }
     end
 
     # Accumulate into batches of 100
@@ -93,15 +93,15 @@ class DynamicBatching
   end
 
   pipeline do
-    producer :gen do
-      500.times { |i| emit(i) }
+    producer :gen do |output|
+      500.times { |i| output << i }
     end
 
     # Small batches for quick processing
     batch 25
 
     process_per_batch(max: 8) do
-      processor :quick_process do |batch|
+      processor :quick_process do |batch, output|
         @mutex.synchronize { @small_batches += 1 }
         batch.map { |x| x * 2 }
       end
@@ -145,8 +145,8 @@ class ConfigurableBatching
   end
 
   pipeline do
-    producer :gen do
-      500.times { |i| emit(i) }
+    producer :gen do |output|
+      500.times { |i| output << i }
     end
 
     # Runtime-configurable batch size

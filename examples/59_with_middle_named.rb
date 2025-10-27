@@ -19,26 +19,26 @@ class WithMiddleNamed
   pipeline do
     execution_context :db_pool, :threads, 3
 
-    producer :gen do
-      20.times { |i| emit(i) }
+    producer :gen do |output|
+      20.times { |i| output << i }
     end
 
     threads(3) do
-      processor :work do |item|
-        emit(item * 2)
+      processor :work do |item, output|
+        output << item * 2
       end
     end
 
     batch 5
 
     process_per_batch(max: 2) do
-      processor :process_batch do |batch|
-        batch.each { |item| emit(item + 100) }
+      processor :process_batch do |batch, output|
+        batch.each { |item| output << item + 100 }
       end
     end
 
     processor :save_db, execution_context: :db_pool do |item|
-      emit(item)
+      output << item
     end
 
     threads(2) do

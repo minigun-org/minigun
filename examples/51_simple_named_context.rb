@@ -19,12 +19,12 @@ class SimpleNamedContext
   pipeline do
     execution_context :my_pool, :threads, 5
 
-    producer :gen do
-      10.times { |i| emit(i) }
+    producer :gen do |output|
+      10.times { |i| output << i }
     end
 
-    processor :work, execution_context: :my_pool do |item|
-      emit(item * 2)
+    processor :work, execution_context: :my_pool do |item, output|
+      output << item * 2
     end
 
     consumer :save do |item|

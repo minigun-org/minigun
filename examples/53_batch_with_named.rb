@@ -19,18 +19,18 @@ class BatchWithNamed
   pipeline do
     execution_context :processor_pool, :threads, 3
 
-    producer :gen do
-      30.times { |i| emit(i) }
+    producer :gen do |output|
+      30.times { |i| output << i }
     end
 
-    processor :prep, execution_context: :processor_pool do |item|
-      emit(item + 1)
+    processor :prep, execution_context: :processor_pool do |item, output|
+      output << item + 1
     end
 
     batch 5
 
-    processor :process_batch do |batch|
-      batch.each { |item| emit(item * 2) }
+    processor :process_batch do |batch, output|
+      batch.each { |item| output << item * 2 }
     end
 
     consumer :save do |item|

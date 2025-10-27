@@ -20,24 +20,24 @@ class ProcessBatchNamed
     execution_context :before_pool, :threads, 3
     execution_context :after_pool, :threads, 2
 
-    producer :gen do
-      20.times { |i| emit(i) }
+    producer :gen do |output|
+      20.times { |i| output << i }
     end
 
-    processor :prep, execution_context: :before_pool do |item|
-      emit(item + 1)
+    processor :prep, execution_context: :before_pool do |item, output|
+      output << item + 1
     end
 
     batch 5
 
     process_per_batch(max: 2) do
-      processor :process_batch do |batch|
-        batch.each { |item| emit(item * 2) }
+      processor :process_batch do |batch, output|
+        batch.each { |item| output << item * 2 }
       end
     end
 
-    processor :post, execution_context: :after_pool do |item|
-      emit(item + 100)
+    processor :post, execution_context: :after_pool do |item, output|
+      output << item + 100
     end
 
     consumer :save do |item|

@@ -24,41 +24,41 @@ class ExactStructure
     execution_context :cache_pool, :threads, 5
     execution_context :db_pool, :threads, 3
 
-    producer :generate do
-      20.times { |i| emit({ id: i, url: "item-#{i}" }) }
+    producer :generate do |output|
+      20.times { |i| output << { id: i, url: "item-#{i}" } }
     end
 
-    processor :check_cache, execution_context: :cache_pool do |item|
+    processor :check_cache, execution_context: :cache_pool do |item, output|
       item[:cached] = false
-      emit(item)
+      output << item
     end
 
     threads(5) do
-      processor :download do |item|
+      processor :download do |item, output|
         @mutex.synchronize { @stats[:downloaded] += 1 }
         item[:data] = "data-#{item[:id]}"
-        emit(item)
+        output << item
       end
 
-      processor :extract do |item|
+      processor :extract do |item, output|
         item[:metadata] = { size: 100 }
-        emit(item)
+        output << item
       end
     end
 
     batch 5
 
     process_per_batch(max: 2) do
-      processor :parse_batch do |batch|
+      processor :parse_batch do |batch, output|
         @mutex.synchronize { @stats[:parsed] += batch.size }
         batch.each do |item|
-          emit({ id: item[:id], parsed: item[:data].upcase })
+          output << { id: item[:id], parsed: item[:data].upcase }
         end
       end
     end
 
     processor :save_db, execution_context: :db_pool do |item|
-      emit(item)
+      output << item
     end
 
     threads(2) do

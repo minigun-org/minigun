@@ -23,58 +23,58 @@ class DataProcessingPipeline
   pipeline :ingest, to: :validate do
     before_run { puts "Starting data processing pipeline..." }
 
-    producer :receive_data do
+    producer :receive_data do |output|
       puts "[Ingest] Receiving data..."
       10.times do |i|
-        emit({
+        output << {
           id: i,
           data: "item_#{i}",
           priority: i % 3 == 0 ? :high : :normal,
           valid: i % 4 != 0  # Every 4th item is invalid
-        })
+        }
       end
     end
 
     consumer :track do |item|
       @mutex.synchronize { ingested << item }
-      emit(item)
+      output << item
     end
   end
 
   # Pipeline 2: Validate - Splits valid/invalid data
   pipeline :validate, to: [:process_fast, :process_slow] do
-    processor :check_validity do |item|
+    processor :check_validity do |item, output|
       if item[:valid]
-        emit(item)
+        output << item
       else
         @mutex.synchronize { invalid << item }
         # Invalid items don't propagate
       end
     end
 
-    processor :prioritize do |item|
+    processor :prioritize do |item, output|
       puts "[Validate] Item #{item[:id]} is #{item[:priority]} priority"
       @mutex.synchronize { valid << item }
-      emit(item)
+      output << item
     end
 
     consumer :output do |item|
       # Route based on priority
       if item[:priority] == :high
         # Will go to process_fast
-        emit(item)
+        output << item
       else
         # Will go to both pipelines
-        emit(item)
+        output << item
       end
     end
   end
 
   # Pipeline 3a: Fast Processing (for high-priority items)
   pipeline :process_fast do
-    processor :fast_transform do |item|
+    processor :fast_transform do |item, output|
       puts "[Fast] Processing item #{item[:id]}"
-      emit(item.merge(processed_by: :fast_lane))
+      output << item.merge(processed_by: :fast_lane)
     end
 
     consumer :complete do |item|
@@ -86,10 +86,10 @@ class DataProcessingPipeline
 
   # Pipeline 3b: Slow Processing (for normal items)
   pipeline :process_slow do
-    processor :slow_transform do |item|
+    processor :slow_transform do |item, output|
       puts "[Slow] Processing item #{item[:id]}"
       sleep 0.01  # Simulate slower processing
-      emit(item.merge(processed_by: :slow_lane))
+      output << item.merge(processed_by: :slow_lane)
     end
 
     consumer :complete do |item|

@@ -15,7 +15,7 @@ class MessageRouterExample
   end
 
   pipeline do
-    producer :generate_messages do
+    producer :generate_messages do |output|
       puts "\n" + "="*60
       puts "MESSAGE ROUTER: Generating Messages"
       puts "="*60
@@ -43,12 +43,12 @@ class MessageRouterExample
         }
 
         puts "#{message[:icon]} Generated #{message[:type]} message #{message[:id]}: #{message[:severity]}"
-        emit(message)
+        output << message
       end
     end
 
     # Route messages based on type
-    processor :classify_message do |message|
+    processor :classify_message do |message, output|
       # Add routing metadata
       message[:handler] = case message[:type]
                           when 'log' then 'log_processor'
@@ -60,11 +60,11 @@ class MessageRouterExample
                           end
 
       puts "→ Routing #{message[:type]} message #{message[:id]} to #{message[:handler]}"
-      emit(message)
+      output << message
     end
 
     # Process logs
-    processor :process_message do |message|
+    processor :process_message do |message, output|
       handler = message[:handler]
 
       # Simulate different processing based on type
@@ -99,7 +99,7 @@ class MessageRouterExample
         @message_counts[message[:type]] += 1
       end
 
-      emit(message)
+      output << message
     end
 
     # Batch messages for efficient storage

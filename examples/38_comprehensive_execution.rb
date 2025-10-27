@@ -42,30 +42,30 @@ class ComprehensivePipeline
     execution_context :cache_pool, :threads, 10
 
     # Generate work items
-    producer :generate_urls do
-      200.times { |i| emit({ id: i, url: "https://api.example.com/item-#{i}" }) }
+    producer :generate_urls do |output|
+      200.times { |i| output << { id: i, url: "https://api.example.com/item-#{i}" } }
     end
 
     # Check cache first (small dedicated pool)
-    processor :check_cache, execution_context: :cache_pool do |item|
+    processor :check_cache, execution_context: :cache_pool do |item, output|
       # Simulate cache lookup
       item[:cached] = false
-      emit(item)
+      output << item
     end
 
     # Download phase: I/O-bound, use thread pool
     threads(@download_threads) do
-      processor :download do |item|
+      processor :download do |item, output|
         @mutex.synchronize { @stats[:downloaded] += 1 }
 
         # Simulate HTTP request
         item[:data] = "response-#{item[:id]}"
-        emit(item)
+        output << item
       end
 
-      processor :extract_metadata do |item|
+      processor :extract_metadata do |item, output|
         item[:metadata] = { size: 1024, type: 'json' }
-        emit(item)
+        output << item
       end
     end
 
@@ -74,18 +74,18 @@ class ComprehensivePipeline
 
     # Parse phase: CPU-bound, use process per batch
     process_per_batch(max: @parse_processes) do
-      processor :parse_batch do |batch|
+      processor :parse_batch do |batch, output|
         # Note: Stats incremented in parent process would not be visible here
         # since this runs in a forked process
 
         # CPU-intensive parsing
         batch.each do |item|
-          emit({
+          output << {
             id: item[:id],
             parsed: item[:data].upcase,
             metadata: item[:metadata],
             parse_pid: Process.pid  # Track which process did the work
-          })
+          }
         end
       end
     end
@@ -98,7 +98,7 @@ class ComprehensivePipeline
         @stats[:parse_pids] << results[:parse_pid] if results[:parse_pid]
       end
       # Simulate database write
-      emit(results)
+      output << results
     end
 
     # Upload phase: I/O-bound, use thread pool

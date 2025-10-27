@@ -17,24 +17,24 @@ class NestedPipelineExample
 
   pipeline do
     # Main pipeline contains a nested sub-pipeline
-    producer :start do
+    producer :start do |output|
       puts "[Main] Generating numbers 1-5"
-      5.times { |i| emit(i + 1) }
+      5.times { |i| output << i + 1 }
     end
 
     # Nested sub-pipeline for transformation
     pipeline :transform_sub do
       # This pipeline receives items from parent
-      processor :double do |num|
+      processor :double do |num, output|
         result = num * 2
         puts "[SubPipeline] #{num} * 2 = #{result}"
-        emit(result)
+        output << result
       end
 
-      processor :add_ten do |num|
+      processor :add_ten do |num, output|
         result = num + 10
         puts "[SubPipeline] #{result - 10} + 10 = #{result}"
-        emit(result)
+        output << result
       end
     end
 

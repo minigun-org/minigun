@@ -22,13 +22,13 @@ class InlineExample
   end
 
   pipeline do
-    producer :generate do
-      5.times { |i| emit(i) }
+    producer :generate do |output|
+      5.times { |i| output << i }
     end
 
     # No execution context specified = inline (synchronous)
-    processor :process do |item|
-      emit(item * 2)
+    processor :process do |item, output|
+      output << item * 2
     end
 
     consumer :collect do |item|
@@ -58,15 +58,15 @@ class ThreadExample
   end
 
   pipeline do
-    producer :generate do
-      10.times { |i| emit(i) }
+    producer :generate do |output|
+      10.times { |i| output << i }
     end
 
     # Use thread pool for concurrent processing
     threads(5) do
-      processor :process do |item|
+      processor :process do |item, output|
         sleep 0.01  # Simulate work
-        emit(item * 2)
+        output << item * 2
       end
     end
 
@@ -97,14 +97,14 @@ class RactorExample
   end
 
   pipeline do
-    producer :generate do
-      5.times { |i| emit(i) }
+    producer :generate do |output|
+      5.times { |i| output << i }
     end
 
     # Ractors provide true parallelism (falls back to threads if unavailable)
     ractors(2) do
-      processor :process do |item|
-        emit(item ** 2)
+      processor :process do |item, output|
+        output << item ** 2
       end
     end
 
@@ -136,16 +136,16 @@ if Process.respond_to?(:fork)
     end
 
     pipeline do
-      producer :generate do
-        3.times { |i| emit(i) }
+      producer :generate do |output|
+        3.times { |i| output << i }
       end
 
       # Process isolation for CPU-bound tasks
       batch 1
       process_per_batch(max: 2) do
-        processor :process do |batch|
+        processor :process do |batch, output|
           batch.each do |item|
-            emit({ item: item, pid: Process.pid, result: item * 100 })
+            output << { item: item, pid: Process.pid, result: item * 100 }
           end
         end
       end
@@ -181,14 +181,14 @@ class ParallelExample
   end
 
   pipeline do
-    producer :generate do
-      10.times { |i| emit(i) }
+    producer :generate do |output|
+      10.times { |i| output << i }
     end
 
     threads(5) do
-      processor :process do |item|
+      processor :process do |item, output|
         sleep 0.01  # Simulate work
-        emit(item * 3)
+        output << item * 3
       end
     end
 
@@ -223,16 +223,16 @@ class ErrorExample
   end
 
   pipeline do
-    producer :generate do
-      5.times { |i| emit(i) }
+    producer :generate do |output|
+      5.times { |i| output << i }
     end
 
     threads(2) do
-      processor :process do |item|
+      processor :process do |item, output|
         if item == 2
           raise StandardError, "Error on item #{item}"
         end
-        emit(item * 2)
+        output << item * 2
       end
     end
 
@@ -263,13 +263,13 @@ class TerminationExample
   end
 
   pipeline do
-    producer :generate do
-      10.times { |i| emit(i) }
+    producer :generate do |output|
+      10.times { |i| output << i }
     end
 
     threads(3) do
-      processor :process do |item|
-        emit(item)
+      processor :process do |item, output|
+        output << item
       end
     end
 

@@ -52,6 +52,19 @@ module Minigun
       @options[:_execution_context]
     end
 
+    # Hash representation (for test compatibility)
+    def to_h
+      { name: @name, options: @options }
+    end
+
+    # Hash-like access (for test compatibility)
+    def [](key)
+      case key
+      when :name then @name
+      when :options then @options
+      else nil
+      end
+    end
   end
 
   # Atomic stages - leaf nodes that execute a single block
@@ -110,6 +123,20 @@ module Minigun
       when :stage
         # Stage with input loop: do |input, output|
         context.instance_exec(input_queue, output_queue, &@block)
+      end
+    end
+
+    # Hash representation (for test compatibility)
+    def to_h
+      super.merge(block: @block, stage_type: @stage_type)
+    end
+
+    # Hash-like access (for test compatibility)
+    def [](key)
+      case key
+      when :block then @block
+      when :stage_type then @stage_type
+      else super
       end
     end
   end

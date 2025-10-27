@@ -32,16 +32,16 @@ class ConfigurableDownloader
   end
 
   pipeline do
-    producer :gen_urls do
-      50.times { |i| emit("https://example.com/#{i}") }
+    producer :gen_urls do |output|
+      50.times { |i| output << "https://example.com/#{i}" }
     end
 
     # Use instance variable for thread count
     threads(@threads) do
-      processor :download do |url|
+      processor :download do |url, output|
         # Simulate download
         sleep 0.01
-        emit({ url: url, data: "content-#{url}" })
+        output << { url: url, data: "content-#{url}" }
       end
     end
 
@@ -86,15 +86,15 @@ class DataProcessor
   end
 
   pipeline do
-    producer :generate do
-      5000.times { |i| emit(i) }
+    producer :generate do |output|
+      5000.times { |i| output << i }
     end
 
     # Parallel download with thread pool
     threads(@threads) do
-      processor :download do |item|
+      processor :download do |item, output|
         # Simulate I/O-bound work
-        emit({ id: item, data: "data-#{item}" })
+        output << { id: item, data: "data-#{item}" }
       end
     end
 
@@ -103,7 +103,7 @@ class DataProcessor
 
     # CPU-intensive processing per batch with process isolation
     process_per_batch(max: @processes) do
-      processor :parse do |batch|
+      processor :parse do |batch, output|
         # Simulate CPU-intensive work
         batch.map { |item| item[:data].upcase }
       end
@@ -157,20 +157,20 @@ class SmartPipeline
   end
 
   pipeline do
-    producer :source do
-      100.times { |i| emit(i) }
+    producer :source do |output|
+      100.times { |i| output << i }
     end
 
     threads(@threads) do
-      processor :work do |item|
-        emit(item * 2)
+      processor :work do |item, output|
+        output << item * 2
       end
     end
 
     batch @batch_size
 
     process_per_batch(max: @processes) do
-      processor :heavy_work do |batch|
+      processor :heavy_work do |batch, output|
         batch.map { |x| x ** 2 }
       end
     end
@@ -231,20 +231,20 @@ class AdaptivePipeline
   end
 
   pipeline do
-    producer :gen do
-      1000.times { |i| emit(i) }
+    producer :gen do |output|
+      1000.times { |i| output << i }
     end
 
     threads(thread_count) do
-      processor :fetch do |item|
-        emit({ id: item, data: "fetched" })
+      processor :fetch do |item, output|
+        output << { id: item, data: "fetched" }
       end
     end
 
     batch batch_size
 
     process_per_batch(max: process_count) do
-      processor :process do |batch|
+      processor :process do |batch, output|
         batch.map { |x| x[:data].upcase }
       end
     end
@@ -292,20 +292,20 @@ class ConfigurablePipeline
   end
 
   pipeline do
-    producer :source do
-      10.times { |i| emit(i) }
+    producer :source do |output|
+      10.times { |i| output << i }
     end
 
     threads(@config.thread_pool_size) do
-      processor :download do |item|
-        emit(item * 2)
+      processor :download do |item, output|
+        output << item * 2
       end
     end
 
     batch @config.batch_size
 
     process_per_batch(max: @config.process_pool_size) do
-      processor :parse do |batch|
+      processor :parse do |batch, output|
         batch.map { |x| x + 100 }
       end
     end

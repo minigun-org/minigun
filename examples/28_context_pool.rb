@@ -23,15 +23,15 @@ class BasicPoolExample
   end
 
   pipeline do
-    producer :generate do
-      10.times { |i| emit(i) }
+    producer :generate do |output|
+      10.times { |i| output << i }
     end
 
     # Thread pool with 3 workers
     threads(3) do
-      processor :process do |item|
+      processor :process do |item, output|
         sleep 0.05
-        emit(item * 2)
+        output << item * 2
       end
     end
 
@@ -62,15 +62,15 @@ class CapacityExample
   end
 
   pipeline do
-    producer :generate do
-      20.times { |i| emit(i) }
+    producer :generate do |output|
+      20.times { |i| output << i }
     end
 
     # Limited to 2 concurrent workers
     threads(2) do
-      processor :process do |item|
+      processor :process do |item, output|
         sleep 0.01
-        emit(item)
+        output << item
       end
     end
 
@@ -103,13 +103,13 @@ class ParallelExample
   end
 
   pipeline do
-    producer :generate do
-      50.times { |i| emit(i) }
+    producer :generate do |output|
+      50.times { |i| output << i }
     end
 
     threads(10) do
-      processor :process do |item|
-        emit(item * 2)
+      processor :process do |item, output|
+        output << item * 2
       end
     end
 
@@ -139,14 +139,14 @@ class ReuseExample
   end
 
   pipeline do
-    producer :generate do
-      20.times { |i| emit(i) }
+    producer :generate do |output|
+      20.times { |i| output << i }
     end
 
     threads(3) do
-      processor :track do |item|
+      processor :track do |item, output|
         @mutex.synchronize { @thread_ids << Thread.current.object_id }
-        emit(item)
+        output << item
       end
     end
 
@@ -177,13 +177,13 @@ class BulkExample
   end
 
   pipeline do
-    producer :generate do
-      100.times { |i| emit(i) }
+    producer :generate do |output|
+      100.times { |i| output << i }
     end
 
     threads(20) do
-      processor :process do |item|
-        emit(item ** 2)
+      processor :process do |item, output|
+        output << item ** 2
       end
     end
 
@@ -217,14 +217,14 @@ class TerminationExample
   end
 
   pipeline do
-    producer :generate do
-      5.times { |i| emit(i) }
+    producer :generate do |output|
+      5.times { |i| output << i }
     end
 
     threads(5) do
-      processor :process do |item|
+      processor :process do |item, output|
         sleep 0.01  # Simulate work
-        emit(item)
+        output << item
       end
     end
 
@@ -256,16 +256,16 @@ class BatchProcessor
   end
 
   pipeline do
-    producer :generate do
-      %w[apple banana cherry date elderberry fig grape honeydew kiwi lemon].each { |item| emit(item) }
+    producer :generate do |output|
+      %w[apple banana cherry date elderberry fig grape honeydew kiwi lemon].each { |item| output << item }
     end
 
     # Use instance variable for thread count
     # Note: This is evaluated when the block is defined, capturing @workers
-    processor :process do |item|
+    processor :process do |item, output|
       @mutex.synchronize { @processed_count += 1 }
       result = { item: item, result: item.upcase, timestamp: Time.now }
-      emit(result)
+      output << result
     end
 
     consumer :collect do |result|

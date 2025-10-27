@@ -97,21 +97,21 @@ class WebCrawler
 
   pipeline do
     # Stage 1: Seed with initial URLs
-    producer :seed_urls do
+    producer :seed_urls do |output|
       puts "\n" + "="*60
       puts "WEB CRAWLER: Starting from #{@start_url}"
       puts "Max pages: #{@max_pages}, Max depth: #{@max_depth}"
       puts "="*60
 
       @seed_urls.each do |url|
-        emit({ url: url, depth: 0 })
+        output << { url: url, depth: 0 }
       end
       puts "[Seed] Emitted #{@seed_urls.size} seed URL(s)"
     end
 
     # Stage 2: Fetch pages (with deduplication)
     threads(20) do
-      processor :fetch_pages do |page_info|
+      processor :fetch_pages do |page_info, output|
         url = page_info[:url]
         depth = page_info[:depth]
 
@@ -152,12 +152,12 @@ class WebCrawler
           @pages_crawled += 1
         end
 
-        emit(page)
+        output << page
       end
     end
 
     # Stage 3: Extract links from fetched pages
-    processor :extract_links do |page|
+    processor :extract_links do |page, output|
       links = extract_links_from_page(page[:url], page[:content])
 
       @mutex.synchronize do
@@ -169,14 +169,14 @@ class WebCrawler
       puts "     Found #{links.size} links on #{page[:url]}"
 
       # Emit the page for storage
-      emit(page)
+      output << page
 
       # Note: In a real recursive crawler, we would emit links back to fetch_pages
       # For this demo, we just extract and track them to avoid complexity
       # To enable recursive crawling:
       # links.each do |link|
       #   next unless should_crawl?(link)
-      #   emit({ url: link, depth: page[:depth] + 1 })
+      #   output << { url: link, depth: page[:depth] + 1 }
       # end
     end
 

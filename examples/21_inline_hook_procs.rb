@@ -43,7 +43,7 @@ class InlineHookExample
              before: -> { @timer[:fetch_start] = Time.now },
              after: -> { @timer[:fetch_end] = Time.now } do
       @events << :fetching
-      10.times { |i| emit(i) }
+      10.times { |i| output << i }
     end
 
     # Inline hooks with multiple operations
@@ -58,7 +58,7 @@ class InlineHookExample
               } do |num|
       @validation_count += 1
       if num > 0
-        emit(num)
+        output << num
       end
     end
 
@@ -66,7 +66,7 @@ class InlineHookExample
     processor :transform,
               before: -> { @events << :transform_start },
               after: -> { @events << :transform_end } do |num|
-      emit(num * 2)
+      output << num * 2
     end
 
     # Accumulator batches items

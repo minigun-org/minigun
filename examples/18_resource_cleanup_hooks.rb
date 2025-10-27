@@ -42,10 +42,10 @@ class ResourceCleanupExample
       @resource_events << "Closed file handle"
     end
 
-    producer :read_file do
+    producer :read_file do |output|
       # Simulate reading from file
       @resource_events << "Reading from file..."
-      10.times { |i| emit("record_#{i}") }
+      10.times { |i| output << "record_#{i}" }
     end
 
     # Initialize API client before processing
@@ -60,10 +60,10 @@ class ResourceCleanupExample
       @resource_events << "Shutdown API client"
     end
 
-    processor :enrich_data do |record|
+    processor :enrich_data do |record, output|
       # Simulate API call to enrich data
       enriched = call_external_api(record)
-      emit(enriched)
+      output << enriched
     end
 
     # Accumulator batches records

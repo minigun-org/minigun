@@ -22,7 +22,7 @@ class LoadBalancedWorkers
     # routing: :round_robin distributes items evenly across workers for load balancing
     producer :generate_work, to: [:worker1, :worker2, :worker3], routing: :round_robin do
       puts "\n[Producer] Generating 10 work items..."
-      10.times { |i| emit(i) }
+      10.times { |i| output << i }
     end
 
     # Multiple consumers that process work in parallel

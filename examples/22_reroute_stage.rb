@@ -15,15 +15,15 @@ class RerouteBaseExample
   end
 
   pipeline do
-    producer :generate do
+    producer :generate do |output|
       puts "[Producer] Generating 5 items"
-      5.times { |i| emit(i + 1) }
+      5.times { |i| output << i + 1 }
     end
 
-    processor :double do |num|
+    processor :double do |num, output|
       result = num * 2
       puts "[Double] #{num} * 2 = #{result}"
-      emit(result)
+      output << result
     end
 
     consumer :collect do |num|
@@ -44,10 +44,10 @@ end
 # Child class that inserts a new stage
 class RerouteInsertExample < RerouteBaseExample
   pipeline do
-    processor :triple do |num|
+    processor :triple do |num, output|
       result = num * 3
       puts "[Triple] #{num} * 3 = #{result}"
-      emit(result)
+      output << result
     end
 
     # Reroute to insert triple between double and collect

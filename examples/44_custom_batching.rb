@@ -15,7 +15,7 @@ class CustomBatchingExample
   end
 
   pipeline do
-    producer :generate_emails do
+    producer :generate_emails do |output|
       puts "\n" + "="*60
       puts "CUSTOM BATCHING: Generating Emails"
       puts "="*60
@@ -38,7 +38,7 @@ class CustomBatchingExample
 
       emails.each do |email|
         puts "📧 Generated #{email[:type]} email #{email[:id]}: #{email[:subject]}"
-        emit(email)
+        output << email
       end
     end
 
@@ -175,7 +175,7 @@ class AdvancedCustomBatchingExample
   end
 
   pipeline do
-    producer :generate_messages do
+    producer :generate_messages do |output|
       puts "\n" + "="*60
       puts "ADVANCED CUSTOM BATCHING: Priority + Type Routing"
       puts "="*60
@@ -197,7 +197,7 @@ class AdvancedCustomBatchingExample
                end
 
         puts "#{icon} Generated #{message[:type]} message (#{message[:priority]}): #{message[:id]}"
-        emit(message)
+        output << message
       end
     end
 
@@ -226,7 +226,7 @@ class AdvancedCustomBatchingExample
         @batches[batch_key].clear
 
         puts "  ✓ Sending batch of #{batch.size} #{batch_key} messages"
-        emit(batch)
+        output << batch
       end
     end
 

@@ -18,37 +18,37 @@ class MultiPipelineTask
 
   # Pipeline A: Processes some data and forwards to Pipeline B
   pipeline :pipeline_a, to: :pipeline_b do
-    producer :source_x do
+    producer :source_x do |output|
       puts "[Pipeline A] Producer X: generating items..."
       3.times do |i|
-        emit({ id: i, source: 'x', value: i * 10 })
+        output << { id: i, source: 'x', value: i * 10 }
       end
       puts "[Pipeline A] Producer X: done (3 items)"
     end
 
-    processor :process_x do |item|
+    processor :process_x do |item, output|
       puts "[Pipeline A] Processing: #{item[:id]} from #{item[:source]}"
       item[:processed_by_a] = true
-      emit(item)
+      output << item
     end
   end
 
   # Pipeline B: Has its own producers AND receives from Pipeline A
   pipeline :pipeline_b do
     # Producer 1 in Pipeline B
-    producer :source_y do
+    producer :source_y do |output|
       puts "[Pipeline B] Producer Y: generating items..."
       2.times do |i|
-        emit({ id: i + 100, source: 'y', value: i * 20 })
+        output << { id: i + 100, source: 'y', value: i * 20 }
       end
       puts "[Pipeline B] Producer Y: done (2 items)"
     end
 
     # Producer 2 in Pipeline B
-    producer :source_z do
+    producer :source_z do |output|
       puts "[Pipeline B] Producer Z: generating items..."
       2.times do |i|
-        emit({ id: i + 200, source: 'z', value: i * 30 })
+        output << { id: i + 200, source: 'z', value: i * 30 }
       end
       puts "[Pipeline B] Producer Z: done (2 items)"
     end

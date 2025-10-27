@@ -3,9 +3,9 @@
 
 require_relative '../lib/minigun'
 
-# Simple Multi-Pipeline Example
+# New DSL Example - Using queue arguments instead of emit
 # Shows basic pipeline-to-pipeline communication
-class SimplePipelineExample
+class NewDslExample
   include Minigun::DSL
 
   attr_accessor :results
@@ -17,12 +17,14 @@ class SimplePipelineExample
 
   # First pipeline generates numbers
   pipeline :generator, to: :processor do
+    # Producer: gets output queue
     producer :generate do |output|
       puts "[Generator] Creating numbers..."
-      5.times { |i| output << i + 1 }
+      5.times { |i| output << (i + 1) }
     end
 
-    consumer :output do |num|
+    # Processor: gets item and output queue
+    processor :output do |num, output|
       puts "[Generator] Sending: #{num}"
       output << num  # Send to next pipeline
     end
@@ -33,16 +35,13 @@ class SimplePipelineExample
     processor :double do |num, output|
       doubled = num * 2
       puts "[Processor] #{num} * 2 = #{doubled}"
-      output << doubled
-    end
-
-    consumer :output do |num|
-      output << num # Send to next pipeline
+      output << doubled  # Fixed: was outputting num instead of doubled
     end
   end
 
   # Third pipeline collects results
   pipeline :collector do
+    # Terminal consumer: only gets item, no output
     consumer :collect do |num|
       puts "[Collector] Storing: #{num}"
       @mutex.synchronize { results << num }
@@ -51,10 +50,10 @@ class SimplePipelineExample
 end
 
 if __FILE__ == $0
-  puts "=== Simple Multi-Pipeline Example ===\n\n"
+  puts "=== New DSL Example ===\n\n"
   puts "Three pipelines: Generator -> Processor -> Collector\n\n"
 
-  example = SimplePipelineExample.new
+  example = NewDslExample.new  # Fixed: was SimplePipelineExample
   example.run
 
   puts "\n=== Final Results ===\n"

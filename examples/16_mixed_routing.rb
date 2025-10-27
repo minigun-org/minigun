@@ -19,32 +19,32 @@ class MixedRoutingExample
 
   pipeline do
     # Explicit routing: producer fans out to two paths
-    producer :generate, to: [:path_a, :path_b] do
+    producer :generate, to: [:path_a, :path_b] do |output|
       puts "[Producer] Generating 3 items"
-      3.times { |i| emit(i) }
+      3.times { |i| output << i }
     end
 
     # Path A: Explicit routing to collect
-    processor :path_a, to: :collect do |num|
+    processor :path_a, to: :collect do |num, output|
       result = num * 10
       puts "[Path A] Processing #{num} → #{result} (explicit route to :collect)"
       @mutex.synchronize { from_a << num }
-      emit(result)
+      output << result
     end
 
     # Path B: Sequential routing (will connect to next stage: transform)
-    processor :path_b do |num|
+    processor :path_b do |num, output|
       result = num * 100
       puts "[Path B] Processing #{num} → #{result} (sequential to :transform)"
       @mutex.synchronize { from_b << num }
-      emit(result)
+      output << result
     end
 
     # Transform: Sequential connection from path_b, explicit routing to collect
-    processor :transform, to: :collect do |num|
+    processor :transform, to: :collect do |num, output|
       result = num + 1
       puts "[Transform] Processing #{num} → #{result} (explicit route to :collect)"
-      emit(result)
+      output << result
     end
 
     # Consumer: Receives from both path_a (explicit) and transform (explicit)

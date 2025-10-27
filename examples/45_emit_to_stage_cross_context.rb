@@ -21,7 +21,7 @@ class CrossContextRoutingExample
   end
 
   pipeline do
-    producer :generate_tasks do
+    producer :generate_tasks do |output|
       puts "\n🎯 CROSS-CONTEXT ROUTING WITH emit_to_stage\n"
       puts "="*60
 
@@ -39,7 +39,7 @@ class CrossContextRoutingExample
 
       tasks.each do |task|
         puts "📦 Generated #{task[:type]} task #{task[:id]}"
-        emit(task)
+        output << task
       end
     end
 

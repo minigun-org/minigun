@@ -34,20 +34,20 @@ class NestedPipeline
   end
 
   pipeline do
-    producer :gen do
-      100.times { |i| emit(i) }
+    producer :gen do |output|
+      100.times { |i| output << i }
     end
 
     # Outer context: thread pool for I/O work
     threads(50) do
-      processor :download do |item|
+      processor :download do |item, output|
         # Simulate I/O-bound download
-        emit({ id: item, data: "downloaded-#{item}" })
+        output << { id: item, data: "downloaded-#{item}" }
       end
 
-      processor :validate do |item|
+      processor :validate do |item, output|
         # Quick validation in thread
-        emit(item)
+        output << item
       end
 
       # Batch within thread context
@@ -121,14 +121,14 @@ class DeepNesting
   end
 
   pipeline do
-    producer :gen do
-      50.times { |i| emit(i) }
+    producer :gen do |output|
+      50.times { |i| output << i }
     end
 
     # Level 1: Thread pool
     threads(20) do
-      processor :fetch do |item|
-        emit(item * 2)
+      processor :fetch do |item, output|
+        output << item * 2
       end
 
       # Level 2: Batch
@@ -136,7 +136,7 @@ class DeepNesting
 
       # Level 3: Thread per batch
       thread_per_batch(max: 5) do
-        processor :parse_batch do |batch|
+        processor :parse_batch do |batch, output|
           # Each batch in its own thread
           batch.map { |x| x + 100 }
         end
@@ -182,19 +182,19 @@ class ImageProcessor
   end
 
   pipeline do
-    producer :list_images do
-      100.times { |i| emit("image-#{i}.jpg") }
+    producer :list_images do |output|
+      100.times { |i| output << "image-#{i}.jpg" }
     end
 
     # Download images in parallel
     threads(30) do
-      processor :download_image do |filename|
+      processor :download_image do |filename, output|
         # Simulate download
-        emit({ filename: filename, bytes: 1024 * 100 })
+        output << { filename: filename, bytes: 1024 * 100 }
       end
 
-      processor :validate_format do |image|
-        emit(image)
+      processor :validate_format do |image, output|
+        output << image
       end
 
       # Batch images for efficient processing
@@ -202,7 +202,7 @@ class ImageProcessor
 
       # Process batches in separate processes (CPU-intensive)
       process_per_batch(max: 4) do
-        processor :resize_batch do |batch|
+        processor :resize_batch do |batch, output|
           # CPU-intensive image resizing
           batch.map do |img|
             { filename: img[:filename], resized: true, thumbnails: 3 }
@@ -211,8 +211,8 @@ class ImageProcessor
       end
 
       # Back to threads for upload
-      processor :prepare_upload do |results|
-        emit(results)
+      processor :prepare_upload do |results, output|
+        output << results
       end
 
       consumer :upload do |results|

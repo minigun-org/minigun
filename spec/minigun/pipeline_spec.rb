@@ -91,9 +91,9 @@ RSpec.describe Minigun::Pipeline do
         end
       end.new
 
-      pipeline.add_stage(:producer, :source) do
-        emit(1)
-        emit(2)
+      pipeline.add_stage(:producer, :source) do |output|
+        output << 1
+        output << 2
       end
 
       pipeline.add_stage(:consumer, :sink) do |item|
@@ -115,7 +115,7 @@ RSpec.describe Minigun::Pipeline do
       pipeline.add_hook(:before_run) { events << :before }
       pipeline.add_hook(:after_run) { events << :after }
 
-      pipeline.add_stage(:producer, :source) { emit(1) }
+      pipeline.add_stage(:producer, :source) { |output| output << 1 }
       pipeline.add_stage(:consumer, :sink) { |item| events << :process }
 
       pipeline.run(context)
@@ -132,12 +132,12 @@ RSpec.describe Minigun::Pipeline do
         end
       end.new
 
-      pipeline.add_stage(:producer, :source) do
-        emit(5)
+      pipeline.add_stage(:producer, :source) do |output|
+        output << 5
       end
 
-      pipeline.add_stage(:processor, :double) do |item|
-        emit(item * 2)
+      pipeline.add_stage(:processor, :double) do |item, output|
+        output << item * 2
       end
 
       pipeline.add_stage(:consumer, :sink) do |item|

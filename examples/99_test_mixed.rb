@@ -16,25 +16,25 @@ class TestMixedExample
   end
 
   pipeline do
-    producer :generate, to: [:path_a, :path_b] do
-      3.times { |i| emit(i) }
+    producer :generate, to: [:path_a, :path_b] do |output|
+      3.times { |i| output << i }
     end
 
-    processor :path_a, to: :collect do |num|
+    processor :path_a, to: :collect do |num, output|
       result = num * 10
       @mutex.synchronize { from_a << num }
-      emit(result)
+      output << result
     end
 
-    processor :path_b do |num|
+    processor :path_b do |num, output|
       result = num * 100
       @mutex.synchronize { from_b << num }
-      emit(result)
+      output << result
     end
 
-    processor :transform, to: :collect do |num|
+    processor :transform, to: :collect do |num, output|
       result = num + 1
-      emit(result)
+      output << result
     end
 
     consumer :collect do |num|

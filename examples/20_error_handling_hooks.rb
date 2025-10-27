@@ -43,10 +43,10 @@ class ErrorHandlingExample
       end
     end
 
-    producer :generate_data do
+    producer :generate_data do |output|
       # Generate mix of good and potentially problematic data
       20.times do |i|
-        emit({ id: i, value: i })
+        output << { id: i, value: i }
       end
     end
 
@@ -60,7 +60,7 @@ class ErrorHandlingExample
       puts "Validation completed in #{validation_duration.round(3)}s"
     end
 
-    processor :validate do |item|
+    processor :validate do |item, output|
       begin
         # Simulate validation that might fail
         if item[:id] == 13
@@ -71,7 +71,7 @@ class ErrorHandlingExample
           raise ArgumentError, "Value cannot be negative"
         end
 
-        emit(item)
+        output << item
       rescue => e
         @errors << { stage: :validate, item: item, error: e.message }
         # Don't re-emit - filter out bad data
@@ -79,7 +79,7 @@ class ErrorHandlingExample
     end
 
     # Process with retry logic
-    processor :transform do |item|
+    processor :transform do |item, output|
       max_retries = 3
 
       begin
@@ -95,11 +95,11 @@ class ErrorHandlingExample
           processed_at: Time.now
         )
 
-        emit(transformed)
+        output << transformed
       rescue => e
         if @retry_counts[item[:id]] < max_retries
           # Retry by re-emitting
-          emit(item)
+          output << item
         else
           @errors << { stage: :transform, item: item, error: e.message, retries: @retry_counts[item[:id]] }
           @failed_items << item

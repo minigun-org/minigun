@@ -27,25 +27,25 @@ class DataPipeline
     execution_context :cpu_workers, :processes, 4
     execution_context :fast_lane, :threads, 100
 
-    producer :generate do
-      100.times { |i| emit(i) }
+    producer :generate do |output|
+      100.times { |i| output << i }
     end
 
     # Assign specific context to stage
-    processor :fetch, execution_context: :io_workers do |item|
+    processor :fetch, execution_context: :io_workers do |item, output|
       # I/O work using io_workers pool
-      emit({ id: item, data: "fetched-#{item}" })
+      output << { id: item, data: "fetched-#{item}" }
     end
 
     # Different stage, different context
-    processor :compute, execution_context: :cpu_workers do |item|
+    processor :compute, execution_context: :cpu_workers do |item, output|
       # CPU work using cpu_workers pool
-      emit({ id: item[:id], computed: item[:data].upcase })
+      output << { id: item[:id], computed: item[:data].upcase }
     end
 
     # Fast lane for final processing
-    processor :validate, execution_context: :fast_lane do |item|
-      emit(item[:computed])
+    processor :validate, execution_context: :fast_lane do |item, output|
+      output << item[:computed]
     end
 
     consumer :save do |item|
@@ -83,25 +83,25 @@ class MixedPipeline
     # Named context for specific stages
     execution_context :heavy_compute, :processes, 8
 
-    producer :gen do
-      50.times { |i| emit(i) }
+    producer :gen do |output|
+      50.times { |i| output << i }
     end
 
     # Use block context for some stages
     threads(20) do
-      processor :download do |item|
-        emit(item * 2)
+      processor :download do |item, output|
+        output << item * 2
       end
 
-      processor :parse do |item|
-        emit({ value: item })
+      processor :parse do |item, output|
+        output << { value: item }
       end
     end
 
     # Use named context for specific heavy work
-    processor :heavy_work, execution_context: :heavy_compute do |item|
+    processor :heavy_work, execution_context: :heavy_compute do |item, output|
       # CPU-intensive work in isolated process
-      emit(item[:value] ** 2)
+      output << item[:value] ** 2
     end
 
     # Back to default for final stage

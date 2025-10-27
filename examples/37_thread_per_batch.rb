@@ -24,8 +24,8 @@ class ThreadPerBatchExample
   end
 
   pipeline do
-    producer :gen do
-      100.times { |i| emit(i) }
+    producer :gen do |output|
+      100.times { |i| output << i }
     end
 
     batch 20
@@ -74,18 +74,18 @@ class MixedThreading
   end
 
   pipeline do
-    producer :gen do
-      50.times { |i| emit(i) }
+    producer :gen do |output|
+      50.times { |i| output << i }
     end
 
     # Thread pool for individual items
     threads(10) do
-      processor :fetch do |item|
-        emit(item * 2)
+      processor :fetch do |item, output|
+        output << item * 2
       end
 
-      processor :validate do |item|
-        emit(item)
+      processor :validate do |item, output|
+        output << item
       end
     end
 

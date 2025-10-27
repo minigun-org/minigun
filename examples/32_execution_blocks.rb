@@ -32,18 +32,18 @@ class ThreadPoolExample
   end
 
   pipeline do
-    producer :gen do
-      10.times { |i| emit(i) }
+    producer :gen do |output|
+      10.times { |i| output << i }
     end
 
     # All stages within threads block use thread pool of 5
     threads(5) do
-      processor :double do |item|
-        emit(item * 2)
+      processor :double do |item, output|
+        output << item * 2
       end
 
-      processor :add_ten do |item|
-        emit(item + 10)
+      processor :add_ten do |item, output|
+        output << item + 10
       end
 
       consumer :collect do |item|
@@ -74,14 +74,14 @@ class BatchProcessExample
   end
 
   pipeline do
-    producer :gen do
-      100.times { |i| emit(i) }
+    producer :gen do |output|
+      100.times { |i| output << i }
     end
 
     threads(10) do
-      processor :download do |item|
+      processor :download do |item, output|
         # Simulate I/O-bound work
-        emit({ id: item, data: "data-#{item}" })
+        output << { id: item, data: "data-#{item}" }
       end
     end
 
@@ -121,15 +121,15 @@ class NestedContextExample
   end
 
   pipeline do
-    producer :gen do
-      50.times { |i| emit(i) }
+    producer :gen do |output|
+      50.times { |i| output << i }
     end
 
     # Outer: thread pool for I/O work
     threads(20) do
-      processor :fetch do |item|
+      processor :fetch do |item, output|
         # Simulate fetch
-        emit(item * 2)
+        output << item * 2
       end
 
       # Batch within thread context
@@ -137,7 +137,7 @@ class NestedContextExample
 
       # Inner: process per batch for CPU work
       process_per_batch(max: 3) do
-        processor :compute do |batch|
+        processor :compute do |batch, output|
           # CPU-intensive work in isolated process
           batch.map { |x| x ** 2 }
         end
@@ -177,18 +177,18 @@ class NamedContextExample
     execution_context :io_pool, :threads, 50
     execution_context :cpu_pool, :processes, 4
 
-    producer :gen do
-      20.times { |i| emit(i) }
+    producer :gen do |output|
+      20.times { |i| output << i }
     end
 
     # Use named context
-    processor :download, execution_context: :io_pool do |item|
-      emit({ id: item, data: "downloaded" })
+    processor :download, execution_context: :io_pool do |item, output|
+      output << { id: item, data: "downloaded" }
     end
 
     # Use different named context
-    processor :compute, execution_context: :cpu_pool do |item|
-      emit(item[:data].upcase)
+    processor :compute, execution_context: :cpu_pool do |item, output|
+      output << item[:data].upcase
     end
 
     consumer :collect do |item|
@@ -219,20 +219,20 @@ class ComplexPipeline
 
   pipeline do
     # Generate URLs
-    producer :generate_urls do
-      100.times { |i| emit("https://example.com/page-#{i}") }
+    producer :generate_urls do |output|
+      100.times { |i| output << "https://example.com/page-#{i}" }
     end
 
     # Download in parallel with threads (I/O-bound)
     threads(50) do
-      processor :download do |url|
+      processor :download do |url, output|
         # Simulate HTTP request
-        emit({ url: url, html: "<html>content</html>", size: 1024 })
+        output << { url: url, html: "<html>content</html>", size: 1024 }
       end
 
-      processor :extract do |page|
+      processor :extract do |page, output|
         # Extract data from HTML
-        emit({ url: page[:url], title: "Page", links: 10 })
+        output << { url: page[:url], title: "Page", links: 10 }
       end
     end
 
@@ -241,7 +241,7 @@ class ComplexPipeline
 
     # Parse in separate processes (CPU-bound)
     process_per_batch(max: 4) do
-      processor :parse_batch do |batch|
+      processor :parse_batch do |batch, output|
         # CPU-intensive parsing
         batch.map do |page|
           {
@@ -283,8 +283,8 @@ class ThreadPerBatchExample
   end
 
   pipeline do
-    producer :gen do
-      50.times { |i| emit(i) }
+    producer :gen do |output|
+      50.times { |i| output << i }
     end
 
     batch 10

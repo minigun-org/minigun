@@ -64,9 +64,9 @@ class StatisticsGatheringExample
       @stats[:producer_duration] = @stats[:producer_end] - @stats[:producer_start]
     end
 
-    producer :generate_data do
+    producer :generate_data do |output|
       100.times do |i|
-        emit({ id: i, value: rand(100) })
+        output << { id: i, value: rand(100 })
         @stats[:producer_count] += 1
       end
     end
@@ -81,19 +81,19 @@ class StatisticsGatheringExample
       @stats[:validator_duration] = @stats[:validator_end] - @stats[:validator_start]
     end
 
-    processor :validate do |item|
+    processor :validate do |item, output|
       if item[:value] > 50
         @stats[:validator_passed] += 1
-        emit(item)
+        output << item
       else
         @stats[:validator_failed] += 1
         # Don't emit - filter out
       end
     end
 
-    processor :transform do |item|
+    processor :transform do |item, output|
       @stats[:transformer_count] += 1
-      emit(item.merge(transformed: true, doubled: item[:value] * 2))
+      output << item.merge(transformed: true, doubled: item[:value] * 2)
     end
 
     # Accumulator batches items

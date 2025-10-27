@@ -23,7 +23,7 @@ class BroadcastPipeline
     # This is useful for ETL where the same data needs multiple transformations
     producer :data_source, to: [:validate, :transform, :analyze], routing: :broadcast do
       puts "\n[Producer] Generating data..."
-      3.times { |i| emit({ id: i, value: i * 10 }) }
+      3.times { |i| output << { id: i, value: i * 10 } }
     end
 
     # Branch 1: Validation

@@ -17,13 +17,13 @@ class ThreadsBatchConsumer
   end
 
   pipeline do
-    producer :gen do
-      20.times { |i| emit(i) }
+    producer :gen do |output|
+      20.times { |i| output << i }
     end
 
     threads(3) do
-      processor :work do |item|
-        emit(item * 2)
+      processor :work do |item, output|
+        output << item * 2
       end
     end
 

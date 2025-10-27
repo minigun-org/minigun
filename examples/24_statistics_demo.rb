@@ -14,14 +14,14 @@ class StatisticsDemo
   end
 
   pipeline do
-    producer :generate do
+    producer :generate do |output|
       puts "[Producer] Generating 20 items"
-      20.times { |i| emit(i + 1) }
+      20.times { |i| output << i + 1 }
     end
 
-    processor :process, to: :collect do |num|
+    processor :process, to: :collect do |num, output|
       sleep(0.001) if num % 5 == 0  # Small delay every 5th item
-      emit(num * 2)
+      output << num * 2
     end
 
     consumer :collect do |num|

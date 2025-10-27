@@ -15,7 +15,7 @@ class PriorityRoutingExample
   end
 
   pipeline do
-    producer :generate_tasks do
+    producer :generate_tasks do |output|
       puts "\n" + "="*60
       puts "PRIORITY ROUTER: Generating Tasks"
       puts "="*60
@@ -37,12 +37,12 @@ class PriorityRoutingExample
       tasks.each do |task|
         badge = task[:vip] ? '⭐' : '  '
         puts "#{badge} Generated task #{task[:id]}: #{task[:type]} [#{task[:priority]}] for #{task[:user]}"
-        emit(task)
+        output << task
       end
     end
 
     # Enrich tasks with priority score
-    processor :calculate_priority do |task|
+    processor :calculate_priority do |task, output|
       # Calculate priority score
       priority_score = case task[:priority]
                        when 'critical' then 100
@@ -66,19 +66,19 @@ class PriorityRoutingExample
                             end
 
       puts "→ Task #{task[:id]} scored #{priority_score} → routing to #{task[:routing_path]}"
-      emit(task)
+      output << task
     end
 
     # Split processing based on routing path
-    processor :route_by_priority do |task|
+    processor :route_by_priority do |task, output|
       # In a real system with emit_to_queue, we'd route to different queues
       # For now, we'll mark it and handle in the consumer
       task[:routed_at] = Time.now
-      emit(task)
+      output << task
     end
 
     # Process with appropriate resources based on priority
-    processor :process_task do |task|
+    processor :process_task do |task, output|
       path = task[:routing_path]
 
       # Simulate different processing speeds
@@ -107,7 +107,7 @@ class PriorityRoutingExample
              end
 
       puts "#{icon} Processed task #{task[:id]} via #{path} in #{delay}s"
-      emit(task)
+      output << task
     end
 
     # Final delivery

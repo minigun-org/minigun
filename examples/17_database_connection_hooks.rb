@@ -65,10 +65,10 @@ class DatabaseConnectionExample
       final_disconnect
     end
 
-    producer :fetch_user_ids do
+    producer :fetch_user_ids do |output|
       @connection_events << "Producer using DB connection"
       # Simulate fetching IDs from database
-      (1..10).each { |id| emit(id) }
+      (1..10).each { |id| output << id }
     end
 
     # Accumulator batches items

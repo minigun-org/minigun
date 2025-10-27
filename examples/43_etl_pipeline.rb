@@ -17,7 +17,7 @@ class EtlPipelineExample
 
   pipeline do
     # EXTRACT: Read data from source
-    producer :extract_data do
+    producer :extract_data do |output|
       puts "\n" + "="*60
       puts "ETL PIPELINE: Extract Phase"
       puts "="*60
@@ -48,13 +48,13 @@ class EtlPipelineExample
       records.each do |record|
         puts "📦 Extracted: #{record[:id]} - #{record[:name]} (#{record[:category]})"
         @mutex.synchronize { @load_stats[:records_extracted] += 1 }
-        emit(record)
+        output << record
       end
     end
 
     # TRANSFORM: Clean, enrich, and validate data
     threads(3) do
-      processor :transform_data do |record|
+      processor :transform_data do |record, output|
         puts "⚙️  Transforming: #{record[:id]} - #{record[:name]}"
 
         # Filter: Skip out-of-stock items
@@ -91,7 +91,7 @@ class EtlPipelineExample
         puts "   ✓ Transformed: price=$#{record[:price]} → $#{record[:price_with_tax]} (tier: #{record[:price_tier]})"
 
         @mutex.synchronize { @load_stats[:records_transformed] += 1 }
-        emit(record)
+        output << record
       end
     end
 
@@ -109,7 +109,7 @@ class EtlPipelineExample
       end
 
       # Pass through the grouped data
-      emit(by_category)
+      output << by_category
     end
 
     # LOAD: Write to destination with per-batch processing

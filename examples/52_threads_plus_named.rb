@@ -19,18 +19,18 @@ class ThreadsPlusNamed
   pipeline do
     execution_context :named_pool, :threads, 3
 
-    producer :gen do
-      20.times { |i| emit(i) }
+    producer :gen do |output|
+      20.times { |i| output << i }
     end
 
     threads(5) do
-      processor :work1 do |item|
-        emit(item + 10)
+      processor :work1 do |item, output|
+        output << item + 10
       end
     end
 
     processor :work2, execution_context: :named_pool do |item|
-      emit(item * 2)
+      output << item * 2
     end
 
     consumer :save do |item|

@@ -15,6 +15,7 @@ RSpec.describe Minigun::Execution::StageWorker do
       'stage',
       producer?: false,
       router?: false,
+      stage_with_loop?: false,
       execution_context: nil
     )
   end
