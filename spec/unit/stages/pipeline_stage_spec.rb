@@ -71,26 +71,35 @@ RSpec.describe Minigun::PipelineStage do
       pipeline = Minigun::Pipeline.new(:test, config)
       stage.pipeline = pipeline
 
-      # Add processor and consumer to pipeline
-      pipeline.add_stage(:processor, :double) { |item| emit(item * 2) }
-      pipeline.add_stage(:consumer, :sink) { |item| item }
+      # Add processor to pipeline (no consumer, so output is returned)
+      pipeline.add_stage(:processor, :double) { |item, output| output << item * 2 }
 
       context = Object.new
-      result = stage.execute(context, 5)
+      output_queue = []
+      output_queue.define_singleton_method(:<<) { |item| self.push(item); self }
 
-      # PipelineStage now returns results to flow downstream in per-edge queue architecture
-      expect(result).to be_an(Array)
+      stage.execute(context, item: 5, output_queue: output_queue)
+
+      # PipelineStage now pushes results to output queue
+      expect(output_queue).to include(10)
     end
   end
 
-  describe '#execute_with_emit' do
+  describe '#execute with queue-based DSL' do
+    let(:create_output_queue) do
+      [].tap do |arr|
+        arr.define_singleton_method(:<<) { |item| push(item); self }
+      end
+    end
+
     it 'returns the item unchanged if no pipeline is set' do
       stage = described_class.new(name: :my_pipeline)
-
       context = Object.new
-      result = stage.execute_with_emit(context, 42)
+      output_queue = create_output_queue
 
-      expect(result).to eq([42])
+      stage.execute(context, item: 42, output_queue: output_queue)
+
+      expect(output_queue).to eq([42])
     end
 
     it 'processes item through pipeline stages sequentially' do
@@ -99,14 +108,16 @@ RSpec.describe Minigun::PipelineStage do
       stage.pipeline = pipeline
 
       # Add stages that transform the item
-      pipeline.add_stage(:processor, :double) { |item| emit(item * 2) }
-      pipeline.add_stage(:processor, :add_ten) { |item| emit(item + 10) }
+      pipeline.add_stage(:processor, :double) { |item, output| output << item * 2 }
+      pipeline.add_stage(:processor, :add_ten) { |item, output| output << item + 10 }
 
       context = Object.new
-      result = stage.execute_with_emit(context, 5)
+      output_queue = create_output_queue
+
+      stage.execute(context, item: 5, output_queue: output_queue)
 
       # 5 * 2 = 10, then 10 + 10 = 20
-      expect(result).to eq([20])
+      expect(output_queue).to eq([20])
     end
 
     it 'skips producer stages' do
@@ -115,14 +126,16 @@ RSpec.describe Minigun::PipelineStage do
       stage.pipeline = pipeline
 
       # Add a producer (should be skipped) and a processor
-      pipeline.add_stage(:producer, :source) { emit(999) }
-      pipeline.add_stage(:processor, :double) { |item| emit(item * 2) }
+      pipeline.add_stage(:producer, :source) { |output| output << 999 }
+      pipeline.add_stage(:processor, :double) { |item, output| output << item * 2 }
 
       context = Object.new
-      result = stage.execute_with_emit(context, 5)
+      output_queue = create_output_queue
+
+      stage.execute(context, item: 5, output_queue: output_queue)
 
       # Should process 5, not 999 from producer
-      expect(result).to eq([10])
+      expect(output_queue).to eq([10])
     end
 
     it 'processes through accumulator stages' do
@@ -130,38 +143,42 @@ RSpec.describe Minigun::PipelineStage do
       pipeline = Minigun::Pipeline.new(:test, config)
       stage.pipeline = pipeline
 
-      pipeline.add_stage(:processor, :double) { |item| emit(item * 2) }
+      pipeline.add_stage(:processor, :double) { |item, output| output << item * 2 }
       pipeline.add_stage(:accumulator, :batch, max_size: 2)  # Small batch for testing
-      pipeline.add_stage(:processor, :sum_batch) { |batch| emit(batch.sum) }
+      pipeline.add_stage(:processor, :sum_batch) { |batch, output| output << batch.sum }
 
       context = Object.new
 
       # First item: buffered by accumulator
-      result = stage.execute_with_emit(context, 5)
-      expect(result).to eq([])  # Nothing emitted yet
+      output_queue1 = create_output_queue
+      stage.execute(context, item: 5, output_queue: output_queue1)
+      expect(output_queue1).to eq([])  # Nothing emitted yet
 
       # Second item: accumulator reaches batch size and emits
-      result = stage.execute_with_emit(context, 3)
+      output_queue2 = create_output_queue
+      stage.execute(context, item: 3, output_queue: output_queue2)
 
       # Accumulator emits [10, 6], sum_batch processes it: 10 + 6 = 16
-      expect(result).to eq([16])
+      expect(output_queue2).to eq([16])
     end
 
-    it 'handles multiple emits per stage' do
+    it 'handles multiple outputs per stage' do
       stage = described_class.new(name: :my_pipeline)
       pipeline = Minigun::Pipeline.new(:test, config)
       stage.pipeline = pipeline
 
-      # Stage that emits multiple items
-      pipeline.add_stage(:processor, :fan_out) do |item|
-        emit(item)
-        emit(item * 10)
+      # Stage that outputs multiple items
+      pipeline.add_stage(:processor, :fan_out) do |item, output|
+        output << item
+        output << item * 10
       end
 
       context = Object.new
-      result = stage.execute_with_emit(context, 5)
+      output_queue = create_output_queue
 
-      expect(result).to contain_exactly(5, 50)
+      stage.execute(context, item: 5, output_queue: output_queue)
+
+      expect(output_queue).to contain_exactly(5, 50)
     end
 
     it 'executes consumer stages but does not collect their output' do
@@ -170,16 +187,18 @@ RSpec.describe Minigun::PipelineStage do
       stage.pipeline = pipeline
 
       results = []
-      pipeline.add_stage(:processor, :double) { |item| emit(item * 2) }
+      pipeline.add_stage(:processor, :double) { |item, output| output << item * 2 }
       pipeline.add_stage(:consumer, :collect) { |item| results << item }
 
       context = Object.new
-      result = stage.execute_with_emit(context, 5)
+      output_queue = create_output_queue
+
+      stage.execute(context, item: 5, output_queue: output_queue)
 
       # Consumer executed (side effect)
       expect(results).to eq([10])
-      # But nothing returned
-      expect(result).to eq([])
+      # But nothing pushed to output queue after consumer
+      expect(output_queue).to eq([])
     end
 
     it 'handles empty results from stages' do
@@ -188,14 +207,16 @@ RSpec.describe Minigun::PipelineStage do
       stage.pipeline = pipeline
 
       # Stage that filters out items
-      pipeline.add_stage(:processor, :filter) do |item|
-        emit(item) if item > 10
+      pipeline.add_stage(:processor, :filter) do |item, output|
+        output << item if item > 10
       end
 
       context = Object.new
-      result = stage.execute_with_emit(context, 5)
+      output_queue = create_output_queue
 
-      expect(result).to eq([])
+      stage.execute(context, item: 5, output_queue: output_queue)
+
+      expect(output_queue).to eq([])
     end
 
     it 'chains multiple transformations correctly' do
@@ -203,15 +224,17 @@ RSpec.describe Minigun::PipelineStage do
       pipeline = Minigun::Pipeline.new(:test, config)
       stage.pipeline = pipeline
 
-      pipeline.add_stage(:processor, :double) { |item| emit(item * 2) }
-      pipeline.add_stage(:processor, :square) { |item| emit(item ** 2) }
-      pipeline.add_stage(:processor, :add_one) { |item| emit(item + 1) }
+      pipeline.add_stage(:processor, :double) { |item, output| output << item * 2 }
+      pipeline.add_stage(:processor, :square) { |item, output| output << item ** 2 }
+      pipeline.add_stage(:processor, :add_one) { |item, output| output << item + 1 }
 
       context = Object.new
-      result = stage.execute_with_emit(context, 3)
+      output_queue = create_output_queue
+
+      stage.execute(context, item: 3, output_queue: output_queue)
 
       # 3 * 2 = 6, 6^2 = 36, 36 + 1 = 37
-      expect(result).to eq([37])
+      expect(output_queue).to eq([37])
     end
 
     it 'skips nested PipelineStages' do
@@ -225,27 +248,31 @@ RSpec.describe Minigun::PipelineStage do
       inner_stage.pipeline = inner_pipeline
       pipeline.stages[:inner] = inner_stage
 
-      pipeline.add_stage(:processor, :double) { |item| emit(item * 2) }
+      pipeline.add_stage(:processor, :double) { |item, output| output << item * 2 }
 
       context = Object.new
-      result = stage.execute_with_emit(context, 5)
+      output_queue = create_output_queue
+
+      stage.execute(context, item: 5, output_queue: output_queue)
 
       # Should skip nested pipeline, only run double
-      expect(result).to eq([10])
+      expect(output_queue).to eq([10])
     end
 
-    it 'handles stages that emit nothing' do
+    it 'handles stages that output nothing' do
       stage = described_class.new(name: :my_pipeline)
       pipeline = Minigun::Pipeline.new(:test, config)
       stage.pipeline = pipeline
 
-      # Stage that never emits
-      pipeline.add_stage(:processor, :black_hole) { |_item| nil }
+      # Stage that never outputs
+      pipeline.add_stage(:processor, :black_hole) { |_item, _output| nil }
 
       context = Object.new
-      result = stage.execute_with_emit(context, 5)
+      output_queue = create_output_queue
 
-      expect(result).to eq([])
+      stage.execute(context, item: 5, output_queue: output_queue)
+
+      expect(output_queue).to eq([])
     end
 
     it 'preserves context instance variables across stages' do
@@ -260,16 +287,19 @@ RSpec.describe Minigun::PipelineStage do
         end
       end.new
 
-      pipeline.add_stage(:processor, :track_and_double) do |item|
+      pipeline.add_stage(:processor, :track_and_double) do |item, output|
         tracking << "saw #{item}"
-        emit(item * 2)
+        output << item * 2
       end
 
-      result = stage.execute_with_emit(context, 5)
+      output_queue = create_output_queue
 
-      expect(result).to eq([10])
+      stage.execute(context, item: 5, output_queue: output_queue)
+
+      expect(output_queue).to eq([10])
       expect(context.tracking).to eq(["saw 5"])
     end
   end
 end
+
 

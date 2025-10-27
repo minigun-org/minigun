@@ -250,7 +250,13 @@ module Minigun
 
     # Execute method for when PipelineStage is used as a processor/consumer
     def execute(context, item: nil, input_queue: nil, output_queue: nil)
-      return unless @pipeline && item
+      # If no pipeline set, just pass item through
+      unless @pipeline
+        output_queue << item if output_queue && item
+        return
+      end
+
+      return unless item
 
       # Process item through the pipeline's stages sequentially (in-process, no full pipeline infrastructure)
       current_items = [item]
@@ -263,14 +269,20 @@ module Minigun
 
         next_items = []
         current_items.each do |current_item|
-          # Execute stage without emit - just collect returned value
-          result = stage.execute(context, item: current_item, output_queue: nil)
-          next_items << result if result
+          # Create a temporary output queue for this stage
+          stage_output = []
+          stage_output.define_singleton_method(:<<) { |i| push(i); self }
+
+          # Execute stage with temporary output queue
+          stage.execute(context, item: current_item, output_queue: stage_output)
+
+          # Collect outputs
+          next_items.concat(stage_output)
         end
-        current_items = next_items.flatten
+        current_items = next_items
       end
 
-      # Output results to output queue
+      # Output final results to output queue
       current_items.each { |result_item| output_queue << result_item } if output_queue
     end
 
