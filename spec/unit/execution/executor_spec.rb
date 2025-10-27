@@ -67,7 +67,7 @@ RSpec.describe Minigun::Execution::Executor do
       output_queue = double('output_queue')
       allow(output_queue).to receive(:items_produced) { items_produced_count }
       allow(output_queue).to receive(:<<) { items_produced_count += 1; output_queue }
-      
+
       allow(stage).to receive(:execute) do |_context, **kwargs|
         kwargs[:output_queue] << 42
         kwargs[:output_queue] << 84

@@ -364,18 +364,9 @@ module Minigun
           # Create OutputQueue wrapper for the new DSL
           output_queue = OutputQueue.new(producer_name, downstream_queues, stage_input_queues, runtime_edges)
 
-          if is_pipeline
-            # Pipeline producers: run nested pipeline with output queue
-            producer_stage.pipeline.instance_variable_set(:@job_id, @job_id)
-            producer_stage.pipeline.run(@context)
-
-            # TODO: Nested pipelines need refactoring to use OutputQueue
-            # For now, this won't work correctly with the new DSL
-            raise NotImplementedError, "PipelineStage producers not yet compatible with queue-based DSL"
-          else
-            # Atomic producers: execute with OutputQueue
-            producer_stage.execute(@context, item: nil, input_queue: nil, output_queue: output_queue)
-          end
+          # Both pipeline and atomic producers use execute() with output_queue
+          # PipelineStage#execute handles producer mode internally
+          producer_stage.execute(@context, item: nil, input_queue: nil, output_queue: output_queue)
 
           # Update stats with items produced
           output_queue.items_produced.times { stage_stats.increment_produced }

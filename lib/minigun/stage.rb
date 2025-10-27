@@ -253,7 +253,11 @@ module Minigun
         return
       end
 
-      return unless item
+      # If used as producer (no item), run the nested pipeline and collect outputs
+      if item.nil?
+        execute_as_producer(context, output_queue)
+        return
+      end
 
       # Process item through the pipeline's stages sequentially (in-process, no full pipeline infrastructure)
       current_items = [item]
@@ -281,6 +285,34 @@ module Minigun
 
       # Output final results to output queue
       current_items.each { |result_item| output_queue << result_item } if output_queue
+    end
+
+    # Execute as a producer - run the nested pipeline and collect its outputs
+    def execute_as_producer(context, output_queue)
+      # Collect all items produced by the nested pipeline
+      collected_items = []
+
+      # Add a temporary consumer to collect items
+      temp_consumer_added = false
+      unless @pipeline.stages.values.any? { |s| s.consumer? && s.name.to_s.start_with?('_temp_collector') }
+        @pipeline.instance_eval do
+          add_stage(:stage, :_temp_collector, stage_type: :consumer) do |item, output|
+            collected_items << item
+          end
+        end
+        temp_consumer_added = true
+      end
+
+      # Run the nested pipeline
+      @pipeline.run(context)
+
+      # Send collected items to parent output queue
+      collected_items.each { |item| output_queue << item } if output_queue
+
+      # Clean up temporary collector
+      if temp_consumer_added
+        @pipeline.stages.delete(:_temp_collector)
+      end
     end
 
     # Set the wrapped pipeline (called by Task)

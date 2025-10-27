@@ -14,9 +14,12 @@ OK. wait, what if we changed it so:
 
 extract the various loops into classes
 
-merge producer and consumer
-
 ==================
+
+- look at the producer look, make it into a class
+- also pipeline producers def execute_as_producer(context, output_queue)
+
+======================
 
 use stage object_ids instead of names
 
