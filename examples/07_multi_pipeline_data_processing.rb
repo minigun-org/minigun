@@ -35,7 +35,7 @@ class DataProcessingPipeline
       end
     end
 
-    consumer :track do |item|
+    consumer :track do |item, output|
       @mutex.synchronize { ingested << item }
       output << item
     end
@@ -58,7 +58,7 @@ class DataProcessingPipeline
       output << item
     end
 
-    consumer :output do |item|
+    consumer :output do |item, output|
       # Route based on priority
       if item[:priority] == :high
         # Will go to process_fast

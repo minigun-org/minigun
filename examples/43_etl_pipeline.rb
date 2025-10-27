@@ -96,7 +96,7 @@ class EtlPipelineExample
     end
 
     # AGGREGATE: Group by category for batch loading
-    accumulator :aggregate_by_category, max_size: 3 do |batch|
+    accumulator :aggregate_by_category, max_size: 3 do |batch, output|
       # Group batch by category
       by_category = batch.group_by { |r| r[:category] }
 
@@ -108,7 +108,7 @@ class EtlPipelineExample
         puts "   #{category.ljust(15)} #{records.size} items, avg price: $#{avg_price}"
       end
 
-      # Pass through the grouped data
+      # Return the grouped data (accumulator automatically outputs this)
       output << by_category
     end
 

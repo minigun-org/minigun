@@ -66,7 +66,7 @@ class StatisticsGatheringExample
 
     producer :generate_data do |output|
       100.times do |i|
-        output << { id: i, value: rand(100 })
+        output << { id: i, value: rand(100) }
         @stats[:producer_count] += 1
       end
     end

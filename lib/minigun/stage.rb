@@ -167,13 +167,13 @@ module Minigun
       end
 
       if batch_to_emit && output_queue
-        # Process the batch with custom logic if provided
-        processed_batch = if @block
-          context.instance_exec(batch_to_emit, &@block)
+        if @block
+          # Accumulator block receives |batch, output| like other stages
+          context.instance_exec(batch_to_emit, output_queue, &@block)
         else
-          batch_to_emit
+          # No block - just pass through
+          output_queue << batch_to_emit
         end
-        output_queue << processed_batch
       end
     end
 
@@ -189,12 +189,13 @@ module Minigun
       end
 
       if batch_to_emit && output_queue
-        processed_batch = if @block
-          context.instance_exec(batch_to_emit, &@block)
+        if @block
+          # Accumulator block receives |batch, output| like other stages
+          context.instance_exec(batch_to_emit, output_queue, &@block)
         else
-          batch_to_emit
+          # No block - just pass through
+          output_queue << batch_to_emit
         end
-        output_queue << processed_batch
       end
     end
   end

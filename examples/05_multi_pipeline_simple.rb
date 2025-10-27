@@ -22,7 +22,7 @@ class SimplePipelineExample
       5.times { |i| output << i + 1 }
     end
 
-    consumer :output do |num|
+    consumer :output do |num, output|
       puts "[Generator] Sending: #{num}"
       output << num  # Send to next pipeline
     end
@@ -36,7 +36,7 @@ class SimplePipelineExample
       output << doubled
     end
 
-    consumer :output do |num|
+    consumer :output do |num, output|
       output << num # Send to next pipeline
     end
   end
