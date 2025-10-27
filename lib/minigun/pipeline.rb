@@ -2,6 +2,7 @@
 
 require 'set'
 require_relative 'execution/stage_worker'
+require_relative 'execution/producer_worker'
 
 module Minigun
   # Pipeline represents a single data processing pipeline with stages
@@ -328,7 +329,9 @@ module Minigun
       return [] if producer_stages.empty?
 
       producer_stages.map do |producer_stage|
-        start_producer_thread(producer_stage)
+        worker = Execution::ProducerWorker.new(self, producer_stage)
+        worker.start
+        worker
       end
     end
 
@@ -338,60 +341,6 @@ module Minigun
       worker.start
     end
 
-    # Start a single producer thread (handles both atomic and pipeline producers)
-    def start_producer_thread(producer_stage)
-      # Capture instance variables for closure
-      produced_count = @produced_count
-      stage_input_queues = @stage_input_queues
-      runtime_edges = @runtime_edges
-
-      Thread.new do
-        producer_name = producer_stage.name
-        stage_stats = @stats.for_stage(producer_name, is_terminal: false)
-        stage_stats.start!
-
-        is_pipeline = producer_stage.is_a?(PipelineStage)
-        log_info "[Pipeline:#{@name}][Producer:#{producer_name}] Starting #{is_pipeline ? '(nested pipeline)' : ''}"
-
-        begin
-          # Execute before hooks for this producer
-          execute_stage_hooks(:before, producer_name) unless is_pipeline
-
-          # Get downstream stage input queues
-          downstream = @dag.downstream(producer_name)
-          downstream_queues = downstream.map { |to| stage_input_queues[to] }.compact
-
-          # Create OutputQueue wrapper for the new DSL
-          output_queue = OutputQueue.new(producer_name, downstream_queues, stage_input_queues, runtime_edges)
-
-          # Both pipeline and atomic producers use execute() with output_queue
-          # PipelineStage#execute handles producer mode internally
-          producer_stage.execute(@context, item: nil, input_queue: nil, output_queue: output_queue)
-
-          # Update stats with items produced
-          output_queue.items_produced.times { stage_stats.increment_produced }
-
-          # Execute after hooks for this producer
-          execute_stage_hooks(:after, producer_name) unless is_pipeline
-        rescue => e
-          log_error "[Pipeline:#{@name}][Producer:#{producer_name}] Error: #{e.message}"
-          log_error e.backtrace.join("\n") if is_pipeline
-          # Don't propagate error - other producers should continue
-        ensure
-          stage_stats.finish!
-          log_info "[Pipeline:#{@name}][Producer:#{producer_name}] Done"
-
-          # Send END signal to ALL connections: DAG downstream + dynamic emit_to_stage targets
-          # This must happen even if producer failed, so downstream stages don't hang
-          dynamic_targets = runtime_edges[producer_name].to_a
-          all_targets = (downstream + dynamic_targets).uniq
-
-          all_targets.each do |target|
-            stage_input_queues[target] << Message.end_signal(source: producer_name)
-          end
-        end
-      end
-    end
 
     def build_dag_routing!
       # Handle multiple producers specially - they should all connect to first non-producer
