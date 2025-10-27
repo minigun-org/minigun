@@ -1,8 +1,7 @@
 # frozen_string_literal: true
 
 require 'set'
-require_relative 'execution/stage_worker'
-require_relative 'execution/producer_worker'
+require_relative 'execution/worker'
 
 module Minigun
   # Pipeline represents a single data processing pipeline with stages
@@ -107,17 +106,21 @@ module Minigun
         add_stage_hook(:after_fork, name, &after_fork_proc)
       end
 
-      # Set stage_type option for AtomicStage (only if not already set by DSL)
-      options[:stage_type] ||= type if [:stage, :producer, :processor, :consumer].include?(type)
+      # Extract stage_type from options if present (used by DSL)
+      actual_type = options.delete(:stage_type) || type
 
-      # Create appropriate stage subclass
-      stage = case type
-              when :stage, :producer, :processor, :consumer
-                AtomicStage.new(name: name, block: block, options: options)
+      # Create appropriate stage subclass based on type
+      stage = case actual_type
+              when :producer
+                ProducerStage.new(name: name, block: block, options: options)
+              when :processor, :consumer
+                ConsumerStage.new(name: name, block: block, options: options)
+              when :stage
+                Stage.new(name: name, block: block, options: options)
               when :accumulator
                 AccumulatorStage.new(name: name, block: block, options: options)
               else
-                raise Minigun::Error, "Unknown stage type: #{type}"
+                raise Minigun::Error, "Unknown stage type: #{actual_type}"
               end
 
       # Store stage by name
@@ -209,19 +212,14 @@ module Minigun
       # Key: source stage, Value: Set of target stages
       @runtime_edges = Concurrent::Hash.new { |h, k| h[k] = Concurrent::Set.new }
 
-      # Start producer threads
-      producer_threads = start_producer_workers
-
-      # Start stage worker threads (one per non-producer stage, including routers)
+      # Start unified workers for ALL stages (producers and consumers)
       @stages.each do |stage_name, stage|
-        next if stage.producer?
-        # Skip PipelineStage producers (those with no upstream)
-        next if stage.is_a?(PipelineStage) && @dag.upstream(stage_name).empty?
-        @stage_threads << start_stage_worker(stage_name, stage)
+        worker = Execution::Worker.new(self, stage, @config)
+        worker.start
+        @stage_threads << worker
       end
 
-      # Wait for all threads (producers + workers) to finish
-      producer_threads.each(&:join)
+      # Wait for all workers to finish
       @stage_threads.each(&:join)
     end
 
@@ -323,23 +321,6 @@ module Minigun
 
     private
 
-    # Start all producer threads
-    def start_producer_workers
-      producer_stages = find_all_producers
-      return [] if producer_stages.empty?
-
-      producer_stages.map do |producer_stage|
-        worker = Execution::ProducerWorker.new(self, producer_stage)
-        worker.start
-        worker
-      end
-    end
-
-    # Start a worker thread for a non-producer stage
-    def start_stage_worker(stage_name, stage)
-      worker = Execution::StageWorker.new(self, stage_name, stage, @config)
-      worker.start
-    end
 
 
     def build_dag_routing!

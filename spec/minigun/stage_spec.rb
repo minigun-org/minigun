@@ -4,16 +4,28 @@ require 'spec_helper'
 
 RSpec.describe Minigun::Stage do
   describe 'base class' do
-    it 'raises NotImplementedError for abstract execute method' do
+    it 'returns nil when execute is called without a block' do
       stage = described_class.new(name: :test)
-      expect { stage.execute(Object.new) }.to raise_error(NotImplementedError)
+      expect(stage.execute(Object.new)).to be_nil
+    end
+
+    it 'executes the block when provided' do
+      executed = false
+      stage = described_class.new(name: :test, block: proc { executed = true })
+
+      # Create mock queues
+      input_queue = double('input')
+      output_queue = double('output')
+
+      stage.execute(Object.new, input_queue: input_queue, output_queue: output_queue)
+      expect(executed).to be true
     end
   end
 end
 
-RSpec.describe Minigun::AtomicStage do
+RSpec.describe Minigun::ProducerStage do
   describe 'producer behavior' do
-    let(:stage) { described_class.new(name: :test, block: proc { |output| }, options: { stage_type: :producer }) }
+    let(:stage) { described_class.new(name: :test, block: proc { |output| }) }
 
     it 'is a producer' do
       expect(stage.producer?).to be true
@@ -23,8 +35,7 @@ RSpec.describe Minigun::AtomicStage do
       result = nil
       stage = described_class.new(
         name: :test,
-        block: proc { |output| result = 42 },
-        options: { stage_type: :producer }
+        block: proc { |output| result = 42 }
       )
 
       context = Object.new
@@ -33,9 +44,11 @@ RSpec.describe Minigun::AtomicStage do
       expect(result).to eq(42)
     end
   end
+end
 
-  describe 'processor behavior (block arity 1)' do
-    let(:stage) { described_class.new(name: :test, block: proc { |_x| }) }
+RSpec.describe Minigun::ConsumerStage do
+  describe 'processor behavior' do
+    let(:stage) { described_class.new(name: :test, block: proc { |_x, _output| }) }
 
     it 'is not a producer' do
       expect(stage.producer?).to be false
@@ -47,8 +60,7 @@ RSpec.describe Minigun::AtomicStage do
         block: proc do |item, output|
           output << item * 2
           output << item * 3
-        end,
-        options: { stage_type: :processor }
+        end
       )
 
       context = Object.new
@@ -66,7 +78,7 @@ RSpec.describe Minigun::AtomicStage do
     let(:stage) do
       described_class.new(
         name: :test,
-        block: proc { |_x| },
+        block: proc { |_x, _output| },
         options: { _execution_context: { type: :processes, mode: :per_batch, max: 2 } }
       )
     end
@@ -89,7 +101,7 @@ RSpec.describe Minigun::AccumulatorStage do
 end
 
 RSpec.describe 'Stage common behavior' do
-  let(:stage) { Minigun::AtomicStage.new(name: :test, block: proc { |x| x * 2 }, options: { foo: 'bar' }) }
+  let(:stage) { Minigun::ConsumerStage.new(name: :test, block: proc { |x, _output| x * 2 }, options: { foo: 'bar' }) }
 
   describe '#initialize' do
     it 'creates a stage with required attributes' do
@@ -100,7 +112,7 @@ RSpec.describe 'Stage common behavior' do
     end
 
     it 'works without options' do
-      simple = Minigun::AtomicStage.new(name: :simple, block: proc { |_x| })
+      simple = Minigun::ConsumerStage.new(name: :simple, block: proc { |_x, _output| })
       expect(simple.name).to eq(:simple)
       expect(simple.options).to eq({})
     end
@@ -109,10 +121,9 @@ RSpec.describe 'Stage common behavior' do
   describe '#execute' do
     it 'executes the block with given context and item' do
       result = nil
-      stage = Minigun::AtomicStage.new(
+      stage = Minigun::ConsumerStage.new(
         name: :test,
-        block: proc { |item| result = item * 2 },
-        options: { stage_type: :consumer }
+        block: proc { |item, _output| result = item * 2 }
       )
 
       context = Object.new
@@ -125,10 +136,9 @@ RSpec.describe 'Stage common behavior' do
       context = Object.new
       context.instance_variable_set(:@value, 100)
 
-      stage = Minigun::AtomicStage.new(
+      stage = Minigun::ConsumerStage.new(
         name: :test,
-        block: proc { |item| @value + item },
-        options: { stage_type: :consumer }
+        block: proc { |item, _output| @value + item }
       )
 
       stage.execute(context, item: 23)
@@ -139,11 +149,11 @@ RSpec.describe 'Stage common behavior' do
 
   describe '#to_h' do
     it 'converts to hash representation' do
-      block = proc { |_x| }
-      stage = Minigun::AtomicStage.new(
+      block = proc { |_x, _output| }
+      stage = Minigun::ConsumerStage.new(
         name: :test,
         block: block,
-        options: { opt: 'val', stage_type: :processor }
+        options: { opt: 'val' }
       )
 
       hash = stage.to_h
@@ -151,14 +161,13 @@ RSpec.describe 'Stage common behavior' do
       expect(hash[:name]).to eq(:test)
       expect(hash[:block]).to eq(block)
       expect(hash[:options]).to include(opt: 'val')
-      expect(hash[:stage_type]).to eq(:processor)
     end
   end
 
   describe '#[]' do
     it 'provides hash-like access to attributes' do
-      block = proc { |_x| }
-      stage = Minigun::AtomicStage.new(
+      block = proc { |_x, _output| }
+      stage = Minigun::ConsumerStage.new(
         name: :test,
         block: block,
         options: { foo: 'bar' }
@@ -170,7 +179,7 @@ RSpec.describe 'Stage common behavior' do
     end
 
     it 'returns nil for unknown keys' do
-      stage = Minigun::AtomicStage.new(name: :test, block: proc { |_x| })
+      stage = Minigun::ConsumerStage.new(name: :test, block: proc { |_x, _output| })
       expect(stage[:unknown]).to be_nil
     end
   end
