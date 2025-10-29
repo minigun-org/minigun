@@ -28,9 +28,10 @@ RSpec.describe Minigun::Worker do
 
   let(:config) { { max_threads: 5, max_processes: 2 } }
   let(:user_context) { double('context') }
-  let(:stats) { {} }
+  let(:stage_stats) { double('stage_stats', start!: nil, finish!: nil) }
+  let(:stats) { double('stats', for_stage: stage_stats) }
   let(:stage_hooks) { {} }
-  let(:dag) { instance_double(Minigun::DAG, upstream: [], downstream: []) }
+  let(:dag) { instance_double(Minigun::DAG, upstream: [], downstream: [], terminal?: false) }
 
   before do
     allow(Minigun.logger).to receive(:info)

@@ -8,7 +8,7 @@ RSpec.describe Minigun::Stage do
       stage = described_class.new(name: :test)
       input_queue = double('input')
       output_queue = double('output')
-      expect(stage.execute(Object.new, input_queue, output_queue)).to be_nil
+      expect(stage.execute(Object.new, input_queue, output_queue, nil)).to be_nil
     end
 
     it 'executes the block when provided' do
@@ -19,7 +19,7 @@ RSpec.describe Minigun::Stage do
       input_queue = double('input')
       output_queue = double('output')
 
-      stage.execute(Object.new, input_queue, output_queue)
+      stage.execute(Object.new, input_queue, output_queue, nil)
       expect(executed).to be true
     end
   end
@@ -41,7 +41,7 @@ RSpec.describe Minigun::ProducerStage do
       )
 
       context = Object.new
-      stage.execute(context, nil, Object.new)
+      stage.execute(context, nil, Object.new, nil)
 
       expect(result).to eq(42)
     end
@@ -73,7 +73,7 @@ RSpec.describe Minigun::ConsumerStage do
       mock_input = double('input_queue')
       allow(mock_input).to receive(:pop).and_return(5, Minigun::AllUpstreamsDone.instance(:test))
 
-      stage.execute(context, mock_input, mock_output)
+      stage.execute(context, mock_input, mock_output, nil)
 
       expect(emitted).to eq([10, 15])
     end
@@ -137,7 +137,7 @@ RSpec.describe 'Stage common behavior' do
       # Input queue returns one item then signals end
       allow(input_queue).to receive(:pop).and_return(5, Minigun::AllUpstreamsDone.instance(:test))
 
-      stage.execute(context, input_queue, output_queue)
+      stage.execute(context, input_queue, output_queue, nil)
 
       expect(result).to eq(10)
     end
@@ -162,7 +162,7 @@ RSpec.describe 'Stage common behavior' do
       # Input queue returns one item then signals end
       allow(input_queue).to receive(:pop).and_return(23, Minigun::AllUpstreamsDone.instance(:test))
 
-      stage.execute(context, input_queue, output_queue)
+      stage.execute(context, input_queue, output_queue, nil)
       # NOTE: execute doesn't return values for consumers in new DSL
       expect(context.value).to eq(100) # unchanged
     end

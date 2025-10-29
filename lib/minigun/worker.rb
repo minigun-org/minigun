@@ -79,13 +79,17 @@ module Minigun
                            Set.new(dag.upstream(@stage_name))
                          end
 
+      # Create stats object for this specific stage
+      is_terminal = dag.terminal?(@stage_name)
+      stage_stats = @pipeline.stats.for_stage(@stage_name, is_terminal: is_terminal)
+
       StageContext.new(
         pipeline: @pipeline,
         stage_name: @stage_name,
         dag: dag,
         runtime_edges: @pipeline.runtime_edges,
         stage_input_queues: stage_input_queues,
-        stats: @pipeline.stats,
+        stage_stats: stage_stats,
         # Worker-specific (nil/empty for producers)
         input_queue: stage_input_queues[@stage_name],
         sources_expected: sources_expected,

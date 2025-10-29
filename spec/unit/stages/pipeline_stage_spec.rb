@@ -84,7 +84,7 @@ RSpec.describe Minigun::PipelineStage do
         self
       end
 
-      stage.execute(context, input_queue, output_queue)
+      stage.execute(context, input_queue, output_queue, nil)
 
       # PipelineStage now pushes results to output queue
       expect(output_queue).to include(10)
@@ -108,7 +108,7 @@ RSpec.describe Minigun::PipelineStage do
       allow(input_queue).to receive(:pop).and_return(42, Minigun::AllUpstreamsDone.instance(:test))
       output_queue = create_output_queue
 
-      stage.execute(context, input_queue, output_queue)
+      stage.execute(context, input_queue, output_queue, nil)
 
       expect(output_queue).to eq([42])
     end
@@ -127,7 +127,7 @@ RSpec.describe Minigun::PipelineStage do
       allow(input_queue).to receive(:pop).and_return(5, Minigun::AllUpstreamsDone.instance(:test))
       output_queue = create_output_queue
 
-      stage.execute(context, input_queue, output_queue)
+      stage.execute(context, input_queue, output_queue, nil)
 
       # 5 * 2 = 10, then 10 + 10 = 20
       expect(output_queue).to eq([20])
@@ -147,7 +147,7 @@ RSpec.describe Minigun::PipelineStage do
       allow(input_queue).to receive(:pop).and_return(5, Minigun::AllUpstreamsDone.instance(:test))
       output_queue = create_output_queue
 
-      stage.execute(context, input_queue, output_queue)
+      stage.execute(context, input_queue, output_queue, nil)
 
       # Should process 5, not 999 from producer
       expect(output_queue).to eq([10])
@@ -168,14 +168,14 @@ RSpec.describe Minigun::PipelineStage do
       input_queue1 = double('input_queue1')
       allow(input_queue1).to receive(:pop).and_return(5, Minigun::AllUpstreamsDone.instance(:test))
       output_queue1 = create_output_queue
-      stage.execute(context, input_queue1, output_queue1)
+      stage.execute(context, input_queue1, output_queue1, nil)
       expect(output_queue1).to eq([]) # Nothing emitted yet
 
       # Second item: accumulator reaches batch size and emits
       input_queue2 = double('input_queue2')
       allow(input_queue2).to receive(:pop).and_return(3, Minigun::AllUpstreamsDone.instance(:test))
       output_queue2 = create_output_queue
-      stage.execute(context, input_queue2, output_queue2)
+      stage.execute(context, input_queue2, output_queue2, nil)
 
       # Accumulator emits [10, 6], sum_batch processes it: 10 + 6 = 16
       expect(output_queue2).to eq([16])
@@ -197,7 +197,7 @@ RSpec.describe Minigun::PipelineStage do
       allow(input_queue).to receive(:pop).and_return(5, Minigun::AllUpstreamsDone.instance(:test))
       output_queue = create_output_queue
 
-      stage.execute(context, input_queue, output_queue)
+      stage.execute(context, input_queue, output_queue, nil)
 
       expect(output_queue).to contain_exactly(5, 50)
     end
@@ -216,7 +216,7 @@ RSpec.describe Minigun::PipelineStage do
       allow(input_queue).to receive(:pop).and_return(5, Minigun::AllUpstreamsDone.instance(:test))
       output_queue = create_output_queue
 
-      stage.execute(context, input_queue, output_queue)
+      stage.execute(context, input_queue, output_queue, nil)
 
       # Consumer executed (side effect)
       expect(results).to eq([10])
@@ -239,7 +239,7 @@ RSpec.describe Minigun::PipelineStage do
       allow(input_queue).to receive(:pop).and_return(5, Minigun::AllUpstreamsDone.instance(:test))
       output_queue = create_output_queue
 
-      stage.execute(context, input_queue, output_queue)
+      stage.execute(context, input_queue, output_queue, nil)
 
       expect(output_queue).to eq([])
     end
@@ -258,7 +258,7 @@ RSpec.describe Minigun::PipelineStage do
       allow(input_queue).to receive(:pop).and_return(3, Minigun::AllUpstreamsDone.instance(:test))
       output_queue = create_output_queue
 
-      stage.execute(context, input_queue, output_queue)
+      stage.execute(context, input_queue, output_queue, nil)
 
       # 3 * 2 = 6, 6^2 = 36, 36 + 1 = 37
       expect(output_queue).to eq([37])
@@ -282,7 +282,7 @@ RSpec.describe Minigun::PipelineStage do
       allow(input_queue).to receive(:pop).and_return(5, Minigun::AllUpstreamsDone.instance(:test))
       output_queue = create_output_queue
 
-      stage.execute(context, input_queue, output_queue)
+      stage.execute(context, input_queue, output_queue, nil)
 
       # Should skip nested pipeline, only run double
       expect(output_queue).to eq([10])
@@ -301,7 +301,7 @@ RSpec.describe Minigun::PipelineStage do
       allow(input_queue).to receive(:pop).and_return(5, Minigun::AllUpstreamsDone.instance(:test))
       output_queue = create_output_queue
 
-      stage.execute(context, input_queue, output_queue)
+      stage.execute(context, input_queue, output_queue, nil)
 
       expect(output_queue).to eq([])
     end
@@ -328,7 +328,7 @@ RSpec.describe Minigun::PipelineStage do
       allow(input_queue).to receive(:pop).and_return(5, Minigun::AllUpstreamsDone.instance(:test))
       output_queue = create_output_queue
 
-      stage.execute(context, input_queue, output_queue)
+      stage.execute(context, input_queue, output_queue, nil)
 
       expect(output_queue).to eq([10])
       expect(context.tracking).to eq(['saw 5'])

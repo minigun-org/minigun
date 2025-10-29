@@ -19,7 +19,7 @@ class DeduplicatorStage < Minigun::Stage
     require_relative '../lib/minigun/queue_wrappers'
 
     # Get stage stats for tracking
-    stage_stats = stage_ctx.stats.for_stage(stage_ctx.stage_name, is_terminal: stage_ctx.dag.terminal?(stage_ctx.stage_name))
+    stage_stats = stage_ctx.stage_stats
 
     # Create wrapped queues
     wrapped_input = Minigun::InputQueue.new(
