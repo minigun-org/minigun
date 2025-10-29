@@ -21,21 +21,9 @@ class DeduplicatorStage < Minigun::Stage
     # Get stage stats for tracking
     stage_stats = stage_ctx.stage_stats
 
-    # Create wrapped queues
-    wrapped_input = Minigun::InputQueue.new(
-      stage_ctx.input_queue,
-      stage_ctx.stage_name,
-      stage_ctx.sources_expected
-    )
-    wrapped_output = Minigun::OutputQueue.new(
-      stage_ctx.stage_name,
-      stage_ctx.dag.downstream(stage_ctx.stage_name).map do |ds|
-        stage_ctx.stage_input_queues[ds]
-      end,
-      stage_ctx.stage_input_queues,
-      stage_ctx.runtime_edges,
-      stage_stats: stage_stats
-    )
+    # Create wrapped queues using consolidated methods
+    wrapped_input = create_input_queue(stage_ctx)
+    wrapped_output = create_output_queue(stage_ctx)
 
     # Process items one-by-one
     loop do

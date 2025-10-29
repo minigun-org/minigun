@@ -59,14 +59,8 @@ module Minigun
     # Loop-based stages manage their own input loop
     def run_worker_loop(stage_ctx)
       # Create wrapped queues
-      input_queue = InputQueue.new(stage_ctx.input_queue, stage_ctx.stage_name, stage_ctx.sources_expected)
-      output_queue = OutputQueue.new(
-        stage_ctx.stage_name,
-        stage_ctx.dag.downstream(stage_ctx.stage_name).map { |ds| stage_ctx.stage_input_queues[ds] },
-        stage_ctx.stage_input_queues,
-        stage_ctx.runtime_edges,
-        stage_stats: stage_ctx.stage_stats
-      )
+      input_queue = create_input_queue(stage_ctx)
+      output_queue = create_output_queue(stage_ctx)
 
       # Execute with both queues (block manages its own loop)
       context = stage_ctx.pipeline.context
@@ -108,6 +102,29 @@ module Minigun
     end
 
     private
+
+    # Create wrapped input queue for this stage
+    def create_input_queue(stage_ctx)
+      InputQueue.new(
+        stage_ctx.input_queue,
+        stage_ctx.stage_name,
+        stage_ctx.sources_expected,
+        stage_stats: stage_ctx.stage_stats
+      )
+    end
+
+    # Create wrapped output queue for this stage
+    def create_output_queue(stage_ctx)
+      downstream = stage_ctx.dag.downstream(stage_ctx.stage_name)
+      downstream_queues = downstream.filter_map { |ds| stage_ctx.stage_input_queues[ds] }
+      OutputQueue.new(
+        stage_ctx.stage_name,
+        downstream_queues,
+        stage_ctx.stage_input_queues,
+        stage_ctx.runtime_edges,
+        stage_stats: stage_ctx.stage_stats
+      )
+    end
 
     # Consolidated end signal logic used by all stage types
     def send_end_signals(stage_ctx)
@@ -177,12 +194,6 @@ module Minigun
 
     private
 
-    def create_output_queue(ctx)
-      downstream = ctx.dag.downstream(ctx.stage_name)
-      downstream_queues = downstream.filter_map { |to| ctx.stage_input_queues[to] }
-      OutputQueue.new(ctx.stage_name, downstream_queues, ctx.stage_input_queues, ctx.runtime_edges, stage_stats: ctx.stage_stats)
-    end
-
     def execute_hooks(ctx, type)
       ctx.pipeline.execute_stage_hooks(type, ctx.stage_name)
     end
@@ -236,18 +247,12 @@ module Minigun
       stage_ctx.pipeline.send(:execute_stage_hooks, :before, stage_ctx.stage_name)
 
       # Create wrapped queues
-      input_queue = InputQueue.new(stage_ctx.input_queue, stage_ctx.stage_name, stage_ctx.sources_expected, stage_stats: stage_stats)
-      output_queue = OutputQueue.new(
-        stage_ctx.stage_name,
-        stage_ctx.dag.downstream(stage_ctx.stage_name).map { |ds| stage_ctx.stage_input_queues[ds] },
-        stage_ctx.stage_input_queues,
-        stage_ctx.runtime_edges,
-        stage_stats: stage_stats
-      )
+      input_queue = create_input_queue(stage_ctx)
+      output_queue = create_output_queue(stage_ctx)
 
       # Execute via executor (defines HOW: inline/threaded/process)
       context = stage_ctx.pipeline.context
-      stage_ctx.executor.execute_stage(self, context, input_queue, output_queue, stage_stats: stage_stats)
+      stage_ctx.executor.execute_stage(self, context, input_queue, output_queue, stage_stats)
 
       # Execute after hooks
       stage_ctx.pipeline.send(:execute_stage_hooks, :after, stage_ctx.stage_name)
@@ -515,7 +520,7 @@ module Minigun
 
         stage_ctx.pipeline.send(:execute_stage_hooks, :before, stage_ctx.stage_name)
 
-        input_queue = InputQueue.new(stage_ctx.input_queue, stage_ctx.stage_name, stage_ctx.sources_expected, stage_stats: stage_stats)
+        input_queue = create_input_queue(stage_ctx)
 
         stage_ctx.executor.execute_stage(self, context, input_queue, output_queue, stage_stats)
 
@@ -567,16 +572,6 @@ module Minigun
     end
 
     private
-
-    def create_output_queue(stage_ctx)
-      OutputQueue.new(
-        stage_ctx.stage_name,
-        stage_ctx.dag.downstream(stage_ctx.stage_name).map { |ds| stage_ctx.stage_input_queues[ds] },
-        stage_ctx.stage_input_queues,
-        stage_ctx.runtime_edges,
-        stage_stats: stage_ctx.stage_stats
-      )
-    end
 
     def add_temp_collector(collected_items)
       return if @temp_collector
