@@ -59,7 +59,7 @@ module Minigun
     # Loop-based stages manage their own input loop
     def run_worker_loop(stage_ctx)
       # Create wrapped queues
-      input_queue = create_input_queue(stage_ctx)
+      input_queue = create_input_queue(stage_ctx) # TODO: move to worker?
       output_queue = create_output_queue(stage_ctx)
 
       # Execute with both queues (block manages its own loop)
@@ -164,31 +164,23 @@ module Minigun
     end
 
     def run_worker_loop(stage_ctx)
-      stage_stats = stage_ctx.stage_stats
-      stage_stats.start!
-      log_info(stage_ctx, 'Starting')
+      # Execute before hooks
+      execute_hooks(stage_ctx, :before)
 
-      begin
-        # Execute before hooks
-        execute_hooks(stage_ctx, :before)
+      # Create output queue
+      output_queue = create_output_queue(stage_ctx)
 
-        # Create output queue
-        output_queue = create_output_queue(stage_ctx)
+      # Execute producer block directly (ProducerStage doesn't use executor since it's autonomous)
+      context = stage_ctx.pipeline.context
+      execute(context, nil, output_queue, stage_stats)
 
-        # Execute producer block directly (ProducerStage doesn't use executor since it's autonomous)
-        context = stage_ctx.pipeline.context
-        execute(context, nil, output_queue, stage_stats)
-
-        # Execute after hooks
-        execute_hooks(stage_ctx, :after)
-      rescue StandardError => e
-        log_error(stage_ctx, "Error: #{e.message}")
-        log_error(stage_ctx, e.backtrace.join("\n"))
-      ensure
-        stage_ctx.stage_stats.finish!
-        log_info(stage_ctx, 'Done')
-        send_end_signals(stage_ctx)
-      end
+      # Execute after hooks
+      execute_hooks(stage_ctx, :after)
+    rescue StandardError => e # TODO: move to worker?
+      log_error(stage_ctx, "Error: #{e.message}")
+      log_error(stage_ctx, e.backtrace.join("\n"))
+    ensure
+      send_end_signals(stage_ctx) # TODO: move to worker?
     end
 
     private

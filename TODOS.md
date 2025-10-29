@@ -15,6 +15,15 @@ add to architecture
 
 ========================================================================================
 
+TODO: Refactor so more things are moved from Stage to Worker, e.g.
+- queue creation
+- start/end stats tracking (need tests for all stage types)
+- error catching
+- sending of end signals?
+- rename #run_worker_loop as its not a loop. Maybe #run_in_worker? other ideas?
+
+=======================================
+
 @stage_name == :_entrance and :_exit (YUCK)
 
 ================================
@@ -30,6 +39,27 @@ log_info(stage_ctx, 'Starting')
 cleanup signal
 + break if item.is_a?(AllUpstreamsDone)
 + break if item.is_a?(Message) && item.end_of_stream?
+
+======================
+
+fiber
+fibers(10) do <-- all childs within fiber scope. should threads be joined within fiber scope?
+
+thread
+threads(10) do
+
+cow_fork
+cow_forks(10) do # creates a pipeline
+end
+
+ipc_fork
+ipc_forks(10) do # creates a pipeline
+
+ractors
+
+===============================
+
+dynamic scaling
 
 ==============================
 

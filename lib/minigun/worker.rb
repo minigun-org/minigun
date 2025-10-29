@@ -37,9 +37,14 @@ module Minigun
       # Check for disconnected stages (no upstream, not a producer, not a PipelineStage)
       return if handle_disconnected_stage(stage_ctx)
 
+      stage_stats = stage_ctx.stage_stats
+      stage_stats.start!
+      log_info('Starting')
+
       @stage.run_worker_loop(stage_ctx)
 
-      log_info 'Done'
+      stage_ctx.stage_stats.finish!
+      log_info('Done')
     rescue StandardError => e
       log_error "Unhandled error: #{e.message}"
       log_error e.backtrace.join("\n")
