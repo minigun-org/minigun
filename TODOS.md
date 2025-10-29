@@ -17,7 +17,7 @@ add to architecture
 
 TODO: Refactor so more things are moved from Stage to Worker, e.g.
 - queue creation
-- start/end stats tracking (need tests for all stage types)
+- start/end stats tracking (need tests for all stage types) -- make some stages silent?
 - error catching
 - sending of end signals?
 - rename #run_worker_loop as its not a loop. Maybe #run_in_worker? other ideas?
@@ -39,6 +39,17 @@ log_info(stage_ctx, 'Starting')
 cleanup signal
 + break if item.is_a?(AllUpstreamsDone)
 + break if item.is_a?(Message) && item.end_of_stream?
+
+====================
+
+make pipeline and dag accessible
+
+=============
+
+names:
+- nordstream
+- permian
+- ???
 
 ======================
 
