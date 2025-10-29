@@ -7,7 +7,7 @@
 require_relative '../lib/minigun'
 
 # Demonstrates named context in the middle of processing pipeline
-class WithMiddleNamed
+class WithMiddleNamedExample
   include Minigun::DSL
 
   attr_reader :results
@@ -38,7 +38,7 @@ class WithMiddleNamed
       end
     end
 
-    processor :save_db, execution_context: :db_pool do |item|
+    processor :save_db, execution_context: :db_pool do |item, output|
       output << item
     end
 
@@ -51,7 +51,7 @@ class WithMiddleNamed
 end
 
 puts 'Testing: threads + batch + process_per_batch + named + threads(consumer)'
-pipeline = WithMiddleNamed.new
+pipeline = WithMiddleNamedExample.new
 pipeline.run
 puts "Results: #{pipeline.results.size} items"
 puts pipeline.results.size == 20 ? '✓ Works!' : '✗ Failed'
