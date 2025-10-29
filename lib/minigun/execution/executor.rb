@@ -4,18 +4,13 @@ module Minigun
   # Execution strategies for running pipeline stages
   module Execution
     # Base executor class - all execution strategies inherit from this
-    # Executors handle stage execution including hooks, stats, and error handling
+    # NOTE: Stages now manage their own execution loops internally via execute(context, input_queue, output_queue).
+    # Executors define HOW that execution happens (inline, threaded, etc).
     class Executor
-      # Execute a stage item with queue-based routing
-      # @param stage [Stage] The stage to execute
-      # @param item [Object] The item to process
-      # @param user_context [Object] The user's pipeline context
-      # @param input_queue [InputQueue] Wrapped input queue for the stage
-      # @param output_queue [OutputQueue] Wrapped output queue for the stage
-      # @param stats [Stats] The stats object for tracking
-      # @param pipeline [Pipeline] The pipeline instance (for hooks)
-      def execute_stage_item(stage:, item:, user_context:, stats:, pipeline:, input_queue: nil, output_queue: nil)
-        # Check if stage is terminal
+      # Execute a stage with stats tracking, hooks, and error handling
+      # This is the main entry point for executing stages
+      def execute_stage(stage:, user_context:, input_queue:, output_queue:, stats:, pipeline:)
+        # Get stage stats for tracking
         dag = pipeline.dag
         is_terminal = dag.terminal?(stage.name)
         stage_stats = stats.for_stage(stage.name, is_terminal: is_terminal)
@@ -25,13 +20,10 @@ module Minigun
         # Execute before hooks for this stage
         pipeline.send(:execute_stage_hooks, :before, stage.name)
 
-        # Track consumption of input item
-        stage_stats.increment_consumed if item
-
         # Execute the stage using this executor's strategy
-        execute_with_strategy(stage, item, user_context, pipeline, input_queue, output_queue)
+        execute_with_strategy(stage, user_context, input_queue, output_queue)
 
-        # Record latency
+        # Record latency for the entire stage execution
         duration = Time.now - start_time
         stage_stats.record_latency(duration)
 
@@ -51,23 +43,9 @@ module Minigun
 
       # Execute the actual stage logic using this executor's strategy
       # Subclasses implement this to control HOW execution happens
-      def execute_with_strategy(stage, item, user_context, pipeline, input_queue, output_queue)
+      # All stages now have unified signature: execute(context, input_queue, output_queue)
+      def execute_with_strategy(stage, user_context, input_queue, output_queue)
         raise NotImplementedError, "#{self.class}#execute_with_strategy must be implemented"
-      end
-
-      # Run the stage's actual processing logic with queues
-      def run_stage_logic(stage, item, user_context, input_queue, output_queue)
-        # All stage types now have consistent signature:
-        # - ProducerStage: execute(context, input_queue, output_queue) - input_queue is nil/unused
-        # - ConsumerStage/AccumulatorStage/PipelineStage: execute(context, item, output_queue) - item passed instead of input_queue
-        # - Stage (loop-based): execute(context, input_queue, output_queue)
-        if stage.is_a?(ConsumerStage)
-          # Consumer stages receive item as second argument
-          stage.execute(user_context, item, output_queue)
-        else
-          # Producer and loop-based stages receive input_queue as second argument (nil for producers)
-          stage.execute(user_context, input_queue, output_queue)
-        end
       end
     end
 
@@ -75,8 +53,8 @@ module Minigun
     class InlineExecutor < Executor
       protected
 
-      def execute_with_strategy(stage, item, user_context, _pipeline, input_queue, output_queue)
-        run_stage_logic(stage, item, user_context, input_queue, output_queue)
+      def execute_with_strategy(stage, user_context, input_queue, output_queue)
+        stage.execute(user_context, input_queue, output_queue)
       end
     end
 
@@ -100,11 +78,11 @@ module Minigun
 
       protected
 
-      def execute_with_strategy(stage, item, user_context, _pipeline, input_queue, output_queue)
+      def execute_with_strategy(stage, user_context, input_queue, output_queue)
         wait_for_slot
 
         thread = Thread.new do
-          run_stage_logic(stage, item, user_context, input_queue, output_queue)
+          stage.execute(user_context, input_queue, output_queue)
         ensure
           @mutex.synchronize { @active_threads.delete(Thread.current) }
         end
@@ -146,10 +124,10 @@ module Minigun
 
       protected
 
-      def execute_with_strategy(stage, item, user_context, _pipeline, input_queue, output_queue)
+      def execute_with_strategy(stage, user_context, input_queue, output_queue)
         unless Process.respond_to?(:fork)
           warn '[Minigun] Process forking not available, falling back to inline'
-          return run_stage_logic(stage, item, user_context, input_queue, output_queue)
+          return stage.execute(user_context, input_queue, output_queue)
         end
 
         # NOTE: Queue-based DSL doesn't work with process pools since queues can't cross process boundaries
@@ -194,29 +172,29 @@ module Minigun
         #   raise result[:error]
         # end
       end
-
-      private
-
-      def wait_for_slot
-        loop do
-          return if @mutex.synchronize { @active_pids.size } < @max_size
-
-          sleep 0.01
-        end
-      end
-
-      def execute_fork_hooks(hook_type, stage, pipeline)
-        user_context = pipeline.context
-        stage_hooks = pipeline.stage_hooks
-
-        # Pipeline-level fork hooks
-        hooks = pipeline.hooks[hook_type] || []
-        hooks.each { |h| user_context.instance_eval(&h) }
-
-        # Stage-specific fork hooks
-        stage_hooks_list = stage_hooks.dig(hook_type, stage.name) || []
-        stage_hooks_list.each { |h| user_context.instance_exec(&h) }
-      end
+      #
+      # private
+      #
+      # def wait_for_slot
+      #   loop do
+      #     return if @mutex.synchronize { @active_pids.size } < @max_size
+      #
+      #     sleep 0.01
+      #   end
+      # end
+      #
+      # def execute_fork_hooks(hook_type, stage, pipeline)
+      #   user_context = pipeline.context
+      #   stage_hooks = pipeline.stage_hooks
+      #
+      #   # Pipeline-level fork hooks
+      #   hooks = pipeline.hooks[hook_type] || []
+      #   hooks.each { |h| user_context.instance_eval(&h) }
+      #
+      #   # Stage-specific fork hooks
+      #   stage_hooks_list = stage_hooks.dig(hook_type, stage.name) || []
+      #   stage_hooks_list.each { |h| user_context.instance_exec(&h) }
+      # end
     end
 
     # Ractor pool executor - manages ractor execution
@@ -229,15 +207,15 @@ module Minigun
 
       protected
 
-      def execute_with_strategy(stage, item, user_context, pipeline, input_queue, output_queue)
+      def execute_with_strategy(stage, user_context, input_queue, output_queue)
         unless defined?(::Ractor)
           warn '[Minigun] Ractors not available, falling back to thread pool'
-          return @fallback.send(:execute_with_strategy, stage, item, user_context, pipeline, input_queue, output_queue)
+          return @fallback.send(:execute_with_strategy, stage, user_context, input_queue, output_queue)
         end
 
         # NOTE: Ractors have similar IPC challenges as process pools
         # Fall back to threads for now
-        @fallback.send(:execute_with_strategy, stage, item, user_context, pipeline, input_queue, output_queue)
+        @fallback.send(:execute_with_strategy, stage, user_context, input_queue, output_queue)
       end
     end
 

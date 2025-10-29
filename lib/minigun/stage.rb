@@ -161,7 +161,7 @@ module Minigun
         # Create output queue
         output_queue = create_output_queue(stage_ctx)
 
-        # Execute producer block
+        # Execute producer block directly (ProducerStage doesn't use executor since it's autonomous)
         context = stage_ctx.pipeline.context
         execute(context, nil, output_queue)
 
@@ -211,20 +211,36 @@ module Minigun
 
   # Consumer/Processor stage - loops on input, processes items
   class ConsumerStage < Stage
-    def execute(context, item, output_queue) # rubocop:disable Lint/UnusedMethodArgument
-      if @block
-        context.instance_exec(item, output_queue, &@block)
-      elsif respond_to?(:call)
-        call_with_arity(item, output_queue, &output_queue.to_proc)
+    def execute(context, input_queue, output_queue)
+      # Consumer stages pop from input_queue and process items
+      loop do
+        item = input_queue.pop
+
+        # Handle END signal or AllUpstreamsDone
+        break if item.is_a?(AllUpstreamsDone)
+        break if item.is_a?(Message) && item.end_of_stream?
+
+        # Execute the block or call method with the item
+        begin
+          if @block
+            context.instance_exec(item, output_queue, &@block)
+          elsif respond_to?(:call)
+            call_with_arity(item, output_queue, &output_queue.to_proc)
+          end
+        rescue StandardError => e
+          # Log item-level errors but continue processing
+          Minigun.logger.error "[Stage:#{name}] Error processing item: #{e.message}"
+          Minigun.logger.debug e.backtrace.join("\n") if Minigun.logger.debug?
+        end
       end
     end
 
     def run_worker_loop(stage_ctx)
-      # Get stage stats for tracking
+      # Get stage stats for tracking (both InputQueue and OutputQueue need it)
       stage_stats = stage_ctx.stats.for_stage(stage_ctx.stage_name, is_terminal: stage_ctx.dag.terminal?(stage_ctx.stage_name))
 
       # Create wrapped queues
-      InputQueue.new(stage_ctx.input_queue, stage_ctx.stage_name, stage_ctx.sources_expected)
+      input_queue = InputQueue.new(stage_ctx.input_queue, stage_ctx.stage_name, stage_ctx.sources_expected, stage_stats: stage_stats)
       output_queue = OutputQueue.new(
         stage_ctx.stage_name,
         stage_ctx.dag.downstream(stage_ctx.stage_name).map { |ds| stage_ctx.stage_input_queues[ds] },
@@ -233,8 +249,16 @@ module Minigun
         stage_stats: stage_stats
       )
 
-      # Process items loop
-      process_items(stage_ctx, output_queue)
+      # Execute with stats tracking, hooks, and error handling via executor
+      context = stage_ctx.pipeline.context
+      stage_ctx.executor.execute_stage(
+        stage: self,
+        user_context: context,
+        input_queue: input_queue,
+        output_queue: output_queue,
+        stats: stage_ctx.stats,
+        pipeline: stage_ctx.pipeline
+      )
 
       # Flush and cleanup
       flush_if_needed(stage_ctx, output_queue)
@@ -242,38 +266,6 @@ module Minigun
     end
 
     private
-
-    def process_items(stage_ctx, output_queue)
-      loop do
-        item = stage_ctx.input_queue.pop
-
-        # Handle END signal
-        if item.is_a?(Message) && item.end_of_stream?
-          stage_ctx.sources_expected << item.source
-          stage_ctx.sources_done << item.source
-          break if stage_ctx.sources_done == stage_ctx.sources_expected
-          next
-        end
-
-        # Execute item
-        execute_item(stage_ctx, item, output_queue)
-      end
-    end
-
-    def execute_item(stage_ctx, item, output_queue)
-      context = stage_ctx.pipeline.context
-      stats = stage_ctx.stats
-
-      stage_ctx.executor.execute_stage_item(
-        stage: self,
-        item: item,
-        user_context: context,
-        input_queue: nil,
-        output_queue: output_queue,
-        stats: stats,
-        pipeline: stage_ctx.pipeline
-      )
-    end
 
     def flush_if_needed(stage_ctx, output_queue)
       return unless respond_to?(:flush)
@@ -309,28 +301,40 @@ module Minigun
     end
 
     # Override execute to buffer items and emit batches via output queue
-    def execute(context, item, output_queue)
-      return unless item
+    def execute(context, input_queue, output_queue)
+      loop do
+        item = input_queue.pop
 
-      buffer = nil
+        # Handle END signal or AllUpstreamsDone
+        break if item.is_a?(AllUpstreamsDone)
+        break if item.is_a?(Message) && item.end_of_stream?
 
-      @mutex.synchronize do
-        @buffer << item
+        buffer = nil
 
-        if @buffer.size >= @max_size
-          buffer = @buffer.dup
-          @buffer.clear
+        @mutex.synchronize do
+          @buffer << item
+
+          if @buffer.size >= @max_size
+            buffer = @buffer.dup
+            @buffer.clear
+          end
         end
-      end
 
-      return unless buffer && output_queue
+        next unless buffer && output_queue
 
-      if @block
-        # Accumulator block receives |batch, output| like other stages
-        context.instance_exec(buffer, output_queue, &@block)
-      else
-        # No block - just pass through
-        output_queue << buffer
+        begin
+          if @block
+            # Accumulator block receives |batch, output| like other stages
+            context.instance_exec(buffer, output_queue, &@block)
+          else
+            # No block - just pass through
+            output_queue << buffer
+          end
+        rescue StandardError => e
+          # Log batch-level errors but continue processing
+          Minigun.logger.error "[Stage:#{name}] Error processing batch: #{e.message}"
+          Minigun.logger.debug e.backtrace.join("\n") if Minigun.logger.debug?
+        end
       end
     end
 
@@ -448,48 +452,61 @@ module Minigun
     end
 
     # Execute method for when PipelineStage is used as a processor/consumer
-    def execute(context, item, output_queue) # rubocop:disable Lint/UnusedMethodArgument
-      # If no pipeline set, just pass item through
-      unless @pipeline
-        output_queue << item if output_queue && item
-        return
-      end
+    def execute(context, input_queue, output_queue)
+      loop do
+        item = input_queue.pop
 
-      # If used as producer (no item), run the nested pipeline and collect outputs
-      if item.nil?
-        execute_as_producer(context, output_queue)
-        return
-      end
+        # Handle END signal or AllUpstreamsDone
+        break if item.is_a?(AllUpstreamsDone)
+        break if item.is_a?(Message) && item.end_of_stream?
 
-      # Process item through the pipeline's stages sequentially (in-process, no full pipeline infrastructure)
-      current_items = [item]
+        # If no pipeline set, just pass item through
+        unless @pipeline
+          output_queue << item if output_queue
+          next
+        end
 
-      @pipeline.stages.each_value do |stage|
-        # Only feed to streaming stages
-        next unless stage.run_mode == :streaming
+        begin
+          # Process item through the pipeline's stages sequentially (in-process, no full pipeline infrastructure)
+          current_items = [item]
 
-        break if current_items.empty?
+          @pipeline.stages.each_value do |stage|
+            # Only feed to streaming stages
+            next unless stage.run_mode == :streaming
 
-        next_items = []
-        current_items.each do |current_item|
-          # Create a temporary output queue for this stage
-          stage_output = []
-          stage_output.define_singleton_method(:<<) do |i|
-            push(i)
-            self
+            break if current_items.empty?
+
+            next_items = []
+            current_items.each do |current_item|
+              # Create a temporary output queue for this stage
+              stage_output = []
+              stage_output.define_singleton_method(:<<) do |i|
+                push(i)
+                self
+              end
+
+              # Create a temporary input queue with just this item
+              temp_input = Queue.new
+              temp_input << current_item
+              temp_input << Message.end_signal(source: :temp)
+
+              # Execute stage with temporary queues
+              stage.execute(context, temp_input, stage_output)
+
+              # Collect outputs
+              next_items.concat(stage_output)
+            end
+            current_items = next_items
           end
 
-          # Execute stage with temporary output queue
-          stage.execute(context, current_item, stage_output)
-
-          # Collect outputs
-          next_items.concat(stage_output)
+          # Output final results to output queue
+          current_items.each { |result_item| output_queue << result_item } if output_queue
+        rescue StandardError => e
+          # Log item-level errors but continue processing
+          Minigun.logger.error "[Stage:#{name}] Error processing item through nested pipeline: #{e.message}"
+          Minigun.logger.debug e.backtrace.join("\n") if Minigun.logger.debug?
         end
-        current_items = next_items
       end
-
-      # Output final results to output queue
-      current_items.each { |result_item| output_queue << result_item } if output_queue
     end
 
     # Run the worker loop for pipeline stages
@@ -507,7 +524,8 @@ module Minigun
         )
 
         context = stage_ctx.pipeline.context
-        execute(context, nil, output_queue)
+        # For producer mode, we call execute_as_producer directly (doesn't use the unified execute signature)
+        execute_as_producer(context, output_queue)
 
         # Send END signals to downstream
         dag_downstream = stage_ctx.dag.downstream(stage_ctx.stage_name)
@@ -524,7 +542,7 @@ module Minigun
 
       # Consumer mode: process items from upstream
       stage_stats = stage_ctx.stats.for_stage(stage_ctx.stage_name, is_terminal: stage_ctx.dag.terminal?(stage_ctx.stage_name))
-      InputQueue.new(stage_ctx.input_queue, stage_ctx.stage_name, stage_ctx.sources_expected)
+      input_queue = InputQueue.new(stage_ctx.input_queue, stage_ctx.stage_name, stage_ctx.sources_expected, stage_stats: stage_stats)
       output_queue = OutputQueue.new(
         stage_ctx.stage_name,
         stage_ctx.dag.downstream(stage_ctx.stage_name).map { |ds| stage_ctx.stage_input_queues[ds] },
@@ -533,33 +551,16 @@ module Minigun
         stage_stats: stage_stats
       )
 
-      # Traditional item-by-item processing
-      loop do
-        item = stage_ctx.input_queue.pop
-
-        # Handle END signal
-        if item.is_a?(Message) && item.end_of_stream?
-          stage_ctx.sources_expected << item.source # Discover dynamic source
-          stage_ctx.sources_done << item.source
-          break if stage_ctx.sources_done == stage_ctx.sources_expected
-
-          next
-        end
-
-        # Execute the stage with queue wrappers
-        context = stage_ctx.pipeline.context
-        stats = stage_ctx.stats
-
-        stage_ctx.executor.execute_stage_item(
-          stage: self,
-          item: item,
-          user_context: context,
-          input_queue: nil,
-          output_queue: output_queue,
-          stats: stats,
-          pipeline: stage_ctx.pipeline
-        )
-      end
+      # Execute with stats tracking, hooks, and error handling via executor
+      context = stage_ctx.pipeline.context
+      stage_ctx.executor.execute_stage(
+        stage: self,
+        user_context: context,
+        input_queue: input_queue,
+        output_queue: output_queue,
+        stats: stage_ctx.stats,
+        pipeline: stage_ctx.pipeline
+      )
 
       # Send END signals
       dag_downstream = stage_ctx.dag.downstream(stage_ctx.stage_name)
