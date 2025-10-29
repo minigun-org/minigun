@@ -47,7 +47,8 @@ module Minigun
 
     # Execute the stage with the given context
     # For loop-based stages, this receives input_queue and output_queue
-    def execute(context, input_queue, output_queue)
+    # stage_stats is optional for per-item latency tracking
+    def execute(context, input_queue, output_queue, stage_stats: nil)
       if @block
         context.instance_exec(input_queue, output_queue, &@block)
       elsif respond_to?(:call)
@@ -134,7 +135,7 @@ module Minigun
 
   # Producer stage - executes once, no input
   class ProducerStage < Stage
-    def execute(context, _input_queue, output_queue) # rubocop:disable Lint/UnusedMethodArgument
+    def execute(context, _input_queue, output_queue, stage_stats: nil)
       if @block
         context.instance_exec(output_queue, &@block)
       elsif respond_to?(:call)
@@ -202,7 +203,7 @@ module Minigun
 
   # Consumer/Processor stage - loops on input, processes items
   class ConsumerStage < Stage
-    def execute(context, input_queue, output_queue)
+    def execute(context, input_queue, output_queue, stage_stats: nil)
       # Consumer stages pop from input_queue and process items
       loop do
         item = input_queue.pop
@@ -211,13 +212,18 @@ module Minigun
         break if item.is_a?(AllUpstreamsDone)
         break if item.is_a?(Message) && item.end_of_stream?
 
-        # Execute the block or call method with the item
+        # Execute the block or call method with the item, tracking per-item latency
         begin
+          start_time = Time.now if stage_stats
+
           if @block
             context.instance_exec(item, output_queue, &@block)
           elsif respond_to?(:call)
             call_with_arity(item, output_queue, &output_queue.to_proc)
           end
+
+          # Record per-item latency for bottleneck detection
+          stage_stats&.record_latency(Time.now - start_time)
         rescue StandardError => e
           # Log item-level errors but continue processing
           Minigun.logger.error "[Stage:#{name}] Error processing item: #{e.message}"
@@ -247,7 +253,7 @@ module Minigun
         user_context: context,
         input_queue: input_queue,
         output_queue: output_queue,
-        stats: stage_ctx.stats,
+        stage_stats: stage_stats,
         pipeline: stage_ctx.pipeline
       )
 
@@ -280,7 +286,7 @@ module Minigun
     end
 
     # Override execute to buffer items and emit batches via output queue
-    def execute(context, input_queue, output_queue)
+    def execute(context, input_queue, output_queue, stage_stats: nil)
       loop do
         item = input_queue.pop
 
@@ -302,6 +308,8 @@ module Minigun
         next unless buffer && output_queue
 
         begin
+          start_time = Time.now if stage_stats
+
           if @block
             # Accumulator block receives |batch, output| like other stages
             context.instance_exec(buffer, output_queue, &@block)
@@ -309,6 +317,9 @@ module Minigun
             # No block - just pass through
             output_queue << buffer
           end
+
+          # Record per-batch latency
+          stage_stats&.record_latency(Time.now - start_time)
         rescue StandardError => e
           # Log batch-level errors but continue processing
           Minigun.logger.error "[Stage:#{name}] Error processing batch: #{e.message}"
@@ -431,7 +442,7 @@ module Minigun
     end
 
     # Execute method for when PipelineStage is used as a processor/consumer
-    def execute(context, input_queue, output_queue)
+    def execute(context, input_queue, output_queue, stage_stats: nil)
       loop do
         item = input_queue.pop
 
@@ -446,6 +457,8 @@ module Minigun
         end
 
         begin
+          start_time = Time.now if stage_stats
+
           # Process item through the pipeline's stages sequentially (in-process, no full pipeline infrastructure)
           current_items = [item]
 
@@ -480,6 +493,9 @@ module Minigun
 
           # Output final results to output queue
           current_items.each { |result_item| output_queue << result_item } if output_queue
+
+          # Record per-item latency
+          stage_stats&.record_latency(Time.now - start_time)
         rescue StandardError => e
           # Log item-level errors but continue processing
           Minigun.logger.error "[Stage:#{name}] Error processing item through nested pipeline: #{e.message}"
@@ -501,13 +517,13 @@ module Minigun
       else
         # Consumer mode: process items from upstream through executor
         input_queue = InputQueue.new(stage_ctx.input_queue, stage_ctx.stage_name, stage_ctx.sources_expected, stage_stats: stage_stats)
-        
+
         stage_ctx.executor.execute_stage(
           stage: self,
           user_context: context,
           input_queue: input_queue,
           output_queue: output_queue,
-          stats: stage_ctx.stats,
+          stage_stats: stage_stats,
           pipeline: stage_ctx.pipeline
         )
       end

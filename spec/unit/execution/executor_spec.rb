@@ -58,7 +58,7 @@ RSpec.describe Minigun::Execution::Executor do
       expect(pipeline).to receive(:send).with(:execute_stage_hooks, :before, :test).ordered
       expect(pipeline).to receive(:send).with(:execute_stage_hooks, :after, :test).ordered
 
-      executor.execute_stage(stage: stage, user_context: user_context, input_queue: input_queue, output_queue: output_queue, stats: stats, pipeline: pipeline)
+      executor.execute_stage(stage: stage, user_context: user_context, input_queue: input_queue, output_queue: output_queue, stage_stats: stage_stats, pipeline: pipeline)
     end
 
     it 'tracks consumption and production' do
@@ -96,19 +96,21 @@ RSpec.describe Minigun::Execution::Executor do
       expect(stage_stats).to receive(:increment_consumed).once
       expect(stage_stats).to receive(:increment_produced).twice
 
-      executor.execute_stage(stage: stage, user_context: user_context, input_queue: input_queue, output_queue: output_queue, stats: stats, pipeline: pipeline)
+      executor.execute_stage(stage: stage, user_context: user_context, input_queue: input_queue, output_queue: output_queue, stage_stats: stage_stats, pipeline: pipeline)
     end
 
-    it 'records latency' do
+    it 'passes stage_stats to stage for per-item latency tracking' do
       executor = Minigun::Execution::InlineExecutor.new
       input_queue = double('input_queue')
       output_queue = double('output_queue')
       allow(input_queue).to receive(:pop).and_return(Minigun::AllUpstreamsDone.instance(:test))
-      allow(stage).to receive(:execute)
 
-      expect(stage_stats).to receive(:record_latency).with(kind_of(Numeric))
+      # Executor no longer records latency - that's the stage's responsibility now
+      expect(stage_stats).not_to receive(:record_latency)
+      # Stage should receive stage_stats for per-item tracking
+      expect(stage).to receive(:execute).with(user_context, input_queue, output_queue, stage_stats: stage_stats)
 
-      executor.execute_stage(stage: stage, user_context: user_context, input_queue: input_queue, output_queue: output_queue, stats: stats, pipeline: pipeline)
+      executor.execute_stage(stage: stage, user_context: user_context, input_queue: input_queue, output_queue: output_queue, stage_stats: stage_stats, pipeline: pipeline)
     end
 
     it 'handles errors gracefully' do
@@ -120,7 +122,7 @@ RSpec.describe Minigun::Execution::Executor do
 
       # Should not raise, errors are logged
       expect do
-        executor.execute_stage(stage: stage, user_context: user_context, input_queue: input_queue, output_queue: output_queue, stats: stats, pipeline: pipeline)
+        executor.execute_stage(stage: stage, user_context: user_context, input_queue: input_queue, output_queue: output_queue, stage_stats: stage_stats, pipeline: pipeline)
       end.not_to raise_error
     end
   end
@@ -152,9 +154,9 @@ RSpec.describe Minigun::Execution::InlineExecutor do
     it 'executes stage immediately in same thread' do
       input_queue = double('input_queue')
       allow(input_queue).to receive(:pop).and_return(Minigun::AllUpstreamsDone.instance(:test))
-      expect(stage).to receive(:execute).with(user_context, input_queue, output_queue)
+      expect(stage).to receive(:execute).with(user_context, input_queue, output_queue, stage_stats: stage_stats)
 
-      executor.execute_stage(stage: stage, user_context: user_context, input_queue: input_queue, output_queue: output_queue, stats: stats, pipeline: pipeline)
+      executor.execute_stage(stage: stage, user_context: user_context, input_queue: input_queue, output_queue: output_queue, stage_stats: stage_stats, pipeline: pipeline)
     end
 
     it 'executes in calling thread' do
@@ -167,7 +169,7 @@ RSpec.describe Minigun::Execution::InlineExecutor do
 
       input_queue = double('input_queue')
       allow(input_queue).to receive(:pop).and_return(Minigun::AllUpstreamsDone.instance(:test))
-      executor.execute_stage(stage: stage, user_context: user_context, input_queue: input_queue, output_queue: output_queue, stats: stats, pipeline: pipeline)
+      executor.execute_stage(stage: stage, user_context: user_context, input_queue: input_queue, output_queue: output_queue, stage_stats: stage_stats, pipeline: pipeline)
       expect(execution_thread_id).to eq(calling_thread_id)
     end
   end
@@ -218,7 +220,7 @@ RSpec.describe Minigun::Execution::ThreadPoolExecutor do
 
       input_queue = double('input_queue')
       allow(input_queue).to receive(:pop).and_return(Minigun::AllUpstreamsDone.instance(:test))
-      executor.execute_stage(stage: stage, user_context: user_context, input_queue: input_queue, output_queue: output_queue, stats: stats, pipeline: pipeline)
+      executor.execute_stage(stage: stage, user_context: user_context, input_queue: input_queue, output_queue: output_queue, stage_stats: stage_stats, pipeline: pipeline)
       expect(execution_thread_id).not_to eq(calling_thread_id)
     end
 
@@ -226,9 +228,9 @@ RSpec.describe Minigun::Execution::ThreadPoolExecutor do
       output_queue = double('output_queue', items_produced: 1)
       input_queue = double('input_queue')
       allow(input_queue).to receive(:pop).and_return(Minigun::AllUpstreamsDone.instance(:test))
-      expect(stage).to receive(:execute).with(user_context, input_queue, output_queue)
+      expect(stage).to receive(:execute).with(user_context, input_queue, output_queue, stage_stats: stage_stats)
 
-      executor.execute_stage(stage: stage, user_context: user_context, input_queue: input_queue, output_queue: output_queue, stats: stats, pipeline: pipeline)
+      executor.execute_stage(stage: stage, user_context: user_context, input_queue: input_queue, output_queue: output_queue, stage_stats: stage_stats, pipeline: pipeline)
     end
 
     it 'respects max_size concurrency limit' do
@@ -246,7 +248,7 @@ RSpec.describe Minigun::Execution::ThreadPoolExecutor do
         Thread.new do
           input_queue = double('input_queue')
       allow(input_queue).to receive(:pop).and_return(Minigun::AllUpstreamsDone.instance(:test))
-      executor.execute_stage(stage: stage, user_context: user_context, input_queue: input_queue, output_queue: output_queue, stats: stats, pipeline: pipeline)
+      executor.execute_stage(stage: stage, user_context: user_context, input_queue: input_queue, output_queue: output_queue, stage_stats: stage_stats, pipeline: pipeline)
         end
       end
 
@@ -261,7 +263,7 @@ RSpec.describe Minigun::Execution::ThreadPoolExecutor do
       # Errors are caught and logged (no exception propagated)
       expect { input_queue = double('input_queue')
       allow(input_queue).to receive(:pop).and_return(Minigun::AllUpstreamsDone.instance(:test))
-      executor.execute_stage(stage: stage, user_context: user_context, input_queue: input_queue, output_queue: output_queue, stats: stats, pipeline: pipeline) }.not_to raise_error
+      executor.execute_stage(stage: stage, user_context: user_context, input_queue: input_queue, output_queue: output_queue, stage_stats: stage_stats, pipeline: pipeline) }.not_to raise_error
     end
   end
 
@@ -316,7 +318,7 @@ RSpec.describe Minigun::Execution::ProcessPoolExecutor, skip: Gem.win_platform? 
         execution_pid = Process.pid
       end
 
-      executor.execute_stage(stage: stage, user_context: user_context, input_queue: input_queue, output_queue: output_queue, stats: stats, pipeline: pipeline)
+      executor.execute_stage(stage: stage, user_context: user_context, input_queue: input_queue, output_queue: output_queue, stage_stats: stage_stats, pipeline: pipeline)
       expect(execution_pid).not_to eq(calling_pid)
     end
 
@@ -326,7 +328,7 @@ RSpec.describe Minigun::Execution::ProcessPoolExecutor, skip: Gem.win_platform? 
       allow(input_queue).to receive(:pop).and_return(Minigun::AllUpstreamsDone.instance(:test))
       allow(stage).to receive(:execute)
 
-      result = executor.execute_stage(stage: stage, user_context: user_context, input_queue: input_queue, output_queue: output_queue, stats: stats, pipeline: pipeline)
+      result = executor.execute_stage(stage: stage, user_context: user_context, input_queue: input_queue, output_queue: output_queue, stage_stats: stage_stats, pipeline: pipeline)
       # Executor no longer returns results, stages write to output_queue
       expect(result).to be_nil
     end
@@ -338,7 +340,7 @@ RSpec.describe Minigun::Execution::ProcessPoolExecutor, skip: Gem.win_platform? 
       allow(stage).to receive(:execute).and_raise(StandardError, 'boom')
 
       # Errors are caught and logged, returns nil
-      result = executor.execute_stage(stage: stage, user_context: user_context, input_queue: input_queue, output_queue: output_queue, stats: stats, pipeline: pipeline)
+      result = executor.execute_stage(stage: stage, user_context: user_context, input_queue: input_queue, output_queue: output_queue, stage_stats: stage_stats, pipeline: pipeline)
       expect(result).to be_nil
     end
   end

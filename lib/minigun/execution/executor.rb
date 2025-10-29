@@ -9,23 +9,16 @@ module Minigun
     class Executor
       # Execute a stage with stats tracking, hooks, and error handling
       # This is the main entry point for executing stages
-      def execute_stage(stage:, user_context:, input_queue:, output_queue:, stats:, pipeline:)
-        # Get stage stats for tracking
-        dag = pipeline.dag
-        is_terminal = dag.terminal?(stage.name)
-        stage_stats = stats.for_stage(stage.name, is_terminal: is_terminal)
+      # @param stage_stats [Stats] Pre-created stats object for this stage (created in run_worker_loop)
+      def execute_stage(stage:, user_context:, input_queue:, output_queue:, pipeline:, stage_stats:)
+        # Start tracking if not already started
         stage_stats.start! unless stage_stats.start_time
-        start_time = Time.now
 
         # Execute before hooks for this stage
         pipeline.send(:execute_stage_hooks, :before, stage.name)
 
-        # Execute the stage using this executor's strategy
-        execute_with_strategy(stage, user_context, input_queue, output_queue)
-
-        # Record latency for the entire stage execution
-        duration = Time.now - start_time
-        stage_stats.record_latency(duration)
+        # Execute the stage using this executor's strategy, passing stage_stats for per-item latency
+        execute_with_strategy(stage, user_context, input_queue, output_queue, stage_stats)
 
         # Execute after hooks for this stage
         pipeline.send(:execute_stage_hooks, :after, stage.name)
@@ -43,8 +36,8 @@ module Minigun
 
       # Execute the actual stage logic using this executor's strategy
       # Subclasses implement this to control HOW execution happens
-      # All stages now have unified signature: execute(context, input_queue, output_queue)
-      def execute_with_strategy(stage, user_context, input_queue, output_queue)
+      # All stages now have unified signature: execute(context, input_queue, output_queue, stage_stats: nil)
+      def execute_with_strategy(stage, user_context, input_queue, output_queue, stage_stats)
         raise NotImplementedError, "#{self.class}#execute_with_strategy must be implemented"
       end
     end
@@ -53,8 +46,8 @@ module Minigun
     class InlineExecutor < Executor
       protected
 
-      def execute_with_strategy(stage, user_context, input_queue, output_queue)
-        stage.execute(user_context, input_queue, output_queue)
+      def execute_with_strategy(stage, user_context, input_queue, output_queue, stage_stats)
+        stage.execute(user_context, input_queue, output_queue, stage_stats: stage_stats)
       end
     end
 
@@ -78,11 +71,11 @@ module Minigun
 
       protected
 
-      def execute_with_strategy(stage, user_context, input_queue, output_queue)
+      def execute_with_strategy(stage, user_context, input_queue, output_queue, stage_stats)
         wait_for_slot
 
         thread = Thread.new do
-          stage.execute(user_context, input_queue, output_queue)
+          stage.execute(user_context, input_queue, output_queue, stage_stats: stage_stats)
         ensure
           @mutex.synchronize { @active_threads.delete(Thread.current) }
         end
@@ -124,10 +117,10 @@ module Minigun
 
       protected
 
-      def execute_with_strategy(stage, user_context, input_queue, output_queue)
+      def execute_with_strategy(stage, user_context, input_queue, output_queue, stage_stats)
         unless Process.respond_to?(:fork)
           warn '[Minigun] Process forking not available, falling back to inline'
-          return stage.execute(user_context, input_queue, output_queue)
+          return stage.execute(user_context, input_queue, output_queue, stage_stats: stage_stats)
         end
 
         # NOTE: Queue-based DSL doesn't work with process pools since queues can't cross process boundaries
@@ -207,15 +200,15 @@ module Minigun
 
       protected
 
-      def execute_with_strategy(stage, user_context, input_queue, output_queue)
+      def execute_with_strategy(stage, user_context, input_queue, output_queue, stage_stats)
         unless defined?(::Ractor)
           warn '[Minigun] Ractors not available, falling back to thread pool'
-          return @fallback.send(:execute_with_strategy, stage, user_context, input_queue, output_queue)
+          return @fallback.send(:execute_with_strategy, stage, user_context, input_queue, output_queue, stage_stats)
         end
 
         # NOTE: Ractors have similar IPC challenges as process pools
         # Fall back to threads for now
-        @fallback.send(:execute_with_strategy, stage, user_context, input_queue, output_queue)
+        @fallback.send(:execute_with_strategy, stage, user_context, input_queue, output_queue, stage_stats)
       end
     end
 
