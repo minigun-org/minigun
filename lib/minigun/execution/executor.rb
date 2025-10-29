@@ -57,7 +57,17 @@ module Minigun
 
       # Run the stage's actual processing logic with queues
       def run_stage_logic(stage, item, user_context, input_queue, output_queue)
-        stage.execute(user_context, item: item, input_queue: input_queue, output_queue: output_queue)
+        # All stage types now have consistent signature:
+        # - ProducerStage: execute(context, input_queue, output_queue) - input_queue is nil/unused
+        # - ConsumerStage/AccumulatorStage/PipelineStage: execute(context, item, output_queue) - item passed instead of input_queue
+        # - Stage (loop-based): execute(context, input_queue, output_queue)
+        if stage.is_a?(ConsumerStage)
+          # Consumer stages receive item as second argument
+          stage.execute(user_context, item, output_queue)
+        else
+          # Producer and loop-based stages receive input_queue as second argument (nil for producers)
+          stage.execute(user_context, input_queue, output_queue)
+        end
       end
     end
 

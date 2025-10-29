@@ -68,9 +68,9 @@ RSpec.describe Minigun::Execution::Executor do
         output_queue
       end
 
-      allow(stage).to receive(:execute) do |_context, **kwargs|
-        kwargs[:output_queue] << 42
-        kwargs[:output_queue] << 84
+      allow(stage).to receive(:execute) do |_context, _input_queue, output_queue|
+        output_queue << 42
+        output_queue << 84
       end
 
       expect(stage_stats).to receive(:increment_consumed).once
@@ -124,7 +124,9 @@ RSpec.describe Minigun::Execution::InlineExecutor do
     let(:output_queue) { double('output_queue', items_produced: 1) }
 
     it 'executes stage immediately in same thread' do
-      expect(stage).to receive(:execute).with(user_context, item: 42, input_queue: nil, output_queue: output_queue)
+      allow(stage).to receive(:is_a?).with(Minigun::ConsumerStage).and_return(true)
+      allow(stage).to receive(:is_a?).with(Minigun::ProducerStage).and_return(false)
+      expect(stage).to receive(:execute).with(user_context, 42, output_queue)
 
       executor.execute_stage_item(stage: stage, item: 42, user_context: user_context, output_queue: output_queue, stats: stats, pipeline: pipeline)
     end
@@ -192,7 +194,9 @@ RSpec.describe Minigun::Execution::ThreadPoolExecutor do
 
     it 'returns result from thread' do
       output_queue = double('output_queue', items_produced: 1)
-      expect(stage).to receive(:execute).with(user_context, item: 1, input_queue: nil, output_queue: output_queue)
+      allow(stage).to receive(:is_a?).with(Minigun::ConsumerStage).and_return(true)
+      allow(stage).to receive(:is_a?).with(Minigun::ProducerStage).and_return(false)
+      expect(stage).to receive(:execute).with(user_context, 1, output_queue)
 
       executor.execute_stage_item(stage: stage, item: 1, user_context: user_context, output_queue: output_queue, stats: stats, pipeline: pipeline)
     end

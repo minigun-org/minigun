@@ -81,7 +81,7 @@ RSpec.describe Minigun::PipelineStage do
         self
       end
 
-      stage.execute(context, item: 5, output_queue: output_queue)
+      stage.execute(context, 5, output_queue)
 
       # PipelineStage now pushes results to output queue
       expect(output_queue).to include(10)
@@ -103,7 +103,7 @@ RSpec.describe Minigun::PipelineStage do
       context = Object.new
       output_queue = create_output_queue
 
-      stage.execute(context, item: 42, output_queue: output_queue)
+      stage.execute(context, 42, output_queue)
 
       expect(output_queue).to eq([42])
     end
@@ -120,7 +120,7 @@ RSpec.describe Minigun::PipelineStage do
       context = Object.new
       output_queue = create_output_queue
 
-      stage.execute(context, item: 5, output_queue: output_queue)
+      stage.execute(context, 5, output_queue)
 
       # 5 * 2 = 10, then 10 + 10 = 20
       expect(output_queue).to eq([20])
@@ -138,7 +138,7 @@ RSpec.describe Minigun::PipelineStage do
       context = Object.new
       output_queue = create_output_queue
 
-      stage.execute(context, item: 5, output_queue: output_queue)
+      stage.execute(context, 5, output_queue)
 
       # Should process 5, not 999 from producer
       expect(output_queue).to eq([10])
@@ -157,12 +157,12 @@ RSpec.describe Minigun::PipelineStage do
 
       # First item: buffered by accumulator
       output_queue1 = create_output_queue
-      stage.execute(context, item: 5, output_queue: output_queue1)
+      stage.execute(context, 5, output_queue1)
       expect(output_queue1).to eq([]) # Nothing emitted yet
 
       # Second item: accumulator reaches batch size and emits
       output_queue2 = create_output_queue
-      stage.execute(context, item: 3, output_queue: output_queue2)
+      stage.execute(context, 3, output_queue2)
 
       # Accumulator emits [10, 6], sum_batch processes it: 10 + 6 = 16
       expect(output_queue2).to eq([16])
@@ -182,7 +182,7 @@ RSpec.describe Minigun::PipelineStage do
       context = Object.new
       output_queue = create_output_queue
 
-      stage.execute(context, item: 5, output_queue: output_queue)
+      stage.execute(context, 5, output_queue)
 
       expect(output_queue).to contain_exactly(5, 50)
     end
@@ -199,7 +199,7 @@ RSpec.describe Minigun::PipelineStage do
       context = Object.new
       output_queue = create_output_queue
 
-      stage.execute(context, item: 5, output_queue: output_queue)
+      stage.execute(context, 5, output_queue)
 
       # Consumer executed (side effect)
       expect(results).to eq([10])
@@ -220,7 +220,7 @@ RSpec.describe Minigun::PipelineStage do
       context = Object.new
       output_queue = create_output_queue
 
-      stage.execute(context, item: 5, output_queue: output_queue)
+      stage.execute(context, 5, output_queue)
 
       expect(output_queue).to eq([])
     end
@@ -237,7 +237,7 @@ RSpec.describe Minigun::PipelineStage do
       context = Object.new
       output_queue = create_output_queue
 
-      stage.execute(context, item: 3, output_queue: output_queue)
+      stage.execute(context, 3, output_queue)
 
       # 3 * 2 = 6, 6^2 = 36, 36 + 1 = 37
       expect(output_queue).to eq([37])
@@ -259,7 +259,7 @@ RSpec.describe Minigun::PipelineStage do
       context = Object.new
       output_queue = create_output_queue
 
-      stage.execute(context, item: 5, output_queue: output_queue)
+      stage.execute(context, 5, output_queue)
 
       # Should skip nested pipeline, only run double
       expect(output_queue).to eq([10])
@@ -276,7 +276,7 @@ RSpec.describe Minigun::PipelineStage do
       context = Object.new
       output_queue = create_output_queue
 
-      stage.execute(context, item: 5, output_queue: output_queue)
+      stage.execute(context, 5, output_queue)
 
       expect(output_queue).to eq([])
     end
@@ -301,7 +301,7 @@ RSpec.describe Minigun::PipelineStage do
 
       output_queue = create_output_queue
 
-      stage.execute(context, item: 5, output_queue: output_queue)
+      stage.execute(context, 5, output_queue)
 
       expect(output_queue).to eq([10])
       expect(context.tracking).to eq(['saw 5'])

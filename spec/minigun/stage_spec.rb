@@ -6,7 +6,9 @@ RSpec.describe Minigun::Stage do
   describe 'base class' do
     it 'returns nil when execute is called without a block' do
       stage = described_class.new(name: :test)
-      expect(stage.execute(Object.new)).to be_nil
+      input_queue = double('input')
+      output_queue = double('output')
+      expect(stage.execute(Object.new, input_queue, output_queue)).to be_nil
     end
 
     it 'executes the block when provided' do
@@ -17,7 +19,7 @@ RSpec.describe Minigun::Stage do
       input_queue = double('input')
       output_queue = double('output')
 
-      stage.execute(Object.new, input_queue: input_queue, output_queue: output_queue)
+      stage.execute(Object.new, input_queue, output_queue)
       expect(executed).to be true
     end
   end
@@ -39,7 +41,7 @@ RSpec.describe Minigun::ProducerStage do
       )
 
       context = Object.new
-      stage.execute(context, output_queue: Object.new)
+      stage.execute(context, nil, Object.new)
 
       expect(result).to eq(42)
     end
@@ -68,7 +70,7 @@ RSpec.describe Minigun::ConsumerStage do
       mock_output = Object.new
       mock_output.define_singleton_method(:<<) { |item| emitted << item }
 
-      stage.execute(context, item: 5, output_queue: mock_output)
+      stage.execute(context, 5, mock_output)
 
       expect(emitted).to eq([10, 15])
     end
@@ -127,7 +129,8 @@ RSpec.describe 'Stage common behavior' do
       )
 
       context = Object.new
-      stage.execute(context, item: 5)
+      output_queue = double('output_queue')
+      stage.execute(context, 5, output_queue)
 
       expect(result).to eq(10)
     end
@@ -147,7 +150,8 @@ RSpec.describe 'Stage common behavior' do
         block: proc { |item, _output| @value + item }
       )
 
-      stage.execute(context, item: 23)
+      output_queue = double('output_queue')
+      stage.execute(context, 23, output_queue)
       # NOTE: execute doesn't return values for consumers in new DSL
       expect(context.value).to eq(100) # unchanged
     end
