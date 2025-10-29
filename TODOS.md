@@ -33,6 +33,10 @@ cleanup signal
 
 ==============================
 
+parallel and sequential/sequence/series keywords --> influences DAG building
+
+==============================
+
 make per item latency tracking optional (and stats?)
 
 =============================================
