@@ -15,6 +15,10 @@ add to architecture
 
 yield instead of |output|
 
+====================
+
+make per item latency tracking optional (and stats?)
+
 =============================================
 
 Support Cross-Pipeline Routing?

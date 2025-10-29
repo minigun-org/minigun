@@ -25,11 +25,12 @@ module Minigun
 
   # Wrapper around stage input queue that handles END messages
   class InputQueue
-    def initialize(queue, stage_name, expected_sources)
+    def initialize(queue, stage_name, expected_sources, stage_stats: nil)
       @queue = queue
       @stage_name = stage_name
       @sources_expected = Set.new(expected_sources)
       @sources_done = Set.new
+      @stage_stats = stage_stats
     end
 
     # Pop items from queue, consuming END messages
@@ -49,6 +50,9 @@ module Minigun
           # More sources pending, keep looping to get next item
           next
         end
+
+        # Track consumption of regular items
+        @stage_stats&.increment_consumed
 
         # Regular item
         return item
