@@ -1071,6 +1071,30 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
+  describe '64_pipeline_exit_fan_out.rb' do
+    it 'demonstrates pipeline exit with fan-out to multiple terminal consumers' do
+      load File.expand_path('../../examples/64_pipeline_exit_fan_out.rb', __dir__)
+
+      example = PipelineExitFanOutExample.new
+      example.run
+
+      # Verify we got all items
+      expect(example.results.size).to eq(10)
+
+      # Verify even items (2, 4)
+      even_items = example.results.select { |r| r[:type] == :even }
+      expect(even_items.map { |r| r[:value] }.sort).to eq([2, 4])
+
+      # Verify odd items (1, 3, 5)
+      odd_items = example.results.select { |r| r[:type] == :odd }
+      expect(odd_items.map { |r| r[:value] }.sort).to eq([1, 3, 5])
+
+      # Verify all items (1, 2, 3, 4, 5)
+      all_items = example.results.select { |r| r[:type] == :all }
+      expect(all_items.map { |r| r[:value] }.sort).to eq([1, 2, 3, 4, 5])
+    end
+  end
+
   # Coverage check: ensure all example files have tests
   describe 'Example Coverage' do
     it 'has tests for all example files' do

@@ -442,7 +442,19 @@ module Minigun
 
     # Execute method for PipelineStage - handles both producer and consumer modes
     def execute(context, input_queue, output_queue, stage_stats)
-      return unless @pipeline
+      # If no pipeline set, pass items through unchanged
+      # TODO: possibly we can skip this case, need to check if it ever happens
+      unless @pipeline
+        return if input_queue.nil? # Producer mode with no pipeline - nothing to do
+
+        loop do
+          item = input_queue.pop
+          break if item.is_a?(AllUpstreamsDone)
+          break if item.is_a?(Message) && item.end_of_stream?
+          output_queue << item if output_queue
+        end
+        return
+      end
 
       # Producer mode: input_queue is nil, run nested pipeline once and collect outputs
       if input_queue.nil?
