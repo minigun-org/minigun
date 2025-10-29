@@ -36,6 +36,10 @@ log_info(stage_ctx, 'Starting')
 
 ====================
 
+batch / debatch / rebatch operators
+
+=======================
+
 cleanup signal
 + break if item.is_a?(AllUpstreamsDone)
 + break if item.is_a?(Message) && item.end_of_stream?
