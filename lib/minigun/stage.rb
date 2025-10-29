@@ -65,8 +65,7 @@ module Minigun
       # Execute with both queues (block manages its own loop)
       context = stage_ctx.pipeline.context
       execute(context, input_queue, output_queue, stage_ctx.stage_stats)
-
-      # Send END signals to downstream
+    ensure
       send_end_signals(stage_ctx)
     end
 
@@ -259,6 +258,7 @@ module Minigun
 
       # Flush and cleanup
       flush_if_needed(stage_ctx, output_queue)
+    ensure
       send_end_signals(stage_ctx)
     end
 
@@ -418,7 +418,7 @@ module Minigun
         target_queues[round_robin_index] << item
         round_robin_index = (round_robin_index + 1) % target_queues.size
       end
-
+    ensure
       send_end_signals(worker_ctx)
     end
   end
@@ -462,7 +462,6 @@ module Minigun
       # Run the nested pipeline (it will automatically create :_entrance/:_exit as needed)
       @pipeline.run(stage_ctx.pipeline.context)
     ensure
-      # Send end signals to downstream stages in the parent pipeline
       send_end_signals(stage_ctx)
     end
   end

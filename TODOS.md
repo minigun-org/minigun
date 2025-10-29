@@ -17,6 +17,14 @@ add to architecture
 
 @stage_name == :_entrance and :_exit (YUCK)
 
+================================
+
+This needs to be in all stage:
+
+stage_stats = stage_ctx.stage_stats
+stage_stats.start!
+log_info(stage_ctx, 'Starting')
+
 ====================
 
 cleanup signal
