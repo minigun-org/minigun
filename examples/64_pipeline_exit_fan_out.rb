@@ -71,24 +71,24 @@ if __FILE__ == $PROGRAM_NAME
 
   puts "\n=== Results ==="
   puts "Total items collected: #{example.results.size}"
-  
+
   even_items = example.results.select { |r| r[:type] == :even }
   odd_items = example.results.select { |r| r[:type] == :odd }
   all_items = example.results.select { |r| r[:type] == :all }
-  
+
   puts "Even items: #{even_items.map { |r| r[:value] }.sort.inspect}"
   puts "Odd items: #{odd_items.map { |r| r[:value] }.sort.inspect}"
   puts "All items: #{all_items.map { |r| r[:value] }.sort.inspect}"
-  
+
   # Verify we got the right counts
   expected_even = [2, 4]
   expected_odd = [1, 3, 5]
   expected_all = [1, 2, 3, 4, 5]
-  
+
   success = even_items.map { |r| r[:value] }.sort == expected_even &&
             odd_items.map { |r| r[:value] }.sort == expected_odd &&
             all_items.map { |r| r[:value] }.sort == expected_all
-  
+
   puts "\n#{success ? '✓ Success!' : '✗ Failed'}"
   puts "Expected: 2 even + 3 odd + 5 all = 10 total items"
   puts "Got: #{even_items.size} even + #{odd_items.size} odd + #{all_items.size} all = #{example.results.size} total items"
