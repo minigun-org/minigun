@@ -65,7 +65,7 @@ RSpec.describe Minigun::Execution::Executor do
       executor = Minigun::Execution::InlineExecutor.new
       input_queue = double('input_queue')
       output_queue = double('output_queue')
-      
+
       # InputQueue pops one item then signals end, calling increment_consumed on real items
       pop_count = 0
       allow(input_queue).to receive(:pop) do
@@ -77,7 +77,7 @@ RSpec.describe Minigun::Execution::Executor do
           Minigun::AllUpstreamsDone.instance(:test)
         end
       end
-      
+
       # OutputQueue now calls increment_produced directly when << is called
       allow(output_queue).to receive(:<<) do
         stage_stats.increment_produced
