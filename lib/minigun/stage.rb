@@ -434,27 +434,29 @@ module Minigun
       # We'll inject the pipeline later when we have the config
       @pipeline = nil
       @stages_to_add = [] # Queue of stages to add when pipeline is created
-      @temp_collector = nil # Track temp collector stage if added
     end
 
     def run_mode
       :composite # Manages internal stages
     end
 
-    # Execute method for when PipelineStage is used as a processor/consumer
+    # Execute method for PipelineStage - handles both producer and consumer modes
     def execute(context, input_queue, output_queue, stage_stats)
+      return unless @pipeline
+
+      # Producer mode: input_queue is nil, run nested pipeline once and collect outputs
+      if input_queue.nil?
+        execute_as_producer(context, output_queue)
+        return
+      end
+
+      # Consumer mode: process items from input_queue through nested pipeline
       loop do
         item = input_queue.pop
 
         # Handle END signal or AllUpstreamsDone
         break if item.is_a?(AllUpstreamsDone)
         break if item.is_a?(Message) && item.end_of_stream?
-
-        # If no pipeline set, just pass item through
-        unless @pipeline
-          output_queue << item if output_queue
-          next
-        end
 
         begin
           start_time = Time.now if stage_stats
@@ -506,48 +508,36 @@ module Minigun
 
     # Run the worker loop for pipeline stages
     def run_worker_loop(stage_ctx)
+      stage_stats = stage_ctx.stage_stats
+      stage_stats.start!
+
+      stage_ctx.pipeline.send(:execute_stage_hooks, :before, stage_ctx.stage_name)
+
+      # Create queues (input_queue will be nil for producer mode)
+      input_queue = stage_ctx.sources_expected.empty? ? nil : create_input_queue(stage_ctx)
       output_queue = create_output_queue(stage_ctx)
+
+      # Execute via executor (defines HOW: inline/threaded/process)
+      # For producer mode, input_queue is nil - execute() detects this and runs as producer
       context = stage_ctx.pipeline.context
+      stage_ctx.executor.execute_stage(self, context, input_queue, output_queue, stage_stats)
 
-      # Check if this PipelineStage is acting as a producer (no upstream)
-      if stage_ctx.sources_expected.empty?
-        # Producer mode: run the nested pipeline once and collect outputs
-        execute_as_producer(context, output_queue)
-      else
-        # Consumer mode: process items from upstream through executor
-        stage_stats = stage_ctx.stage_stats
-        stage_stats.start!
-
-        stage_ctx.pipeline.send(:execute_stage_hooks, :before, stage_ctx.stage_name)
-
-        input_queue = create_input_queue(stage_ctx)
-
-        stage_ctx.executor.execute_stage(self, context, input_queue, output_queue, stage_stats)
-
-        stage_ctx.pipeline.send(:execute_stage_hooks, :after, stage_ctx.stage_name)
-      end
+      stage_ctx.pipeline.send(:execute_stage_hooks, :after, stage_ctx.stage_name)
     ensure
       # Send END signals to all downstream targets
       send_end_signals(stage_ctx)
     end
 
     # Execute as a producer - run the nested pipeline and collect its outputs
+    # Terminal stages automatically drain into :_exit collector added during DAG building
     def execute_as_producer(context, output_queue)
       return unless @pipeline
 
-      collected_items = []
+      # Set output_queues - the pipeline's DAG builder will add :_exit collector for terminal stages
+      @pipeline.instance_variable_set(:@output_queues, { output: output_queue }) if output_queue
 
-      # Add temporary collector to gather nested pipeline outputs
-      add_temp_collector(collected_items)
-
-      # Run the nested pipeline
+      # Run the nested pipeline - terminal stages will automatically route to :_exit which forwards to output_queue
       @pipeline.run(context)
-
-      # Send collected items to parent output queue
-      collected_items.each { |item| output_queue << item } if output_queue
-
-      # Clean up temporary collector
-      remove_temp_collector
     end
 
     # Set the wrapped pipeline (called by Task)
@@ -569,26 +559,6 @@ module Minigun
         # Queue for later when pipeline is set
         @stages_to_add << { type: type, name: name, options: options, block: block }
       end
-    end
-
-    private
-
-    def add_temp_collector(collected_items)
-      return if @temp_collector
-
-      @pipeline.instance_eval do
-        add_stage(:stage, :_temp_collector, stage_type: :consumer) do |item, _output|
-          collected_items << item
-        end
-      end
-      @temp_collector = @pipeline.stages[:_temp_collector]
-    end
-
-    def remove_temp_collector
-      return unless @temp_collector
-
-      @pipeline.stages.delete(:_temp_collector)
-      @temp_collector = nil
     end
   end
 end

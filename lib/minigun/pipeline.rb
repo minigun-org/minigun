@@ -329,6 +329,9 @@ module Minigun
       fill_sequential_gaps_by_definition_order!
       puts "[DAG BUILD] AFTER fill_sequential_gaps: edges=#{@dag.edges.map { |k, v| "#{k}->#{v.to_a.join(',')}" }.join(' | ')}"
 
+      # If this pipeline has output_queues, add :_exit collector for terminal stages
+      insert_exit_collector_for_outputs! if @output_queues && !@output_queues.empty?
+
       @dag.validate!
       validate_stages_exist!
 
@@ -400,6 +403,36 @@ module Minigun
 
         @dag.add_edge(stage_name, next_stage)
       end
+    end
+
+    # Insert an :_exit collector stage that terminal stages drain into
+    # This allows nested pipelines to send their outputs to the parent pipeline
+    def insert_exit_collector_for_outputs!
+      # Find terminal stages (stages with no downstream)
+      terminal_stages = @stages.keys.select { |stage_name| @dag.terminal?(stage_name) }
+      return if terminal_stages.empty?
+
+      # Create a consumer stage that forwards items to @output_queues[:output]
+      # The block receives (item, output) but we ignore output and use @output_queues directly
+      parent_output = @output_queues[:output]
+      exit_block = proc do |item, _stage_output|
+        parent_output << item if parent_output
+      end
+      exit_stage = Minigun::ConsumerStage.new(name: :_exit, block: exit_block, options: {})
+
+      # Add the :_exit stage to the pipeline
+      @stages[:_exit] = exit_stage
+      @stage_order << :_exit
+      @dag.add_node(:_exit)
+
+      # Connect terminal stages to :_exit
+      terminal_stages.each do |stage_name|
+        @dag.add_edge(stage_name, :_exit)
+      end
+
+      # Note: input queue for :_exit will be created automatically by build_stage_input_queues
+
+      log_info "[Pipeline:#{@name}] Added :_exit collector for terminal stages: #{terminal_stages.join(', ')}"
     end
 
     def log_prefix
