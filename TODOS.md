@@ -1,7 +1,7 @@
 
 ADD to README / DOCS:
 - stages route to each other sequentially, unless you add :to or :from keywords
-- execute in paralle, and do NOT route to each other, unless unless you add :to or :from keywords.
+- execute in parallel, and do NOT route to each other, unless you add :to or :from keywords.
 
 - every consumer has an input queue
 - if there is fan-out (multiple consumers for any 1 producer), add producer output queues and an intermediate router (load balancer) object. the router has an input queue and round-robin allocates to the consumers.
