@@ -2,7 +2,7 @@
 
 module Minigun
   # Unified worker for all stage types (producers and consumers)
-  # Manages thread lifecycle and delegates to stage.run_worker_loop()
+  # Manages thread lifecycle and delegates to stage.run_stage()
   class Worker
     attr_reader :thread, :stage_name, :stage
 
@@ -41,7 +41,7 @@ module Minigun
       stage_stats.start!
       log_info('Starting')
 
-      @stage.run_worker_loop(stage_ctx)
+      @stage.run_stage(stage_ctx)
 
       stage_ctx.stage_stats.finish!
       log_info('Done')

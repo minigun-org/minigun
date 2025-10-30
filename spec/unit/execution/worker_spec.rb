@@ -60,8 +60,8 @@ RSpec.describe Minigun::Worker do
       allow(dag).to receive(:upstream).with(:test_stage).and_return([:upstream])
       allow(dag).to receive(:downstream).with(:test_stage).and_return([])
 
-      # Stub run_worker_loop to simulate stage execution
-      allow(stage).to receive(:run_worker_loop) do |worker_ctx|
+      # Stub run_stage to simulate stage execution
+      allow(stage).to receive(:run_stage) do |worker_ctx|
         # Simulate basic loop: wait for END signal
         loop do
           msg = worker_ctx.input_queue.pop
@@ -268,8 +268,8 @@ RSpec.describe Minigun::Worker do
       allow(dag).to receive(:upstream).with(:test_stage).and_return([:upstream])
       allow(dag).to receive(:downstream).with(:test_stage).and_return([])
 
-      # Stub run_worker_loop to simulate stage execution
-      allow(stage).to receive(:run_worker_loop) do |worker_ctx|
+      # Stub run_stage to simulate stage execution
+      allow(stage).to receive(:run_stage) do |worker_ctx|
         loop do
           msg = worker_ctx.input_queue.pop
           break if msg.is_a?(Minigun::Message) && msg.end_of_stream?

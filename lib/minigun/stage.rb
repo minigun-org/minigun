@@ -55,9 +55,9 @@ module Minigun
       end
     end
 
-    # Run the worker loop for loop-based stages
+    # Run the stage execution
     # Loop-based stages manage their own input loop
-    def run_worker_loop(stage_ctx)
+    def run_stage(stage_ctx)
       # Create wrapped queues
       input_queue = create_input_queue(stage_ctx) # TODO: move to worker?
       output_queue = create_output_queue(stage_ctx)
@@ -163,7 +163,7 @@ module Minigun
       :autonomous # Generates data independently
     end
 
-    def run_worker_loop(stage_ctx)
+    def run_stage(stage_ctx)
       # Execute before hooks
       execute_hooks(stage_ctx, :before)
 
@@ -172,29 +172,18 @@ module Minigun
 
       # Execute producer block directly (ProducerStage doesn't use executor since it's autonomous)
       context = stage_ctx.pipeline.context
-      execute(context, nil, output_queue, stage_stats)
+      execute(context, nil, output_queue, stage_ctx.stage_stats)
 
       # Execute after hooks
       execute_hooks(stage_ctx, :after)
-    rescue StandardError => e # TODO: move to worker?
-      log_error(stage_ctx, "Error: #{e.message}")
-      log_error(stage_ctx, e.backtrace.join("\n"))
     ensure
-      send_end_signals(stage_ctx) # TODO: move to worker?
+      send_end_signals(stage_ctx)
     end
 
     private
 
     def execute_hooks(ctx, type)
       ctx.pipeline.execute_stage_hooks(type, ctx.stage_name)
-    end
-
-    def log_info(ctx, msg)
-      Minigun.logger.info "[Pipeline:#{ctx.pipeline.name}][Producer:#{ctx.stage_name}] #{msg}"
-    end
-
-    def log_error(ctx, msg)
-      Minigun.logger.error "[Pipeline:#{ctx.pipeline.name}][Producer:#{ctx.stage_name}] #{msg}"
     end
   end
 
@@ -229,10 +218,9 @@ module Minigun
       end
     end
 
-    def run_worker_loop(stage_ctx)
+    def run_stage(stage_ctx)
       # Store stage_stats for access during execute
       stage_stats = stage_ctx.stage_stats
-      stage_stats.start!
 
       # Execute before hooks
       stage_ctx.pipeline.send(:execute_stage_hooks, :before, stage_ctx.stage_name)
@@ -365,7 +353,7 @@ module Minigun
 
   # Broadcast router - sends each item to ALL downstream stages
   class RouterBroadcastStage < RouterStage
-    def run_worker_loop(worker_ctx)
+    def run_stage(worker_ctx)
       loop do
         item = worker_ctx.input_queue.pop
 
@@ -390,7 +378,7 @@ module Minigun
 
   # Round-robin router - distributes items across downstream stages
   class RouterRoundRobinStage < RouterStage
-    def run_worker_loop(worker_ctx)
+    def run_stage(worker_ctx)
       target_queues = @targets.map { |target| worker_ctx.stage_input_queues[target] }
       round_robin_index = 0
 
@@ -434,7 +422,7 @@ module Minigun
     end
 
     # Run the nested pipeline when this stage is executed as a worker
-    def run_worker_loop(stage_ctx)
+    def run_stage(stage_ctx)
       return unless @pipeline
 
       # Set up input/output queues for the nested pipeline

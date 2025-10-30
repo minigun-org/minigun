@@ -20,7 +20,7 @@ TODO: Refactor so more things are moved from Stage to Worker, e.g.
 - start/end stats tracking (need tests for all stage types) -- make some stages silent?
 - error catching
 - sending of end signals?
-- rename #run_worker_loop as its not a loop. Maybe #run_in_worker? other ideas?
+- rename #run_worker_loop as its not a loop. Maybe #run_in_worker? other ideas? --> DONE: renamed to #run_stage
 
 =======================================
 

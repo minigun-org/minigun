@@ -15,7 +15,7 @@ class DeduplicatorStage < Minigun::Stage
     :streaming
   end
 
-  def run_worker_loop(stage_ctx)
+  def run_stage(stage_ctx)
     require_relative '../lib/minigun/queue_wrappers'
 
     # Get stage stats for tracking

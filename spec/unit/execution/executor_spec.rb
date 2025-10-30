@@ -54,7 +54,7 @@ RSpec.describe Minigun::Execution::Executor do
       output_queue = double('output_queue')
       allow(input_queue).to receive(:pop).and_return(Minigun::AllUpstreamsDone.instance(:test))
 
-      # Executor just calls stage.execute - hooks are handled by run_worker_loop
+      # Executor just calls stage.execute - hooks are handled by run_stage
       expect(stage).to receive(:execute).with(user_context, input_queue, output_queue, stage_stats)
 
       executor.execute_stage(stage, user_context, input_queue, output_queue, stage_stats)

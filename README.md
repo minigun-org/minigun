@@ -136,9 +136,9 @@ class CustomStage < Minigun::Stage
     output_queue << result if output_queue
   end
 
-  # Optional: Customize the worker loop
-  def run_worker_loop(stage_ctx)
-    # Custom loop implementation
+  # Optional: Customize the stage execution
+  def run_stage(stage_ctx)
+    # Custom execution implementation
     # See ProducerStage or ConsumerStage for examples
   end
 
@@ -167,7 +167,7 @@ class TimedBatchStage < Minigun::Stage
     :streaming  # Processes items from input queue
   end
 
-  def run_worker_loop(stage_ctx)
+  def run_stage(stage_ctx)
     require 'minigun/queue_wrappers'
 
     wrapped_input = Minigun::InputQueue.new(
