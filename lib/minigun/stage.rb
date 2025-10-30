@@ -27,12 +27,16 @@ module Minigun
   # Implements the Composite pattern where Pipeline is a composite Stage
   # Also handles loop-based stages (stages that manage their own input loop)
   class Stage
-    attr_reader :name, :options, :block
+    attr_reader :name, :options, :block, :task
 
-    def initialize(name:, block: nil, options: {})
+    def initialize(task, name, block = nil, options = {})
+      @task = task
       @name = name
       @block = block
       @options = options
+
+      # Register in Task's flat registry if task is provided
+      @task&.register_stage(name, self)
     end
 
     # Get the queue size for this stage
@@ -152,6 +156,10 @@ module Minigun
 
   # Producer stage - executes once, no input
   class ProducerStage < Stage
+    def initialize(task, name, block = nil, options = {})
+      super(task, name, block, options)
+    end
+
     def execute(context, _input_queue, output_queue, _stage_stats)
       if @block
         context.instance_exec(output_queue, &@block)
@@ -194,6 +202,10 @@ module Minigun
 
   # Consumer/Processor stage - loops on input, processes items
   class ConsumerStage < Stage
+    def initialize(task, name, block = nil, options = {})
+      super(task, name, block, options)
+    end
+
     def execute(context, input_queue, output_queue, stage_stats)
       # Consumer stages pop from input_queue and process items
       loop do
@@ -257,8 +269,8 @@ module Minigun
   class AccumulatorStage < ConsumerStage
     attr_reader :max_size, :max_wait
 
-    def initialize(name:, block: nil, options: {})
-      super
+    def initialize(task, name, block = nil, options = {})
+      super(task, name, block, options)
       @max_size = options[:max_size] || 100
       @max_wait = options[:max_wait] || nil # Future: time-based batching
       @buffer = []
@@ -334,8 +346,8 @@ module Minigun
   class RouterStage < Stage
     attr_accessor :targets
 
-    def initialize(name:, targets:)
-      super(name: name, options: {})
+    def initialize(task, name, targets)
+      super(task, name, nil, {})
       @targets = targets
     end
 
@@ -403,8 +415,8 @@ module Minigun
   class PipelineStage < Stage
     attr_reader :pipeline
 
-    def initialize(name:, options: {})
-      super
+    def initialize(task, name, block = nil, options = {})
+      super(task, name, block, options)
       @pipeline = nil
     end
 

@@ -22,6 +22,8 @@ module Minigun
 
       # Root pipeline - all stages and nested pipelines live here
       @root_pipeline = root_pipeline || Pipeline.new(self, :default, @config)
+      # Ensure root pipeline's task reference points to this task
+      @root_pipeline.task = self
     end
 
     # Register a stage in the flat registry
@@ -73,8 +75,8 @@ module Minigun
 
     # Add a nested pipeline as a stage within the implicit pipeline
     def add_nested_pipeline(name, options = {}, &)
-      # Create a PipelineStage and configure it
-      pipeline_stage = PipelineStage.new(name: name, options: options)
+      # Create a PipelineStage and configure it (will self-register in Task)
+      pipeline_stage = PipelineStage.new(self, name, nil, options)
 
       # Create the actual Pipeline instance for this nested pipeline
       nested_pipeline = Pipeline.new(self, name, @config)
@@ -110,8 +112,8 @@ module Minigun
 
         pipeline = pipeline_stage.pipeline
       else
-        # Create new PipelineStage and add to root_pipeline
-        pipeline_stage = PipelineStage.new(name: name, options: options)
+        # Create new PipelineStage and add to root_pipeline (will self-register in Task)
+        pipeline_stage = PipelineStage.new(self, name, nil, options)
         pipeline = Pipeline.new(self, name, @config)
         pipeline_stage.pipeline = pipeline
 

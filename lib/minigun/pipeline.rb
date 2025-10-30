@@ -95,10 +95,10 @@ module Minigun
         add_stage_hook(:after_fork, name, &after_fork_proc)
       end
 
-      # Create stage instance
+      # Create stage instance (stages will self-register in Task during initialization)
       stage = if type.is_a?(Class)
                 # Custom stage class provided
-                type.new(name: name, options: options)
+                type.new(@task, name, block, options)
               else
                 # Extract stage_type from options if present (used by DSL)
                 actual_type = options.delete(:stage_type) || type
@@ -106,13 +106,13 @@ module Minigun
                 # Create appropriate stage subclass based on type symbol
                 case actual_type
                 when :producer
-                  ProducerStage.new(name: name, block: block, options: options)
+                  ProducerStage.new(@task, name, block, options)
                 when :processor, :consumer
-                  ConsumerStage.new(name: name, block: block, options: options)
+                  ConsumerStage.new(@task, name, block, options)
                 when :stage
-                  Stage.new(name: name, block: block, options: options)
+                  Stage.new(@task, name, block, options)
                 when :accumulator
-                  AccumulatorStage.new(name: name, block: block, options: options)
+                  AccumulatorStage.new(@task, name, block, options)
                 else
                   raise Minigun::Error, "Unknown stage type: #{actual_type}"
                 end
@@ -123,9 +123,6 @@ module Minigun
 
       # Store stage by name
       @stages[name] = stage
-
-      # Register in Task's flat registry
-      @task.register_stage(name, stage)
 
       # Add to stage order and DAG
       @stage_order << name
@@ -298,12 +295,12 @@ module Minigun
         # Get explicit routing strategy from stage options, or default to :broadcast
         routing_strategy = stage.options[:routing] || :broadcast
 
-        # Create the appropriate router subclass
+        # Create the appropriate router subclass (will self-register in Task)
         router_name = :"#{stage_name}_router"
         router_stage = if routing_strategy == :round_robin
-                         RouterRoundRobinStage.new(name: router_name, targets: downstream.dup)
+                         RouterRoundRobinStage.new(@task, router_name, downstream.dup)
                        else
-                         RouterBroadcastStage.new(name: router_name, targets: downstream.dup)
+                         RouterBroadcastStage.new(@task, router_name, downstream.dup)
                        end
         stages_to_add << [router_name, router_stage]
 
@@ -324,10 +321,9 @@ module Minigun
         update[:add_router_edges].each { |(from, to)| @dag.add_edge(from, to) }
       end
 
-      # Add router stages to @stages and register in Task
+      # Add router stages to @stages (already registered in Task during initialization)
       stages_to_add.each do |name, stage|
         @stages[name] = stage
-        @task.register_stage(name, stage)
       end
     end
 
@@ -491,7 +487,7 @@ module Minigun
         # Just forward items from parent to nested pipeline
         output << item
       end
-      entrance_stage = Minigun::ConsumerStage.new(name: :_entrance, block: entrance_block, options: {})
+      entrance_stage = Minigun::ConsumerStage.new(@task, :_entrance, entrance_block, {})
 
       # Add the :_entrance stage to the pipeline
       @stages[:_entrance] = entrance_stage
@@ -519,7 +515,7 @@ module Minigun
       exit_block = proc do |item, _stage_output|
         parent_output << item if parent_output
       end
-      exit_stage = Minigun::ConsumerStage.new(name: :_exit, block: exit_block, options: {})
+      exit_stage = Minigun::ConsumerStage.new(@task, :_exit, exit_block, {})
 
       # Add the :_exit stage to the pipeline
       @stages[:_exit] = exit_stage
