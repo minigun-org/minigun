@@ -133,17 +133,10 @@ This method looks suss:
 
 - mermaid diagrams
 
-===========================
-
-- IPC Fork
 
 ==========================
 
 - fibers
-
-=======================
-
-ProcessPoolExecutor --> cow_fork
 
 ================================
 

@@ -4,6 +4,10 @@ module Minigun
   # Base class for all pipeline queue signals
   # Queue signals are special marker objects that flow through queues to coordinate pipeline state
   class QueueSignal
+    def to_s
+      'QueueSignal'
+    end
+    alias_method :inspect, :to_s
   end
 
   # Signal indicating one upstream source has completed
@@ -18,10 +22,6 @@ module Minigun
     def to_s
       "EndOfSource(#{@source})"
     end
-
-    def inspect
-      to_s
-    end
   end
 
   # Signal indicating all upstream sources for a stage have completed
@@ -35,10 +35,6 @@ module Minigun
 
     def to_s
       "EndOfStage(#{@stage_name})"
-    end
-
-    def inspect
-      to_s
     end
   end
 end

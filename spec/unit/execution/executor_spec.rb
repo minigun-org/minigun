@@ -12,9 +12,13 @@ RSpec.describe Minigun::Execution::Executor do
       inline_executor = Minigun::Execution.create_executor(type: :inline, max_size: 3)
       expect(inline_executor).to be_a(Minigun::Execution::InlineExecutor)
 
-      process_executor = Minigun::Execution.create_executor(type: :fork, max_size: 2)
-      expect(process_executor).to be_a(Minigun::Execution::ProcessPoolExecutor)
-      expect(process_executor.max_size).to eq(2)
+      cow_fork_executor = Minigun::Execution.create_executor(type: :cow_fork, max_size: 3)
+      expect(cow_fork_executor).to be_a(Minigun::Execution::CowForkPoolExecutor)
+      expect(cow_fork_executor.max_size).to eq(3)
+
+      ipc_fork_executor = Minigun::Execution.create_executor(type: :ipc_fork, max_size: 4)
+      expect(ipc_fork_executor).to be_a(Minigun::Execution::IpcForkPoolExecutor)
+      expect(ipc_fork_executor.max_size).to eq(4)
     end
 
     it 'all executors extend Executor base class' do
@@ -275,7 +279,7 @@ RSpec.describe Minigun::Execution::ThreadPoolExecutor do
   end
 end
 
-RSpec.describe Minigun::Execution::ProcessPoolExecutor, skip: Gem.win_platform? do
+RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: Gem.win_platform? do
   let(:executor) { described_class.new(max_size: 2) }
 
   describe '#initialize' do
@@ -341,6 +345,199 @@ RSpec.describe Minigun::Execution::ProcessPoolExecutor, skip: Gem.win_platform? 
 
       # Errors are caught and logged
       executor.execute_stage(stage, user_context, input_queue, output_queue, stage_stats)
+    end
+  end
+
+  describe '#shutdown' do
+    it 'terminates active processes' do
+      expect { executor.shutdown }.not_to raise_error
+    end
+  end
+end
+
+RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: Gem.win_platform? do
+  let(:executor) { described_class.new(max_size: 2) }
+
+  describe '#initialize' do
+    it 'sets max_size' do
+      expect(executor.max_size).to eq(2)
+    end
+  end
+
+  describe '#execute_stage' do
+    let(:dag) { double('dag', terminal?: false) }
+    let(:pipeline) do
+      double('pipeline',
+             name: 'test_pipeline',
+             dag: dag,
+             send: nil)
+    end
+    let(:stage) do
+      double('stage',
+             name: :test,
+             execute_with_emit: nil,
+             execute: nil,
+             respond_to?: false)
+    end
+    let(:stage_stats) { double('stage_stats', start!: nil, start_time: nil, increment_consumed: nil, increment_produced: nil, record_latency: nil) }
+    let(:stats) { double('stats', for_stage: stage_stats) }
+    let(:user_context) { double('user_context') }
+
+    it 'executes in forked process (COW)' do
+      calling_pid = Process.pid
+      execution_pid = nil
+      input_queue = double('input_queue')
+      output_queue = double('output_queue')
+      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.new(:test))
+
+      allow(stage).to receive(:execute) do
+        execution_pid = Process.pid
+      end
+
+      executor.execute_stage(stage, user_context, input_queue, output_queue, stage_stats)
+      expect(execution_pid).not_to eq(calling_pid)
+    end
+
+    it 'executes stage with inherited memory (COW)' do
+      input_queue = double('input_queue')
+      output_queue = double('output_queue')
+      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.new(:test))
+      allow(stage).to receive(:execute)
+
+      executor.execute_stage(stage, user_context, input_queue, output_queue, stage_stats)
+    end
+
+    it 'propagates errors from child process' do
+      input_queue = double('input_queue')
+      output_queue = double('output_queue')
+      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.new(:test))
+      allow(stage).to receive(:execute).and_raise(StandardError, 'boom')
+
+      # COW fork should propagate errors
+      expect do
+        executor.execute_stage(stage, user_context, input_queue, output_queue, stage_stats)
+      end.to raise_error(/COW forked process failed/)
+    end
+
+    it 'respects max_size concurrency limit' do
+      slow_stage = double('stage', name: :test)
+      input_queue = double('input_queue')
+      output_queue = double('output_queue')
+      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.new(:test))
+
+      execution_count = 0
+      mutex = Mutex.new
+
+      allow(slow_stage).to receive(:execute) do
+        mutex.synchronize { execution_count += 1 }
+        sleep 0.05
+      end
+
+      threads = Array.new(5) do
+        Thread.new do
+          executor.execute_stage(slow_stage, user_context, input_queue, output_queue, stage_stats)
+        end
+      end
+
+      threads.each(&:join)
+      expect(execution_count).to eq(5)
+    end
+  end
+
+  describe '#shutdown' do
+    it 'terminates active processes' do
+      expect { executor.shutdown }.not_to raise_error
+    end
+  end
+end
+
+RSpec.describe Minigun::Execution::IpcForkPoolExecutor, skip: Gem.win_platform? do
+  let(:executor) { described_class.new(max_size: 2) }
+
+  describe '#initialize' do
+    it 'sets max_size' do
+      expect(executor.max_size).to eq(2)
+    end
+  end
+
+  describe '#execute_stage' do
+    let(:dag) { double('dag', terminal?: false) }
+    let(:pipeline) do
+      double('pipeline',
+             name: 'test_pipeline',
+             dag: dag,
+             send: nil)
+    end
+    let(:stage) do
+      double('stage',
+             name: :test,
+             execute_with_emit: nil,
+             execute: nil,
+             respond_to?: false)
+    end
+    let(:stage_stats) { double('stage_stats', start!: nil, start_time: nil, increment_consumed: nil, increment_produced: nil, record_latency: nil) }
+    let(:stats) { double('stats', for_stage: stage_stats) }
+    let(:user_context) { double('user_context') }
+
+    it 'executes in forked process with IPC' do
+      calling_pid = Process.pid
+      execution_pid = nil
+      input_queue = double('input_queue')
+      output_queue = double('output_queue')
+      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.new(:test))
+
+      allow(stage).to receive(:execute) do
+        execution_pid = Process.pid
+      end
+
+      executor.execute_stage(stage, user_context, input_queue, output_queue, stage_stats)
+      expect(execution_pid).not_to eq(calling_pid)
+    end
+
+    it 'communicates success via IPC pipe' do
+      input_queue = double('input_queue')
+      output_queue = double('output_queue')
+      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.new(:test))
+      allow(stage).to receive(:execute)
+
+      # Should complete without error
+      executor.execute_stage(stage, user_context, input_queue, output_queue, stage_stats)
+    end
+
+    it 'propagates errors from child process via IPC' do
+      input_queue = double('input_queue')
+      output_queue = double('output_queue')
+      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.new(:test))
+      allow(stage).to receive(:execute).and_raise(StandardError, 'boom')
+
+      # IPC fork should propagate errors through the pipe
+      expect do
+        executor.execute_stage(stage, user_context, input_queue, output_queue, stage_stats)
+      end.to raise_error(/IPC forked process error.*boom/)
+    end
+
+    it 'respects max_size concurrency limit' do
+      slow_stage = double('stage', name: :test)
+      input_queue = double('input_queue')
+      output_queue = double('output_queue')
+      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.new(:test))
+
+      execution_count = 0
+      mutex = Mutex.new
+
+      allow(slow_stage).to receive(:execute) do
+        mutex.synchronize { execution_count += 1 }
+        sleep 0.05
+      end
+
+      threads = Array.new(5) do
+        Thread.new do
+          executor.execute_stage(slow_stage, user_context, input_queue, output_queue, stage_stats)
+        end
+      end
+
+      threads.each(&:join)
+      expect(execution_count).to eq(5)
     end
   end
 
