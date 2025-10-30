@@ -2,7 +2,7 @@
 
 module Minigun
   # Unified worker for all stage types (producers and consumers)
-  # Manages thread lifecycle and delegates to stage.run_worker_loop()
+  # Manages thread lifecycle and delegates to stage.run_stage()
   class Worker
     attr_reader :thread, :stage_name, :stage
 
@@ -37,9 +37,14 @@ module Minigun
       # Check for disconnected stages (no upstream, not a producer, not a PipelineStage)
       return if handle_disconnected_stage(stage_ctx)
 
-      @stage.run_worker_loop(stage_ctx)
+      stage_stats = stage_ctx.stage_stats
+      stage_stats.start!
+      log_info('Starting')
 
-      log_info 'Done'
+      @stage.run_stage(stage_ctx)
+
+      stage_ctx.stage_stats.finish!
+      log_info('Done')
     rescue StandardError => e
       log_error "Unhandled error: #{e.message}"
       log_error e.backtrace.join("\n")
@@ -55,10 +60,10 @@ module Minigun
       if stage_ctx.sources_expected.empty?
         log_info 'No upstream sources, sending END signals and exiting'
 
-        # Send END to all downstream stages so they don't deadlock
+        # Send EndOfSource to all downstream stages so they don't deadlock
         downstream = stage_ctx.dag.downstream(stage_ctx.stage_name)
         downstream.each do |target|
-          stage_ctx.stage_input_queues[target] << Message.end_signal(source: stage_ctx.stage_name)
+          stage_ctx.stage_input_queues[target] << EndOfSource.new(stage_ctx.stage_name)
         end
 
         log_info 'Done'

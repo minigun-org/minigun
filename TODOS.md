@@ -1,7 +1,7 @@
 
 ADD to README / DOCS:
 - stages route to each other sequentially, unless you add :to or :from keywords
-- execute in paralle, and do NOT route to each other, unless unless you add :to or :from keywords.
+- execute in parallel, and do NOT route to each other, unless you add :to or :from keywords.
 
 - every consumer has an input queue
 - if there is fan-out (multiple consumers for any 1 producer), add producer output queues and an intermediate router (load balancer) object. the router has an input queue and round-robin allocates to the consumers.
@@ -15,13 +15,70 @@ add to architecture
 
 ========================================================================================
 
+TODO: Refactor so more things are moved from Stage to Worker, e.g.
+- queue creation
+- start/end stats tracking (need tests for all stage types) -- make some stages silent?
+- error catching
+- sending of end signals?
+- rename #run_worker_loop as its not a loop. Maybe #run_in_worker? other ideas? --> DONE: renamed to #run_stage
+
+=======================================
+
 @stage_name == :_entrance and :_exit (YUCK)
 
+================================
+
+This needs to be in all stage:
+
+stage_stats = stage_ctx.stage_stats
+stage_stats.start!
+log_info(stage_ctx, 'Starting')
+
 ====================
+
+batch / debatch / rebatch operators
+
+=======================
 
 cleanup signal
 + break if item.is_a?(AllUpstreamsDone)
 + break if item.is_a?(Message) && item.end_of_stream?
+
+====================
+
+make pipeline and dag accessible
+
+=============
+
+names:
+- nordstream
+- permian
+- ???
+
+======================
+
+fiber
+fibers(10) do <-- all childs within fiber scope. should threads be joined within fiber scope?
+
+thread
+threads(10) do
+
+cow_fork
+cow_forks(10) do # creates a pipeline
+end
+
+ipc_fork
+ipc_forks(10) do # creates a pipeline
+
+ractors
+
+===============================
+
+dynamic scaling
+
+==============================
+
+parallel and sequential/sequence/series keywords --> influences DAG building
 
 ==============================
 

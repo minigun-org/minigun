@@ -16,7 +16,7 @@ class TimedBatchStage < Minigun::Stage
     :streaming # Processes items from input queue
   end
 
-  def run_worker_loop(stage_ctx)
+  def run_stage(stage_ctx)
     require_relative '../lib/minigun/queue_wrappers'
 
     # Get stage stats for tracking
@@ -39,15 +39,14 @@ class TimedBatchStage < Minigun::Stage
 
       # Try to get item with timeout (use underlying queue directly)
       begin
-        msg = stage_ctx.input_queue.pop(timeout: 0.1)
+        item = stage_ctx.input_queue.pop(timeout: 0.1)
 
         # nil means timeout - continue to check timeout condition
-        next if msg.nil?
+        next if item.nil?
 
-        # Handle END signal
-        if msg.is_a?(Minigun::Message) && msg.end_of_stream?
-          stage_ctx.sources_expected << msg.source # Discover dynamic sources
-          sources_done << msg.source
+        if item.is_a?(Minigun::EndOfSource)
+          stage_ctx.sources_expected << item.source # Discover dynamic sources
+          sources_done << item.source
 
           # All sources done?
           if sources_done == stage_ctx.sources_expected
@@ -59,7 +58,7 @@ class TimedBatchStage < Minigun::Stage
         end
 
         # Add item to batch
-        batch << msg
+        batch << item
 
         # Flush if batch is full
         if batch.size >= @batch_size

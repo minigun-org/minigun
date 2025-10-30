@@ -201,39 +201,39 @@ RSpec.describe Minigun::InputQueue do
       expect(input_queue.pop).to eq(84)
     end
 
-    it 'tracks END signals from sources and returns AllUpstreamsDone' do
-      # Add END signals from all sources
-      raw_queue << Minigun::Message.end_signal(source: :source_a)
-      raw_queue << Minigun::Message.end_signal(source: :source_b)
+    it 'tracks EndOfSource signals from sources and returns EndOfStage' do
+      # Add EndOfSource signals from all sources
+      raw_queue << Minigun::EndOfSource.new(:source_a)
+      raw_queue << Minigun::EndOfSource.new(:source_b)
 
-      # First pop processes all END signals and returns AllUpstreamsDone
+      # First pop processes all EndOfSource signals and returns EndOfStage
       result = input_queue.pop
 
-      expect(result).to be_a(Minigun::AllUpstreamsDone)
+      expect(result).to be_a(Minigun::EndOfStage)
       expect(result.stage_name).to eq(stage_name)
     end
 
-    it 'returns AllUpstreamsDone when all sources are done' do
+    it 'returns EndOfStage when all sources are done' do
       sources_expected.each do |source|
-        raw_queue << Minigun::Message.end_signal(source: source)
+        raw_queue << Minigun::EndOfSource.new(source)
       end
 
-      # Pop automatically consumes all END signals and returns AllUpstreamsDone
-      expect(input_queue.pop).to be_a(Minigun::AllUpstreamsDone)
+      # Pop automatically consumes all EndOfSource signals and returns EndOfStage
+      expect(input_queue.pop).to be_a(Minigun::EndOfStage)
     end
 
-    it 'handles mixed items and END signals' do
+    it 'handles mixed items and EndOfSource signals' do
       raw_queue << 1
-      raw_queue << Minigun::Message.end_signal(source: :source_a)
+      raw_queue << Minigun::EndOfSource.new(:source_a)
       raw_queue << 2
-      raw_queue << Minigun::Message.end_signal(source: :source_b)
+      raw_queue << Minigun::EndOfSource.new(:source_b)
 
-      # Pop returns regular items, automatically consuming END signals
+      # Pop returns regular items, automatically consuming EndOfSource signals
       expect(input_queue.pop).to eq(1)
-      expect(input_queue.pop).to eq(2) # END signal from source_a is auto-consumed
+      expect(input_queue.pop).to eq(2) # EndOfSource signal from source_a is auto-consumed
 
-      # After both items, both END signals are consumed, returns AllUpstreamsDone
-      expect(input_queue.pop).to be_a(Minigun::AllUpstreamsDone)
+      # After both items, both EndOfSource signals are consumed, returns EndOfStage
+      expect(input_queue.pop).to be_a(Minigun::EndOfStage)
     end
   end
 end

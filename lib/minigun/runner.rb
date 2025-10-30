@@ -67,7 +67,7 @@ module Minigun
       signals = RUBY_PLATFORM.match?(/win32|mingw/) ? %i[INT TERM] : %i[INT TERM QUIT]
 
       signals.each do |signal|
-        @original_handlers[signal] = Signal.trap(signal) do
+        @original_handlers[signal] = ::Signal.trap(signal) do
           shutdown_gracefully(signal)
         end
       end

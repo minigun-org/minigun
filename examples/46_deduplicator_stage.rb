@@ -15,7 +15,7 @@ class DeduplicatorStage < Minigun::Stage
     :streaming
   end
 
-  def run_worker_loop(stage_ctx)
+  def run_stage(stage_ctx)
     require_relative '../lib/minigun/queue_wrappers'
 
     # Get stage stats for tracking
@@ -30,7 +30,7 @@ class DeduplicatorStage < Minigun::Stage
       item = wrapped_input.pop
 
       # Handle end of stream
-      break if item.is_a?(Minigun::AllUpstreamsDone)
+      break if item.is_a?(Minigun::EndOfStage)
 
       # Check for duplicates
       key = extract_key(item)

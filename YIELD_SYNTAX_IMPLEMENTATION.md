@@ -19,7 +19,7 @@ This document describes the implementation of native Ruby `yield` syntax support
 - Added `call_stage_with_arity` private method to each class
 - Method inspects the arity of custom `#call` methods and passes appropriate arguments
 - Made `output` parameter optional based on method arity
-- Fixed visibility issues ensuring `run_mode` and `run_worker_loop` remain public
+- Fixed visibility issues ensuring `run_mode` and `run_stage` remain public
 
 ### 2. Usage
 
@@ -138,7 +138,7 @@ This Proc is passed as a block argument to the `#call` method, enabling the use 
 
 ### Visibility Fix
 
-The `private` declarations were moved to ensure that public methods like `run_mode` and `run_worker_loop` remain accessible to the `Worker` and `Pipeline` classes.
+The `private` declarations were moved to ensure that public methods like `run_mode` and `run_stage` remain accessible to the `Worker` and `Pipeline` classes.
 
 ## Future Improvements
 

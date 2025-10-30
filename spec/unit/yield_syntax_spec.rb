@@ -171,7 +171,7 @@ RSpec.describe 'Yield Syntax Support' do
         def call(input_queue, _output_queue)
           loop do
             item = input_queue.pop
-            break if item.is_a?(Minigun::AllUpstreamsDone)
+            break if item.is_a?(Minigun::EndOfStage)
 
             yield(item * 3)
           end

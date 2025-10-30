@@ -41,7 +41,7 @@ RSpec.describe Minigun::PipelineStage do
     end
   end
 
-  describe '#run_worker_loop' do
+  describe '#run_stage' do
     it 'returns early if no pipeline is set' do
       stage = described_class.new(name: :my_pipeline)
       stage_ctx = instance_double(Minigun::StageContext,
@@ -54,7 +54,7 @@ RSpec.describe Minigun::PipelineStage do
                                   stage_name: :my_pipeline)
 
       # Should not raise, just return
-      expect { stage.run_worker_loop(stage_ctx) }.not_to raise_error
+      expect { stage.run_stage(stage_ctx) }.not_to raise_error
     end
 
     it 'runs the nested pipeline when pipeline is set' do
@@ -80,7 +80,7 @@ RSpec.describe Minigun::PipelineStage do
       # Expect pipeline.run to be called
       expect(pipeline).to receive(:run).with(context)
 
-      stage.run_worker_loop(stage_ctx)
+      stage.run_stage(stage_ctx)
     end
 
     it 'sets input_queues when stage has upstream sources' do
@@ -112,7 +112,7 @@ RSpec.describe Minigun::PipelineStage do
       )
       expect(pipeline).to receive(:instance_variable_set).with(:@output_queues, anything)
 
-      stage.run_worker_loop(stage_ctx)
+      stage.run_stage(stage_ctx)
     end
 
     it 'always sets output_queues' do
@@ -139,7 +139,7 @@ RSpec.describe Minigun::PipelineStage do
       # Expect output_queues to be set on the nested pipeline
       expect(pipeline).to receive(:instance_variable_set).with(:@output_queues, { output: output_queue })
 
-      stage.run_worker_loop(stage_ctx)
+      stage.run_stage(stage_ctx)
     end
 
     it 'sends end signals to downstream stages after pipeline completes' do
@@ -165,7 +165,7 @@ RSpec.describe Minigun::PipelineStage do
       # Expect send_end_signals to be called after pipeline runs
       expect(stage).to receive(:send_end_signals).with(stage_ctx)
 
-      stage.run_worker_loop(stage_ctx)
+      stage.run_stage(stage_ctx)
     end
 
     it 'sends end signals even if pipeline raises an error' do
@@ -191,7 +191,7 @@ RSpec.describe Minigun::PipelineStage do
       # Expect send_end_signals to be called even on error
       expect(stage).to receive(:send_end_signals).with(stage_ctx)
 
-      expect { stage.run_worker_loop(stage_ctx) }.to raise_error(StandardError, 'test error')
+      expect { stage.run_stage(stage_ctx) }.to raise_error(StandardError, 'test error')
     end
   end
 end

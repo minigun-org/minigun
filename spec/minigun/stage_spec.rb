@@ -71,7 +71,7 @@ RSpec.describe Minigun::ConsumerStage do
       mock_output.define_singleton_method(:<<) { |item| emitted << item }
 
       mock_input = double('input_queue')
-      allow(mock_input).to receive(:pop).and_return(5, Minigun::AllUpstreamsDone.instance(:test))
+      allow(mock_input).to receive(:pop).and_return(5, Minigun::EndOfStage.new(:test))
 
       stage.execute(context, mock_input, mock_output, nil)
 
@@ -135,7 +135,7 @@ RSpec.describe 'Stage common behavior' do
       input_queue = double('input_queue')
       output_queue = double('output_queue')
       # Input queue returns one item then signals end
-      allow(input_queue).to receive(:pop).and_return(5, Minigun::AllUpstreamsDone.instance(:test))
+      allow(input_queue).to receive(:pop).and_return(5, Minigun::EndOfStage.new(:test))
 
       stage.execute(context, input_queue, output_queue, nil)
 
@@ -160,7 +160,7 @@ RSpec.describe 'Stage common behavior' do
       input_queue = double('input_queue')
       output_queue = double('output_queue')
       # Input queue returns one item then signals end
-      allow(input_queue).to receive(:pop).and_return(23, Minigun::AllUpstreamsDone.instance(:test))
+      allow(input_queue).to receive(:pop).and_return(23, Minigun::EndOfStage.new(:test))
 
       stage.execute(context, input_queue, output_queue, nil)
       # NOTE: execute doesn't return values for consumers in new DSL
