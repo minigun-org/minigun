@@ -123,6 +123,10 @@ parallel and sequential/sequence/series keywords --> influences DAG building
 
 ==============================
 
+Pipeline names should be consolidated with stage names
+
+==============================
+
 better unique ID generation
 _jf02ASj3 ??
 

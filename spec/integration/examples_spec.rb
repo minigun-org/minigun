@@ -550,12 +550,19 @@ RSpec.describe 'Examples Integration' do
       bottleneck = stats.bottleneck
       expect(bottleneck).to be_a(Minigun::Stats)
       # Both process and collect can be bottlenecks depending on timing
-      expect(%i[process collect]).to include(bottleneck.stage_name)
+      # Convert stage_id to name for comparison
+      stage = demo._minigun_task.find_stage(bottleneck.stage_id)
+      expect(%i[process collect]).to include(stage&.name)
 
       # Verify stage stats
       stages = stats.stages_in_order
       expect(stages.size).to eq(3)
-      expect(stages.map(&:stage_name)).to eq(%i[generate process collect])
+      # Convert stage_ids to names for comparison
+      stage_names = stages.map do |s|
+        stage = demo._minigun_task.find_stage(s.stage_id)
+        stage&.name
+      end
+      expect(stage_names).to eq(%i[generate process collect])
     end
   end
 
