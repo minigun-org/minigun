@@ -84,7 +84,7 @@ RSpec.describe Minigun::ConsumerStage do
       described_class.new(
         name: :test,
         block: proc { |_x, _output| },
-        options: { _execution_context: { type: :processes, mode: :per_batch, max: 2 } }
+        options: { _execution_context: { type: :cow_forks, mode: :per_batch, max: 2 } }
       )
     end
 
@@ -93,7 +93,7 @@ RSpec.describe Minigun::ConsumerStage do
     end
 
     it 'has execution context' do
-      expect(stage.execution_context).to eq({ type: :processes, mode: :per_batch, max: 2 })
+      expect(stage.execution_context).to eq({ type: :cow_forks, mode: :per_batch, max: 2 })
     end
   end
 end

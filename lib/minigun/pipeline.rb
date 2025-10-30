@@ -160,6 +160,15 @@ module Minigun
       hooks.each { |h| @context.instance_exec(&h) }
     end
 
+    # Execute both pipeline-level and stage-specific hooks
+    # Pipeline-level hooks are executed first, then stage-specific hooks
+    def execute_fork_hooks(type, stage_name)
+      # Execute pipeline-level hooks first
+      (@hooks[type] || []).each { |h| @context.instance_exec(&h) }
+      # Then execute stage-specific hooks
+      execute_stage_hooks(type, stage_name)
+    end
+
     # Run this pipeline
     def run(context, job_id: nil)
       @context = context
@@ -170,7 +179,7 @@ module Minigun
       @stats = AggregatedStats.new(@name, @dag)
       @stats.start!
 
-      log_info "#{log_prefix} Starting"
+      log_debug "#{log_prefix} Starting"
 
       # Build and validate DAG routing
       build_dag_routing!
@@ -184,7 +193,7 @@ module Minigun
       @job_end = Time.now
       @stats.finish!
 
-      log_info "#{log_prefix} Finished in #{(@job_end - @job_start).round(2)}s"
+      log_debug "#{log_prefix} Finished in #{(@job_end - @job_start).round(2)}s"
 
       # Run after_run hooks
       @hooks[:after_run].each { |h| context.instance_eval(&h) }
@@ -274,7 +283,7 @@ module Minigun
           add_router_edges: downstream.map { |target| [router_name, target] }
         }
 
-        log_info "[Pipeline:#{@name}] Inserting RouterStage '#{router_name}' (#{routing_strategy}) for fan-out: #{stage_name} -> #{downstream.join(', ')}"
+        log_debug "[Pipeline:#{@name}] Inserting RouterStage '#{router_name}' (#{routing_strategy}) for fan-out: #{stage_name} -> #{downstream.join(', ')}"
       end
 
       # Apply DAG updates
@@ -341,7 +350,7 @@ module Minigun
       @dag.validate!
       validate_stages_exist!
 
-      log_info "#{log_prefix} DAG: #{@dag.topological_sort.join(' -> ')}"
+      log_debug "#{log_prefix} DAG: #{@dag.topological_sort.join(' -> ')}"
     end
 
     def validate_stages_exist!
@@ -444,7 +453,7 @@ module Minigun
         @dag.add_edge(:_entrance, stage_name)
       end
 
-      log_info "[Pipeline:#{@name}] Added :_entrance distributor for entry stages: #{entry_stages.join(', ')}"
+      log_debug "[Pipeline:#{@name}] Added :_entrance distributor for entry stages: #{entry_stages.join(', ')}"
     end
 
     # Insert an :_exit collector stage that terminal stages drain into
@@ -474,7 +483,7 @@ module Minigun
 
       # Note: input queue for :_exit will be created automatically by build_stage_input_queues
 
-      log_info "[Pipeline:#{@name}] Added :_exit collector for terminal stages: #{terminal_stages.join(', ')}"
+      log_debug "[Pipeline:#{@name}] Added :_exit collector for terminal stages: #{terminal_stages.join(', ')}"
     end
 
     def log_prefix
@@ -485,8 +494,8 @@ module Minigun
       end
     end
 
-    def log_info(msg)
-      Minigun.logger.info(msg)
+    def log_debug(msg)
+      Minigun.logger.debug(msg)
     end
 
     def log_error(msg)

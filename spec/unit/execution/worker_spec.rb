@@ -65,7 +65,7 @@ RSpec.describe Minigun::Worker do
         # Simulate basic loop: wait for END signal
         loop do
           msg = worker_ctx.input_queue.pop
-          break if msg.is_a?(Minigun::Message) && msg.end_of_stream?
+          break if msg.is_a?(Minigun::EndOfSource)
         end
       end
 
@@ -126,7 +126,7 @@ RSpec.describe Minigun::Worker do
 
     context 'with thread execution context' do
       before do
-        allow(stage).to receive(:execution_context).and_return({ type: :threads, pool_size: 5 })
+        allow(stage).to receive(:execution_context).and_return({ type: :thread, pool_size: 5 })
       end
 
       it 'creates a thread pool executor' do
@@ -138,7 +138,7 @@ RSpec.describe Minigun::Worker do
 
     context 'with process execution context' do
       before do
-        allow(stage).to receive(:execution_context).and_return({ type: :fork, max: 2 })
+        allow(stage).to receive(:execution_context).and_return({ type: :cow_fork, max: 2 })
       end
 
       it 'creates a process pool executor' do
@@ -158,10 +158,12 @@ RSpec.describe Minigun::Worker do
 
       worker = described_class.new(pipeline, stage, config)
 
-      expect(Minigun.logger).to receive(:info).with(/No upstream sources, sending END signals and exiting/)
+      allow(Minigun.logger).to receive(:debug).and_call_original
 
       worker.start
       worker.join
+
+      expect(Minigun.logger).to have_received(:debug).with(/No upstream sources, sending END signals and exiting/)
     end
 
     it 'sends END signals to downstream if disconnected' do
@@ -225,14 +227,14 @@ RSpec.describe Minigun::Worker do
       executor = instance_double(Minigun::Execution::InlineExecutor)
       allow(executor).to receive(:shutdown)
 
-      # Mock executor creation to return our test double
-      allow_any_instance_of(described_class).to receive(:create_executor_if_needed).and_return(executor)
+      # Mock executor creation to return our test double (now takes stage_ctx arg)
+      allow_any_instance_of(described_class).to receive(:create_executor_if_needed).with(any_args).and_return(executor)
 
       worker = described_class.new(pipeline, stage, config)
 
-      # Cause an error in the worker loop
-      allow(pipeline).to receive(:stage_input_queues)
-        .and_raise(StandardError, 'Test error')
+      # Cause an error AFTER stage_ctx is created (so executor gets created)
+      # Error during stage.run_stage (after executor is created)
+      allow(stage).to receive(:run_stage).and_raise(StandardError, 'Test error')
 
       expect(executor).to receive(:shutdown)
 
@@ -254,11 +256,13 @@ RSpec.describe Minigun::Worker do
 
       input_queue << Minigun::EndOfSource.new(:upstream)
 
-      expect(Minigun.logger).to receive(:info).with(/Starting/)
+      allow(Minigun.logger).to receive(:debug).and_call_original
 
       worker = described_class.new(pipeline, stage, config)
       worker.start
       worker.join
+
+      expect(Minigun.logger).to have_received(:debug).with(/Starting/)
     end
 
     it 'logs when done' do
@@ -279,11 +283,13 @@ RSpec.describe Minigun::Worker do
 
       input_queue << Minigun::EndOfSource.new(:upstream)
 
-      expect(Minigun.logger).to receive(:info).with(/Done/)
+      allow(Minigun.logger).to receive(:debug).and_call_original
 
       worker = described_class.new(pipeline, stage, config)
       worker.start
       worker.join
+
+      expect(Minigun.logger).to have_received(:debug).with(/Done/)
     end
   end
 end

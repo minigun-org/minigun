@@ -22,6 +22,11 @@ module Minigun
         _minigun_task.set_config(:max_retries, value)
       end
 
+      # Set default execution context for all stages
+      def execution(type, max: nil)
+        _minigun_task.set_config(:_default_execution_context, { type: type, pool_size: max })
+      end
+
       # Pipeline block - stores block for lazy instance-level evaluation
       # All pipeline definitions (both unnamed and named) are stored and evaluated at instance time
       # This allows blocks to access instance variables correctly
@@ -163,7 +168,7 @@ module Minigun
       end
 
       def processes(pool_size, &)
-        context = { type: :processes, pool_size: pool_size, mode: :pool }
+        context = { type: :cow_forks, pool_size: pool_size, mode: :pool }
         _with_execution_context(context, &)
       end
 
@@ -178,7 +183,7 @@ module Minigun
       end
 
       def process_per_batch(max:, &)
-        context = { type: :processes, max: max, mode: :per_batch }
+        context = { type: :cow_forks, max: max, mode: :per_batch }
         _with_execution_context(context, &)
       end
 
@@ -329,8 +334,26 @@ module Minigun
         elsif _current_execution_context
           # Use current context from stack
           options[:_execution_context] = _current_execution_context
+        elsif @pipeline && @pipeline.config[:_default_execution_context]
+          # Use default execution context from config
+          default_ctx = @pipeline.config[:_default_execution_context]
+          options[:_execution_context] = {
+            type: default_ctx[:type],
+            pool_size: default_ctx[:pool_size],
+            mode: :pool
+          }
         end
+
+        # Normalize the type if an execution context was set
+        if options[:_execution_context] && options[:_execution_context][:type]
+          options[:_execution_context][:type] = normalize_execution_type(options[:_execution_context][:type])
+        end
+
         options
+      end
+
+      def normalize_execution_type(type)
+        type.to_s.delete_suffix('s').delete_suffix('_pool').to_sym
       end
     end
 

@@ -74,7 +74,7 @@ module Minigun
     end
 
     def shutdown_gracefully(signal)
-      log_info "[Job:#{@job_id}] Received #{signal} signal, shutting down gracefully..."
+      log_debug "[Job:#{@job_id}] Received #{signal} signal, shutting down gracefully..."
 
       # TODO: Send signal to all child processes tracked by pipelines
       # This will require tracking PIDs at the Runner level
@@ -100,8 +100,8 @@ module Minigun
     end
 
     def log_job_started
-      log_info "[Job:#{@job_id}] #{@context.class.name} started"
-      log_info "[Job:#{@job_id}] Configuration: #{format_config}"
+      log_debug "[Job:#{@job_id}] #{@context.class.name} started"
+      log_debug "[Job:#{@job_id}] Configuration: #{format_config}"
     end
 
     def log_job_finished
@@ -109,18 +109,18 @@ module Minigun
 
       runtime = @job_end - @job_start
 
-      log_info "[Job:#{@job_id}] #{@context.class.name} finished"
-      log_info "[Job:#{@job_id}] Runtime: #{runtime.round(2)}s"
+      log_debug "[Job:#{@job_id}] #{@context.class.name} finished"
+      log_debug "[Job:#{@job_id}] Runtime: #{runtime.round(2)}s"
 
       # Log statistics from each pipeline
       @pipeline_stats.each do |stats|
-        log_info "[Job:#{@job_id}] Pipeline '#{stats.pipeline_name}': " \
-                 "#{stats.total_produced} produced, #{stats.total_consumed} consumed, " \
-                 "#{stats.throughput.round(2)} items/s"
+        log_debug "[Job:#{@job_id}] Pipeline '#{stats.pipeline_name}': " \
+                  "#{stats.total_produced} produced, #{stats.total_consumed} consumed, " \
+                  "#{stats.throughput.round(2)} items/s"
 
         # Log bottleneck if found
         if (bn = stats.bottleneck)
-          log_info "[Job:#{@job_id}] Bottleneck: #{bn.stage_name} (#{bn.throughput.round(2)} items/s)"
+          log_debug "[Job:#{@job_id}] Bottleneck: #{bn.stage_name} (#{bn.throughput.round(2)} items/s)"
         end
       end
 
@@ -128,7 +128,7 @@ module Minigun
       total_items = @pipeline_stats.sum(&:total_produced)
       overall_rate = total_items / [runtime / 60.0, 0.01].max # items/min
 
-      log_info "[Job:#{@job_id}] Total: #{total_items} items, #{overall_rate.round(2)} items/min"
+      log_debug "[Job:#{@job_id}] Total: #{total_items} items, #{overall_rate.round(2)} items/min"
     end
 
     def format_config
@@ -139,8 +139,8 @@ module Minigun
       parts.join(', ')
     end
 
-    def log_info(msg)
-      Minigun.logger.info(msg)
+    def log_debug(msg)
+      Minigun.logger.debug(msg)
     end
 
     def log_error(msg)

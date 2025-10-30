@@ -11,12 +11,17 @@ module Minigun
     :stage_input_queues,
     :stage_stats,
     # Worker-specific (nil/empty for producers)
+    :worker,
     :input_queue,
     :sources_expected,
     :sources_done,
-    :executor,
     keyword_init: true
-  )
+  ) do
+    # Convenience method to access executor through worker
+    def executor
+      worker&.executor
+    end
+  end
 
   # Base class for all execution units (stages and pipelines)
   # Implements the Composite pattern where Pipeline is a composite Stage
@@ -217,9 +222,6 @@ module Minigun
     end
 
     def run_stage(stage_ctx)
-      # Store stage_stats for access during execute
-      stage_stats = stage_ctx.stage_stats
-
       # Execute before hooks
       stage_ctx.pipeline.send(:execute_stage_hooks, :before, stage_ctx.stage_name)
 
@@ -229,7 +231,7 @@ module Minigun
 
       # Execute via executor (defines HOW: inline/threaded/process)
       context = stage_ctx.pipeline.context
-      stage_ctx.executor.execute_stage(self, context, input_queue, output_queue, stage_stats)
+      stage_ctx.executor.execute_stage(self, context, input_queue, output_queue)
 
       # Execute after hooks
       stage_ctx.pipeline.send(:execute_stage_hooks, :after, stage_ctx.stage_name)

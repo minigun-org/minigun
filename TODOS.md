@@ -72,6 +72,39 @@ ipc_forks(10) do # creates a pipeline
 
 ractors
 
+
+      # Execution block methods
+      def threads(pool_size, &)
+        context = { type: :threads, pool_size: pool_size, mode: :pool }
+        _with_execution_context(context, &)
+      end
+
+      def processes(pool_size, &)
+        context = { type: :cow_forks, pool_size: pool_size, mode: :pool }
+        _with_execution_context(context, &)
+      end
+
+      def ractors(pool_size, &)
+        context = { type: :ractors, pool_size: pool_size, mode: :pool }
+        _with_execution_context(context, &)
+      end
+
+      def thread_per_batch(max:, &)
+        context = { type: :threads, max: max, mode: :per_batch }
+        _with_execution_context(context, &)
+      end
+
+      def process_per_batch(max:, &)
+        context = { type: :cow_forks, max: max, mode: :per_batch }
+        _with_execution_context(context, &)
+      end
+
+      def ractor_per_batch(max:, &)
+        context = { type: :ractors, max: max, mode: :per_batch }
+        _with_execution_context(context, &)
+      end
+
+
 ===============================
 
 dynamic scaling
@@ -111,6 +144,19 @@ I see the issue now - when you're inside a pipeline block, the stages within it 
 
 ====================================
 
+- hooks (fork, stage, nesting)
+- output.to of IpcQueues
+- Fork/Thread etc should create an implicit pipeline
+- cow_fork getting IPC input via to from IPC
+- cow_fork getting IPC input via to from COW
+- cow_fork getting IPC input via to from threads
+- cow_fork getting IPC input via to from master(?)
+- cow_fork doing IPC output
+- ipc 2 cow, cow to ipc, ipc to master
+- ipc/cow fan-out/fan-in
+
+==================================
+
 This method looks suss:
 
     def execute(context, item: nil, _input_queue: nil, output_queue: nil)
@@ -133,17 +179,10 @@ This method looks suss:
 
 - mermaid diagrams
 
-===========================
-
-- IPC Fork
 
 ==========================
 
 - fibers
-
-=======================
-
-ProcessPoolExecutor --> cow_fork
 
 ================================
 

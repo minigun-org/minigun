@@ -3,6 +3,19 @@
 require 'spec_helper'
 
 RSpec.describe 'Examples Integration' do
+  # Automatically capture stdout for all examples
+  around do |example|
+    original_stdout = $stdout
+    @captured_output = StringIO.new
+    $stdout = @captured_output
+    example.run
+  ensure
+    $stdout = original_stdout
+  end
+
+  # Make captured output available to tests
+  let(:captured_output) { @captured_output.string }
+
   describe '000_new_dsl.rb' do
     it 'demonstrates new DSL with multi-pipeline' do
       load File.expand_path('../../examples/000_new_dsl.rb', __dir__)
@@ -546,57 +559,322 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
-  describe '27_execution_contexts.rb' do
-    it 'demonstrates execution context types' do
-      # Run the example
-      output = `ruby #{File.expand_path('../../examples/27_execution_contexts.rb', __dir__)} 2>&1`
+  describe '27_inline_execution.rb' do
+    it 'demonstrates inline synchronous execution' do
+      load File.expand_path('../../examples/27_inline_execution.rb', __dir__)
 
-      expect($CHILD_STATUS.exitstatus).to eq(0)
-      expect(output).to include('Execution Context Examples')
-      expect(output).to include('InlineContext')
-      expect(output).to include('ThreadContext')
-      expect(output).to include('RactorContext')
-      expect(output).to include('Parallel Execution')
-      expect(output).to include('Error Handling and Propagation')
-      expect(output).to include('Context Termination')
-      expect(output).to include('✓ Unified API for all concurrency models')
+      example = InlineExample.new
+      example.run
+
+      expect(example.results.size).to eq(5)
+      expect(example.results.sort).to eq([0, 2, 4, 6, 8])
+    end
+  end
+
+  describe '27_thread_execution.rb' do
+    it 'demonstrates thread-based concurrent execution' do
+      load File.expand_path('../../examples/27_thread_execution.rb', __dir__)
+
+      example = ThreadExample.new
+      example.run
+
+      expect(example.results.size).to eq(10)
+      expect(example.results.sort).to eq([0, 2, 4, 6, 8, 10, 12, 14, 16, 18])
+    end
+  end
+
+  describe '27_ractor_execution.rb' do
+    it 'demonstrates Ractor-based parallel execution' do
+      load File.expand_path('../../examples/27_ractor_execution.rb', __dir__)
+
+      example = RactorExample.new
+      example.run
+
+      expect(example.results.size).to eq(5)
+      expect(example.results.sort).to eq([0, 1, 4, 9, 16])
+    end
+  end
+
+  describe '27_process_execution.rb', skip: !Process.respond_to?(:fork) do
+    it 'demonstrates process-based execution with isolation' do
+      load File.expand_path('../../examples/27_process_execution.rb', __dir__)
+
+      example = ProcessExample.new
+      example.run
+
+      expect(example.results.size).to eq(3)
+      pids = example.results.map { |r| r[:pid] }.uniq
+      expect(pids.size).to be >= 1
+      example.results.each do |result|
+        expect(result).to have_key(:item)
+        expect(result).to have_key(:pid)
+        expect(result).to have_key(:result)
+        expect(result[:result]).to eq(result[:item] * 100)
+      end
+    end
+  end
+
+  describe '27_parallel_execution.rb' do
+    it 'demonstrates parallel processing with multiple workers' do
+      load File.expand_path('../../examples/27_parallel_execution.rb', __dir__)
+
+      start = Time.now
+      example = ParallelExample.new
+      example.run
+      elapsed = Time.now - start
+
+      expect(example.results.size).to eq(10)
+      expect(example.results.sort).to eq([0, 3, 6, 9, 12, 15, 18, 21, 24, 27])
+      expect(elapsed).to be < 1.0 # Should complete quickly with parallelism
+    end
+  end
+
+  describe '27_error_handling.rb' do
+    it 'demonstrates error handling in execution contexts' do
+      load File.expand_path('../../examples/27_error_handling.rb', __dir__)
+
+      example = ErrorExample.new
+      # Error on item 2 should not prevent other items from processing
+      expect { example.run }.not_to raise_error
+
+      # Should process items 0, 1, 3, 4 (skipping 2 which raises error)
+      expect(example.results.size).to eq(4)
+      expect(example.results.sort).to eq([0, 2, 6, 8])
+      expect(example.results).not_to include(4) # Item 2 (doubled) would be 4
+    end
+  end
+
+  describe '27_termination.rb' do
+    it 'demonstrates proper termination and cleanup' do
+      load File.expand_path('../../examples/27_termination.rb', __dir__)
+
+      example = TerminationExample.new
+      example.run
+
+      expect(example.count).to eq(10)
+    end
+  end
+
+  describe '28_basic_pool.rb' do
+    it 'demonstrates basic thread pool usage' do
+      load File.expand_path('../../examples/28_basic_pool.rb', __dir__)
+
+      example = BasicPoolExample.new
+      example.run
+
+      expect(example.results.size).to eq(10)
+      expect(example.results.sort).to eq([0, 2, 4, 6, 8, 10, 12, 14, 16, 18])
+    end
+  end
+
+  describe '28_capacity_pool.rb' do
+    it 'demonstrates thread pool capacity management' do
+      load File.expand_path('../../examples/28_capacity_pool.rb', __dir__)
+
+      start = Time.now
+      example = CapacityExample.new
+      example.run
+      elapsed = Time.now - start
+
+      expect(example.results.size).to eq(20)
+      expect(example.results.sort).to eq((0..19).to_a)
+      expect(elapsed).to be > 0.1 # Limited concurrency should take some time
+    end
+  end
+
+  describe '28_parallel_pool.rb' do
+    it 'demonstrates parallel processing with thread pool' do
+      load File.expand_path('../../examples/28_parallel_pool.rb', __dir__)
+
+      example = ParallelPoolExample.new
+      example.run
+
+      expect(example.results.size).to eq(50)
+      expect(example.results.sort).to eq((0..49).map { |i| i * 2 })
+    end
+  end
+
+  describe '28_reuse_pool.rb' do
+    it 'demonstrates thread context reuse in pools' do
+      load File.expand_path('../../examples/28_reuse_pool.rb', __dir__)
+
+      example = ReuseExample.new
+      example.run
+
+      unique_threads = example.thread_ids.uniq.size
+      expect(unique_threads).to be <= 3 # Should reuse threads, not create 20
+      expect(unique_threads).to be >= 1
+    end
+  end
+
+  describe '28_bulk_pool.rb' do
+    it 'demonstrates bulk operations with thread pools' do
+      load File.expand_path('../../examples/28_bulk_pool.rb', __dir__)
+
+      start = Time.now
+      example = BulkExample.new
+      example.run
+      elapsed = Time.now - start
+
+      expect(example.results.size).to eq(100)
+      expect(example.results.sort).to eq((0..99).map { |i| i**2 })
+      expect(elapsed).to be < 1.0 # Should be fast with 20 workers
+    end
+  end
+
+  describe '28_termination_pool.rb' do
+    it 'demonstrates proper pool termination and cleanup' do
+      load File.expand_path('../../examples/28_termination_pool.rb', __dir__)
+
+      example = TerminationPoolExample.new
+      example.run
+
+      expect(example.completed).to eq(5)
+    end
+  end
+
+  describe '28_batch_processor.rb' do
+    it 'demonstrates batch processing with thread pools' do
+      load File.expand_path('../../examples/28_batch_processor.rb', __dir__)
+
+      processor = BatchProcessorExample.new(workers: 5)
+      processor.run
+
+      expect(processor.processed_count).to eq(10)
+      expect(processor.results.size).to eq(10)
+      expect(processor.results.map { |r| r[:result] }).to include('APPLE', 'BANANA', 'CHERRY')
+      processor.results.each do |result|
+        expect(result).to have_key(:item)
+        expect(result).to have_key(:result)
+        expect(result).to have_key(:timestamp)
+        expect(result[:result]).to eq(result[:item].upcase)
+      end
+    end
+  end
+
+  describe '31_configurable_downloader.rb' do
+    it 'demonstrates runtime-configurable thread pools' do
+      load File.expand_path('../../examples/31_configurable_downloader.rb', __dir__)
+
+      small_pipeline = ConfigurableDownloader.new(threads: 5, batch_size: 10)
+      large_pipeline = ConfigurableDownloader.new(threads: 20, batch_size: 50)
+
+      expect(small_pipeline.threads).to eq(5)
+      expect(small_pipeline.batch_size).to eq(10)
+      expect(large_pipeline.threads).to eq(20)
+      expect(large_pipeline.batch_size).to eq(50)
+
+      small_pipeline.run
+      large_pipeline.run
+
+      expect(small_pipeline.results.size).to eq(50)
+      expect(large_pipeline.results.size).to eq(50)
+    end
+  end
+
+  describe '31_data_processor.rb' do
+    it 'demonstrates configurable process-per-batch' do
+      load File.expand_path('../../examples/31_data_processor.rb', __dir__)
+
+      processor = DataProcessor.new(threads: 10, processes: 2, batch_size: 100)
+      expect(processor.threads).to eq(10)
+      expect(processor.processes).to eq(2)
+      expect(processor.batch_size).to eq(100)
+
+      processor.run
+
+      expect(processor.processed_count).to be > 0
+    end
+  end
+
+  describe '31_smart_pipeline.rb' do
+    it 'demonstrates environment-based pipeline configuration' do
+      load File.expand_path('../../examples/31_smart_pipeline.rb', __dir__)
+
+      # Test default (development)
+      smart = SmartPipeline.new
+      expect(smart.env).to eq('development')
+      expect(smart.threads).to eq(10)
+      expect(smart.processes).to eq(2)
+      expect(smart.batch_size).to eq(100)
+
+      # Test production configuration
+      ENV['RACK_ENV'] = 'production'
+      prod_pipeline = SmartPipeline.new
+      expect(prod_pipeline.threads).to eq(100)
+      expect(prod_pipeline.processes).to eq(8)
+      expect(prod_pipeline.batch_size).to eq(5000)
+      ENV.delete('RACK_ENV')
+    end
+  end
+
+  describe '31_adaptive_pipeline.rb' do
+    it 'demonstrates dynamic configuration based on runtime conditions' do
+      load File.expand_path('../../examples/31_adaptive_pipeline.rb', __dir__)
+
+      low_pipeline = AdaptivePipeline.new(concurrency: :low)
+      expect(low_pipeline.thread_count).to eq(10)
+      expect(low_pipeline.process_count).to eq(2)
+      expect(low_pipeline.batch_size).to eq(100)
+
+      medium_pipeline = AdaptivePipeline.new(concurrency: :medium)
+      expect(medium_pipeline.thread_count).to eq(50)
+      expect(medium_pipeline.process_count).to eq(4)
+      expect(medium_pipeline.batch_size).to eq(1000)
+
+      high_pipeline = AdaptivePipeline.new(concurrency: :high)
+      expect(high_pipeline.thread_count).to eq(200)
+      expect(high_pipeline.process_count).to eq(16)
+      expect(high_pipeline.batch_size).to eq(10_000)
+    end
+  end
+
+  describe '31_configurable_pipeline.rb' do
+    it 'demonstrates configuration object pattern' do
+      load File.expand_path('../../examples/31_configurable_pipeline.rb', __dir__)
+
+      config = PipelineConfig.new
+      config.thread_pool_size = 10
+      config.process_pool_size = 2
+      config.batch_size = 50
+
+      pipeline = ConfigurablePipeline.new(config: config)
+      expect(config.thread_pool_size).to eq(10)
+      expect(config.process_pool_size).to eq(2)
+      expect(config.batch_size).to eq(50)
+
+      pipeline.run
+      expect(pipeline.results.size).to eq(10)
+    end
+  end
+
+  describe '27_execution_contexts.rb' do
+    it 'demonstrates execution context types as standalone script', timeout: 30 do
+      # This is a consolidated demo file - just verify it runs
+      cmd = "bundle exec ruby #{File.expand_path('../../examples/27_execution_contexts.rb', __dir__)}"
+      output = `#{cmd} 2>&1`
+
+      expect($CHILD_STATUS.exitstatus).to eq(0), "Example failed with output:\n#{output}"
     end
   end
 
   describe '28_context_pool.rb' do
-    it 'demonstrates context pool resource management' do
-      # Run the example
-      output = `ruby #{File.expand_path('../../examples/28_context_pool.rb', __dir__)} 2>&1`
+    it 'demonstrates context pool resource management as standalone script', timeout: 30 do
+      # This is a consolidated demo file - just verify it runs
+      cmd = "bundle exec ruby #{File.expand_path('../../examples/28_context_pool.rb', __dir__)}"
+      output = `#{cmd} 2>&1`
 
-      expect($CHILD_STATUS.exitstatus).to eq(0)
-      expect(output).to include('Context Pool Examples')
-      expect(output).to include('Basic Context Pool')
-      expect(output).to include('Pool Capacity Management')
-      expect(output).to include('Pooled Parallel Execution')
-      expect(output).to include('Context Reuse')
-      expect(output).to include('Bulk Operations')
-      expect(output).to include('Emergency Termination')
-      expect(output).to include('Real-World: Batch Processing')
-      expect(output).to include('✓ Prevents resource exhaustion')
+      expect($CHILD_STATUS.exitstatus).to eq(0), "Example failed with output:\n#{output}"
     end
   end
 
   describe '31_configurable_execution.rb' do
-    it 'demonstrates configurable execution contexts' do
-      # Run the example
-      output = `ruby #{File.expand_path('../../examples/31_configurable_execution.rb', __dir__)} 2>&1`
+    it 'demonstrates configurable execution contexts as standalone script', timeout: 30 do
+      # This is a consolidated demo file - just verify it runs
+      cmd = "bundle exec ruby #{File.expand_path('../../examples/31_configurable_execution.rb', __dir__)}"
+      output = `#{cmd} 2>&1`
 
-      expect($CHILD_STATUS.exitstatus).to eq(0)
-      expect(output).to include('Configurable Execution Contexts')
-      expect(output).to include('Basic Configurable Thread Pool')
-      expect(output).to include('Configurable Process-Per-Batch')
-      expect(output).to include('Environment-Based Configuration')
-      expect(output).to include('Dynamic Configuration Methods')
-      expect(output).to include('Configuration Object Pattern')
-      expect(output).to include('Runtime Configuration')
-      expect(output).to include('threads(N) { ... }')
-      expect(output).to include('process_per_batch(max: N)')
-      expect(output).to include('✓ Clean, declarative DSL')
+      expect($CHILD_STATUS.exitstatus).to eq(0), "Example failed with output:\n#{output}"
     end
   end
 
@@ -753,27 +1031,18 @@ RSpec.describe 'Examples Integration' do
     it 'demonstrates custom TimedBatchStage with size and timeout limits' do
       load File.expand_path('../../examples/45_timed_batch_stage.rb', __dir__)
 
-      # Capture output to verify batches are processed
-      output = StringIO.new
-      original_stdout = $stdout
-      $stdout = output
+      example = TimedBatchExample.new
+      example.run
 
-      begin
-        example = TimedBatchExample.new
-        example.run
+      output_lines = captured_output.lines
+      batch_lines = output_lines.grep(/Processing batch/)
 
-        output_lines = output.string.lines
-        batch_lines = output_lines.grep(/Processing batch/)
+      # Should have multiple batches due to size (5) and timeout (0.3s)
+      expect(batch_lines.size).to be >= 2
 
-        # Should have multiple batches due to size (5) and timeout (0.3s)
-        expect(batch_lines.size).to be >= 2
-
-        # Should process all 20 items total
-        total_items = batch_lines.sum { |line| line[/batch of (\d+)/, 1].to_i }
-        expect(total_items).to eq(20)
-      ensure
-        $stdout = original_stdout
-      end
+      # Should process all 20 items total
+      total_items = batch_lines.sum { |line| line[/batch of (\d+)/, 1].to_i }
+      expect(total_items).to eq(20)
     end
   end
 
@@ -781,76 +1050,52 @@ RSpec.describe 'Examples Integration' do
     it 'demonstrates simple value deduplication' do
       load File.expand_path('../../examples/46_deduplicator_stage.rb', __dir__)
 
-      output = StringIO.new
-      original_stdout = $stdout
-      $stdout = output
+      example = SimpleDeduplicatorExample.new
+      example.run
 
-      begin
-        example = SimpleDeduplicatorExample.new
-        example.run
+      output_lines = captured_output.lines
+      unique_lines = output_lines.grep(/Unique item:/)
 
-        output_lines = output.string.lines
-        unique_lines = output_lines.grep(/Unique item:/)
+      # Input: [1, 2, 3, 2, 4, 1, 5, 3, 6, 4]
+      # Should deduplicate to: [1, 2, 3, 4, 5, 6]
+      expect(unique_lines.size).to eq(6)
 
-        # Input: [1, 2, 3, 2, 4, 1, 5, 3, 6, 4]
-        # Should deduplicate to: [1, 2, 3, 4, 5, 6]
-        expect(unique_lines.size).to eq(6)
-
-        items = unique_lines.map { |line| line[/Unique item: (\d+)/, 1].to_i }
-        expect(items.sort).to eq([1, 2, 3, 4, 5, 6])
-      ensure
-        $stdout = original_stdout
-      end
+      items = unique_lines.map { |line| line[/Unique item: (\d+)/, 1].to_i }
+      expect(items.sort).to eq([1, 2, 3, 4, 5, 6])
     end
 
     it 'demonstrates hash deduplication with key extraction' do
       load File.expand_path('../../examples/46_deduplicator_stage.rb', __dir__)
 
-      output = StringIO.new
-      original_stdout = $stdout
-      $stdout = output
+      example = HashDeduplicatorExample.new
+      example.run
 
-      begin
-        example = HashDeduplicatorExample.new
-        example.run
+      output_lines = captured_output.lines
+      unique_lines = output_lines.grep(/Unique user:/)
 
-        output_lines = output.string.lines
-        unique_lines = output_lines.grep(/Unique user:/)
+      # Should deduplicate 6 users down to 4 unique IDs
+      expect(unique_lines.size).to eq(4)
 
-        # Should deduplicate 6 users down to 4 unique IDs
-        expect(unique_lines.size).to eq(4)
-
-        # Should keep first occurrence of each ID
-        expect(output_lines.join).to include('Alice')
-        expect(output_lines.join).to include('Bob')
-        expect(output_lines.join).to include('Charlie')
-        expect(output_lines.join).to include('David')
-        expect(output_lines.join).not_to include('duplicate')
-      ensure
-        $stdout = original_stdout
-      end
+      # Should keep first occurrence of each ID
+      expect(captured_output).to include('Alice')
+      expect(captured_output).to include('Bob')
+      expect(captured_output).to include('Charlie')
+      expect(captured_output).to include('David')
+      expect(captured_output).not_to include('duplicate')
     end
 
     it 'demonstrates thread-safe deduplication' do
       load File.expand_path('../../examples/46_deduplicator_stage.rb', __dir__)
 
-      output = StringIO.new
-      original_stdout = $stdout
-      $stdout = output
+      example = ThreadedDeduplicatorExample.new
+      example.run
 
-      begin
-        example = ThreadedDeduplicatorExample.new
-        example.run
+      output_lines = captured_output.lines
+      final_lines = output_lines.grep(/Final item:/)
 
-        output_lines = output.string.lines
-        final_lines = output_lines.grep(/Final item:/)
-
-        # Input: 100 items with only 20 unique values (i % 20)
-        # Should deduplicate to 20 unique items
-        expect(final_lines.size).to eq(20)
-      ensure
-        $stdout = original_stdout
-      end
+      # Input: 100 items with only 20 unique values (i % 20)
+      # Should deduplicate to 20 unique items
+      expect(final_lines.size).to eq(20)
     end
   end
 
@@ -1124,6 +1369,36 @@ RSpec.describe 'Examples Integration' do
       z_from_b = example.results_z.select { |r| r[:source] == :b }.map { |r| r[:value] }.sort
       expect(z_from_a).to eq([4, 16, 36])  # 2^2, 4^2, 6^2
       expect(z_from_b).to eq([1, 9, 25])   # 1^2, 3^2, 5^2
+    end
+  end
+
+  describe '66_cow_and_ipc_fork_executors.rb', skip: Gem.win_platform? do
+    it 'demonstrates COW and IPC fork executors' do
+      load File.expand_path('../../examples/66_cow_and_ipc_fork_executors.rb', __dir__)
+
+      # Test COW Fork Example
+      cow_example = CowForkExample.new
+      cow_example.run
+
+      expect(cow_example.results.size).to eq(5)
+      cow_example.results.each do |result|
+        expect(result).to have_key(:item)
+        expect(result).to have_key(:shared_sum)
+        expect(result).to have_key(:pid)
+        expect(result[:shared_sum]).to eq(9900) # sum of first 100 elements of [0, 2, 4, ..., 1998]
+      end
+
+      # Test IPC Fork Example
+      ipc_example = IpcForkExample.new
+      ipc_example.run
+
+      expect(ipc_example.results.size).to eq(5)
+      ipc_example.results.each_with_index do |result, idx|
+        expect(result[:id]).to eq(idx)
+        expect(result[:value]).to eq(idx * 10)
+        expect(result[:computed]).to eq((idx * 10) ** 2)
+        expect(result).to have_key(:pid)
+      end
     end
   end
 

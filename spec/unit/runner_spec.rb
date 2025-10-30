@@ -74,27 +74,35 @@ RSpec.describe Minigun::Runner do
     end
 
     it 'logs job started' do
-      expect(Minigun.logger).to receive(:info).with(/TestContext started/)
+      allow(Minigun.logger).to receive(:debug).and_call_original
 
       runner.run
+
+      expect(Minigun.logger).to have_received(:debug).with(/TestContext started/)
     end
 
     it 'logs job finished' do
-      expect(Minigun.logger).to receive(:info).with(/TestContext finished/)
+      allow(Minigun.logger).to receive(:debug).and_call_original
 
       runner.run
+
+      expect(Minigun.logger).to have_received(:debug).with(/TestContext finished/)
     end
 
     it 'logs configuration' do
-      expect(Minigun.logger).to receive(:info).with(/max_processes=2, max_threads=5/)
+      allow(Minigun.logger).to receive(:debug).and_call_original
 
       runner.run
+
+      expect(Minigun.logger).to have_received(:debug).with(/max_processes=2, max_threads=5/)
     end
 
     it 'logs runtime' do
-      expect(Minigun.logger).to receive(:info).with(/Runtime: \d+\.\d+s/)
+      allow(Minigun.logger).to receive(:debug).and_call_original
 
       runner.run
+
+      expect(Minigun.logger).to have_received(:debug).with(/Runtime: \d+\.\d+s/)
     end
 
     it 'passes job_id to pipeline.run' do
@@ -128,21 +136,27 @@ RSpec.describe Minigun::Runner do
       end
 
       it 'logs pipeline statistics' do
-        expect(Minigun.logger).to receive(:info).with(/100 produced, 95 consumed/)
+        allow(Minigun.logger).to receive(:debug).and_call_original
 
         runner.run
+
+        expect(Minigun.logger).to have_received(:debug).with(/100 produced, 95 consumed/)
       end
 
       it 'logs bottleneck information' do
-        expect(Minigun.logger).to receive(:info).with(/Bottleneck: slow_stage/)
+        allow(Minigun.logger).to receive(:debug).and_call_original
 
         runner.run
+
+        expect(Minigun.logger).to have_received(:debug).with(/Bottleneck: slow_stage/)
       end
 
       it 'logs overall throughput' do
-        expect(Minigun.logger).to receive(:info).with(/Total: 100 items/)
+        allow(Minigun.logger).to receive(:debug).and_call_original
 
         runner.run
+
+        expect(Minigun.logger).to have_received(:debug).with(/Total: 100 items/)
       end
     end
 

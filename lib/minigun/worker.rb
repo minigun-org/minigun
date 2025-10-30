@@ -4,7 +4,7 @@ module Minigun
   # Unified worker for all stage types (producers and consumers)
   # Manages thread lifecycle and delegates to stage.run_stage()
   class Worker
-    attr_reader :thread, :stage_name, :stage
+    attr_reader :thread, :stage_name, :stage, :executor
 
     def initialize(pipeline, stage, config = {})
       @pipeline = pipeline
@@ -12,9 +12,7 @@ module Minigun
       @stage_name = stage.name
       @config = config
       @thread = nil
-
-      # Create executor only for non-producers
-      @executor = create_executor_if_needed
+      @executor = nil # Created later in create_stage_context
     end
 
     # Start the worker thread
@@ -30,21 +28,24 @@ module Minigun
     private
 
     def run
-      log_info 'Starting'
+      log_debug 'Starting'
 
       stage_ctx = create_stage_context
+
+      # Create executor with stage_ctx (only for non-autonomous stages)
+      @executor = create_executor_if_needed(stage_ctx)
 
       # Check for disconnected stages (no upstream, not a producer, not a PipelineStage)
       return if handle_disconnected_stage(stage_ctx)
 
       stage_stats = stage_ctx.stage_stats
       stage_stats.start!
-      log_info('Starting')
+      log_debug('Starting')
 
       @stage.run_stage(stage_ctx)
 
       stage_ctx.stage_stats.finish!
-      log_info('Done')
+      log_debug('Done')
     rescue StandardError => e
       log_error "Unhandled error: #{e.message}"
       log_error e.backtrace.join("\n")
@@ -58,7 +59,7 @@ module Minigun
 
       # If no upstream sources, this stage is disconnected
       if stage_ctx.sources_expected.empty?
-        log_info 'No upstream sources, sending END signals and exiting'
+        log_debug 'No upstream sources, sending END signals and exiting'
 
         # Send EndOfSource to all downstream stages so they don't deadlock
         downstream = stage_ctx.dag.downstream(stage_ctx.stage_name)
@@ -66,7 +67,7 @@ module Minigun
           stage_ctx.stage_input_queues[target] << EndOfSource.new(stage_ctx.stage_name)
         end
 
-        log_info 'Done'
+        log_debug 'Done'
         return true
       end
 
@@ -92,6 +93,7 @@ module Minigun
       stage_stats = @pipeline.stats.for_stage(@stage_name, is_terminal: is_terminal)
 
       StageContext.new(
+        worker: self,
         pipeline: @pipeline,
         stage_name: @stage_name,
         dag: dag,
@@ -101,43 +103,34 @@ module Minigun
         # Worker-specific (nil/empty for producers)
         input_queue: stage_input_queues[@stage_name],
         sources_expected: sources_expected,
-        sources_done: Set.new,
-        executor: @executor
+        sources_done: Set.new
       )
     end
 
-    def create_executor_if_needed
+    def create_executor_if_needed(stage_ctx)
       return nil if @stage.run_mode == :autonomous
 
       exec_ctx = @stage.execution_context
-      return Execution::InlineExecutor.new if exec_ctx.nil?
+      return Execution::InlineExecutor.new(stage_ctx) if exec_ctx.nil?
 
-      type = normalize_type(exec_ctx[:type])
-      pool_size = exec_ctx[:pool_size] || exec_ctx[:max] || default_pool_size(exec_ctx[:type])
+      type = exec_ctx[:type]
+      pool_size = exec_ctx[:pool_size] || exec_ctx[:max] || default_pool_size(type)
 
-      Execution.create_executor(type: type, max_size: pool_size)
+      Execution.create_executor(type, stage_ctx, max_size: pool_size)
     end
 
-    def normalize_type(type)
-      case type
-      when :threads then :thread
-      when :processes then :fork
-      when :ractors then :ractor
-      else type
-      end
-    end
-
+    # TODO: Move this elsewhere? DSL class?
     def default_pool_size(type)
       case type
-      when :threads then @config[:max_threads] || 5
-      when :processes then @config[:max_processes] || 2
-      when :ractors then @config[:max_ractors] || 4
+      when :thread then @config[:max_threads] || 5
+      when :cow_fork then @config[:max_processes] || 2
+      when :ractor then @config[:max_ractors] || 4
       else 5
       end
     end
 
-    def log_info(msg)
-      Minigun.logger.info "[Pipeline:#{@pipeline.name}][#{@stage.log_type}:#{@stage_name}] #{msg}"
+    def log_debug(msg)
+      Minigun.logger.debug "[Pipeline:#{@pipeline.name}][#{@stage.log_type}:#{@stage_name}] #{msg}"
     end
 
     def log_error(msg)
