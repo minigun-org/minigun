@@ -112,26 +112,18 @@ module Minigun
       exec_ctx = @stage.execution_context
       return Execution::InlineExecutor.new if exec_ctx.nil?
 
-      type = normalize_type(exec_ctx[:type])
-      pool_size = exec_ctx[:pool_size] || exec_ctx[:max] || default_pool_size(exec_ctx[:type])
+      type = exec_ctx[:type]
+      pool_size = exec_ctx[:pool_size] || exec_ctx[:max] || default_pool_size(type)
 
       Execution.create_executor(type: type, max_size: pool_size)
     end
 
-    def normalize_type(type)
-      case type
-      when :threads then :thread
-      when :processes then :fork
-      when :ractors then :ractor
-      else type
-      end
-    end
-
+    # TODO: Move this elsewhere? DSL class?
     def default_pool_size(type)
       case type
-      when :threads then @config[:max_threads] || 5
-      when :processes then @config[:max_processes] || 2
-      when :ractors then @config[:max_ractors] || 4
+      when :thread then @config[:max_threads] || 5
+      when :cow_fork then @config[:max_processes] || 2
+      when :ractor then @config[:max_ractors] || 4
       else 5
       end
     end

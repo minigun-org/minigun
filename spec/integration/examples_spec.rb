@@ -1127,6 +1127,36 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
+  describe '66_cow_and_ipc_fork_executors.rb', skip: Gem.win_platform? do
+    it 'demonstrates COW and IPC fork executors' do
+      load File.expand_path('../../examples/66_cow_and_ipc_fork_executors.rb', __dir__)
+
+      # Test COW Fork Example
+      cow_example = CowForkExample.new
+      cow_example.run
+
+      expect(cow_example.results.size).to eq(5)
+      cow_example.results.each do |result|
+        expect(result).to have_key(:item)
+        expect(result).to have_key(:shared_sum)
+        expect(result).to have_key(:pid)
+        expect(result[:shared_sum]).to eq(9900) # sum of first 100 elements of [0, 2, 4, ..., 1998]
+      end
+
+      # Test IPC Fork Example
+      ipc_example = IpcForkExample.new
+      ipc_example.run
+
+      expect(ipc_example.results.size).to eq(5)
+      ipc_example.results.each_with_index do |result, idx|
+        expect(result[:id]).to eq(idx)
+        expect(result[:value]).to eq(idx * 10)
+        expect(result[:computed]).to eq((idx * 10) ** 2)
+        expect(result).to have_key(:pid)
+      end
+    end
+  end
+
   # Coverage check: ensure all example files have tests
   describe 'Example Coverage' do
     it 'has tests for all example files' do

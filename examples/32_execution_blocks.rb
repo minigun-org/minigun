@@ -179,7 +179,7 @@ class NamedContextExample
   pipeline do
     # Define named contexts
     execution_context :io_pool, :threads, 50
-    execution_context :cpu_pool, :processes, 4
+    execution_context :cpu_pool, :cow_forks, 4
 
     producer :gen do |output|
       20.times { |i| output << i }

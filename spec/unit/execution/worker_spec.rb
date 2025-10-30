@@ -126,7 +126,7 @@ RSpec.describe Minigun::Worker do
 
     context 'with thread execution context' do
       before do
-        allow(stage).to receive(:execution_context).and_return({ type: :threads, pool_size: 5 })
+        allow(stage).to receive(:execution_context).and_return({ type: :thread, pool_size: 5 })
       end
 
       it 'creates a thread pool executor' do
@@ -138,7 +138,7 @@ RSpec.describe Minigun::Worker do
 
     context 'with process execution context' do
       before do
-        allow(stage).to receive(:execution_context).and_return({ type: :fork, max: 2 })
+        allow(stage).to receive(:execution_context).and_return({ type: :cow_fork, max: 2 })
       end
 
       it 'creates a process pool executor' do

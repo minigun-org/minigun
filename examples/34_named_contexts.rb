@@ -25,7 +25,7 @@ class DataPipeline
   pipeline do
     # Define named execution contexts upfront
     execution_context :io_workers, :threads, 50
-    execution_context :cpu_workers, :processes, 4
+    execution_context :cpu_workers, :cow_forks, 4
     execution_context :fast_lane, :threads, 100
 
     producer :generate do |output|
@@ -83,7 +83,7 @@ class MixedPipeline
 
   pipeline do
     # Named context for specific stages
-    execution_context :heavy_compute, :processes, 8
+    execution_context :heavy_compute, :cow_forks, 8
 
     producer :gen do |output|
       50.times { |i| output << i }

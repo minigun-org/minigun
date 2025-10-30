@@ -163,7 +163,7 @@ module Minigun
       end
 
       def processes(pool_size, &)
-        context = { type: :processes, pool_size: pool_size, mode: :pool }
+        context = { type: :cow_forks, pool_size: pool_size, mode: :pool }
         _with_execution_context(context, &)
       end
 
@@ -178,7 +178,7 @@ module Minigun
       end
 
       def process_per_batch(max:, &)
-        context = { type: :processes, max: max, mode: :per_batch }
+        context = { type: :cow_forks, max: max, mode: :per_batch }
         _with_execution_context(context, &)
       end
 
@@ -330,7 +330,17 @@ module Minigun
           # Use current context from stack
           options[:_execution_context] = _current_execution_context
         end
+
+        # Normalize the type if an execution context was set
+        if options[:_execution_context] && options[:_execution_context][:type]
+          options[:_execution_context][:type] = normalize_execution_type(options[:_execution_context][:type])
+        end
+
         options
+      end
+
+      def normalize_execution_type(type)
+        type.to_s.delete_suffix('s').delete_suffix('_pool').to_sym
       end
     end
 
