@@ -30,7 +30,7 @@ class DeduplicatorStage < Minigun::Stage
       item = wrapped_input.pop
 
       # Handle end of stream
-      break if item.is_a?(Minigun::AllUpstreamsDone)
+      break if item.is_a?(Minigun::EndOfStage)
 
       # Check for duplicates
       key = extract_key(item)

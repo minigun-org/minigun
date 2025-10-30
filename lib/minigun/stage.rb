@@ -134,7 +134,7 @@ module Minigun
       all_targets.each do |target|
         next unless stage_ctx.stage_input_queues[target]
 
-        stage_ctx.stage_input_queues[target] << Message.end_signal(source: stage_ctx.stage_name)
+        stage_ctx.stage_input_queues[target] << EndOfSource.from(source: stage_ctx.stage_name)
       end
     end
 
@@ -194,9 +194,7 @@ module Minigun
       loop do
         item = input_queue.pop
 
-        # Handle END signal or AllUpstreamsDone
-        break if item.is_a?(AllUpstreamsDone)
-        break if item.is_a?(Message) && item.end_of_stream?
+        break if item.is_a?(EndOfStage)
 
         # Execute the block or call method with the item, tracking per-item latency
         begin
@@ -270,9 +268,7 @@ module Minigun
       loop do
         item = input_queue.pop
 
-        # Handle END signal or AllUpstreamsDone
-        break if item.is_a?(AllUpstreamsDone)
-        break if item.is_a?(Message) && item.end_of_stream?
+        break if item.is_a?(EndOfStage)
 
         buffer = nil
 
@@ -344,9 +340,9 @@ module Minigun
     protected
 
     def send_end_signals(worker_ctx)
-      # Broadcast END to ALL router targets
+      # Broadcast EndOfSource to ALL router targets
       @targets.each do |target|
-        worker_ctx.stage_input_queues[target] << Message.end_signal(source: worker_ctx.stage_name)
+        worker_ctx.stage_input_queues[target] << EndOfSource.from(source: worker_ctx.stage_name)
       end
     end
   end
@@ -357,8 +353,7 @@ module Minigun
       loop do
         item = worker_ctx.input_queue.pop
 
-        # Handle END signal
-        if item.is_a?(Message) && item.end_of_stream?
+        if item.is_a?(EndOfSource)
           worker_ctx.sources_expected << item.source # Discover dynamic source
           worker_ctx.sources_done << item.source
           break if worker_ctx.sources_done == worker_ctx.sources_expected
@@ -385,8 +380,7 @@ module Minigun
       loop do
         item = worker_ctx.input_queue.pop
 
-        # Handle END signal
-        if item.is_a?(Message) && item.end_of_stream?
+        if item.is_a?(EndOfSource)
           worker_ctx.sources_expected << item.source # Discover dynamic source
           worker_ctx.sources_done << item.source
           break if worker_ctx.sources_done == worker_ctx.sources_expected

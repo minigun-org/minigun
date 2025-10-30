@@ -77,7 +77,7 @@ RSpec.describe Minigun::Worker do
       expect(worker.thread).to be_a(Thread)
 
       # Put END signal so the worker exits
-      input_queue << Minigun::Message.end_signal(source: :upstream)
+      input_queue << Minigun::EndOfSource.from(source: :upstream)
 
       worker.join
 
@@ -95,7 +95,7 @@ RSpec.describe Minigun::Worker do
       worker = described_class.new(pipeline, stage, config)
 
       # Put END signal
-      input_queue << Minigun::Message.end_signal(source: :upstream)
+      input_queue << Minigun::EndOfSource.from(source: :upstream)
 
       worker.start
       worker.join
@@ -184,7 +184,7 @@ RSpec.describe Minigun::Worker do
       rescue StandardError
         nil
       end
-      expect(msg).to be_a(Minigun::Message) if msg
+      expect(msg).to be_a(Minigun::EndOfSource) if msg
     end
   end
 
@@ -208,7 +208,7 @@ RSpec.describe Minigun::Worker do
       # Put items and END signal
       input_queue << 1
       input_queue << 2
-      input_queue << Minigun::Message.end_signal(source: :source)
+      input_queue << Minigun::EndOfSource.from(source: :source)
 
       worker = described_class.new(pipeline, router_stage, config)
       worker.start
@@ -252,7 +252,7 @@ RSpec.describe Minigun::Worker do
       allow(pipeline).to receive(:stage_input_queues)
         .and_return({ test_stage: input_queue })
 
-      input_queue << Minigun::Message.end_signal(source: :upstream)
+      input_queue << Minigun::EndOfSource.from(source: :upstream)
 
       expect(Minigun.logger).to receive(:info).with(/Starting/)
 
@@ -269,14 +269,15 @@ RSpec.describe Minigun::Worker do
       allow(dag).to receive(:downstream).with(:test_stage).and_return([])
 
       # Stub run_stage to simulate stage execution
+      # Note: accessing raw queue directly here (not wrapped in InputQueue)
       allow(stage).to receive(:run_stage) do |worker_ctx|
         loop do
           msg = worker_ctx.input_queue.pop
-          break if msg.is_a?(Minigun::Message) && msg.end_of_stream?
+          break if msg.is_a?(Minigun::EndOfSource)
         end
       end
 
-      input_queue << Minigun::Message.end_signal(source: :upstream)
+      input_queue << Minigun::EndOfSource.from(source: :upstream)
 
       expect(Minigun.logger).to receive(:info).with(/Done/)
 

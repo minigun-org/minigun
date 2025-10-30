@@ -60,10 +60,10 @@ module Minigun
       if stage_ctx.sources_expected.empty?
         log_info 'No upstream sources, sending END signals and exiting'
 
-        # Send END to all downstream stages so they don't deadlock
+        # Send EndOfSource to all downstream stages so they don't deadlock
         downstream = stage_ctx.dag.downstream(stage_ctx.stage_name)
         downstream.each do |target|
-          stage_ctx.stage_input_queues[target] << Message.end_signal(source: stage_ctx.stage_name)
+          stage_ctx.stage_input_queues[target] << EndOfSource.from(source: stage_ctx.stage_name)
         end
 
         log_info 'Done'
