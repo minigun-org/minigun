@@ -46,6 +46,7 @@ module Minigun
 
       @dag = dag || DAG.new
       @stage_order = stage_order || []
+      @pending_edges = [] # Store forward references (edges with names) until stages exist
 
       # Statistics tracking
       @stats = stats # Will be initialized in run() if nil
@@ -105,20 +106,17 @@ module Minigun
       stage_id = stage.id
 
       # Extract routing information (user supplies names, we resolve to IDs)
-      # Note: If target stages don't exist yet, we store the name and resolve later during build_dag_routing!
+      # DAG should ONLY contain IDs - store forward references separately
       to_targets = options.delete(:to)
       if to_targets
         Array(to_targets).each do |target|
-          # Try to resolve to ID, but if it doesn't exist yet (forward reference), store the name
-          # The DAGProxy will handle resolution when the edge is accessed
           target_id = resolve_stage_identifier(target)
           if target_id
+            # Target exists - add edge with ID immediately
             @dag.add_edge(stage_id, target_id)
           else
-            # Forward reference - add edge with name, DAGProxy will resolve when needed
-            # Store temporarily in a pending edges structure, or let DAGProxy handle it
-            # For now, try adding the edge with the name - DAGProxy should handle resolution
-            @dag.add_edge(stage_id, target)
+            # Forward reference - store for later resolution during build_dag_routing!
+            @pending_edges << [:to, stage_id, target]
           end
         end
       end
@@ -127,13 +125,13 @@ module Minigun
       from_sources = options.delete(:from)
       if from_sources
         Array(from_sources).each do |source|
-          # Try to resolve to ID, but if it doesn't exist yet (forward reference), store the name
           source_id = resolve_stage_identifier(source)
           if source_id
+            # Source exists - add edge with ID immediately
             @dag.add_edge(source_id, stage_id)
           else
-            # Forward reference - add edge with name
-            @dag.add_edge(source, stage_id)
+            # Forward reference - store for later resolution during build_dag_routing!
+            @pending_edges << [:from, source, stage_id]
           end
         end
       end
@@ -343,9 +341,7 @@ module Minigun
       dag_updates = []
 
       @stages.each do |stage_id, stage|
-        downstream = @dag.downstream(stage_id)
-        # DAGProxy returns names, normalize to IDs for router targets
-        downstream_ids = downstream.map { |ds| normalize_to_id(ds) }.compact
+        downstream_ids = @dag.downstream(stage_id) # DAG only contains IDs
 
         # Fan-out: stage has multiple downstream consumers
         next unless downstream_ids.size > 1
@@ -453,6 +449,9 @@ module Minigun
     private
 
     def build_dag_routing!
+      # Normalize all DAG edges: convert names to IDs (handles forward references)
+      normalize_dag_edges!
+
       # Handle multiple producers specially - they should all connect to first non-producer
       handle_multiple_producers_routing!
 
@@ -473,16 +472,31 @@ module Minigun
       log_debug "#{log_prefix} DAG: #{dag_display}"
     end
 
+    # Resolve all pending edges (forward references) now that all stages exist
+    # DAG should ONLY contain IDs - this resolves any names from forward references
+    def normalize_dag_edges!
+      @pending_edges.each do |direction, from_identifier, to_identifier|
+        # Resolve the identifier that was a forward reference
+        from_id = direction == :to ? from_identifier : resolve_stage_identifier(from_identifier)
+        to_id = direction == :to ? resolve_stage_identifier(to_identifier) : to_identifier
+        
+        if from_id && to_id
+          @dag.add_edge(from_id, to_id)
+        else
+          # If we can't resolve, that's an error - stage doesn't exist
+          unresolved = from_id ? to_identifier : from_identifier
+          raise Error, "Cannot resolve forward reference to stage: #{unresolved.inspect}"
+        end
+      end
+      
+      @pending_edges.clear
+    end
+
     def validate_stages_exist!
       @dag.nodes.each do |node_id|
-        # Skip if it's a hash (shouldn't happen, but defensive)
-        next if node_id.is_a?(Hash)
-
         stage = find_stage(node_id)
         unless stage
-          # Try to format error with display name if it's an ID
-          display = node_id
-          raise Minigun::Error, "[Pipeline:#{@name}] Routing references non-existent stage '#{display}'"
+          raise Minigun::Error, "[Pipeline:#{@name}] Routing references non-existent stage ID '#{node_id}'"
         end
       end
     end

@@ -222,7 +222,7 @@ module Minigun
     private
 
     def execute_hooks(ctx, type)
-      ctx.pipeline.execute_stage_hooks(type, ctx.stage_name)
+      ctx.pipeline.execute_stage_hooks(type, ctx.stage_id)
     end
   end
 
