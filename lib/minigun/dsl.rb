@@ -388,10 +388,11 @@ module Minigun
           end
         end
 
-        # Add the pipeline stage to the current pipeline
-        @pipeline.stages[name] = pipeline_stage
-        @pipeline.stage_order << name
-        @pipeline.dag.add_node(name)
+        # Add the pipeline stage to the current pipeline by ID (stage already registered in Task)
+        pipeline_stage_id = pipeline_stage.id
+        @pipeline.stages[pipeline_stage_id] = pipeline_stage
+        @pipeline.stage_order << pipeline_stage_id
+        @pipeline.dag.add_node(pipeline_stage_id)
 
         pipeline_stage
       end

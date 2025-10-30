@@ -132,8 +132,8 @@ RSpec.describe 'Yield Syntax Support' do
       terminal_stage_class = Class.new(Minigun::ConsumerStage) do
         attr_reader :items_received
 
-        def initialize(**args)
-          super
+        def initialize(task, name = nil, block = nil, options = {})
+          super(task, name, block, options)
           @items_received = []
           @mutex = Mutex.new
         end

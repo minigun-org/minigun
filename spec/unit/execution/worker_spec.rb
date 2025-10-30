@@ -19,7 +19,9 @@ RSpec.describe Minigun::Worker do
   let(:stage) do
     double(
       'stage',
+      id: SecureRandom.uuid,
       name: :test_stage,
+      display_name: :test_stage,
       execution_context: nil,
       log_type: 'Worker',
       run_mode: :streaming
@@ -41,7 +43,7 @@ RSpec.describe Minigun::Worker do
     it 'creates a worker' do
       worker = described_class.new(pipeline, stage, config)
 
-      expect(worker.stage_name).to eq(:test_stage)
+      expect(worker.stage_id).to eq(stage.id)
       expect(worker).to be_a(described_class)
     end
 
@@ -191,10 +193,13 @@ RSpec.describe Minigun::Worker do
   end
 
   describe 'router stage' do
+    let(:task) { Minigun::Task.new }
     let(:router_stage) do
       Minigun::RouterBroadcastStage.new(
-        name: :router,
-        targets: %i[target_a target_b]
+        task,
+        :router,
+        nil,
+        { targets: %i[target_a target_b] }
       )
     end
 

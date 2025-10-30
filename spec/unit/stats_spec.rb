@@ -4,9 +4,9 @@ require 'spec_helper'
 
 RSpec.describe Minigun::Stats do
   describe '#initialize' do
-    it 'creates stats with stage name' do
+    it 'creates stats with stage id' do
       stats = described_class.new(:test_stage)
-      expect(stats.stage_name).to eq(:test_stage)
+      expect(stats.stage_id).to eq(:test_stage)
     end
 
     it 'defaults is_terminal to false' do
@@ -17,7 +17,7 @@ RSpec.describe Minigun::Stats do
     it 'accepts is_terminal parameter' do
       stats = described_class.new(:test_stage, is_terminal: true)
       stats.items_consumed # Just verify it was set
-      expect(stats.stage_name).to eq(:test_stage)
+      expect(stats.stage_id).to eq(:test_stage)
     end
   end
 

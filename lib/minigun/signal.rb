@@ -30,14 +30,14 @@ module Minigun
   # Signal indicating all upstream sources for a stage have completed
   # Created by InputQueue wrapper when all expected sources send EndOfSource
   class EndOfStage < QueueSignal
-    attr_reader :stage_name
+    attr_reader :stage_id
 
-    def initialize(stage_name)
-      @stage_name = stage_name
+    def initialize(stage_id)
+      @stage_id = stage_id
     end
 
     def to_s
-      "EndOfStage(#{@stage_name})"
+      "EndOfStage(#{@stage_id})"
     end
   end
 end

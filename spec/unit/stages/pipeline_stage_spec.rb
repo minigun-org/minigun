@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require 'securerandom'
 
 RSpec.describe Minigun::PipelineStage do
   let(:config) { { max_threads: 2, max_processes: 1 } }
@@ -57,7 +58,7 @@ RSpec.describe Minigun::PipelineStage do
                                   dag: instance_double(Minigun::DAG, downstream: []),
                                   stage_input_queues: {},
                                   runtime_edges: {},
-                                  stage_name: :my_pipeline)
+                                  stage_id: SecureRandom.uuid)
 
       # Should not raise, just return
       expect { stage.run_stage(stage_ctx) }.not_to raise_error
@@ -78,7 +79,7 @@ RSpec.describe Minigun::PipelineStage do
                                   dag: instance_double(Minigun::DAG, downstream: []),
                                   stage_input_queues: {},
                                   runtime_edges: {},
-                                  stage_name: :my_pipeline)
+                                  stage_id: SecureRandom.uuid)
 
       # Mock the output queue creation
       allow(stage).to receive(:create_output_queue).and_return(Queue.new)
@@ -107,7 +108,7 @@ RSpec.describe Minigun::PipelineStage do
                                   dag: instance_double(Minigun::DAG, downstream: []),
                                   stage_input_queues: {},
                                   runtime_edges: {},
-                                  stage_name: :my_pipeline)
+                                  stage_id: SecureRandom.uuid)
 
       allow(stage).to receive(:create_output_queue).and_return(Queue.new)
       allow(stage).to receive(:send_end_signals)
@@ -139,7 +140,7 @@ RSpec.describe Minigun::PipelineStage do
                                   dag: instance_double(Minigun::DAG, downstream: []),
                                   stage_input_queues: {},
                                   runtime_edges: {},
-                                  stage_name: :my_pipeline)
+                                  stage_id: SecureRandom.uuid)
 
       allow(stage).to receive(:create_output_queue).and_return(output_queue)
       allow(stage).to receive(:send_end_signals)
@@ -166,7 +167,7 @@ RSpec.describe Minigun::PipelineStage do
                                   dag: instance_double(Minigun::DAG, downstream: []),
                                   stage_input_queues: {},
                                   runtime_edges: {},
-                                  stage_name: :my_pipeline)
+                                  stage_id: SecureRandom.uuid)
 
       allow(stage).to receive(:create_output_queue).and_return(Queue.new)
       allow(pipeline).to receive(:instance_variable_set)
@@ -193,7 +194,7 @@ RSpec.describe Minigun::PipelineStage do
                                   dag: instance_double(Minigun::DAG, downstream: []),
                                   stage_input_queues: {},
                                   runtime_edges: {},
-                                  stage_name: :my_pipeline)
+                                  stage_id: SecureRandom.uuid)
 
       allow(stage).to receive(:create_output_queue).and_return(Queue.new)
       allow(pipeline).to receive(:instance_variable_set)

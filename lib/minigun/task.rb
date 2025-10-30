@@ -17,8 +17,11 @@ module Minigun
         use_ipc: false
       }
 
-      # Flat registry of all stages across all pipelines (including nested)
-      @all_stages = {}
+      # Flat registry of all stages by ID (primary key)
+      @all_stages_by_id = {}
+
+      # Name to ID mapping for user lookups (optional names)
+      @stage_name_to_id = {}
 
       # Root pipeline - all stages and nested pipelines live here
       @root_pipeline = root_pipeline || Pipeline.new(self, :default, @config)
@@ -26,17 +29,37 @@ module Minigun
       @root_pipeline.task = self
     end
 
-    # Register a stage in the flat registry
-    def register_stage(name, stage)
-      if @all_stages.key?(name)
-        raise Minigun::Error, "Stage name collision: '#{name}' is already registered at Task level"
+    # Register a stage in the flat registry by ID (primary registration)
+    def register_stage(id, stage)
+      if @all_stages_by_id.key?(id)
+        raise Minigun::Error, "Stage ID collision: '#{id}' is already registered at Task level"
       end
-      @all_stages[name] = stage
+      @all_stages_by_id[id] = stage
     end
 
-    # Find a stage by name (flat lookup)
-    def find_stage(name)
-      @all_stages[name]
+    # Register a stage name mapping (for user lookups)
+    def register_stage_by_name(name, id)
+      if @stage_name_to_id.key?(name)
+        raise Minigun::Error, "Stage name collision: '#{name}' is already registered at Task level"
+      end
+      @stage_name_to_id[name] = id
+    end
+
+    # Find a stage by ID or name (name resolves to ID first)
+    def find_stage(identifier)
+      # Try as name lookup first
+      if @stage_name_to_id.key?(identifier)
+        id = @stage_name_to_id[identifier]
+        return @all_stages_by_id[id]
+      end
+
+      # Fallback: try direct ID lookup
+      @all_stages_by_id[identifier]
+    end
+
+    # Get all stages (for debugging/inspection)
+    def all_stages
+      @all_stages_by_id
     end
 
     # Set config value (applies to all pipelines)
@@ -54,7 +77,7 @@ module Minigun
 
     # Get all named pipelines (composite stages in root_pipeline)
     def pipelines
-      @root_pipeline.stages.select { |_name, stage| stage.run_mode == :composite }
+      @root_pipeline.stages.select { |_id, stage| stage.run_mode == :composite }
                     .transform_values(&:pipeline)
     end
 
@@ -88,16 +111,20 @@ module Minigun
         dsl.instance_eval(&)
       end
 
-      # Add the pipeline stage to the implicit pipeline
-      @root_pipeline.stages[name] = pipeline_stage
-      @root_pipeline.stage_order << name
-      @root_pipeline.dag.add_node(name)
-      # Register PipelineStage in Task's flat registry
-      register_stage(name, pipeline_stage)
+      # Add the pipeline stage to the implicit pipeline by ID (stage already registered in Task)
+      pipeline_stage_id = pipeline_stage.id
+      @root_pipeline.stages[pipeline_stage_id] = pipeline_stage
+      @root_pipeline.stage_order << pipeline_stage_id
+      @root_pipeline.dag.add_node(pipeline_stage_id)
 
-      # Extract routing if specified
+      # Extract routing if specified (resolve names to IDs)
       to_targets = options[:to]
-      Array(to_targets).each { |target| @root_pipeline.dag.add_edge(name, target) } if to_targets
+      if to_targets
+        Array(to_targets).each do |target|
+          target_id = @root_pipeline.resolve_stage_identifier(target)
+          @root_pipeline.dag.add_edge(pipeline_stage_id, target_id) if target_id
+        end
+      end
 
       pipeline_stage
     end
@@ -105,37 +132,42 @@ module Minigun
     # Define a named pipeline with routing
     # Pipelines are just PipelineStage objects in root_pipeline
     def define_pipeline(name, options = {})
-      # Check if already exists
-      if @root_pipeline.stages.key?(name)
-        pipeline_stage = @root_pipeline.stages[name]
-        raise Minigun::Error, "Stage #{name} already exists as a non-composite stage" unless pipeline_stage.run_mode == :composite
-
+      # Check if already exists by name (resolve to ID)
+      existing_stage = find_stage(name)
+      if existing_stage && existing_stage.run_mode == :composite
+        pipeline_stage = existing_stage
         pipeline = pipeline_stage.pipeline
+        pipeline_stage_id = pipeline_stage.id
       else
-        # Create new PipelineStage and add to root_pipeline (will self-register in Task)
+        if existing_stage && existing_stage.run_mode != :composite
+          raise Minigun::Error, "Stage #{name} already exists as a non-composite stage"
+        end
+
+        # Create new PipelineStage and add to root_pipeline (will self-register in Task by ID)
         pipeline_stage = PipelineStage.new(self, name, nil, options)
         pipeline = Pipeline.new(self, name, @config)
         pipeline_stage.pipeline = pipeline
+        pipeline_stage_id = pipeline_stage.id
 
-        @root_pipeline.stages[name] = pipeline_stage
-        @root_pipeline.stage_order << name
-        @root_pipeline.dag.add_node(name)
-        # Register PipelineStage in Task's flat registry
-        register_stage(name, pipeline_stage)
+        @root_pipeline.stages[pipeline_stage_id] = pipeline_stage
+        @root_pipeline.stage_order << pipeline_stage_id
+        @root_pipeline.dag.add_node(pipeline_stage_id)
       end
 
-      # Handle routing in root_pipeline DAG
+      # Handle routing in root_pipeline DAG (resolve names to IDs)
       to_targets = options[:to]
       if to_targets
         Array(to_targets).each do |target|
-          @root_pipeline.dag.add_edge(name, target)
+          target_id = @root_pipeline.resolve_stage_identifier(target)
+          @root_pipeline.dag.add_edge(pipeline_stage_id, target_id) if target_id
         end
       end
 
       from_sources = options[:from]
       if from_sources
         Array(from_sources).each do |source|
-          @root_pipeline.dag.add_edge(source, name)
+          source_id = @root_pipeline.resolve_stage_identifier(source)
+          @root_pipeline.dag.add_edge(source_id, pipeline_stage_id) if source_id
         end
       end
 
