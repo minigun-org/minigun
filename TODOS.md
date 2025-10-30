@@ -81,7 +81,6 @@ thread_pool
 cow_fork_pool
 
 
-
       # Execution block methods
       def threads(pool_size, &)
         context = { type: :threads, pool_size: pool_size, mode: :pool }
@@ -163,6 +162,16 @@ I see the issue now - when you're inside a pipeline block, the stages within it 
 - cow_fork doing IPC output
 - ipc 2 cow, cow to ipc, ipc to master
 - ipc/cow fan-out/fan-in
+- routing to inner stages of pipelines
+- routing to inner stages of cow and ipc fork via an ingress delegator
+
+===================================
+
+- rename end_of_stage --> end_of_all_upstreams?
+
+==================================
+
+- harden --> add inputoutputstream
 
 ==================================
 
