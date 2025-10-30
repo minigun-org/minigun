@@ -61,6 +61,8 @@ RSpec.describe Minigun::Pipeline do
       pipeline.add_stage(:processor, :transform, to: :save) { |item| item }
       pipeline.add_stage(:consumer, :save) { |item| puts item }
 
+      pipeline.send(:build_dag_routing!) # Resolve forward references
+
       expect(pipeline.ids_to_names(pipeline.downstream(:source))).to include(:transform)
       expect(pipeline.ids_to_names(pipeline.downstream(:transform))).to include(:save)
     end

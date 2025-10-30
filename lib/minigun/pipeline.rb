@@ -479,7 +479,7 @@ module Minigun
         # Resolve the identifier that was a forward reference
         from_id = direction == :to ? from_identifier : resolve_stage_identifier(from_identifier)
         to_id = direction == :to ? resolve_stage_identifier(to_identifier) : to_identifier
-        
+
         if from_id && to_id
           @dag.add_edge(from_id, to_id)
         else
@@ -488,7 +488,7 @@ module Minigun
           raise Error, "Cannot resolve forward reference to stage: #{unresolved.inspect}"
         end
       end
-      
+
       @pending_edges.clear
     end
 

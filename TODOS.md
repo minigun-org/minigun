@@ -125,6 +125,36 @@ parallel and sequential/sequence/series keywords --> influences DAG building
 
 make per item latency tracking optional (and stats?)
 
+============================
+
+allow this, and resolve names locally, and then up the chain. we may need a name resolution tree.
+
+routing to an ambiguous stage should raise an error, unless its an immediate neighbor
+
+do what's sensible here
+
+        pipeline :pipe_a do
+          processor :transform do |item, output|
+            output << (item + 100)
+          end
+
+          consumer :collect do |item, _output|
+            @mutex.synchronize { @results_a << item }
+          end
+        end
+
+        pipeline :pipe_b do
+          processor :transform do |item, output|
+            output << (item + 200)
+          end
+
+          consumer :collect do |item, _output|
+            @mutex.synchronize { @results_b << item }
+          end
+        end
+
+names string/symbol -- always convert to string for referencing
+
 =============================================
 
 Support Cross-Pipeline Routing?
@@ -138,8 +168,7 @@ Support Cross-Pipeline Routing?
   task.pipeline(:foo)
   task.stages(:bar)
 
-  task.minigun.dag
-
+  task.minigun.da
 
   task.pipeline(:foo).stage(:bar)
   task.pipelines
@@ -149,6 +178,15 @@ Support Cross-Pipeline Routing?
 
 fix DataProcessingPipeline spec
 I see the issue now - when you're inside a pipeline block, the stages within it are part of a PipelineStage which doesn't support output.to(). The output parameter is just an Array for collecting items, not an OutputQueue.
+
+
+============================================
+
+supervision tree of processes
+
+========================================
+
+htop-like monitoring dashboard (CLI)
 
 ====================================
 
@@ -179,6 +217,7 @@ I see the issue now - when you're inside a pipeline block, the stages within it 
 
         unless find_stage(node_name)
           raise Minigun::Error, "[Pipeline:#{@name}] Routing references non-existent stage '#{node_name}'"
+
 
 ============================
 
