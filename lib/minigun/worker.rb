@@ -79,8 +79,12 @@ module Minigun
       stage_input_queues = @pipeline.stage_input_queues
 
       # Calculate sources for workers (empty for autonomous stages)
+      parent_sources = @stage.instance_variable_get(:@_parent_sources_expected)
       sources_expected = if @stage.run_mode == :autonomous
                            Set.new
+                         elsif parent_sources
+                           # Entrance stage: Use parent pipeline's sources instead of local DAG
+                           parent_sources
                          else
                            Set.new(dag.upstream(@stage_id))
                          end

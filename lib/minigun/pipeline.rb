@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'set'
+
 module Minigun
   # Pipeline represents a single data processing pipeline with stages
   # A Pipeline can be standalone or part of a multi-pipeline Task
@@ -303,13 +305,19 @@ module Minigun
 
       # Check if parent pipeline has queues for our stages (from output.to() routing)
       parent_queues = instance_variable_get(:@_parent_stage_queues)
+      
+      # Check if this nested pipeline has input from parent (from PipelineStage)
+      input_from_parent = @input_queues&.dig(:input)
 
       @stages.each do |stage_id, stage|
         # Skip autonomous stages - they don't have input queues
         next if stage.run_mode == :autonomous
 
+        # CRITICAL: Entrance stage gets input queue from parent
+        if input_from_parent && stage.instance_variable_get(:@_parent_sources_expected)
+          queues[stage_id] = input_from_parent
         # If parent has a queue for this stage (from routing), reuse it
-        if parent_queues && parent_queues.key?(stage_id)
+        elsif parent_queues && parent_queues.key?(stage_id)
           queues[stage_id] = parent_queues[stage_id]
         else
           # Use stage's queue_size setting (bounded SizedQueue or unbounded Queue)
@@ -596,6 +604,11 @@ module Minigun
       end
       entrance_stage = Minigun::ConsumerStage.new(self, nil, entrance_block, {})
       entrance_id = entrance_stage.id
+
+      # CRITICAL: Mark this stage so Worker knows it expects sources from parent pipeline
+      # The parent pipeline sets @input_queues[:sources_expected] which are the IDs
+      # of upstream stages in the PARENT pipeline that will send items
+      entrance_stage.instance_variable_set(:@_parent_sources_expected, @input_queues[:sources_expected])
 
       # Add the entrance stage to the pipeline by ID
       @stages[entrance_id] = entrance_stage

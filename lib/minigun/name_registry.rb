@@ -14,9 +14,9 @@ module Minigun
 
     def initialize(task)
       @task = task
-      @stages_by_id = {}              # { id => Stage } - primary registry
-      @global_names = Hash.new { |h, k| h[k] = [] }  # { name_string => [id1, id2, ...] }
-      @pipeline_names = {}            # { pipeline_name => { name_string => id } }
+      @stages_by_id = {} # { id => Stage } - primary registry
+      @global_names = Hash.new { |h, k| h[k] = [] } # { name_string => [id1, id2, ...] }
+      @pipeline_names = {} # { pipeline_name => { name_string => id } }
       @stage_counter = 0
     end
 
@@ -143,7 +143,12 @@ module Minigun
     end
 
     # Recursively find all stages with given name in pipeline's nested children
-    def find_in_children(pipeline, name_str)
+    # Uses visited set to prevent infinite loops from circular references
+    def find_in_children(pipeline, name_str, visited = Set.new)
+      # Prevent infinite recursion from circular pipeline references
+      return [] if visited.include?(pipeline.object_id)
+      visited.add(pipeline.object_id)
+
       results = []
 
       pipeline.stages.each_value do |stage|
@@ -158,8 +163,8 @@ module Minigun
           results << @pipeline_names[nested_name][name_str]
         end
 
-        # Recurse into nested pipeline's children
-        results.concat(find_in_children(nested_pipeline, name_str))
+        # Recurse into nested pipeline's children (with visited tracking)
+        results.concat(find_in_children(nested_pipeline, name_str, visited))
       end
 
       results

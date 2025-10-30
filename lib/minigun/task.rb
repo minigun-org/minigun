@@ -34,11 +34,6 @@ module Minigun
       @registry.find(identifier, from_pipeline: from_pipeline)
     end
 
-    # Get all stages (for debugging/inspection)
-    def all_stages
-      @registry.all_stages
-    end
-
     # Set config value (applies to all pipelines)
     def set_config(key, value)
       @config[key] = value
@@ -132,11 +127,18 @@ module Minigun
       end
 
       # Handle routing in root_pipeline DAG (resolve names to IDs)
+      # Use same forward reference mechanism as add_stage
       to_targets = options[:to]
       if to_targets
         Array(to_targets).each do |target|
           target_id = @root_pipeline.resolve_stage_identifier(target)
-          @root_pipeline.dag.add_edge(pipeline_stage_id, target_id) if target_id
+          if target_id
+            # Target exists - add edge with ID immediately
+            @root_pipeline.dag.add_edge(pipeline_stage_id, target_id)
+          else
+            # Forward reference - store for later resolution during build_dag_routing!
+            @root_pipeline.instance_variable_get(:@pending_edges) << [:to, pipeline_stage_id, target]
+          end
         end
       end
 
@@ -144,7 +146,13 @@ module Minigun
       if from_sources
         Array(from_sources).each do |source|
           source_id = @root_pipeline.resolve_stage_identifier(source)
-          @root_pipeline.dag.add_edge(source_id, pipeline_stage_id) if source_id
+          if source_id
+            # Source exists - add edge with ID immediately
+            @root_pipeline.dag.add_edge(source_id, pipeline_stage_id)
+          else
+            # Forward reference - store for later resolution during build_dag_routing!
+            @root_pipeline.instance_variable_get(:@pending_edges) << [:from, source, pipeline_stage_id]
+          end
         end
       end
 

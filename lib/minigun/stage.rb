@@ -487,7 +487,8 @@ module Minigun
       end
 
       # Always set output queue so pipeline creates :_exit
-      @nested_pipeline.instance_variable_set(:@output_queues, { output: create_output_queue(stage_ctx) })
+      output_queue = create_output_queue(stage_ctx)
+      @nested_pipeline.instance_variable_set(:@output_queues, { output: output_queue })
 
       # If parent pipeline has already built queues for nested stages (from output.to() routing),
       # reuse those queues instead of creating new ones. This ensures items routed directly to
