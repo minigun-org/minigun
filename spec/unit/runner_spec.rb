@@ -126,7 +126,7 @@ RSpec.describe Minigun::Runner do
       let(:bottleneck) do
         instance_double(
           Minigun::Stats,
-          stage_name: :slow_stage,
+          stage_id: :slow_stage,
           throughput: 10.5
         )
       end

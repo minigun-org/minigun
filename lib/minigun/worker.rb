@@ -4,12 +4,12 @@ module Minigun
   # Unified worker for all stage types (producers and consumers)
   # Manages thread lifecycle and delegates to stage.run_stage()
   class Worker
-    attr_reader :thread, :stage_name, :stage, :executor
+    attr_reader :thread, :stage_id, :stage, :executor
 
     def initialize(pipeline, stage, config = {})
       @pipeline = pipeline
       @stage = stage
-      @stage_name = stage.name
+      @stage_id = stage.id
       @config = config
       @thread = nil
       @executor = nil # Created later in create_stage_context
@@ -62,9 +62,9 @@ module Minigun
         log_debug 'No upstream sources, sending END signals and exiting'
 
         # Send EndOfSource to all downstream stages so they don't deadlock
-        downstream = stage_ctx.dag.downstream(stage_ctx.stage_name)
-        downstream.each do |target|
-          stage_ctx.stage_input_queues[target] << EndOfSource.new(stage_ctx.stage_name)
+        downstream = stage_ctx.dag.downstream(stage_ctx.stage_id)
+        downstream.each do |target_id|
+          stage_ctx.stage_input_queues[target_id]&.<<(EndOfSource.new(stage_ctx.stage_id))
         end
 
         log_debug 'Done'
@@ -81,27 +81,24 @@ module Minigun
       # Calculate sources for workers (empty for autonomous stages)
       sources_expected = if @stage.run_mode == :autonomous
                            Set.new
-                         elsif @stage_name == :_entrance && @pipeline.input_queues
-                           # For :_entrance, use sources from parent pipeline if available
-                           @pipeline.input_queues[:sources_expected] || Set.new
                          else
-                           Set.new(dag.upstream(@stage_name))
+                           Set.new(dag.upstream(@stage_id))
                          end
 
       # Create stats object for this specific stage
-      is_terminal = dag.terminal?(@stage_name)
-      stage_stats = @pipeline.stats.for_stage(@stage_name, is_terminal: is_terminal)
+      is_terminal = dag.terminal?(@stage_id)
+      stage_stats = @pipeline.stats.for_stage(@stage_id, is_terminal: is_terminal)
 
       StageContext.new(
         worker: self,
         pipeline: @pipeline,
-        stage_name: @stage_name,
+        stage_id: @stage_id,
         dag: dag,
         runtime_edges: @pipeline.runtime_edges,
         stage_input_queues: stage_input_queues,
         stage_stats: stage_stats,
         # Worker-specific (nil/empty for producers)
-        input_queue: stage_input_queues[@stage_name],
+        input_queue: stage_input_queues[@stage_id],
         sources_expected: sources_expected,
         sources_done: Set.new
       )
@@ -130,11 +127,11 @@ module Minigun
     end
 
     def log_debug(msg)
-      Minigun.logger.debug "[Pipeline:#{@pipeline.name}][#{@stage.log_type}:#{@stage_name}] #{msg}"
+      Minigun.logger.debug "[Pipeline:#{@pipeline.name}][#{@stage.log_type}:#{@stage.display_name}] #{msg}"
     end
 
     def log_error(msg)
-      Minigun.logger.error "[Pipeline:#{@pipeline.name}][#{@stage.log_type}:#{@stage_name}] #{msg}"
+      Minigun.logger.error "[Pipeline:#{@pipeline.name}][#{@stage.log_type}:#{@stage.display_name}] #{msg}"
     end
   end
 end
