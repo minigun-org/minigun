@@ -209,7 +209,8 @@ module Minigun
   class AggregatedStats
     attr_reader :pipeline_name, :stage_stats
 
-    def initialize(pipeline_name, dag)
+    def initialize(task, pipeline_name, dag)
+      @task = task
       @pipeline_name = pipeline_name
       @dag = dag
       @stage_stats = {}
