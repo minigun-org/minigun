@@ -419,6 +419,8 @@ module Minigun
 
     # Run the nested pipeline when this stage is executed as a worker
     def run_stage(stage_ctx)
+      $stderr.puts "DEBUG: PipelineStage#run_stage called: name=#{name}, has_pipeline=#{!@pipeline.nil?}, options=#{options.inspect}"
+      $stderr.flush
       return unless @pipeline
 
       # Set up input/output queues for the nested pipeline
@@ -426,6 +428,8 @@ module Minigun
       if stage_ctx.sources_expected.any?
         # Has upstream: set input queue so pipeline creates :_entrance
         # Also pass the expected source count for proper END signal handling
+        $stderr.puts "DEBUG: Setting input queues for nested pipeline (has upstream)"
+        $stderr.flush
         @pipeline.instance_variable_set(:@input_queues, {
           input: stage_ctx.input_queue,
           sources_expected: stage_ctx.sources_expected
@@ -433,12 +437,25 @@ module Minigun
       end
 
       # Always set output queue so pipeline creates :_exit
+      $stderr.puts "DEBUG: Setting output queues for nested pipeline"
+      $stderr.flush
       @pipeline.instance_variable_set(:@output_queues, { output: create_output_queue(stage_ctx) })
 
       # Run the nested pipeline (it will automatically create :_entrance/:_exit as needed)
+      pipeline_name = @pipeline.respond_to?(:name) ? @pipeline.name : 'unknown'
+      pipeline_stages = @pipeline.respond_to?(:stages) ? @pipeline.stages.keys.inspect : 'unknown'
+      $stderr.puts "DEBUG: About to run nested pipeline: #{pipeline_name}, stages: #{pipeline_stages}"
+      $stderr.flush
       @pipeline.run(stage_ctx.pipeline.context)
+      $stderr.puts "DEBUG: Nested pipeline run completed"
+      $stderr.flush
     ensure
       send_end_signals(stage_ctx)
     end
+  end
+
+  # ExecutorStage extends PipelineStage to handle executor-configured nested pipelines
+  # When executor options are provided, stages within the nested pipeline use that executor
+  class ExecutorStage < PipelineStage
   end
 end
