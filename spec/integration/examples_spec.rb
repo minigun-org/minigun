@@ -777,8 +777,8 @@ RSpec.describe 'Examples Integration' do
       load File.expand_path('../../examples/31_data_processor.rb', __dir__)
 
       processor = DataProcessor.new(threads: 10, processes: 2, batch_size: 100)
-      expect(processor.threads).to eq(10)
-      expect(processor.processes).to eq(2)
+      expect(processor.thread_count).to eq(10)
+      expect(processor.process_count).to eq(2)
       expect(processor.batch_size).to eq(100)
 
       processor.run
