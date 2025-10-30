@@ -61,8 +61,8 @@ RSpec.describe Minigun::Pipeline do
       pipeline.add_stage(:processor, :transform, to: :save) { |item| item }
       pipeline.add_stage(:consumer, :save) { |item| puts item }
 
-      expect(pipeline.dag.downstream(:source)).to include(:transform)
-      expect(pipeline.dag.downstream(:transform)).to include(:save)
+      expect(pipeline.ids_to_names(pipeline.downstream(:source))).to include(:transform)
+      expect(pipeline.ids_to_names(pipeline.downstream(:transform))).to include(:save)
     end
 
     it 'raises error on duplicate stage name' do
@@ -245,7 +245,7 @@ RSpec.describe Minigun::Pipeline do
 
       pipeline.send(:build_dag_routing!)
 
-      expect(pipeline.dag.downstream(:source)).to include(:sink)
+      expect(pipeline.ids_to_names(pipeline.downstream(:source))).to include(:sink)
     end
 
     it 'connects each producer to its next sequential non-producer' do
@@ -257,9 +257,9 @@ RSpec.describe Minigun::Pipeline do
       pipeline.send(:build_dag_routing!)
 
       # source_a should connect to process_a
-      expect(pipeline.dag.downstream(:source_a)).to include(:process_a)
+      expect(pipeline.ids_to_names(pipeline.downstream(:source_a))).to include(:process_a)
       # source_b should connect to process_b
-      expect(pipeline.dag.downstream(:source_b)).to include(:process_b)
+      expect(pipeline.ids_to_names(pipeline.downstream(:source_b))).to include(:process_b)
     end
 
     it 'does not connect producers that already have explicit routing' do
@@ -271,9 +271,9 @@ RSpec.describe Minigun::Pipeline do
       pipeline.send(:build_dag_routing!)
 
       # source_a already has explicit routing to process_a
-      expect(pipeline.dag.downstream(:source_a)).to eq([:process_a])
+      expect(pipeline.ids_to_names(pipeline.downstream(:source_a))).to eq([:process_a])
       # source_b should still get sequential routing
-      expect(pipeline.dag.downstream(:source_b)).to include(:process_b)
+      expect(pipeline.ids_to_names(pipeline.downstream(:source_b))).to include(:process_b)
     end
 
     it 'handles producers at the end with no following stage' do
@@ -285,8 +285,8 @@ RSpec.describe Minigun::Pipeline do
       expect { pipeline.send(:build_dag_routing!) }.not_to raise_error
 
       # source_a routes to sink, source_b has no downstream
-      expect(pipeline.dag.downstream(:source_a)).to include(:sink)
-      expect(pipeline.dag.downstream(:source_b)).to be_empty
+      expect(pipeline.ids_to_names(pipeline.downstream(:source_a))).to include(:sink)
+      expect(pipeline.ids_to_names(pipeline.downstream(:source_b))).to be_empty
     end
 
     it 'connects multiple producers to different stages, not all to first' do
@@ -300,9 +300,9 @@ RSpec.describe Minigun::Pipeline do
       pipeline.send(:build_dag_routing!)
 
       # Each producer connects to its next stage
-      expect(pipeline.dag.downstream(:source_a)).to include(:process_a)
-      expect(pipeline.dag.downstream(:source_b)).to include(:process_b)
-      expect(pipeline.dag.downstream(:source_c)).to include(:sink)
+      expect(pipeline.ids_to_names(pipeline.downstream(:source_a))).to include(:process_a)
+      expect(pipeline.ids_to_names(pipeline.downstream(:source_b))).to include(:process_b)
+      expect(pipeline.ids_to_names(pipeline.downstream(:source_c))).to include(:sink)
     end
 
     it 'handles mixed AtomicStage and PipelineStage producers' do
@@ -325,9 +325,9 @@ RSpec.describe Minigun::Pipeline do
       pipeline.send(:build_dag_routing!)
 
       # Atomic routes to process_atomic
-      expect(pipeline.dag.downstream(:atomic_source)).to include(:process_atomic)
+      expect(pipeline.ids_to_names(pipeline.downstream(:atomic_source))).to include(:process_atomic)
       # Pipeline routes to sink
-      expect(pipeline.dag.downstream(:pipeline_source)).to include(:sink)
+      expect(pipeline.ids_to_names(pipeline.downstream(:pipeline_source))).to include(:sink)
     end
   end
 

@@ -261,7 +261,7 @@ module Minigun
 
     def run_stage(stage_ctx)
       # Execute before hooks
-      stage_ctx.pipeline.send(:execute_stage_hooks, :before, stage_ctx.stage_name)
+      stage_ctx.pipeline.send(:execute_stage_hooks, :before, stage_ctx.stage_id)
 
       # Create wrapped queues
       input_queue = create_input_queue(stage_ctx)
@@ -272,7 +272,7 @@ module Minigun
       stage_ctx.executor.execute_stage(self, context, input_queue, output_queue)
 
       # Execute after hooks
-      stage_ctx.pipeline.send(:execute_stage_hooks, :after, stage_ctx.stage_name)
+      stage_ctx.pipeline.send(:execute_stage_hooks, :after, stage_ctx.stage_id)
 
       # Flush and cleanup
       flush_if_needed(stage_ctx, output_queue)

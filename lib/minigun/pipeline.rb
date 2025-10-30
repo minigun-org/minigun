@@ -44,7 +44,7 @@ module Minigun
         after_fork: {}
       }
 
-      @dag = dag || DAGProxy.new(self)
+      @dag = dag || DAG.new
       @stage_order = stage_order || []
 
       # Statistics tracking
