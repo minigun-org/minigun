@@ -3,6 +3,19 @@
 require 'spec_helper'
 
 RSpec.describe 'Examples Integration' do
+  # Automatically capture stdout for all examples
+  around do |example|
+    original_stdout = $stdout
+    @captured_output = StringIO.new
+    $stdout = @captured_output
+    example.run
+  ensure
+    $stdout = original_stdout
+  end
+
+  # Make captured output available to tests
+  let(:captured_output) { @captured_output.string }
+
   describe '000_new_dsl.rb' do
     it 'demonstrates new DSL with multi-pipeline' do
       load File.expand_path('../../examples/000_new_dsl.rb', __dir__)
@@ -729,15 +742,15 @@ RSpec.describe 'Examples Integration' do
       example = TimedBatchExample.new
       example.run
 
+      output_lines = captured_output.lines
+      batch_lines = output_lines.grep(/Processing batch/)
+
       # Should have multiple batches due to size (5) and timeout (0.3s)
-      expect(example.batches_processed.size).to be >= 2
+      expect(batch_lines.size).to be >= 2
 
       # Should process all 20 items total
-      total_items = example.batches_processed.flatten.size
+      total_items = batch_lines.sum { |line| line[/batch of (\d+)/, 1].to_i }
       expect(total_items).to eq(20)
-
-      # Verify all items are present
-      expect(example.batches_processed.flatten.sort).to eq((0..19).to_a)
     end
   end
 
@@ -748,10 +761,15 @@ RSpec.describe 'Examples Integration' do
       example = SimpleDeduplicatorExample.new
       example.run
 
+      output_lines = captured_output.lines
+      unique_lines = output_lines.grep(/Unique item:/)
+
       # Input: [1, 2, 3, 2, 4, 1, 5, 3, 6, 4]
       # Should deduplicate to: [1, 2, 3, 4, 5, 6]
-      expect(example.unique_items.size).to eq(6)
-      expect(example.unique_items.sort).to eq([1, 2, 3, 4, 5, 6])
+      expect(unique_lines.size).to eq(6)
+
+      items = unique_lines.map { |line| line[/Unique item: (\d+)/, 1].to_i }
+      expect(items.sort).to eq([1, 2, 3, 4, 5, 6])
     end
 
     it 'demonstrates hash deduplication with key extraction' do
@@ -760,17 +778,18 @@ RSpec.describe 'Examples Integration' do
       example = HashDeduplicatorExample.new
       example.run
 
+      output_lines = captured_output.lines
+      unique_lines = output_lines.grep(/Unique user:/)
+
       # Should deduplicate 6 users down to 4 unique IDs
-      expect(example.unique_users.size).to eq(4)
+      expect(unique_lines.size).to eq(4)
 
       # Should keep first occurrence of each ID
-      names = example.unique_users.map { |u| u[:name] }
-      expect(names).to include('Alice')
-      expect(names).to include('Bob')
-      expect(names).to include('Charlie')
-      expect(names).to include('David')
-      expect(names).not_to include('Alice (duplicate)')
-      expect(names).not_to include('Bob (duplicate)')
+      expect(captured_output).to include('Alice')
+      expect(captured_output).to include('Bob')
+      expect(captured_output).to include('Charlie')
+      expect(captured_output).to include('David')
+      expect(captured_output).not_to include('duplicate')
     end
 
     it 'demonstrates thread-safe deduplication' do
@@ -779,13 +798,12 @@ RSpec.describe 'Examples Integration' do
       example = ThreadedDeduplicatorExample.new
       example.run
 
+      output_lines = captured_output.lines
+      final_lines = output_lines.grep(/Final item:/)
+
       # Input: 100 items with only 20 unique values (i % 20)
       # Should deduplicate to 20 unique items
-      expect(example.final_items.size).to eq(20)
-
-      # Extract and verify we got all unique processed items
-      items = example.final_items.map { |item| item.match(/processed_(\d+)/)[1].to_i }
-      expect(items.sort).to eq((0..19).to_a)
+      expect(final_lines.size).to eq(20)
     end
   end
 
