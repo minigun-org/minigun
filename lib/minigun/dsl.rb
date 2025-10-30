@@ -126,8 +126,7 @@ module Minigun
             _pipeline_dsl_stack.push(pipeline_dsl)
             begin
               # Evaluate in instance context so @config, @results etc. are accessible
-              # Use instance_exec with no args to avoid Ruby passing self as an argument
-              instance_exec(&entry[:block])
+              instance_eval(&entry[:block])
             rescue => e
               raise
             ensure
@@ -140,8 +139,7 @@ module Minigun
           _pipeline_dsl_stack.push(pipeline_dsl)
           begin
             # Evaluate in instance context so @config, @results etc. are accessible
-            # Use instance_exec with no args to avoid Ruby passing self as an argument
-            instance_exec(&entry[:block])
+            instance_eval(&entry[:block])
           rescue => e
             raise
           ensure
