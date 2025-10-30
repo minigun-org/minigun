@@ -7,7 +7,10 @@ module Minigun
     def to_s
       'QueueSignal'
     end
-    alias_method :inspect, :to_s
+
+    def inspect
+      to_s
+    end
   end
 
   # Signal indicating one upstream source has completed
@@ -38,4 +41,3 @@ module Minigun
     end
   end
 end
-
