@@ -6,8 +6,10 @@ module Minigun
   class Pipeline
     attr_reader :name, :config, :stages, :hooks, :dag, :output_queues, :stage_order, :stats,
                 :context, :stage_hooks, :stage_input_queues, :runtime_edges, :input_queues
+    attr_accessor :task
 
-    def initialize(name, config = {}, stages: nil, hooks: nil, stage_hooks: nil, dag: nil, stage_order: nil, stats: nil)
+    def initialize(task, name, config = {}, stages: nil, hooks: nil, stage_hooks: nil, dag: nil, stage_order: nil, stats: nil)
+      @task = task
       @name = name
       @config = {
         max_threads: config[:max_threads] || 5,
@@ -44,6 +46,7 @@ module Minigun
     # Duplicate this pipeline for inheritance
     def dup
       Pipeline.new(
+        @task,
         @name,
         @config.dup,
         stages: @stages.transform_values(&:dup), # Deep copy - dup each stage object
@@ -120,6 +123,9 @@ module Minigun
 
       # Store stage by name
       @stages[name] = stage
+
+      # Register in Task's flat registry
+      @task.register_stage(name, stage)
 
       # Add to stage order and DAG
       @stage_order << name
@@ -228,8 +234,15 @@ module Minigun
     end
 
     # Build one input queue per stage (except producers)
-    def build_stage_input_queues
+    def build_stage_input_queues(visited_pipelines = Set.new)
+      # Prevent infinite recursion
+      return {} if visited_pipelines.include?(object_id)
+      visited_pipelines.add(object_id)
+
       queues = {}
+
+      # Check if parent pipeline has queues for our stages (from output.to() routing)
+      parent_queues = instance_variable_get(:@_parent_stage_queues)
 
       @stages.each do |stage_name, stage|
         # Skip autonomous stages - they don't have input queues
@@ -241,13 +254,31 @@ module Minigun
           next
         end
 
-        # Use stage's queue_size setting (bounded SizedQueue or unbounded Queue)
-        size = stage.queue_size
-        queues[stage_name] = if size.nil?
-                               Queue.new # Unbounded queue
-                             else
-                               SizedQueue.new(size) # Bounded queue with backpressure
-                             end
+        # If parent has a queue for this stage (from routing), reuse it
+        if parent_queues && parent_queues.key?(stage_name)
+          queues[stage_name] = parent_queues[stage_name]
+        else
+          # Use stage's queue_size setting (bounded SizedQueue or unbounded Queue)
+          size = stage.queue_size
+          queues[stage_name] = if size.nil?
+                                 Queue.new # Unbounded queue
+                               else
+                                 SizedQueue.new(size) # Bounded queue with backpressure
+                               end
+        end
+      end
+
+      # Also include stages from nested pipelines (for output.to() routing)
+      # Build queues for nested pipeline stages so they're accessible for routing
+      @stages.each_value do |stage|
+        next unless stage.run_mode == :composite
+        next unless stage.respond_to?(:pipeline) && stage.pipeline
+
+        nested_queues = stage.pipeline.build_stage_input_queues(visited_pipelines)
+        nested_queues.each do |nested_stage_name, nested_queue|
+          # Avoid conflicts - nested pipeline stages should be accessible by name
+          queues[nested_stage_name] = nested_queue unless queues.key?(nested_stage_name)
+        end
       end
 
       queues
@@ -293,14 +324,16 @@ module Minigun
         update[:add_router_edges].each { |(from, to)| @dag.add_edge(from, to) }
       end
 
-      # Add router stages to @stages
+      # Add router stages to @stages and register in Task
       stages_to_add.each do |name, stage|
         @stages[name] = stage
+        @task.register_stage(name, stage)
       end
     end
 
+    # Delegate to Task's flat registry (all stages are registered there)
     def find_stage(name)
-      @stages[name]
+      @task.find_stage(name)
     end
 
     def terminal_stage?(stage_name)
@@ -355,7 +388,19 @@ module Minigun
 
     def validate_stages_exist!
       @dag.nodes.each do |node_name|
-        raise Minigun::Error, "[Pipeline:#{@name}] Routing references non-existent stage '#{node_name}'" unless find_stage(node_name)
+        # Skip router stages - they're added during insert_router_stages_for_fan_out
+        # which happens before validation, so they should exist
+        next if node_name.to_s.end_with?('_router')
+
+        # Skip internal stages that are created dynamically
+        next if node_name == :_entrance || node_name == :_exit
+
+        # Skip if it's a hash (shouldn't happen, but defensive)
+        next if node_name.is_a?(Hash)
+
+        unless find_stage(node_name)
+          raise Minigun::Error, "[Pipeline:#{@name}] Routing references non-existent stage '#{node_name}'"
+        end
       end
     end
 
@@ -390,6 +435,9 @@ module Minigun
           candidate = @stage_order[next_index]
           candidate_obj = find_stage(candidate)
 
+          # Skip if stage not found (might be a router stage or invalid node)
+          next unless candidate_obj
+
           # Skip autonomous stages
           next if candidate_obj.run_mode == :autonomous
 
@@ -401,9 +449,11 @@ module Minigun
 
         # No valid next stage found
         next unless next_stage
+        next unless next_stage_obj  # Make sure we found the stage object
 
         # Skip if BOTH current and next are composite stages (isolated pipelines)
         current_stage = find_stage(stage_name)
+        next unless current_stage  # Make sure current stage exists
         next if current_stage.run_mode == :composite && next_stage_obj.run_mode == :composite
 
         # Skip if this is a fan-out pattern (next_stage is a sibling)

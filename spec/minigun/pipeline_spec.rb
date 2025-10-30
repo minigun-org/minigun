@@ -3,8 +3,9 @@
 require 'spec_helper'
 
 RSpec.describe Minigun::Pipeline do
+  let(:task) { Minigun::Task.new }
   let(:config) { { max_threads: 3, max_processes: 2 } }
-  let(:pipeline) { described_class.new(:test_pipeline, config) }
+  let(:pipeline) { described_class.new(task, :test_pipeline, config) }
 
   describe '#initialize' do
     it 'creates a pipeline with a name' do
@@ -17,7 +18,8 @@ RSpec.describe Minigun::Pipeline do
     end
 
     it 'uses default config for missing options' do
-      default_pipeline = described_class.new(:default)
+      default_task = Minigun::Task.new
+      default_pipeline = described_class.new(default_task, :default)
       expect(default_pipeline.config[:max_threads]).to eq(5)
     end
 
@@ -181,7 +183,7 @@ RSpec.describe Minigun::Pipeline do
     it 'finds PipelineStages with no upstream as producers' do
       # Add a PipelineStage
       pipeline_stage = Minigun::PipelineStage.new(name: :nested)
-      nested_pipeline = described_class.new(:nested, config)
+      nested_pipeline = described_class.new(task, :nested, config)
       pipeline_stage.pipeline = nested_pipeline
       pipeline.stages[:nested] = pipeline_stage
 
@@ -201,7 +203,7 @@ RSpec.describe Minigun::Pipeline do
 
       # Add a PipelineStage with upstream
       pipeline_stage = Minigun::PipelineStage.new(name: :nested)
-      nested_pipeline = described_class.new(:nested, config)
+      nested_pipeline = described_class.new(task, :nested, config)
       pipeline_stage.pipeline = nested_pipeline
       pipeline.stages[:nested] = pipeline_stage
       pipeline.stage_order << :nested
@@ -222,7 +224,7 @@ RSpec.describe Minigun::Pipeline do
 
       # Add PipelineStage producer
       pipeline_stage = Minigun::PipelineStage.new(name: :pipeline_source)
-      nested_pipeline = described_class.new(:nested, config)
+      nested_pipeline = described_class.new(task, :nested, config)
       pipeline_stage.pipeline = nested_pipeline
       pipeline.stages[:pipeline_source] = pipeline_stage
       pipeline.stage_order << :pipeline_source
@@ -309,11 +311,13 @@ RSpec.describe Minigun::Pipeline do
 
       # PipelineStage producer
       pipeline_stage = Minigun::PipelineStage.new(name: :pipeline_source)
-      nested_pipeline = described_class.new(:nested, config)
+      nested_pipeline = described_class.new(task, :nested, config)
       pipeline_stage.pipeline = nested_pipeline
       pipeline.stages[:pipeline_source] = pipeline_stage
       pipeline.stage_order << :pipeline_source
       pipeline.dag.add_node(:pipeline_source)
+      # Register PipelineStage in Task's flat registry
+      task.register_stage(:pipeline_source, pipeline_stage)
 
       pipeline.add_stage(:consumer, :sink) { |item| item }
 
@@ -342,7 +346,7 @@ RSpec.describe Minigun::Pipeline do
 
       # Create PipelineStage that acts as a producer
       pipeline_stage = Minigun::PipelineStage.new(name: :source_pipeline)
-      source_pipeline = described_class.new(:source, config)
+      source_pipeline = described_class.new(task, :source, config)
       pipeline_stage.pipeline = source_pipeline
       source_pipeline.add_stage(:producer, :gen) { |output| 3.times { |i| output << i } }
       source_pipeline.add_stage(:processor, :double) { |item, output| output << (item * 2) }
@@ -350,6 +354,8 @@ RSpec.describe Minigun::Pipeline do
       pipeline.stages[:source_pipeline] = pipeline_stage
       pipeline.stage_order.unshift(:source_pipeline)
       pipeline.dag.add_node(:source_pipeline)
+      # Register PipelineStage in Task's flat registry
+      task.register_stage(:source_pipeline, pipeline_stage)
 
       # Add consumer to main pipeline
       pipeline.add_stage(:consumer, :sink) { |item| results << item }
@@ -375,12 +381,14 @@ RSpec.describe Minigun::Pipeline do
 
       # PipelineStage as processor
       pipeline_stage = Minigun::PipelineStage.new(name: :processor_pipeline)
-      proc_pipeline = described_class.new(:processor, config)
+      proc_pipeline = described_class.new(task, :processor, config)
       pipeline_stage.pipeline = proc_pipeline
       proc_pipeline.add_stage(:processor, :multiply) { |item, output| output << (item * 10) }
       proc_pipeline.add_stage(:processor, :add_one) { |item, output| output << (item + 1) }
 
       pipeline.stages[:processor_pipeline] = pipeline_stage
+      # Register PipelineStage in Task's flat registry
+      task.register_stage(:processor_pipeline, pipeline_stage)
       pipeline.stage_order << :processor_pipeline
       pipeline.dag.add_node(:processor_pipeline)
       pipeline.dag.add_edge(:source, :processor_pipeline)
@@ -406,23 +414,27 @@ RSpec.describe Minigun::Pipeline do
 
       # First PipelineStage producer
       ps1 = Minigun::PipelineStage.new(name: :pipeline_a)
-      p1 = described_class.new(:pa, config)
+      p1 = described_class.new(task, :pa, config)
       ps1.pipeline = p1
-      p1.add_stage(:producer, :gen) { |output| output << 10 }
+      p1.add_stage(:producer, :gen_a) { |output| output << 10 }
       p1.add_stage(:processor, :double) { |item, output| output << (item * 2) }
 
       pipeline.stages[:pipeline_a] = ps1
       pipeline.stage_order << :pipeline_a
       pipeline.dag.add_node(:pipeline_a)
+      # Register PipelineStage in Task's flat registry
+      task.register_stage(:pipeline_a, ps1)
 
       # Second PipelineStage producer
       ps2 = Minigun::PipelineStage.new(name: :pipeline_b)
-      p2 = described_class.new(:pb, config)
+      p2 = described_class.new(task, :pb, config)
       ps2.pipeline = p2
-      p2.add_stage(:producer, :gen) { |output| output << 5 }
+      p2.add_stage(:producer, :gen_b) { |output| output << 5 }
       p2.add_stage(:processor, :triple) { |item, output| output << (item * 3) }
 
       pipeline.stages[:pipeline_b] = ps2
+      # Register PipelineStage in Task's flat registry
+      task.register_stage(:pipeline_b, ps2)
       pipeline.stage_order << :pipeline_b
       pipeline.dag.add_node(:pipeline_b)
 

@@ -363,7 +363,8 @@ module Minigun
         if stage_options[:_execution_context]
           nested_pipeline_config[:_default_execution_context] = stage_options[:_execution_context]
         end
-        nested_pipeline = Minigun::Pipeline.new(name, nested_pipeline_config)
+
+        nested_pipeline = Minigun::Pipeline.new(@pipeline.task, name, nested_pipeline_config)
         pipeline_stage.pipeline = nested_pipeline
 
         # Add stages to the nested pipeline via block
@@ -391,6 +392,7 @@ module Minigun
         @pipeline.stages[name] = pipeline_stage
         @pipeline.stage_order << name
         @pipeline.dag.add_node(name)
+        @pipeline.task.register_stage(name, pipeline_stage)
 
         pipeline_stage
       end

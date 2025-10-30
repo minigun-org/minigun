@@ -435,6 +435,32 @@ module Minigun
       # Always set output queue so pipeline creates :_exit
       @pipeline.instance_variable_set(:@output_queues, { output: create_output_queue(stage_ctx) })
 
+      # If parent pipeline has already built queues for nested stages (from output.to() routing),
+      # reuse those queues instead of creating new ones. This ensures items routed directly to
+      # nested pipeline stages are processed correctly.
+      parent_queues = stage_ctx.pipeline.stage_input_queues
+      if parent_queues && !parent_queues.empty?
+        # Before nested pipeline builds its queues, check if parent has queues for nested stages
+        # and prepare to reuse them
+        @pipeline.instance_variable_set(:@_parent_stage_queues, parent_queues)
+
+        # Track runtime edges from parent to nested stages for END signal handling
+        parent_runtime_edges = stage_ctx.pipeline.runtime_edges
+        if parent_runtime_edges
+          # Find which parent stages route to nested stages
+          nested_stage_names = @pipeline.stages.keys.to_set
+          parent_runtime_edges.each do |source_stage, targets|
+            nested_targets = targets & nested_stage_names
+            if nested_targets.any?
+              # These parent stages route to nested stages - we need to track this
+              # for proper END signal propagation
+              nested_sources_expected = Set.new(nested_targets.map { |t| source_stage })
+              @pipeline.instance_variable_set(:@_nested_sources_expected, nested_sources_expected)
+            end
+          end
+        end
+      end
+
       # Run the nested pipeline (it will automatically create :_entrance/:_exit as needed)
       @pipeline.run(stage_ctx.pipeline.context)
     ensure

@@ -17,8 +17,24 @@ module Minigun
         use_ipc: false
       }
 
+      # Flat registry of all stages across all pipelines (including nested)
+      @all_stages = {}
+
       # Root pipeline - all stages and nested pipelines live here
-      @root_pipeline = root_pipeline || Pipeline.new(:default, @config)
+      @root_pipeline = root_pipeline || Pipeline.new(self, :default, @config)
+    end
+
+    # Register a stage in the flat registry
+    def register_stage(name, stage)
+      if @all_stages.key?(name)
+        raise Minigun::Error, "Stage name collision: '#{name}' is already registered at Task level"
+      end
+      @all_stages[name] = stage
+    end
+
+    # Find a stage by name (flat lookup)
+    def find_stage(name)
+      @all_stages[name]
     end
 
     # Set config value (applies to all pipelines)
@@ -61,7 +77,7 @@ module Minigun
       pipeline_stage = PipelineStage.new(name: name, options: options)
 
       # Create the actual Pipeline instance for this nested pipeline
-      nested_pipeline = Pipeline.new(name, @config)
+      nested_pipeline = Pipeline.new(self, name, @config)
       pipeline_stage.pipeline = nested_pipeline
 
       # Add stages to the nested pipeline via block
@@ -74,6 +90,8 @@ module Minigun
       @root_pipeline.stages[name] = pipeline_stage
       @root_pipeline.stage_order << name
       @root_pipeline.dag.add_node(name)
+      # Register PipelineStage in Task's flat registry
+      register_stage(name, pipeline_stage)
 
       # Extract routing if specified
       to_targets = options[:to]
@@ -94,12 +112,14 @@ module Minigun
       else
         # Create new PipelineStage and add to root_pipeline
         pipeline_stage = PipelineStage.new(name: name, options: options)
-        pipeline = Pipeline.new(name, @config)
+        pipeline = Pipeline.new(self, name, @config)
         pipeline_stage.pipeline = pipeline
 
         @root_pipeline.stages[name] = pipeline_stage
         @root_pipeline.stage_order << name
         @root_pipeline.dag.add_node(name)
+        # Register PipelineStage in Task's flat registry
+        register_stage(name, pipeline_stage)
       end
 
       # Handle routing in root_pipeline DAG

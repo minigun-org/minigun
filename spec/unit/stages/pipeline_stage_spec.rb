@@ -23,7 +23,8 @@ RSpec.describe Minigun::PipelineStage do
   describe '#pipeline=' do
     it 'sets the pipeline' do
       stage = described_class.new(name: :my_pipeline)
-      pipeline = Minigun::Pipeline.new(:test, config)
+      task = Minigun::Task.new
+      pipeline = Minigun::Pipeline.new(task, :test, config)
 
       stage.pipeline = pipeline
 
@@ -32,7 +33,8 @@ RSpec.describe Minigun::PipelineStage do
 
     it 'allows setting pipeline to nil' do
       stage = described_class.new(name: :my_pipeline)
-      pipeline = Minigun::Pipeline.new(:test, config)
+      task = Minigun::Task.new
+      pipeline = Minigun::Pipeline.new(task, :test, config)
       stage.pipeline = pipeline
 
       stage.pipeline = nil
@@ -63,7 +65,7 @@ RSpec.describe Minigun::PipelineStage do
       stage.pipeline = pipeline
 
       context = Object.new
-      parent_pipeline = instance_double(Minigun::Pipeline, context: context)
+      parent_pipeline = instance_double(Minigun::Pipeline, context: context, stage_input_queues: {})
       stage_ctx = instance_double(Minigun::StageContext,
                                   pipeline: parent_pipeline,
                                   sources_expected: Set.new,
@@ -89,7 +91,7 @@ RSpec.describe Minigun::PipelineStage do
       stage.pipeline = pipeline
 
       context = Object.new
-      parent_pipeline = instance_double(Minigun::Pipeline, context: context)
+      parent_pipeline = instance_double(Minigun::Pipeline, context: context, stage_input_queues: {})
       input_queue = Queue.new
       sources = Set.new([:upstream])
       stage_ctx = instance_double(Minigun::StageContext,
@@ -121,7 +123,7 @@ RSpec.describe Minigun::PipelineStage do
       stage.pipeline = pipeline
 
       context = Object.new
-      parent_pipeline = instance_double(Minigun::Pipeline, context: context)
+      parent_pipeline = instance_double(Minigun::Pipeline, context: context, stage_input_queues: {})
       output_queue = Queue.new
       stage_ctx = instance_double(Minigun::StageContext,
                                   pipeline: parent_pipeline,
@@ -148,7 +150,7 @@ RSpec.describe Minigun::PipelineStage do
       stage.pipeline = pipeline
 
       context = Object.new
-      parent_pipeline = instance_double(Minigun::Pipeline, context: context)
+      parent_pipeline = instance_double(Minigun::Pipeline, context: context, stage_input_queues: {})
       stage_ctx = instance_double(Minigun::StageContext,
                                   pipeline: parent_pipeline,
                                   sources_expected: Set.new,
@@ -174,7 +176,7 @@ RSpec.describe Minigun::PipelineStage do
       stage.pipeline = pipeline
 
       context = Object.new
-      parent_pipeline = instance_double(Minigun::Pipeline, context: context)
+      parent_pipeline = instance_double(Minigun::Pipeline, context: context, stage_input_queues: {})
       stage_ctx = instance_double(Minigun::StageContext,
                                   pipeline: parent_pipeline,
                                   sources_expected: Set.new,

@@ -167,6 +167,21 @@ I see the issue now - when you're inside a pipeline block, the stages within it 
 
 ===================================
 
+        # Skip router stages - they're added during insert_router_stages_for_fan_out
+        # which happens before validation, so they should exist
+        next if node_name.to_s.end_with?('_router')
+
+        # Skip internal stages that are created dynamically
+        next if node_name == :_entrance || node_name == :_exit
+
+        # Skip if it's a hash (shouldn't happen, but defensive)
+        next if node_name.is_a?(Hash)
+
+        unless find_stage(node_name)
+          raise Minigun::Error, "[Pipeline:#{@name}] Routing references non-existent stage '#{node_name}'"
+
+============================
+
 - rename end_of_stage --> end_of_all_upstreams?
 
 ==================================
