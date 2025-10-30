@@ -108,16 +108,7 @@ module Minigun
     end
 
     def create_executor_if_needed(stage_ctx)
-      $stderr.puts "DEBUG: Worker#create_executor_if_needed: stage=#{@stage_name}, run_mode=#{@stage.run_mode}"
-      $stderr.flush
       return nil if @stage.run_mode == :autonomous
-      
-      # Composite stages manage their own execution, but they might still need executors?
-      # For now, let's see what happens
-      if @stage.run_mode == :composite
-        $stderr.puts "DEBUG: Composite stage, checking execution_context: #{@stage.execution_context.inspect}"
-        $stderr.flush
-      end
 
       exec_ctx = @stage.execution_context
       return Execution::InlineExecutor.new(stage_ctx) if exec_ctx.nil?
@@ -125,8 +116,6 @@ module Minigun
       type = exec_ctx[:type]
       pool_size = exec_ctx[:pool_size] || exec_ctx[:max] || default_pool_size(type)
 
-      $stderr.puts "DEBUG: Creating executor: type=#{type}, pool_size=#{pool_size}"
-      $stderr.flush
       Execution.create_executor(type, stage_ctx, max_size: pool_size)
     end
 

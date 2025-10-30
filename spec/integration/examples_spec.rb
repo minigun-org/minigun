@@ -759,9 +759,9 @@ RSpec.describe 'Examples Integration' do
       small_pipeline = ConfigurableDownloader.new(threads: 5, batch_size: 10)
       large_pipeline = ConfigurableDownloader.new(threads: 20, batch_size: 50)
 
-      expect(small_pipeline.threads).to eq(5)
+      expect(small_pipeline.thread_count).to eq(5)
       expect(small_pipeline.batch_size).to eq(10)
-      expect(large_pipeline.threads).to eq(20)
+      expect(large_pipeline.thread_count).to eq(20)
       expect(large_pipeline.batch_size).to eq(50)
 
       small_pipeline.run

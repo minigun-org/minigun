@@ -125,21 +125,10 @@ module Minigun
             pipeline_dsl = PipelineDSL.new(pipeline, self)
             _pipeline_dsl_stack.push(pipeline_dsl)
             begin
-              block = entry[:block]
-              puts "DEBUG: Named pipeline - block class: #{block.class}, arity: #{block.arity}"
-              puts "DEBUG: Stack size before eval: #{_pipeline_dsl_stack.size}"
-              puts "DEBUG: Top DSL: #{_pipeline_dsl_stack.last.class}"
-              # Ruby's instance_eval/instance_exec can pass arguments even to arity-0 blocks in some cases
-              # Wrap block to explicitly ignore any arguments Ruby might pass while preserving instance context
-              self_instance = self
-              safe_block = proc { |*_args| self_instance.instance_eval(&block) }
-              $stderr.puts "DEBUG: Named pipeline - Using instance_eval with wrapped block (ignores args, preserves context)"
-              $stderr.flush
-              instance_eval(&safe_block)
-              puts "DEBUG: Named pipeline eval completed"
+              # Evaluate in instance context so @config, @results etc. are accessible
+              # Use instance_exec with no args to avoid Ruby passing self as an argument
+              instance_exec(&entry[:block])
             rescue => e
-              puts "DEBUG: Error in named pipeline eval: #{e.class}: #{e.message}"
-              puts "DEBUG: Stack size on error: #{_pipeline_dsl_stack.size}"
               raise
             ensure
               _pipeline_dsl_stack.pop
@@ -150,23 +139,10 @@ module Minigun
           pipeline_dsl = PipelineDSL.new(@_minigun_task.root_pipeline, self)
           _pipeline_dsl_stack.push(pipeline_dsl)
           begin
-            block = entry[:block]
-            $stderr.puts "DEBUG: Unnamed pipeline - block class: #{block.class}, arity: #{block.arity}"
-            $stderr.puts "DEBUG: Stack size before eval: #{_pipeline_dsl_stack.size}"
-            $stderr.puts "DEBUG: Top DSL: #{_pipeline_dsl_stack.last.class}"
-            $stderr.flush
-            # Ruby's instance_eval/instance_exec can pass arguments even to arity-0 blocks in some cases
-            # Wrap block to explicitly ignore any arguments Ruby might pass while preserving instance context
-            self_instance = self
-            safe_block = proc { |*_args| self_instance.instance_eval(&block) }
-            $stderr.puts "DEBUG: Using instance_eval with wrapped block (ignores args, preserves context)"
-            $stderr.flush
-            instance_eval(&safe_block)
-            puts "DEBUG: Unnamed pipeline eval completed"
+            # Evaluate in instance context so @config, @results etc. are accessible
+            # Use instance_exec with no args to avoid Ruby passing self as an argument
+            instance_exec(&entry[:block])
           rescue => e
-            puts "DEBUG: Error in unnamed pipeline eval: #{e.class}: #{e.message}"
-            puts "DEBUG: Stack size on error: #{_pipeline_dsl_stack.size}"
-            puts "DEBUG: Backtrace: #{e.backtrace.first(5).join("\n")}"
             raise
           ensure
             _pipeline_dsl_stack.pop
@@ -223,7 +199,6 @@ module Minigun
 
       # Execution block methods - these are just shortcuts for pipeline with executor config
       def threads(pool_size, &block)
-        puts "DEBUG: threads called with pool_size=#{pool_size}, block class=#{block.class}, block arity=#{block.arity}"
         pipeline(executor: :threads, pool_size: pool_size, &block)
       end
 
@@ -274,27 +249,17 @@ module Minigun
       # Stage determines its own type based on block arity
       # Producer - generates items, receives output queue
       def producer(name, options = {}, &)
-        pipeline_name = @pipeline.respond_to?(:name) ? @pipeline.name : 'unknown'
-        $stderr.puts "DEBUG: producer called: name=#{name}, pipeline=#{pipeline_name}"
-        $stderr.flush
         options = _apply_execution_context(options)
         options[:stage_type] = :producer
         @pipeline.add_stage(:stage, name, options, &)
-        $stderr.puts "DEBUG: producer added stage #{name} to pipeline #{pipeline_name}"
-        $stderr.flush
       end
 
       # Consumer - processes items, receives item and output queue
       # Whether it uses output or not is up to the stage implementation
       def consumer(name, options = {}, &)
-        pipeline_name = @pipeline.respond_to?(:name) ? @pipeline.name : 'unknown'
-        $stderr.puts "DEBUG: consumer called: name=#{name}, pipeline=#{pipeline_name}"
-        $stderr.flush
         options = _apply_execution_context(options)
         options[:stage_type] = :consumer
         @pipeline.add_stage(:stage, name, options, &)
-        $stderr.puts "DEBUG: consumer added stage #{name} to pipeline #{pipeline_name}"
-        $stderr.flush
       end
 
       # Processor - alias for consumer (both receive item and output)
@@ -367,9 +332,6 @@ module Minigun
       # Unified method for creating ALL nested pipelines
       # Handles both executor-configured pipelines and regular nested pipelines
       def _add_nested_pipeline(name, options = {}, &block)
-        $stderr.puts "DEBUG: _add_nested_pipeline called: name=#{name}, options=#{options.inspect}, has_block=#{!block.nil?}"
-        $stderr.flush
-
         # Convert executor options to _execution_context format if present
         stage_options = options.dup
         has_executor = false
@@ -390,16 +352,11 @@ module Minigun
             mode: options[:mode] || :pool
           }
           stage_options[:_execution_context] = exec_ctx
-          $stderr.puts "DEBUG: Converted executor options to _execution_context: #{exec_ctx.inspect}"
-          $stderr.flush
         end
 
         # Use ExecutorStage if executor config is present, otherwise use PipelineStage
         stage_class = has_executor ? Minigun::ExecutorStage : Minigun::PipelineStage
         pipeline_stage = stage_class.new(name: name, options: stage_options)
-        $stderr.puts "DEBUG: Created #{pipeline_stage.class}: options=#{pipeline_stage.options.inspect}"
-        $stderr.puts "DEBUG: Stage execution_context: #{pipeline_stage.execution_context.inspect}"
-        $stderr.flush
 
         # Create the actual Pipeline instance for this nested pipeline
         nested_pipeline_config = {}
@@ -407,72 +364,35 @@ module Minigun
         # This makes all stages within the nested pipeline use this executor by default
         if stage_options[:_execution_context]
           nested_pipeline_config[:_default_execution_context] = stage_options[:_execution_context]
-          $stderr.puts "DEBUG: Setting default execution context on nested pipeline: #{nested_pipeline_config[:_default_execution_context].inspect}"
-          $stderr.flush
         end
         nested_pipeline = Minigun::Pipeline.new(name, nested_pipeline_config)
         pipeline_stage.pipeline = nested_pipeline
-        $stderr.puts "DEBUG: Created nested Pipeline: #{nested_pipeline.name}, assigned to PipelineStage"
-        $stderr.flush
 
         # Add stages to the nested pipeline via block
         if block
-          puts "DEBUG: _add_nested_pipeline - block class=#{block.class}, arity=#{block.arity}, has @context=#{!@context.nil?}"
           nested_dsl = Minigun::DSL::PipelineDSL.new(nested_pipeline, @context)
 
           if @context
             # Push nested DSL onto the context's delegation stack
             # This allows the block to be evaluated in the user's instance context
             # while DSL method calls are delegated to the nested_dsl via method_missing stack
-            puts "DEBUG: Pushing nested_dsl onto context stack, stack size will be: #{@context._pipeline_dsl_stack.size + 1}"
             @context._pipeline_dsl_stack.push(nested_dsl)
             begin
               # Evaluate in the user's instance context to allow access to @config, @results, etc.
-              # Use instance_exec for arity-0 blocks to avoid argument passing issues
-              $stderr.puts "DEBUG: Nested pipeline - block arity=#{block.arity}"
-              $stderr.flush
-              if block.arity == 0
-                $stderr.puts "DEBUG: Using @context.instance_exec(&block) for nested pipeline"
-                $stderr.flush
-                @context.instance_exec(&block)
-              else
-                $stderr.puts "DEBUG: Using @context.instance_eval(&block) for nested pipeline"
-                $stderr.flush
-                @context.instance_eval(&block)
-              end
-            rescue => e
-              $stderr.puts "DEBUG: Error in nested pipeline eval: #{e.class}: #{e.message}"
-              $stderr.puts "DEBUG: Block arity was: #{block.arity}"
-              $stderr.flush
-              raise
+              @context.instance_eval(&block)
             ensure
               @context._pipeline_dsl_stack.pop
             end
           else
             # No context - evaluate in PipelineDSL context
-            # Wrap block to ignore any arguments Ruby might pass
-            puts "DEBUG: No context, calling nested_dsl.instance_eval(&block)"
             nested_dsl.instance_eval(&block)
           end
         end
 
         # Add the pipeline stage to the current pipeline
-        pipeline_name = @pipeline.respond_to?(:name) ? @pipeline.name : 'unknown'
-        $stderr.puts "DEBUG: Adding pipeline stage #{name} to parent pipeline #{pipeline_name}"
-        if @pipeline.respond_to?(:stages)
-          $stderr.puts "DEBUG: Parent pipeline stages before: #{@pipeline.stages.keys.inspect}"
-        end
-        $stderr.flush
         @pipeline.stages[name] = pipeline_stage
         @pipeline.stage_order << name
         @pipeline.dag.add_node(name)
-        if @pipeline.respond_to?(:stages)
-          $stderr.puts "DEBUG: Parent pipeline stages after: #{@pipeline.stages.keys.inspect}"
-        end
-        if nested_pipeline.respond_to?(:stages)
-          $stderr.puts "DEBUG: Nested pipeline stages: #{nested_pipeline.stages.keys.inspect}"
-        end
-        $stderr.flush
 
         pipeline_stage
       end
@@ -529,15 +449,11 @@ module Minigun
     # Checks each level from top to bottom until method is found
     def method_missing(method_name, *args, **kwargs, &block)
       stack = _pipeline_dsl_stack
-      puts "DEBUG: method_missing called: #{method_name}, stack size: #{stack.size}, self: #{self.class}"
       stack.reverse_each do |dsl|
-        puts "DEBUG: Checking DSL: #{dsl.class}, responds_to?(#{method_name}): #{dsl.respond_to?(method_name, true)}"
         if dsl.respond_to?(method_name, true)
-          puts "DEBUG: Delegating #{method_name} to #{dsl.class}"
           return dsl.send(method_name, *args, **kwargs, &block)
         end
       end
-      puts "DEBUG: method_missing: #{method_name} not found in stack, calling super"
       super
     end
 

@@ -71,6 +71,15 @@ ipc_fork
 ipc_forks(10) do # creates a pipeline
 
 ractors
+=
+
+=====================================================
+
+think about potential for conflicts with the base context
+
+thread_pool
+cow_fork_pool
+
 
 
       # Execution block methods
