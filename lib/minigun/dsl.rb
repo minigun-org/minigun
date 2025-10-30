@@ -120,15 +120,29 @@ module Minigun
         opts = entry[:options]
 
         if name
-          # Named pipeline - define on instance task, then evaluate block in PipelineDSL context
+          # Named pipeline - define on instance task, then evaluate block with instance context
           @_minigun_task.define_pipeline(name, opts) do |pipeline|
             pipeline_dsl = PipelineDSL.new(pipeline, self)
-            pipeline_dsl.instance_eval(&entry[:block])
+            @_current_pipeline_dsl = pipeline_dsl
+            begin
+              # Evaluate in instance context so @config, @results etc. are accessible
+              # DSL methods are delegated to pipeline_dsl via method_missing
+              instance_exec(&entry[:block])
+            ensure
+              @_current_pipeline_dsl = nil
+            end
           end
         else
-          # Unnamed pipeline - evaluate in PipelineDSL context on root pipeline
+          # Unnamed pipeline - evaluate with instance context on root pipeline
           pipeline_dsl = PipelineDSL.new(@_minigun_task.root_pipeline, self)
-          pipeline_dsl.instance_eval(&entry[:block])
+          @_current_pipeline_dsl = pipeline_dsl
+          begin
+            # Evaluate in instance context so @config, @results etc. are accessible
+            # DSL methods are delegated to pipeline_dsl via method_missing
+            instance_exec(&entry[:block])
+          ensure
+            @_current_pipeline_dsl = nil
+          end
         end
       end
     end
@@ -161,35 +175,36 @@ module Minigun
         _execution_context_stack.last
       end
 
-      # Execution block methods
-      def threads(pool_size, &)
-        context = { type: :threads, pool_size: pool_size, mode: :pool }
-        _with_execution_context(context, &)
+      # Execution block methods - these create nested pipelines with specific executors
+      def threads(pool_size, &block)
+        # Generate a unique name for the nested pipeline
+        name = :"_threads_#{object_id}_#{@pipeline.stages.size}"
+        _add_executor_pipeline(name, :threads, { pool_size: pool_size }, &block)
       end
 
-      def processes(pool_size, &)
-        context = { type: :cow_forks, pool_size: pool_size, mode: :pool }
-        _with_execution_context(context, &)
+      def processes(pool_size, &block)
+        name = :"_processes_#{object_id}_#{@pipeline.stages.size}"
+        _add_executor_pipeline(name, :cow_forks, { pool_size: pool_size }, &block)
       end
 
-      def ractors(pool_size, &)
-        context = { type: :ractors, pool_size: pool_size, mode: :pool }
-        _with_execution_context(context, &)
+      def ractors(pool_size, &block)
+        name = :"_ractors_#{object_id}_#{@pipeline.stages.size}"
+        _add_executor_pipeline(name, :ractors, { pool_size: pool_size }, &block)
       end
 
-      def thread_per_batch(max:, &)
-        context = { type: :threads, max: max, mode: :per_batch }
-        _with_execution_context(context, &)
+      def thread_per_batch(max:, &block)
+        name = :"_thread_per_batch_#{object_id}_#{@pipeline.stages.size}"
+        _add_executor_pipeline(name, :threads, { max: max, mode: :per_batch }, &block)
       end
 
-      def process_per_batch(max:, &)
-        context = { type: :cow_forks, max: max, mode: :per_batch }
-        _with_execution_context(context, &)
+      def process_per_batch(max:, &block)
+        name = :"_process_per_batch_#{object_id}_#{@pipeline.stages.size}"
+        _add_executor_pipeline(name, :cow_forks, { max: max, mode: :per_batch }, &block)
       end
 
-      def ractor_per_batch(max:, &)
-        context = { type: :ractors, max: max, mode: :per_batch }
-        _with_execution_context(context, &)
+      def ractor_per_batch(max:, &block)
+        name = :"_ractor_per_batch_#{object_id}_#{@pipeline.stages.size}"
+        _add_executor_pipeline(name, :ractors, { max: max, mode: :per_batch }, &block)
       end
 
       # Batching shorthand
@@ -309,6 +324,45 @@ module Minigun
 
       private
 
+      def _add_executor_pipeline(name, executor_type, executor_options, &block)
+        # Create a PipelineStage with executor configuration
+        stage_options = { executor: executor_type }.merge(executor_options)
+        pipeline_stage = Minigun::PipelineStage.new(name: name, options: stage_options)
+
+        # Create the actual Pipeline instance for this nested pipeline
+        nested_pipeline = Minigun::Pipeline.new(name, {})
+        pipeline_stage.pipeline = nested_pipeline
+
+        # Add stages to the nested pipeline via block
+        if block
+          nested_dsl = Minigun::DSL::PipelineDSL.new(nested_pipeline, @context)
+          
+          if @context
+            # Save the current pipeline DSL and temporarily replace it with the nested one
+            # This allows the block to be evaluated in the user's instance context
+            # while DSL method calls are delegated to the nested_dsl via method_missing
+            saved_dsl = @context.instance_variable_get(:@_current_pipeline_dsl)
+            @context.instance_variable_set(:@_current_pipeline_dsl, nested_dsl)
+            begin
+              # Evaluate in the user's instance context to allow access to @config, @results, etc.
+              @context.instance_exec(&block)
+            ensure
+              @context.instance_variable_set(:@_current_pipeline_dsl, saved_dsl)
+            end
+          else
+            # No context - evaluate in PipelineDSL context
+            nested_dsl.instance_eval(&block)
+          end
+        end
+
+        # Add the pipeline stage to the current pipeline
+        @pipeline.stages[name] = pipeline_stage
+        @pipeline.stage_order << name
+        @pipeline.dag.add_node(name)
+
+        pipeline_stage
+      end
+
       def _with_execution_context(context, &)
         _execution_context_stack.push(context)
         begin
@@ -355,6 +409,19 @@ module Minigun
       def normalize_execution_type(type)
         type.to_s.delete_suffix('s').delete_suffix('_pool').to_sym
       end
+    end
+
+    # Delegate DSL method calls to the current pipeline_dsl when evaluating pipeline blocks
+    def method_missing(method_name, *args, **kwargs, &block)
+      if @_current_pipeline_dsl && @_current_pipeline_dsl.respond_to?(method_name, true)
+        @_current_pipeline_dsl.send(method_name, *args, **kwargs, &block)
+      else
+        super
+      end
+    end
+
+    def respond_to_missing?(method_name, include_private = false)
+      (@_current_pipeline_dsl && @_current_pipeline_dsl.respond_to?(method_name, include_private)) || super
     end
 
     # Full production execution with Runner (signal handling, job ID, stats)
