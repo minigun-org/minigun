@@ -354,7 +354,7 @@ module Minigun
 
         # Use ExecutorStage if executor config is present, otherwise use PipelineStage
         stage_class = has_executor ? Minigun::ExecutorStage : Minigun::PipelineStage
-        pipeline_stage = stage_class.new(@pipeline.task, name, nil, stage_options)
+        pipeline_stage = stage_class.new(@pipeline, name, nil, stage_options)
 
         # Create the actual Pipeline instance for this nested pipeline
         nested_pipeline_config = {}
@@ -365,7 +365,7 @@ module Minigun
         end
 
         nested_pipeline = Minigun::Pipeline.new(@pipeline.task, name, nested_pipeline_config)
-        pipeline_stage.pipeline = nested_pipeline
+        pipeline_stage.nested_pipeline = nested_pipeline
 
         # Add stages to the nested pipeline via block
         if block

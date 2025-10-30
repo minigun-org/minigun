@@ -7,7 +7,8 @@ module Minigun
   # A Pipeline can be standalone or part of a multi-pipeline Task
   class Pipeline
     attr_reader :name, :config, :hooks, :dag, :output_queues, :stage_order, :stats,
-                :context, :stage_hooks, :stage_input_queues, :runtime_edges, :input_queues
+                :context, :stage_hooks, :stage_input_queues, :runtime_edges, :input_queues,
+                :name_registry
     attr_accessor :task
 
     # Stages accessor returns a proxy that supports both ID and name lookups
@@ -27,6 +28,10 @@ module Minigun
       }
 
       @stages = stages || {} # { stage_id => Stage } - stages indexed by ID internally
+
+      # Hierarchical name registry (local → parent → task)
+      parent_registry = @parent_pipeline&.name_registry
+      @name_registry = NameRegistry.new(parent: parent_registry)
 
       # Pipeline-level hooks (run once per pipeline)
       @hooks = hooks || {
@@ -80,10 +85,10 @@ module Minigun
     # type can be a Symbol (:producer, :consumer, etc.) or a custom Stage class
     # name is optional - if not provided, stage will only be identified by ID
     def add_stage(type, name = nil, options = {}, &block)
-      # Create stage instance (stages will self-register in Task by ID during initialization)
+      # Create stage instance (stages will register in pipeline's namespace)
       stage = if type.is_a?(Class)
                 # Custom stage class provided
-                type.new(@task, name, block, options)
+                type.new(self, name, block, options)
               else
                 # Extract stage_type from options if present (used by DSL)
                 actual_type = options.delete(:stage_type) || type
@@ -91,13 +96,13 @@ module Minigun
                 # Create appropriate stage subclass based on type symbol
                 case actual_type
                 when :producer
-                  ProducerStage.new(@task, name, block, options)
+                  ProducerStage.new(self, name, block, options)
                 when :processor, :consumer
-                  ConsumerStage.new(@task, name, block, options)
+                  ConsumerStage.new(self, name, block, options)
                 when :stage
-                  Stage.new(@task, name, block, options)
+                  Stage.new(self, name, block, options)
                 when :accumulator
-                  AccumulatorStage.new(@task, name, block, options)
+                  AccumulatorStage.new(self, name, block, options)
                 else
                   raise Minigun::Error, "Unknown stage type: #{actual_type}"
                 end
@@ -156,6 +161,8 @@ module Minigun
       # Store stage by ID (not name)
       @stages[stage_id] = stage
 
+      # Note: Stage already registered its name in its constructor
+
       # Add to stage order by ID and DAG
       @stage_order << stage_id
       @dag.add_node(stage_id)
@@ -164,11 +171,13 @@ module Minigun
     # Resolve a stage identifier (name or ID) to an ID
     # Returns the ID if found, nil otherwise
     # Special case: :output is a marker for output queues, not a stage name
+    # Uses hierarchical name resolution (local → parent → task-level)
     def resolve_stage_identifier(identifier)
       return nil unless identifier
       return nil if identifier == :output
 
-      stage = @task&.find_stage(identifier)
+      # Use hierarchical lookup from this pipeline's perspective
+      stage = find_stage(identifier)
       stage&.id
     end
 
@@ -323,9 +332,9 @@ module Minigun
       # Build queues for nested pipeline stages so they're accessible for routing
       @stages.each_value do |stage|
         next unless stage.run_mode == :composite
-        next unless stage.respond_to?(:pipeline) && stage.pipeline
+        next unless stage.respond_to?(:nested_pipeline) && stage.nested_pipeline
 
-        nested_queues = stage.pipeline.build_stage_input_queues(visited_pipelines)
+        nested_queues = stage.nested_pipeline.build_stage_input_queues(visited_pipelines)
         nested_queues.each do |nested_stage_id, nested_queue|
           # Avoid conflicts - nested pipeline stages accessible by ID
           queues[nested_stage_id] = nested_queue unless queues.key?(nested_stage_id)
@@ -349,12 +358,12 @@ module Minigun
         # Get explicit routing strategy from stage options, or default to :broadcast
         routing_strategy = stage.options[:routing] || :broadcast
 
-        # Create the appropriate router subclass (will self-register in Task by ID)
+        # Create the appropriate router subclass (will register in this pipeline)
         # Router stages don't get names - they're identified by ID only
         router_stage = if routing_strategy == :round_robin
-                         RouterRoundRobinStage.new(@task, nil, nil, { targets: downstream_ids.dup })
+                         RouterRoundRobinStage.new(self, nil, nil, { targets: downstream_ids.dup })
                        else
-                         RouterBroadcastStage.new(@task, nil, nil, { targets: downstream_ids.dup })
+                         RouterBroadcastStage.new(self, nil, nil, { targets: downstream_ids.dup })
                        end
         router_id = router_stage.id
         stages_to_add << [router_id, router_stage]
@@ -387,9 +396,34 @@ module Minigun
       end
     end
 
-    # Delegate to Task's flat registry (all stages are registered there)
-    def find_stage(name)
-      @task.find_stage(name)
+    # Register a stage name at this pipeline level
+    # Delegates to NameRegistry (raises StageNameConflict if duplicate)
+    def register_stage_name(name, stage_id)
+      @name_registry.register(name, stage_id, context_name: @name)
+    end
+
+    # Find a stage by name using task's routing strategy
+    # Delegates to TaskNameRegistry which implements:
+    # 1. Local neighbors -> 2. Children (deep) -> 3. Global
+    # Returns the Stage object or nil if not found
+    # Raises AmbiguousRoutingError if multiple stages found at any level
+    def find_stage_by_name(name)
+      return nil if name.nil?
+      @task.name_registry.find_from_pipeline(name, self)
+    end
+
+    # Find a stage by name or ID
+    # - Tries ID lookup first (fast path)
+    # - Falls back to pipeline-scoped name lookup with ambiguity checking
+    def find_stage(identifier)
+      return nil if identifier.nil?
+      
+      # Try ID lookup first (fast path)
+      stage = @task.find_stage(identifier)
+      return stage if stage
+      
+      # Fall back to pipeline-scoped name lookup
+      find_stage_by_name(identifier)
     end
 
     def terminal_stage?(stage_identifier)

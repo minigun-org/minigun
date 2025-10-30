@@ -123,6 +123,11 @@ parallel and sequential/sequence/series keywords --> influences DAG building
 
 ==============================
 
+better unique ID generation
+_jf02ASj3 ??
+
+==============================
+
 make per item latency tracking optional (and stats?)
 
 ============================

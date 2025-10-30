@@ -72,7 +72,7 @@ RSpec.describe Minigun::Pipeline do
 
       expect do
         pipeline.add_stage(:producer, :fetch) { |output| output << 'second' }
-      end.to raise_error(Minigun::Error, /Stage name collision.*fetch/)
+      end.to raise_error(Minigun::StageNameConflict, /Stage name.*fetch.*already registered/)
     end
 
     it 'raises error on duplicate stage name across different types' do
@@ -80,7 +80,7 @@ RSpec.describe Minigun::Pipeline do
 
       expect do
         pipeline.add_stage(:consumer, :my_stage) { |item| puts item }
-      end.to raise_error(Minigun::Error, /Stage name collision.*my_stage/)
+      end.to raise_error(Minigun::StageNameConflict, /Stage name.*my_stage.*already registered/)
     end
   end
 

@@ -35,23 +35,30 @@ module Minigun
   # Implements the Composite pattern where Pipeline is a composite Stage
   # Also handles loop-based stages (stages that manage their own input loop)
   class Stage
-    attr_reader :id, :name, :options, :block, :task
+    attr_reader :id, :name, :options, :block, :pipeline
 
-    def initialize(task, name = nil, block = nil, options = {})
-      @task = task
+    # Constructor takes pipeline as first arg (get task via pipeline.task)
+    # This allows stages to register themselves in the correct pipeline namespace
+    def initialize(pipeline, name = nil, block = nil, options = {})
+      @pipeline = pipeline
       @id = SecureRandom.uuid
       @name = name # Optional - only set if user provides it
       @block = block
       @options = options
 
       # Register in Task's flat registry by ID (stages are referenced by ID internally)
-      @task&.register_stage(@id, self)
+      task&.register_stage(@id, self)
 
-      # Also register by name if provided (for user lookups)
+      # Register name in pipeline's local namespace (raises StageNameConflict if duplicate)
       # Skip :output as it's a special marker, not a real stage name
-      if @name && @task && @name != :output
-        @task.register_stage_by_name(@name, @id)
+      if @name && @name != :output
+        @pipeline&.register_stage_name(@name, @id)
       end
+    end
+
+    # Convenience method to get task from pipeline
+    def task
+      @pipeline&.task
     end
 
     # Display name for logging - use name if available, otherwise ID
@@ -448,16 +455,16 @@ module Minigun
 
   # Stage that wraps and executes a nested pipeline
   class PipelineStage < Stage
-    attr_reader :pipeline
+    attr_reader :nested_pipeline
 
-    def initialize(task, name, block = nil, options = {})
-      super(task, name, block, options)
-      @pipeline = nil
+    def initialize(parent_pipeline, name, block = nil, options = {})
+      super(parent_pipeline, name, block, options)
+      @nested_pipeline = nil
     end
 
-    # Inject the pipeline instance
-    def pipeline=(pipeline)
-      @pipeline = pipeline
+    # Inject the nested pipeline instance
+    def nested_pipeline=(pipeline)
+      @nested_pipeline = pipeline
     end
 
     def run_mode
@@ -466,21 +473,21 @@ module Minigun
 
     # Run the nested pipeline when this stage is executed as a worker
     def run_stage(stage_ctx)
-      return unless @pipeline
+      return unless @nested_pipeline
 
       # Set up input/output queues for the nested pipeline
       # The pipeline will create :_entrance and :_exit stages based on these
       if stage_ctx.sources_expected.any?
         # Has upstream: set input queue so pipeline creates :_entrance
         # Also pass the expected source count for proper END signal handling
-        @pipeline.instance_variable_set(:@input_queues, {
+        @nested_pipeline.instance_variable_set(:@input_queues, {
           input: stage_ctx.input_queue,
           sources_expected: stage_ctx.sources_expected
         })
       end
 
       # Always set output queue so pipeline creates :_exit
-      @pipeline.instance_variable_set(:@output_queues, { output: create_output_queue(stage_ctx) })
+      @nested_pipeline.instance_variable_set(:@output_queues, { output: create_output_queue(stage_ctx) })
 
       # If parent pipeline has already built queues for nested stages (from output.to() routing),
       # reuse those queues instead of creating new ones. This ensures items routed directly to
@@ -489,27 +496,27 @@ module Minigun
       if parent_queues && !parent_queues.empty?
         # Before nested pipeline builds its queues, check if parent has queues for nested stages
         # and prepare to reuse them
-        @pipeline.instance_variable_set(:@_parent_stage_queues, parent_queues)
+        @nested_pipeline.instance_variable_set(:@_parent_stage_queues, parent_queues)
 
         # Track runtime edges from parent to nested stages for END signal handling
         parent_runtime_edges = stage_ctx.pipeline.runtime_edges
         if parent_runtime_edges
           # Find which parent stages route to nested stages
-          nested_stage_names = @pipeline.stages.keys.to_set
+          nested_stage_names = @nested_pipeline.stages.keys.to_set
           parent_runtime_edges.each do |source_stage, targets|
             nested_targets = targets & nested_stage_names
             if nested_targets.any?
               # These parent stages route to nested stages - we need to track this
               # for proper END signal propagation
               nested_sources_expected = Set.new(nested_targets.map { |t| source_stage })
-              @pipeline.instance_variable_set(:@_nested_sources_expected, nested_sources_expected)
+              @nested_pipeline.instance_variable_set(:@_nested_sources_expected, nested_sources_expected)
             end
           end
         end
       end
 
       # Run the nested pipeline (it will automatically create :_entrance/:_exit as needed)
-      @pipeline.run(stage_ctx.pipeline.context)
+      @nested_pipeline.run(stage_ctx.pipeline.context)
     ensure
       send_end_signals(stage_ctx)
     end

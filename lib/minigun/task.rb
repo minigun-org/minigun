@@ -20,8 +20,8 @@ module Minigun
       # Flat registry of all stages by ID (primary key)
       @all_stages_by_id = {}
 
-      # Name to ID mapping for user lookups (optional names)
-      @stage_name_to_id = {}
+      # Task-level name registry for routing strategy
+      @name_registry = TaskNameRegistry.new(self)
 
       # Root pipeline - all stages and nested pipelines live here
       @root_pipeline = root_pipeline || Pipeline.new(self, :default, @config)
@@ -37,25 +37,26 @@ module Minigun
       @all_stages_by_id[id] = stage
     end
 
-    # Register a stage name mapping (for user lookups)
+    # Register a stage name mapping (delegates to TaskNameRegistry)
+    # Note: Multiple stages can have the same name (in different pipelines)
     def register_stage_by_name(name, id)
-      if @stage_name_to_id.key?(name)
-        raise Minigun::Error, "Stage name collision: '#{name}' is already registered at Task level"
-      end
-      @stage_name_to_id[name] = id
+      @name_registry.register(name, id)
     end
 
-    # Find a stage by ID or name (name resolves to ID first)
+    # Find a stage by ID (or name from root pipeline's perspective)
+    # For pipeline-specific name resolution, use task.name_registry.find_from_pipeline
     def find_stage(identifier)
-      # Try as name lookup first
-      if @stage_name_to_id.key?(identifier)
-        id = @stage_name_to_id[identifier]
-        return @all_stages_by_id[id]
-      end
-
-      # Fallback: try direct ID lookup
+      # Try direct ID lookup first (fast path for IDs)
       @all_stages_by_id[identifier]
     end
+
+    # Find all stages with the given name globally
+    def find_all_stages_by_name(name)
+      @name_registry.find_all_global(name)
+    end
+
+    # Get the task-level name registry (for pipeline-specific routing)
+    attr_reader :name_registry
 
     # Get all stages (for debugging/inspection)
     def all_stages
@@ -98,12 +99,12 @@ module Minigun
 
     # Add a nested pipeline as a stage within the implicit pipeline
     def add_nested_pipeline(name, options = {}, &)
-      # Create a PipelineStage and configure it (will self-register in Task)
-      pipeline_stage = PipelineStage.new(self, name, nil, options)
+      # Create a PipelineStage in the root pipeline
+      pipeline_stage = PipelineStage.new(@root_pipeline, name, nil, options)
 
       # Create the actual Pipeline instance for this nested pipeline
       nested_pipeline = Pipeline.new(self, name, @config)
-      pipeline_stage.pipeline = nested_pipeline
+      pipeline_stage.nested_pipeline = nested_pipeline
 
       # Add stages to the nested pipeline via block
       if block_given?
@@ -136,17 +137,17 @@ module Minigun
       existing_stage = find_stage(name)
       if existing_stage && existing_stage.run_mode == :composite
         pipeline_stage = existing_stage
-        pipeline = pipeline_stage.pipeline
+        pipeline = pipeline_stage.nested_pipeline
         pipeline_stage_id = pipeline_stage.id
       else
         if existing_stage && existing_stage.run_mode != :composite
           raise Minigun::Error, "Stage #{name} already exists as a non-composite stage"
         end
 
-        # Create new PipelineStage and add to root_pipeline (will self-register in Task by ID)
-        pipeline_stage = PipelineStage.new(self, name, nil, options)
+        # Create new PipelineStage in root_pipeline
+        pipeline_stage = PipelineStage.new(@root_pipeline, name, nil, options)
         pipeline = Pipeline.new(self, name, @config)
-        pipeline_stage.pipeline = pipeline
+        pipeline_stage.nested_pipeline = pipeline
         pipeline_stage_id = pipeline_stage.id
 
         @root_pipeline.stages[pipeline_stage_id] = pipeline_stage
