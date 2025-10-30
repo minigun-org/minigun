@@ -53,7 +53,7 @@ module Minigun
     # 1. Local neighbors (stages in same pipeline)
     # 2. Neighbor's children (deep search into nested pipelines)
     # 3. Global registry (task-level)
-    # 
+    #
     # This registry only handles local lookups - Pipeline orchestrates the strategy
     def find_local(name)
       return nil if name.nil?

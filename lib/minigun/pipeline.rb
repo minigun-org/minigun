@@ -417,11 +417,11 @@ module Minigun
     # - Falls back to pipeline-scoped name lookup with ambiguity checking
     def find_stage(identifier)
       return nil if identifier.nil?
-      
+
       # Try ID lookup first (fast path)
       stage = @task.find_stage(identifier)
       return stage if stage
-      
+
       # Fall back to pipeline-scoped name lookup
       find_stage_by_name(identifier)
     end
