@@ -305,7 +305,7 @@ module Minigun
 
       # Check if parent pipeline has queues for our stages (from output.to() routing)
       parent_queues = instance_variable_get(:@_parent_stage_queues)
-      
+
       # Check if this nested pipeline has input from parent (from PipelineStage)
       input_from_parent = @input_queues&.dig(:input)
 
