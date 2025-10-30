@@ -158,10 +158,12 @@ RSpec.describe Minigun::Worker do
 
       worker = described_class.new(pipeline, stage, config)
 
-      expect(Minigun.logger).to receive(:info).with(/No upstream sources, sending END signals and exiting/)
+      allow(Minigun.logger).to receive(:debug).and_call_original
 
       worker.start
       worker.join
+
+      expect(Minigun.logger).to have_received(:debug).with(/No upstream sources, sending END signals and exiting/)
     end
 
     it 'sends END signals to downstream if disconnected' do
@@ -254,11 +256,13 @@ RSpec.describe Minigun::Worker do
 
       input_queue << Minigun::EndOfSource.new(:upstream)
 
-      expect(Minigun.logger).to receive(:info).with(/Starting/)
+      allow(Minigun.logger).to receive(:debug).and_call_original
 
       worker = described_class.new(pipeline, stage, config)
       worker.start
       worker.join
+
+      expect(Minigun.logger).to have_received(:debug).with(/Starting/)
     end
 
     it 'logs when done' do
@@ -279,11 +283,13 @@ RSpec.describe Minigun::Worker do
 
       input_queue << Minigun::EndOfSource.new(:upstream)
 
-      expect(Minigun.logger).to receive(:info).with(/Done/)
+      allow(Minigun.logger).to receive(:debug).and_call_original
 
       worker = described_class.new(pipeline, stage, config)
       worker.start
       worker.join
+
+      expect(Minigun.logger).to have_received(:debug).with(/Done/)
     end
   end
 end

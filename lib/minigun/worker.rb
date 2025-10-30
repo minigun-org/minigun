@@ -30,7 +30,7 @@ module Minigun
     private
 
     def run
-      log_info 'Starting'
+      log_debug 'Starting'
 
       stage_ctx = create_stage_context
 
@@ -39,12 +39,12 @@ module Minigun
 
       stage_stats = stage_ctx.stage_stats
       stage_stats.start!
-      log_info('Starting')
+      log_debug('Starting')
 
       @stage.run_stage(stage_ctx)
 
       stage_ctx.stage_stats.finish!
-      log_info('Done')
+      log_debug('Done')
     rescue StandardError => e
       log_error "Unhandled error: #{e.message}"
       log_error e.backtrace.join("\n")
@@ -58,7 +58,7 @@ module Minigun
 
       # If no upstream sources, this stage is disconnected
       if stage_ctx.sources_expected.empty?
-        log_info 'No upstream sources, sending END signals and exiting'
+        log_debug 'No upstream sources, sending END signals and exiting'
 
         # Send EndOfSource to all downstream stages so they don't deadlock
         downstream = stage_ctx.dag.downstream(stage_ctx.stage_name)
@@ -66,7 +66,7 @@ module Minigun
           stage_ctx.stage_input_queues[target] << EndOfSource.new(stage_ctx.stage_name)
         end
 
-        log_info 'Done'
+        log_debug 'Done'
         return true
       end
 
@@ -128,8 +128,8 @@ module Minigun
       end
     end
 
-    def log_info(msg)
-      Minigun.logger.info "[Pipeline:#{@pipeline.name}][#{@stage.log_type}:#{@stage_name}] #{msg}"
+    def log_debug(msg)
+      Minigun.logger.debug "[Pipeline:#{@pipeline.name}][#{@stage.log_type}:#{@stage_name}] #{msg}"
     end
 
     def log_error(msg)
