@@ -23,7 +23,7 @@ module Minigun
           @sources_done << item.source
 
           # All sources done? Return sentinel
-          return EndOfStage.instance(@stage_name) if @sources_done == @sources_expected
+          return EndOfStage.new(@stage_name) if @sources_done == @sources_expected
 
           # More sources pending, keep looping to get next item
           next

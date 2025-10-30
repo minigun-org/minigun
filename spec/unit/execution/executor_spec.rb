@@ -52,7 +52,7 @@ RSpec.describe Minigun::Execution::Executor do
       executor = Minigun::Execution::InlineExecutor.new
       input_queue = double('input_queue')
       output_queue = double('output_queue')
-      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.instance(:test))
+      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.new(:test))
 
       # Executor just calls stage.execute - hooks are handled by run_stage
       expect(stage).to receive(:execute).with(user_context, input_queue, output_queue, stage_stats)
@@ -73,7 +73,7 @@ RSpec.describe Minigun::Execution::Executor do
           stage_stats.increment_consumed  # InputQueue calls this when popping real items
           1
         else
-          Minigun::EndOfStage.instance(:test)
+          Minigun::EndOfStage.new(:test)
         end
       end
 
@@ -102,7 +102,7 @@ RSpec.describe Minigun::Execution::Executor do
       executor = Minigun::Execution::InlineExecutor.new
       input_queue = double('input_queue')
       output_queue = double('output_queue')
-      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.instance(:test))
+      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.new(:test))
 
       # Executor does not record latency or handle stats - that's the stage's responsibility
       expect(stage_stats).not_to receive(:record_latency)
@@ -116,7 +116,7 @@ RSpec.describe Minigun::Execution::Executor do
       executor = Minigun::Execution::InlineExecutor.new
       input_queue = double('input_queue')
       output_queue = double('output_queue')
-      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.instance(:test))
+      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.new(:test))
       allow(stage).to receive(:execute).and_raise(StandardError, 'test error')
 
       # Executor propagates stage errors (item-level errors are handled inside stage loops)
@@ -152,7 +152,7 @@ RSpec.describe Minigun::Execution::InlineExecutor do
 
     it 'executes stage immediately in same thread' do
       input_queue = double('input_queue')
-      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.instance(:test))
+      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.new(:test))
       expect(stage).to receive(:execute).with(user_context, input_queue, output_queue, stage_stats)
 
       executor.execute_stage(stage, user_context, input_queue, output_queue, stage_stats)
@@ -167,7 +167,7 @@ RSpec.describe Minigun::Execution::InlineExecutor do
       end
 
       input_queue = double('input_queue')
-      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.instance(:test))
+      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.new(:test))
       executor.execute_stage(stage, user_context, input_queue, output_queue, stage_stats)
       expect(execution_thread_id).to eq(calling_thread_id)
     end
@@ -218,7 +218,7 @@ RSpec.describe Minigun::Execution::ThreadPoolExecutor do
       end
 
       input_queue = double('input_queue')
-      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.instance(:test))
+      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.new(:test))
       executor.execute_stage(stage, user_context, input_queue, output_queue, stage_stats)
       expect(execution_thread_id).not_to eq(calling_thread_id)
     end
@@ -226,7 +226,7 @@ RSpec.describe Minigun::Execution::ThreadPoolExecutor do
     it 'returns result from thread' do
       output_queue = double('output_queue', items_produced: 1)
       input_queue = double('input_queue')
-      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.instance(:test))
+      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.new(:test))
       expect(stage).to receive(:execute).with(user_context, input_queue, output_queue, stage_stats)
 
       executor.execute_stage(stage, user_context, input_queue, output_queue, stage_stats)
@@ -246,7 +246,7 @@ RSpec.describe Minigun::Execution::ThreadPoolExecutor do
       threads = Array.new(5) do
         Thread.new do
           input_queue = double('input_queue')
-      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.instance(:test))
+      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.new(:test))
       executor.execute_stage(stage, user_context, input_queue, output_queue, stage_stats)
         end
       end
@@ -258,7 +258,7 @@ RSpec.describe Minigun::Execution::ThreadPoolExecutor do
     it 'propagates errors from thread' do
       output_queue = double('output_queue', items_produced: 0)
       input_queue = double('input_queue')
-      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.instance(:test))
+      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.new(:test))
       allow(stage).to receive(:execute).and_raise(StandardError, 'boom')
 
       # ThreadPoolExecutor propagates errors from threads via thread.value
@@ -313,7 +313,7 @@ RSpec.describe Minigun::Execution::ProcessPoolExecutor, skip: Gem.win_platform? 
       execution_pid = nil
       input_queue = double('input_queue')
       output_queue = double('output_queue')
-      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.instance(:test))
+      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.new(:test))
 
       allow(stage).to receive(:execute) do
         execution_pid = Process.pid
@@ -326,7 +326,7 @@ RSpec.describe Minigun::Execution::ProcessPoolExecutor, skip: Gem.win_platform? 
     it 'returns result from child process' do
       input_queue = double('input_queue')
       output_queue = double('output_queue')
-      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.instance(:test))
+      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.new(:test))
       allow(stage).to receive(:execute)
 
       # Executor no longer returns results, stages write to output_queue
@@ -336,7 +336,7 @@ RSpec.describe Minigun::Execution::ProcessPoolExecutor, skip: Gem.win_platform? 
     it 'propagates errors from child process' do
       input_queue = double('input_queue')
       output_queue = double('output_queue')
-      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.instance(:test))
+      allow(input_queue).to receive(:pop).and_return(Minigun::EndOfStage.new(:test))
       allow(stage).to receive(:execute).and_raise(StandardError, 'boom')
 
       # Errors are caught and logged

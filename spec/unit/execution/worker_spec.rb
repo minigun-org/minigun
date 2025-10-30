@@ -77,7 +77,7 @@ RSpec.describe Minigun::Worker do
       expect(worker.thread).to be_a(Thread)
 
       # Put END signal so the worker exits
-      input_queue << Minigun::EndOfSource.from(source: :upstream)
+      input_queue << Minigun::EndOfSource.new(:upstream)
 
       worker.join
 
@@ -95,7 +95,7 @@ RSpec.describe Minigun::Worker do
       worker = described_class.new(pipeline, stage, config)
 
       # Put END signal
-      input_queue << Minigun::EndOfSource.from(source: :upstream)
+      input_queue << Minigun::EndOfSource.new(:upstream)
 
       worker.start
       worker.join
@@ -208,7 +208,7 @@ RSpec.describe Minigun::Worker do
       # Put items and END signal
       input_queue << 1
       input_queue << 2
-      input_queue << Minigun::EndOfSource.from(source: :source)
+      input_queue << Minigun::EndOfSource.new(:source)
 
       worker = described_class.new(pipeline, router_stage, config)
       worker.start
@@ -252,7 +252,7 @@ RSpec.describe Minigun::Worker do
       allow(pipeline).to receive(:stage_input_queues)
         .and_return({ test_stage: input_queue })
 
-      input_queue << Minigun::EndOfSource.from(source: :upstream)
+      input_queue << Minigun::EndOfSource.new(:upstream)
 
       expect(Minigun.logger).to receive(:info).with(/Starting/)
 
@@ -277,7 +277,7 @@ RSpec.describe Minigun::Worker do
         end
       end
 
-      input_queue << Minigun::EndOfSource.from(source: :upstream)
+      input_queue << Minigun::EndOfSource.new(:upstream)
 
       expect(Minigun.logger).to receive(:info).with(/Done/)
 

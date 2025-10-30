@@ -134,7 +134,7 @@ module Minigun
       all_targets.each do |target|
         next unless stage_ctx.stage_input_queues[target]
 
-        stage_ctx.stage_input_queues[target] << EndOfSource.from(source: stage_ctx.stage_name)
+        stage_ctx.stage_input_queues[target] << EndOfSource.new(stage_ctx.stage_name)
       end
     end
 
@@ -342,7 +342,7 @@ module Minigun
     def send_end_signals(worker_ctx)
       # Broadcast EndOfSource to ALL router targets
       @targets.each do |target|
-        worker_ctx.stage_input_queues[target] << EndOfSource.from(source: worker_ctx.stage_name)
+        worker_ctx.stage_input_queues[target] << EndOfSource.new(worker_ctx.stage_name)
       end
     end
   end

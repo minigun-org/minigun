@@ -203,8 +203,8 @@ RSpec.describe Minigun::InputQueue do
 
     it 'tracks EndOfSource signals from sources and returns EndOfStage' do
       # Add EndOfSource signals from all sources
-      raw_queue << Minigun::EndOfSource.from(source: :source_a)
-      raw_queue << Minigun::EndOfSource.from(source: :source_b)
+      raw_queue << Minigun::EndOfSource.new(:source_a)
+      raw_queue << Minigun::EndOfSource.new(:source_b)
 
       # First pop processes all EndOfSource signals and returns EndOfStage
       result = input_queue.pop
@@ -215,7 +215,7 @@ RSpec.describe Minigun::InputQueue do
 
     it 'returns EndOfStage when all sources are done' do
       sources_expected.each do |source|
-        raw_queue << Minigun::EndOfSource.from(source: source)
+        raw_queue << Minigun::EndOfSource.new(source)
       end
 
       # Pop automatically consumes all EndOfSource signals and returns EndOfStage
@@ -224,9 +224,9 @@ RSpec.describe Minigun::InputQueue do
 
     it 'handles mixed items and EndOfSource signals' do
       raw_queue << 1
-      raw_queue << Minigun::EndOfSource.from(source: :source_a)
+      raw_queue << Minigun::EndOfSource.new(:source_a)
       raw_queue << 2
-      raw_queue << Minigun::EndOfSource.from(source: :source_b)
+      raw_queue << Minigun::EndOfSource.new(:source_b)
 
       # Pop returns regular items, automatically consuming EndOfSource signals
       expect(input_queue.pop).to eq(1)

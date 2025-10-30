@@ -11,7 +11,7 @@ module Minigun
   class EndOfSource < QueueSignal
     attr_reader :source
 
-    def initialize(source:)
+    def initialize(source)
       @source = source
     end
 
@@ -22,23 +22,12 @@ module Minigun
     def inspect
       to_s
     end
-
-    # Factory method for consistency with old API
-    def self.from(source:)
-      new(source: source)
-    end
   end
 
   # Signal indicating all upstream sources for a stage have completed
   # Created by InputQueue wrapper when all expected sources send EndOfSource
-  # This is a singleton per stage for efficiency
   class EndOfStage < QueueSignal
     attr_reader :stage_name
-
-    def self.instance(stage_name)
-      @instances ||= {}
-      @instances[stage_name] ||= new(stage_name)
-    end
 
     def initialize(stage_name)
       @stage_name = stage_name

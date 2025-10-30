@@ -63,7 +63,7 @@ module Minigun
         # Send EndOfSource to all downstream stages so they don't deadlock
         downstream = stage_ctx.dag.downstream(stage_ctx.stage_name)
         downstream.each do |target|
-          stage_ctx.stage_input_queues[target] << EndOfSource.from(source: stage_ctx.stage_name)
+          stage_ctx.stage_input_queues[target] << EndOfSource.new(stage_ctx.stage_name)
         end
 
         log_info 'Done'
