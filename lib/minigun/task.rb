@@ -21,7 +21,8 @@ module Minigun
       @registry = NameRegistry.new
 
       # Root pipeline - all stages and nested pipelines live here
-      @root_pipeline = root_pipeline || Pipeline.new(:default, @config)
+      # Use new signature: Pipeline.new(task, name, config)
+      @root_pipeline = root_pipeline || Pipeline.new(self, :default, @config)
     end
 
     # Set config value (applies to all pipelines)
@@ -63,8 +64,8 @@ module Minigun
       # Create a PipelineStage and configure it
       pipeline_stage = PipelineStage.new(name: name, options: options)
 
-      # Create the actual Pipeline instance for this nested pipeline
-      nested_pipeline = Pipeline.new(name, @config)
+      # Create the actual Pipeline instance for this nested pipeline (new signature)
+      nested_pipeline = Pipeline.new(self, name, @config)
       pipeline_stage.pipeline = nested_pipeline
 
       # Add stages to the nested pipeline via block
