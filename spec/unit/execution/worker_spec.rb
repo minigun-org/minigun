@@ -19,6 +19,7 @@ RSpec.describe Minigun::Worker do
   let(:stage) do
     double(
       'stage',
+      id: SecureRandom.hex(8),
       name: :test_stage,
       execution_context: nil,
       log_type: 'Worker',

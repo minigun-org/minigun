@@ -135,7 +135,7 @@ module Minigun
 
       # Store stage by name (legacy)
       @stages[name] = stage
-      
+
       # Also store by ID for future ID-based operations
       @stages_by_id[stage.id] = stage
 
@@ -322,7 +322,7 @@ module Minigun
       # Try as name first (current behavior - backward compatible)
       stage = @stages[identifier]
       return stage if stage
-      
+
       # Try as ID (new behavior - much faster with @stages_by_id)
       @stages_by_id[identifier]
     end

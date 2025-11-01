@@ -7,7 +7,8 @@ module Minigun
   StageContext = Struct.new(
     # Common to all stages
     :pipeline,
-    :stage_name,
+    :stage_name,  # Legacy name-based identifier (for backward compatibility)
+    :stage_id,    # New ID-based identifier (primary going forward)
     :dag,
     :runtime_edges,
     :stage_input_queues,

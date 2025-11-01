@@ -95,7 +95,8 @@ module Minigun
       StageContext.new(
         worker: self,
         pipeline: @pipeline,
-        stage_name: @stage_name,
+        stage_name: @stage_name,  # Legacy - for backward compatibility
+        stage_id: @stage.id,       # New - primary identifier
         dag: dag,
         runtime_edges: @pipeline.runtime_edges,
         stage_input_queues: stage_input_queues,
