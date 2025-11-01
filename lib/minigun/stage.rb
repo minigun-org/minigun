@@ -385,8 +385,8 @@ module Minigun
         item = worker_ctx.input_queue.pop
 
         if item.is_a?(EndOfSource)
-          worker_ctx.sources_expected << item.source # Discover dynamic source
-          worker_ctx.sources_done << item.source
+          worker_ctx.sources_expected << item.stage
+          worker_ctx.sources_done << item.stage
           break if worker_ctx.sources_done == worker_ctx.sources_expected
 
           next
@@ -412,8 +412,8 @@ module Minigun
         item = worker_ctx.input_queue.pop
 
         if item.is_a?(EndOfSource)
-          worker_ctx.sources_expected << item.source # Discover dynamic source
-          worker_ctx.sources_done << item.source
+          worker_ctx.sources_expected << item.stage
+          worker_ctx.sources_done << item.stage
           break if worker_ctx.sources_done == worker_ctx.sources_expected
 
           next

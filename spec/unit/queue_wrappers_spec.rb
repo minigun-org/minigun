@@ -5,7 +5,10 @@ require 'minigun/queue_wrappers'
 
 RSpec.describe Minigun::OutputQueue do
   # Create mock Stage objects
-  let(:test_stage) { double('test_stage', name: :test_stage) }
+  let(:test_stage) { double('test_stage', name: :test_stage, pipeline: pipeline) }
+
+  let(:pipeline_context) { Object.new }
+  let(:pipeline) { instance_double(Minigun::Pipeline, context: pipeline_context) }
   let(:stage_a) { double('stage_a', name: :stage_a) }
   let(:stage_b) { double('stage_b', name: :stage_b) }
   let(:stage_c) { double('stage_c', name: :stage_c) }
@@ -31,7 +34,6 @@ RSpec.describe Minigun::OutputQueue do
       downstream_queues,
       all_stage_queues,
       runtime_edges,
-      pipeline: pipeline,
       stage_stats: stage_stats
     )
   end
@@ -168,7 +170,6 @@ RSpec.describe Minigun::OutputQueue do
             [all_stage_queues[stage_a]],
             all_stage_queues,
             runtime_edges,
-            pipeline: pipeline,
             stage_stats: stage_stats
           )
         end

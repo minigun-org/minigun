@@ -233,7 +233,6 @@ module Minigun
               [capture_queue],
               {},
               {},
-              pipeline: nil, # REMOVE_THIS? - No pipeline in forked process
               stage_stats: stage_stats
             )
 
@@ -281,7 +280,6 @@ module Minigun
             [capture_queue],
             {},
             {},
-            pipeline: nil, # REMOVE_THIS? - No pipeline in fallback mode
             stage_stats: stage_stats
           )
           if stage.respond_to?(:block) && stage.block

@@ -40,12 +40,11 @@ module Minigun
 
   # Wrapper around stage output that routes to downstream queues
   class OutputQueue
-    def initialize(stage, downstream_queues, all_stage_queues, runtime_edges, pipeline: nil, stage_stats: nil)
+    def initialize(stage, downstream_queues, all_stage_queues, runtime_edges, stage_stats: nil)
       @stage = stage
       @downstream_queues = downstream_queues # Array of Queue objects
       @all_stage_queues = all_stage_queues   # Hash keyed by Stage objects
       @runtime_edges = runtime_edges         # Track dynamic routing (keyed by Stage objects)
-      @pipeline = pipeline                   # Pipeline for resolving names to objects
       @stage_stats = stage_stats             # Stats object for tracking (optional)
       @to_cache = {}                         # Memoization cache for .to() results
     end
@@ -65,7 +64,7 @@ module Minigun
       return @to_cache[target] if @to_cache.key?(target)
 
       # Resolve target to Stage object if it's a name
-      target_stage = target.is_a?(Stage) ? target : @pipeline&.find_stage(target)
+      target_stage = target.is_a?(Stage) ? target : pipeline&.find_stage(target)
       raise ArgumentError, "Unknown target stage: #{target}" unless target_stage
 
       # Look up queue by Stage object
@@ -81,7 +80,6 @@ module Minigun
         [target_queue],
         @all_stage_queues,
         @runtime_edges,
-        pipeline: @pipeline,
         stage_stats: @stage_stats
       )
     end
@@ -98,6 +96,12 @@ module Minigun
           self << item
         end
       end
+    end
+
+    private
+
+    def pipeline
+      @stage.pipeline
     end
   end
 
