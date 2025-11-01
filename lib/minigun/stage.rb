@@ -43,10 +43,10 @@ module Minigun
   class Stage
     attr_reader :pipeline, :name, :options, :block
 
-    # Positional constructor: Stage.new(pipeline, name, block, options)
-    def initialize(pipeline, name, block, options = {})
-      @pipeline = pipeline
+    # Positional constructor: Stage.new(name, pipeline, block, options)
+    def initialize(name, pipeline, block, options = {})
       @name = name
+      @pipeline = pipeline
       @block = block
       @options = options
 
@@ -291,9 +291,9 @@ module Minigun
   class AccumulatorStage < ConsumerStage
     attr_reader :max_size, :max_wait
 
-    # Positional constructor: AccumulatorStage.new(pipeline, name, block, options)
-    def initialize(pipeline, name, block, options = {})
-      super(pipeline, name, block, options)
+    # Positional constructor: AccumulatorStage.new(name, pipeline, block, options)
+    def initialize(name, pipeline, block, options = {})
+      super(name, pipeline, block, options)
 
       @max_size = options[:max_size] || 100
       @max_wait = options[:max_wait] || nil # Future: time-based batching
@@ -370,9 +370,9 @@ module Minigun
   class RouterStage < Stage
     attr_accessor :targets
 
-    # Positional constructor: RouterStage.new(pipeline, name, targets, options)
-    def initialize(pipeline, name, targets, options = {})
-      super(pipeline, name, nil, options)
+    # Positional constructor: RouterStage.new(name, pipeline, targets, options)
+    def initialize(name, pipeline, targets, options = {})
+      super(name, pipeline, nil, options)
       @targets = targets || []
     end
 
@@ -439,18 +439,18 @@ module Minigun
   # Special entrance stage for nested pipelines
   # Automatically created when a pipeline has input from parent
   class EntranceStage < ConsumerStage
-    # Positional constructor: EntranceStage.new(pipeline, name, block, options)
-    def initialize(pipeline, name, block, options = {})
-      super(pipeline, name, block, options)
+    # Positional constructor: EntranceStage.new(name, pipeline, block, options)
+    def initialize(name, pipeline, block, options = {})
+      super(name, pipeline, block, options)
     end
   end
 
   # Special exit stage for nested pipelines
   # Automatically created when a pipeline has output to parent
   class ExitStage < ConsumerStage
-    # Positional constructor: ExitStage.new(pipeline, name, block, options)
-    def initialize(pipeline, name, block, options = {})
-      super(pipeline, name, block, options)
+    # Positional constructor: ExitStage.new(name, pipeline, block, options)
+    def initialize(name, pipeline, block, options = {})
+      super(name, pipeline, block, options)
     end
   end
 
@@ -458,16 +458,12 @@ module Minigun
   class PipelineStage < Stage
     attr_reader :nested_pipeline
 
-    # Positional constructor: PipelineStage.new(pipeline, name, block, options)
-    def initialize(pipeline, name, block, options = {})
-      super(pipeline, name, block, options)
-      @nested_pipeline = nil
+    # Positional constructor: PipelineStage.new(name, pipeline, nested_pipeline, block, options)
+    def initialize(name, pipeline, nested_pipeline, block, options = {})
+      super(name, pipeline, block, options)
+      @nested_pipeline = nested_pipeline
     end
 
-    # Inject the nested pipeline instance
-    def nested_pipeline=(pipeline)
-      @nested_pipeline = pipeline
-    end
 
     def run_mode
       :composite # Manages internal stages

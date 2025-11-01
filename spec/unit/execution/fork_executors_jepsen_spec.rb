@@ -37,8 +37,8 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: Gem.win_platform? do
     # RSpec mocks don't work across forks, so we need real objects
     # ConsumerStage#execute handles the input loop and calls block per item
     Minigun::ConsumerStage.new(
-      mock_pipeline,
       name.to_sym,
+      mock_pipeline,
       proc { |item, output_queue|
         # Block is executed via instance_exec(user_context), so 'self' is the user context
         # If expects_context=true, pass user context to processor; otherwise pass output_queue

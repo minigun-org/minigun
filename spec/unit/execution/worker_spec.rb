@@ -193,16 +193,16 @@ RSpec.describe Minigun::Worker do
   describe 'router stage' do
     # Create mock stage objects (positional constructor style)
     let(:router_stage) do
-      Minigun::ConsumerStage.new(pipeline, :router, proc {}, {})
+      Minigun::ConsumerStage.new(:router, pipeline, proc {}, {})
     end
-    let(:target_a_stage) { Minigun::ConsumerStage.new(pipeline, :target_a, proc {}, {}) }
-    let(:target_b_stage) { Minigun::ConsumerStage.new(pipeline, :target_b, proc {}, {}) }
-    let(:source_stage) { Minigun::ProducerStage.new(pipeline, :source, proc {}, {}) }
+    let(:target_a_stage) { Minigun::ConsumerStage.new(:target_a, pipeline, proc {}, {}) }
+    let(:target_b_stage) { Minigun::ConsumerStage.new(:target_b, pipeline, proc {}, {}) }
+    let(:source_stage) { Minigun::ProducerStage.new(:source, pipeline, proc {}, {}) }
 
     let(:broadcast_router) do
       Minigun::RouterBroadcastStage.new(
-        pipeline,
         :router,
+        pipeline,
         [target_a_stage, target_b_stage],  # Use Stage objects
         {}
       )
