@@ -286,10 +286,20 @@ module Minigun
   class AccumulatorStage < ConsumerStage
     attr_reader :max_size, :max_wait
 
-    def initialize(name:, block: nil, options: {})
-      super
-      @max_size = options[:max_size] || 100
-      @max_wait = options[:max_wait] || nil # Future: time-based batching
+    def initialize(*args, name: nil, block: nil, options: {}, **kwargs)
+      # Support both old and new signatures
+      if args.length > 0 && args[0].is_a?(Pipeline)
+        # New style: AccumulatorStage.new(pipeline, name, block, options)
+        super(args[0], args[1], args[2], args[3] || {})
+        opts = args[3] || {}
+      else
+        # Old style: AccumulatorStage.new(name: :foo, block: proc {}, options: {})
+        super(name: name, block: block, options: options)
+        opts = options
+      end
+      
+      @max_size = opts[:max_size] || 100
+      @max_wait = opts[:max_wait] || nil # Future: time-based batching
       @buffer = []
       @mutex = Mutex.new
     end
@@ -363,9 +373,17 @@ module Minigun
   class RouterStage < Stage
     attr_accessor :targets
 
-    def initialize(name:, targets:)
-      super(name: name, options: {})
-      @targets = targets
+    def initialize(*args, name: nil, targets: nil, **kwargs)
+      # Support both old and new signatures
+      if args.length > 0 && args[0].is_a?(Pipeline)
+        # New style: RouterStage.new(pipeline, name, targets, options)
+        super(args[0], args[1], nil, args[3] || {})
+        @targets = args[2] || []
+      else
+        # Old style: RouterStage.new(name: :foo, targets: [...])
+        super(name: name, options: {})
+        @targets = targets || []
+      end
     end
 
     protected
@@ -432,8 +450,15 @@ module Minigun
   class PipelineStage < Stage
     attr_reader :pipeline
 
-    def initialize(name:, options: {})
-      super
+    def initialize(*args, name: nil, options: {}, **kwargs)
+      # Support both old and new signatures
+      if args.length > 0 && args[0].is_a?(Pipeline)
+        # New style: PipelineStage.new(pipeline, name, block, options)
+        super(args[0], args[1], nil, args[3] || options)
+      else
+        # Old style: PipelineStage.new(name: :foo, options: {})
+        super(name: name, options: options)
+      end
       @pipeline = nil
     end
 

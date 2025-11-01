@@ -98,7 +98,8 @@ module Minigun
       else
         # Create new PipelineStage and add to root_pipeline
         pipeline_stage = PipelineStage.new(name: name, options: options)
-        pipeline = Pipeline.new(name, @config)
+        # Use new signature: Pipeline.new(task, name, config)
+        pipeline = Pipeline.new(self, name, @config)
         pipeline_stage.pipeline = pipeline
 
         @root_pipeline.stages[name] = pipeline_stage
