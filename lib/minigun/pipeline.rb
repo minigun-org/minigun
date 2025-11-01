@@ -299,8 +299,13 @@ module Minigun
       end
     end
 
-    def find_stage(name)
-      @stages[name]
+    def find_stage(identifier)
+      # Try as name first (current behavior - backward compatible)
+      stage = @stages[identifier]
+      return stage if stage
+      
+      # Try as ID (new behavior - supports future ID-based lookups)
+      @stages.values.find { |s| s.id == identifier }
     end
 
     def terminal_stage?(stage_name)
