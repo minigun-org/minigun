@@ -141,7 +141,7 @@ module Minigun
       # Create stage instance
       stage = if type.is_a?(Class)
                 # Custom stage class provided (positional constructor style)
-                type.new(self, name, block, options)
+                type.new(name, self, block, options)
               else
                 # Extract stage_type from options if present (used by DSL)
                 actual_type = options.delete(:stage_type) || type
