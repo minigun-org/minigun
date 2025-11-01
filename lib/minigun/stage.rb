@@ -174,8 +174,7 @@ module Minigun
 
       all_targets.each do |target|
         target_id = stage_ctx.pipeline.normalize_to_id(target)
-        next unless stage_ctx.stage_input_queues[target_id]
-        stage_ctx.stage_input_queues[target_id] << EndOfSource.new(stage_ctx.stage_id)
+        stage_ctx.stage_input_queues[target_id]&.<<(EndOfSource.new(stage_ctx.stage_id))
       end
     end
 
