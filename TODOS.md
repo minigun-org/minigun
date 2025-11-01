@@ -112,6 +112,16 @@ cow_fork_pool
         _with_execution_context(context, &)
       end
 
+=================
+
++        # Get pipeline name - pipeline might be a Pipeline or Task
++        pipeline_name = @pipeline.is_a?(Pipeline) ? @pipeline.name : nil
++        task.registry.register(self, pipeline_name: pipeline_name)
+       else
+
+======================
+
+lock DAG /pipelines/task when running (no modification possible)
 
 ===============================
 
