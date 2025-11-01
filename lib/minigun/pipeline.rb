@@ -180,6 +180,12 @@ module Minigun
       # Add to stage order by ID and DAG
       @stage_order << stage_id
       @dag.add_node(stage_id)
+      
+      # CRITICAL: If this is a PipelineStage, merge nested stages into parent DAG
+      # This makes the DAG the single source of truth for all routing
+      if stage.is_a?(PipelineStage) && stage.instance_variable_get(:@nested_pipeline)
+        merge_nested_pipeline_into_dag(stage)
+      end
     end
 
     # Resolve a stage identifier (name or ID) to an ID
@@ -303,10 +309,25 @@ module Minigun
       @runtime_edges = Concurrent::Hash.new { |h, k| h[k] = Concurrent::Set.new }
 
       # Start unified workers for ALL stages (producers and consumers)
+      # Include both local stages and nested pipeline stages (DAG-centric)
       @stages.each_value do |stage|
         worker = Worker.new(self, stage, @config)
         worker.start
         @stage_threads << worker
+      end
+      
+      # Also create workers for nested pipeline stages
+      # (they're in parent DAG and have queues, but not in @stages)
+      @stages.each_value do |stage|
+        next unless stage.run_mode == :composite
+        next unless stage.respond_to?(:nested_pipeline) && stage.nested_pipeline
+        
+        nested_pipeline = stage.nested_pipeline
+        nested_pipeline.stages.each_value do |nested_stage|
+          worker = Worker.new(self, nested_stage, @config)
+          worker.start
+          @stage_threads << worker
+        end
       end
 
       # Wait for all workers to finish
@@ -321,43 +342,39 @@ module Minigun
 
       queues = {}
 
-      # Check if parent pipeline has queues for our stages (from output.to() routing)
-      parent_queues = instance_variable_get(:@_parent_stage_queues)
 
-      # Check if this nested pipeline has input from parent (from PipelineStage)
-      input_from_parent = @input_queues&.dig(:input)
-
+      # Create queue for every stage (DAG includes all stages, including nested)
       @stages.each do |stage_id, stage|
         # Skip autonomous stages - they don't have input queues
         next if stage.run_mode == :autonomous
 
-        # CRITICAL: Entrance stage gets input queue from parent
-        if input_from_parent && stage.instance_variable_get(:@_parent_sources_expected)
-          queues[stage_id] = input_from_parent
-        # If parent has a queue for this stage (from routing), reuse it
-        elsif parent_queues && parent_queues.key?(stage_id)
-          queues[stage_id] = parent_queues[stage_id]
-        else
-          # Use stage's queue_size setting (bounded SizedQueue or unbounded Queue)
-          size = stage.queue_size
-          queues[stage_id] = if size.nil?
-                               Queue.new # Unbounded queue
-                             else
-                               SizedQueue.new(size) # Bounded queue with backpressure
-                             end
-        end
+        # Use stage's queue_size setting (bounded SizedQueue or unbounded Queue)
+        size = stage.queue_size
+        queues[stage_id] = if size.nil?
+                             Queue.new # Unbounded queue
+                           else
+                             SizedQueue.new(size) # Bounded queue with backpressure
+                           end
       end
 
-      # Also include stages from nested pipelines (for output.to() routing)
-      # Build queues for nested pipeline stages so they're accessible for routing
+      # Also create queues for nested pipeline stages
+      # (they're in parent DAG but stage objects are owned by nested pipeline)
       @stages.each_value do |stage|
         next unless stage.run_mode == :composite
         next unless stage.respond_to?(:nested_pipeline) && stage.nested_pipeline
 
-        nested_queues = stage.nested_pipeline.build_stage_input_queues(visited_pipelines)
-        nested_queues.each do |nested_stage_id, nested_queue|
-          # Avoid conflicts - nested pipeline stages accessible by ID
-          queues[nested_stage_id] = nested_queue unless queues.key?(nested_stage_id)
+        nested_pipeline = stage.nested_pipeline
+        nested_pipeline.stages.each do |nested_stage_id, nested_stage|
+          # Skip if already created or autonomous
+          next if queues.key?(nested_stage_id)
+          next if nested_stage.run_mode == :autonomous
+
+          size = nested_stage.queue_size
+          queues[nested_stage_id] = if size.nil?
+                                      Queue.new
+                                    else
+                                      SizedQueue.new(size)
+                                    end
         end
       end
 
@@ -443,6 +460,50 @@ module Minigun
     def downstream(stage_identifier)
       stage_id = normalize_to_id(stage_identifier)
       @dag.downstream(stage_id)
+    end
+
+    # Merge a nested pipeline's stages and edges into this pipeline's DAG
+    # This allows parent pipeline to route directly to nested stages
+    def merge_nested_pipeline_into_dag(pipeline_stage)
+      nested_pipeline = pipeline_stage.instance_variable_get(:@nested_pipeline)
+      return unless nested_pipeline
+      
+      # Add all nested stages as nodes in parent DAG
+      nested_pipeline.stages.each_key do |nested_stage_id|
+        @dag.add_node(nested_stage_id)
+      end
+      
+      # Merge nested pipeline's DAG edges into parent DAG
+      nested_pipeline.dag.edges.each do |from_id, to_ids|
+        to_ids.each do |to_id|
+          @dag.add_edge(from_id, to_id)
+        end
+      end
+      
+      # Don't connect PipelineStage to nested stages automatically
+      # Let explicit routing (to:, from:, output.to()) handle connections
+    end
+    
+    # Merge a nested pipeline's stages and edges into this pipeline's DAG
+    # This allows parent pipeline to route directly to nested stages
+    def merge_nested_pipeline_into_dag(pipeline_stage)
+      nested_pipeline = pipeline_stage.instance_variable_get(:@nested_pipeline)
+      return unless nested_pipeline
+      
+      # Add all nested stages as nodes in parent DAG
+      nested_pipeline.stages.each_key do |nested_stage_id|
+        @dag.add_node(nested_stage_id)
+      end
+      
+      # Merge nested pipeline's DAG edges into parent DAG
+      nested_pipeline.dag.edges.each do |from_id, to_ids|
+        to_ids.each do |to_id|
+          @dag.add_edge(from_id, to_id)
+        end
+      end
+      
+      # Don't connect PipelineStage to nested stages automatically
+      # Let user define routing via output.to() or explicit DAG edges
     end
 
     # Helper method for tests: get upstream stages by name or ID
@@ -601,46 +662,9 @@ module Minigun
     # Insert an entrance distributor stage for nested pipelines
     # This receives items from the parent pipeline and distributes to entry stages
     def insert_entrance_distributor_for_inputs!
-      # Find stages that have no upstream (would be entry points)
-      entry_stage_ids = @stages.keys.select do |stage_id|
-        stage = @stages[stage_id]
-        # Skip autonomous stages (they're producers)
-        next false if stage.run_mode == :autonomous
-        # Entry stages have no upstream
-        @dag.upstream(stage_id).empty?
-      end
-
-      return if entry_stage_ids.empty?
-
-      # Create a consumer stage that reads from parent input and emits to nested pipeline
-      # Use ConsumerStage (not ProducerStage) so it properly tracks multiple END signals
-      # No name - entrance stage is identified by ID only
-      parent_input = @input_queues[:input]
-      entrance_block = proc do |item, output|
-        # Just forward items from parent to nested pipeline
-        output << item
-      end
-      entrance_stage = Minigun::ConsumerStage.new(self, nil, entrance_block, {})
-      entrance_id = entrance_stage.id
-
-      # CRITICAL: Mark this stage so Worker knows it expects sources from parent pipeline
-      # The parent pipeline sets @input_queues[:sources_expected] which are the IDs
-      # of upstream stages in the PARENT pipeline that will send items
-      entrance_stage.instance_variable_set(:@_parent_sources_expected, @input_queues[:sources_expected])
-
-      # Add the entrance stage to the pipeline by ID
-      @stages[entrance_id] = entrance_stage
-      @stage_order.unshift(entrance_id) # Add at beginning
-      @dag.add_node(entrance_id)
-
-      # Connect entrance to entry stages (all by ID)
-      entry_stage_ids.each do |entry_stage_id|
-        @dag.add_edge(entrance_id, entry_stage_id)
-      end
-
-      # Log using display names for readability
-      entry_display = entry_stage_ids.map { |id| @task.find_stage(id)&.display_name || id }.join(', ')
-      log_debug "[Pipeline:#{@name}] Added entrance distributor '#{entrance_stage.display_name}' for entry stages: #{entry_display}"
+      # Entrance stage is NO LONGER NEEDED with DAG-centric architecture
+      # Parent DAG includes nested stages, so parent routes directly to them
+      # This method is kept as a no-op for now in case we need special logic later
     end
 
     # Insert an :_exit collector stage that terminal stages drain into

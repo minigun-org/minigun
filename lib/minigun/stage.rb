@@ -471,51 +471,31 @@ module Minigun
     end
 
     # Run the nested pipeline when this stage is executed as a worker
+    # With DAG-centric architecture:
+    # - If parent routes directly to nested stages, PipelineStage is passive (doesn't run)
+    # - Parent already created workers for nested stages, so nothing to do here
+    # - Only run nested pipeline if PipelineStage itself receives direct inputs
     def run_stage(stage_ctx)
       return unless @nested_pipeline
 
-      # Set up input/output queues for the nested pipeline
-      # The pipeline will create :_entrance and :_exit stages based on these
-      if stage_ctx.sources_expected.any?
-        # Has upstream: set input queue so pipeline creates :_entrance
-        # Also pass the expected source count for proper END signal handling
-        @nested_pipeline.instance_variable_set(:@input_queues, {
-          input: stage_ctx.input_queue,
-          sources_expected: stage_ctx.sources_expected
-        })
+      # In DAG-centric model, check if parent routes directly to nested stages
+      # If so, nested stages are already running in parent's worker pool
+      nested_stage_ids = @nested_pipeline.stages.keys.to_set
+      parent_routes_to_nested = stage_ctx.pipeline.dag.edges.any? do |from_id, to_ids|
+        # Skip self (PipelineStage)
+        next false if from_id == @id
+        # Check if any parent stage routes to nested stages
+        to_ids.any? { |to_id| nested_stage_ids.include?(to_id) }
       end
 
-      # Always set output queue so pipeline creates :_exit
-      output_queue = create_output_queue(stage_ctx)
-      @nested_pipeline.instance_variable_set(:@output_queues, { output: output_queue })
-
-      # If parent pipeline has already built queues for nested stages (from output.to() routing),
-      # reuse those queues instead of creating new ones. This ensures items routed directly to
-      # nested pipeline stages are processed correctly.
-      parent_queues = stage_ctx.pipeline.stage_input_queues
-      if parent_queues && !parent_queues.empty?
-        # Before nested pipeline builds its queues, check if parent has queues for nested stages
-        # and prepare to reuse them
-        @nested_pipeline.instance_variable_set(:@_parent_stage_queues, parent_queues)
-
-        # Track runtime edges from parent to nested stages for END signal handling
-        parent_runtime_edges = stage_ctx.pipeline.runtime_edges
-        if parent_runtime_edges
-          # Find which parent stages route to nested stages
-          nested_stage_names = @nested_pipeline.stages.keys.to_set
-          parent_runtime_edges.each do |source_stage, targets|
-            nested_targets = targets & nested_stage_names
-            if nested_targets.any?
-              # These parent stages route to nested stages - we need to track this
-              # for proper END signal propagation
-              nested_sources_expected = Set.new(nested_targets.map { |t| source_stage })
-              @nested_pipeline.instance_variable_set(:@_nested_sources_expected, nested_sources_expected)
-            end
-          end
-        end
+      if parent_routes_to_nested
+        # Parent routes directly to nested stages - they're already running
+        # PipelineStage is passive, just forward EndOfStage signals
+        return
       end
 
-      # Run the nested pipeline (it will automatically create :_entrance/:_exit as needed)
+      # No direct parent->nested routing, run nested pipeline normally
+      # (This handles cases where PipelineStage receives inputs directly)
       @nested_pipeline.run(stage_ctx.pipeline.context)
     ensure
       send_end_signals(stage_ctx)

@@ -57,6 +57,9 @@ module Minigun
       # Only check streaming stages (autonomous and composite manage their own execution)
       return false unless @stage.run_mode == :streaming
 
+      # PipelineStage always runs (it manages nested pipeline execution)
+      return false if @stage.run_mode == :composite
+
       # If no upstream sources, this stage is disconnected
       if stage_ctx.sources_expected.empty?
         log_debug 'No upstream sources, sending END signals and exiting'
@@ -78,29 +81,11 @@ module Minigun
       dag = @pipeline.dag
       stage_input_queues = @pipeline.stage_input_queues
 
-      # Calculate sources for workers (empty for autonomous stages)
-      parent_sources = @stage.instance_variable_get(:@_parent_sources_expected)
+      # Calculate sources for workers: Just use DAG upstream (DAG is single source of truth)
       sources_expected = if @stage.run_mode == :autonomous
-                           Set.new
-                         elsif parent_sources
-                           # Entrance stage: Use parent pipeline's sources instead of local DAG
-                           parent_sources
-                         elsif @stage.run_mode == :composite && @stage.respond_to?(:nested_pipeline)
-                           # PipelineStage: Check if parent routes to nested stages
-                           # If parent has queues for nested stages, this PipelineStage has upstream sources
-                           nested_pipeline = @stage.nested_pipeline
-                           if nested_pipeline
-                             parent_queues = @pipeline.stage_input_queues
-                             nested_stage_ids = nested_pipeline.stages.keys.to_set
-                             # Check if any parent stage routes to nested stages
-                             has_parent_routes = parent_queues&.any? { |stage_id, _queue| nested_stage_ids.include?(stage_id) } ||
-                                                 @pipeline.dag.upstream(@stage_id).any?
-                             has_parent_routes ? Set.new([:parent]) : Set.new(dag.upstream(@stage_id))
-                           else
-                             Set.new(dag.upstream(@stage_id))
-                           end
+                           Set.new # Autonomous stages (producers) have no sources
                          else
-                           Set.new(dag.upstream(@stage_id))
+                           Set.new(dag.upstream(@stage_id)) # All other stages use DAG
                          end
 
       # Create stats object for this specific stage
