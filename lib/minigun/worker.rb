@@ -62,13 +62,7 @@ module Minigun
 
       # If no upstream sources, this stage is disconnected
       if stage_ctx.sources_expected.empty?
-        # Named stages might receive items via runtime routing, so keep them alive
-        if @stage.name
-          log_debug 'No upstream sources but has name - keeping alive for potential runtime routing'
-          return false
-        end
-
-        log_debug 'No upstream sources and no name, sending END signals and exiting'
+        log_debug 'No upstream sources, sending END signals and exiting'
 
         # Send EndOfSource to all downstream stages so they don't deadlock
         downstream = stage_ctx.dag.downstream(stage_ctx.stage_id)

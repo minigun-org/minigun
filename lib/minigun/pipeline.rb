@@ -637,6 +637,10 @@ module Minigun
         # Skip if this is the last stage
         next if index >= @stage_order.size - 1
 
+        # Skip composite stages (PipelineStages) - they don't send items sequentially
+        current_stage = find_stage(stage_id)
+        next if current_stage&.run_mode == :composite
+
         # Find the next non-producer stage
         next_stage_id = nil
         next_stage_obj = nil
@@ -650,6 +654,9 @@ module Minigun
           # Skip autonomous stages
           next if candidate_obj.run_mode == :autonomous
 
+          # Skip composite stages - they don't participate in sequential routing
+          next if candidate_obj.run_mode == :composite
+
           # Found a valid non-producer stage
           next_stage_id = candidate_id
           next_stage_obj = candidate_obj
@@ -659,11 +666,6 @@ module Minigun
         # No valid next stage found
         next unless next_stage_id
         next unless next_stage_obj  # Make sure we found the stage object
-
-        # Skip if BOTH current and next are composite stages (isolated pipelines)
-        current_stage = find_stage(stage_id)
-        next unless current_stage  # Make sure current stage exists
-        next if current_stage.run_mode == :composite && next_stage_obj.run_mode == :composite
 
         # Skip if this is a fan-out pattern (next_stage is a sibling)
         next if @dag.fan_out_siblings?(stage_id, next_stage_id)
