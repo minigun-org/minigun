@@ -304,23 +304,26 @@ module Minigun
       # Key: source stage, Value: Set of target stages
       @runtime_edges = Concurrent::Hash.new { |h, k| h[k] = Concurrent::Set.new }
 
-      # Collect nested stages to add to @stages
-      nested_stages = {}
-      @stages.each_value do |stage|
-        next unless stage.is_a?(PipelineStage) && stage.nested_pipeline
-        stage.nested_pipeline.stages.each do |nested_id, nested_stage|
-          nested_stages[nested_id] = nested_stage unless @stages.key?(nested_id)
-        end
-      end
-
-      # Add nested stages to @stages
-      @stages.merge!(nested_stages)
-
-      # Start workers for all stages (including nested ones)
+      # Start unified workers for ALL stages (producers and consumers)
+      # Include both local stages and nested pipeline stages (DAG-centric)
       @stages.each_value do |stage|
         worker = Worker.new(self, stage, @config)
         worker.start
         @stage_threads << worker
+      end
+
+      # Also create workers for nested pipeline stages
+      # (they're in parent DAG and have queues, but not in @stages)
+      @stages.each_value do |stage|
+        next unless stage.run_mode == :composite
+        next unless stage.respond_to?(:nested_pipeline) && stage.nested_pipeline
+
+        nested_pipeline = stage.nested_pipeline
+        nested_pipeline.stages.each_value do |nested_stage|
+          worker = Worker.new(self, nested_stage, @config)
+          worker.start
+          @stage_threads << worker
+        end
       end
 
       # Wait for all workers to finish
@@ -486,9 +489,7 @@ module Minigun
         end
       end
 
-      # Note: PipelineStage does NOT connect to nested entry stages
-      # Nested entry stages are started by PipelineStage but don't receive items/EndOfSource from it
-      # They may receive items via runtime routing from other stages
+      # Connect PipelineStage wrapper to nested entry points (stages with no upstream in nested pipeline)
       entry_stages = nested_pipeline.stages.keys.select do |stage_id|
         nested_pipeline.dag.upstream(stage_id).empty?
       end.reject do |stage_id|
@@ -496,8 +497,10 @@ module Minigun
         nested_pipeline.stages[stage_id].run_mode == :autonomous
       end
 
-      # Don't add edges from PipelineStage to entry stages
-      puts "[DEBUG merge] Entry stages (not connected to PipelineStage): #{entry_stages.inspect}"
+      entry_stages.each do |entry_stage_id|
+        puts "[DEBUG merge] Connecting PipelineStage #{pipeline_stage.id} -> nested entry #{entry_stage_id}"
+        @dag.add_edge(pipeline_stage.id, entry_stage_id)
+      end
 
       # Connect nested exit stages to PipelineStage's downstream stages
       # This maintains the flow: upstream → PipelineStage → nested stages → downstream

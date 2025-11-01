@@ -208,12 +208,9 @@ RSpec.describe Minigun::Worker do
       target_a_queue = Queue.new
       target_b_queue = Queue.new
 
-      # Use the router stage's actual ID as the key
-      router_id = router_stage.id
       allow(pipeline).to receive(:stage_input_queues)
-        .and_return({ router_id => input_queue, target_a: target_a_queue, target_b: target_b_queue })
-      allow(pipeline).to receive(:normalize_to_id) { |id| id } # Return input as-is
-      allow(dag).to receive(:upstream).with(router_id).and_return([:source])
+        .and_return({ router: input_queue, target_a: target_a_queue, target_b: target_b_queue })
+      allow(dag).to receive(:upstream).with(:router).and_return([:source])
 
       # Put items and END signal
       input_queue << 1

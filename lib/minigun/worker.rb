@@ -62,9 +62,9 @@ module Minigun
 
       # If no upstream sources, this stage is disconnected
       if stage_ctx.sources_expected.empty?
-        # However, named stages might receive items via runtime routing, so don't exit
+        # Named stages might receive items via runtime routing, so keep them alive
         if @stage.name
-          log_debug 'No upstream sources but has name - waiting for potential runtime routing'
+          log_debug 'No upstream sources but has name - keeping alive for potential runtime routing'
           return false
         end
 

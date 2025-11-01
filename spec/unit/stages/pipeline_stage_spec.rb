@@ -112,10 +112,14 @@ RSpec.describe Minigun::PipelineStage do
 
       allow(stage).to receive(:create_output_queue).and_return(Queue.new)
       allow(stage).to receive(:send_end_signals)
+      allow(pipeline).to receive(:run)
 
-      # In DAG-centric architecture, nested pipeline stages get their own queues
-      # PipelineStage just runs the nested pipeline
-      expect(pipeline).to receive(:run).with(context)
+      # Expect input_queues to be set on the nested pipeline with sources_expected
+      expect(pipeline).to receive(:instance_variable_set).with(
+        :@input_queues,
+        { input: input_queue, sources_expected: sources }
+      )
+      expect(pipeline).to receive(:instance_variable_set).with(:@output_queues, anything)
 
       stage.run_stage(stage_ctx)
     end
@@ -140,10 +144,10 @@ RSpec.describe Minigun::PipelineStage do
 
       allow(stage).to receive(:create_output_queue).and_return(output_queue)
       allow(stage).to receive(:send_end_signals)
+      allow(pipeline).to receive(:run)
 
-      # In DAG-centric architecture, nested pipeline handles its own output coordination
-      # PipelineStage just runs the nested pipeline
-      expect(pipeline).to receive(:run).with(context)
+      # Expect output_queues to be set on the nested pipeline
+      expect(pipeline).to receive(:instance_variable_set).with(:@output_queues, { output: output_queue })
 
       stage.run_stage(stage_ctx)
     end

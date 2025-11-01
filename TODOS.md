@@ -123,6 +123,14 @@ cow_fork_pool
 
 lock DAG /pipelines/task when running (no modification possible)
 
+=======================
+
+named_stage_keepalive_seconds = nil, 0, 5, infinity
+keepalive_seconds
+- needs to send keepalives to downstreams (solve in DAG?)
+- mark & sweep GC? mark them for overall pipeline ermination
+
+
 ===============================
 
 dynamic scaling
