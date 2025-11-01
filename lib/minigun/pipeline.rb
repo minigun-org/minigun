@@ -5,7 +5,7 @@ module Minigun
   # A Pipeline can be standalone or part of a multi-pipeline Task
   class Pipeline
     attr_reader :name, :config, :stages, :hooks, :dag, :output_queues, :stage_order, :stats,
-                :context, :stage_hooks, :stage_input_queues, :runtime_edges, :input_queues, :task
+                :context, :stage_hooks, :stage_input_queues, :runtime_edges, :input_queues, :task, :stages_by_name
 
     def initialize(*args, name: nil, config: {}, stages: nil, hooks: nil, stage_hooks: nil, dag: nil, stage_order: nil, stats: nil, **kwargs)
       # Support both old and new signatures
@@ -29,8 +29,8 @@ module Minigun
         use_ipc: config[:use_ipc] || false
       }
 
-      @stages = stages || {} # { stage_name => Stage } - legacy name-based lookup
-      @stages_by_id = {} # { stage_id => Stage } - new ID-based lookup (populated on demand)
+      @stages = stages || [] # Array of Stage objects
+      @stages_by_name = {} # Hash for name → Stage lookups
 
       # Pipeline-level hooks (run once per pipeline)
       @hooks = hooks || {
@@ -61,7 +61,7 @@ module Minigun
       Pipeline.new(
         @name,
         @config.dup,
-        stages: @stages.transform_values(&:dup), # Deep copy - dup each stage object
+        stages: @stages.map(&:dup), # Deep copy - dup each stage object
         hooks: {
           before_run: @hooks[:before_run].dup,
           after_run: @hooks[:after_run].dup,
@@ -131,15 +131,15 @@ module Minigun
               end
 
       # Check for name collision
-      raise Minigun::Error, "Stage name collision: '#{name}' is already defined in pipeline '#{@name}'" if @stages.key?(name)
+      raise Minigun::Error, "Stage name collision: '#{name}' is already defined in pipeline '#{@name}'" if @stages_by_name.key?(name)
 
-      # Store stage by name (legacy)
-      @stages[name] = stage
+      # Store stage object in array
+      @stages << stage
+      
+      # Store by name for lookups
+      @stages_by_name[name] = stage
 
-      # Also store by ID for future ID-based operations
-      @stages_by_id[stage.id] = stage
-
-      # Add to stage order and DAG
+      # Add to stage order and DAG (still using names for now)
       @stage_order << name
       @dag.add_node(name)
     end
@@ -235,7 +235,7 @@ module Minigun
       @runtime_edges = Concurrent::Hash.new { |h, k| h[k] = Concurrent::Set.new }
 
       # Start unified workers for ALL stages (producers and consumers)
-      @stages.each_value do |stage|
+      @stages.each do |stage|
         worker = Worker.new(self, stage, @config)
         worker.start
         @stage_threads << worker
@@ -249,19 +249,19 @@ module Minigun
     def build_stage_input_queues
       queues = {}
 
-      @stages.each do |stage_name, stage|
+      @stages.each do |stage|
         # Skip autonomous stages - they don't have input queues
         next if stage.run_mode == :autonomous
 
         # Special case: :_entrance uses the parent pipeline's input queue
-        if stage_name == :_entrance && @input_queues && @input_queues[:input]
-          queues[stage_name] = @input_queues[:input]
+        if stage.name == :_entrance && @input_queues && @input_queues[:input]
+          queues[stage.name] = @input_queues[:input]
           next
         end
 
         # Use stage's queue_size setting (bounded SizedQueue or unbounded Queue)
         size = stage.queue_size
-        queues[stage_name] = if size.nil?
+        queues[stage.name] = if size.nil?
                                Queue.new # Unbounded queue
                              else
                                SizedQueue.new(size) # Bounded queue with backpressure
@@ -276,7 +276,8 @@ module Minigun
       stages_to_add = []
       dag_updates = []
 
-      @stages.each do |stage_name, stage|
+      @stages.each do |stage|
+        stage_name = stage.name
         downstream = @dag.downstream(stage_name)
 
         # Fan-out: stage has multiple downstream consumers
@@ -311,20 +312,16 @@ module Minigun
         update[:add_router_edges].each { |(from, to)| @dag.add_edge(from, to) }
       end
 
-      # Add router stages to @stages (by name) and @stages_by_id
+      # Add router stages to @stages array and @stages_by_name
       stages_to_add.each do |name, stage|
-        @stages[name] = stage
-        @stages_by_id[stage.id] = stage
+        @stages << stage
+        @stages_by_name[name] = stage
       end
     end
 
     def find_stage(identifier)
-      # Try as name first (current behavior - backward compatible)
-      stage = @stages[identifier]
-      return stage if stage
-
-      # Try as ID (new behavior - much faster with @stages_by_id)
-      @stages_by_id[identifier]
+      # identifier is a name (symbol/string)
+      @stages_by_name[identifier]
     end
 
     # Normalize a stage identifier to a consistent format for internal use
@@ -351,11 +348,11 @@ module Minigun
 
     # Helper methods to find stages by characteristics
     def find_producer
-      @stages.values.find { |stage| stage.run_mode == :autonomous }
+      @stages.find { |stage| stage.run_mode == :autonomous }
     end
 
     def find_all_producers
-      @stages.values.select do |stage|
+      @stages.select do |stage|
         if stage.run_mode == :composite
           # Composite stage is a producer if it has no upstream
           @dag.upstream(stage.name).empty?
@@ -457,12 +454,11 @@ module Minigun
     # This receives items from the parent pipeline and distributes to entry stages
     def insert_entrance_distributor_for_inputs!
       # Find stages that have no upstream (would be entry points)
-      entry_stages = @stages.keys.select do |stage_name|
-        stage = @stages[stage_name]
+      entry_stages = @stages.select do |stage|
         # Skip autonomous stages (they're producers)
         next false if stage.run_mode == :autonomous
         # Entry stages have no upstream
-        @dag.upstream(stage_name).empty?
+        @dag.upstream(stage.name).empty?
       end
 
       return if entry_stages.empty?
@@ -477,24 +473,25 @@ module Minigun
       entrance_stage = Minigun::ConsumerStage.new(name: :_entrance, block: entrance_block, options: {})
 
       # Add the :_entrance stage to the pipeline
-      @stages[:_entrance] = entrance_stage
-      @stages_by_id[entrance_stage.id] = entrance_stage
+      @stages << entrance_stage
+      @stages_by_name[:_entrance] = entrance_stage
       @stage_order.unshift(:_entrance) # Add at beginning
       @dag.add_node(:_entrance)
 
       # Connect :_entrance to entry stages
-      entry_stages.each do |stage_name|
-        @dag.add_edge(:_entrance, stage_name)
+      entry_stages.each do |stage|
+        @dag.add_edge(:_entrance, stage.name)
       end
 
-      log_debug "[Pipeline:#{@name}] Added :_entrance distributor for entry stages: #{entry_stages.join(', ')}"
+      entry_stage_names = entry_stages.map(&:name).join(', ')
+      log_debug "[Pipeline:#{@name}] Added :_entrance distributor for entry stages: #{entry_stage_names}"
     end
 
     # Insert an :_exit collector stage that terminal stages drain into
     # This allows nested pipelines to send their outputs to the parent pipeline
     def insert_exit_collector_for_outputs!
       # Find terminal stages (stages with no downstream)
-      terminal_stages = @stages.keys.select { |stage_name| @dag.terminal?(stage_name) }
+      terminal_stages = @stages.select { |stage| @dag.terminal?(stage.name) }
       return if terminal_stages.empty?
 
       # Create a consumer stage that forwards items to @output_queues[:output]
@@ -506,19 +503,20 @@ module Minigun
       exit_stage = Minigun::ConsumerStage.new(name: :_exit, block: exit_block, options: {})
 
       # Add the :_exit stage to the pipeline
-      @stages[:_exit] = exit_stage
-      @stages_by_id[exit_stage.id] = exit_stage
+      @stages << exit_stage
+      @stages_by_name[:_exit] = exit_stage
       @stage_order << :_exit
       @dag.add_node(:_exit)
 
       # Connect terminal stages to :_exit
-      terminal_stages.each do |stage_name|
-        @dag.add_edge(stage_name, :_exit)
+      terminal_stages.each do |stage|
+        @dag.add_edge(stage.name, :_exit)
       end
 
       # Note: input queue for :_exit will be created automatically by build_stage_input_queues
 
-      log_debug "[Pipeline:#{@name}] Added :_exit collector for terminal stages: #{terminal_stages.join(', ')}"
+      terminal_stage_names = terminal_stages.map(&:name).join(', ')
+      log_debug "[Pipeline:#{@name}] Added :_exit collector for terminal stages: #{terminal_stage_names}"
     end
 
     # Merge a nested pipeline's DAG into this pipeline's DAG
@@ -543,10 +541,10 @@ module Minigun
         end
       end
 
-      # Store reference to nested pipeline stages in parent (by name and ID)
-      nested_pipeline.stages.each do |nested_stage_name, nested_stage|
-        @stages[nested_stage_name] = nested_stage
-        @stages_by_id[nested_stage.id] = nested_stage
+      # Store reference to nested pipeline stages in parent
+      nested_pipeline.stages.each do |nested_stage|
+        @stages << nested_stage unless @stages.include?(nested_stage)
+        @stages_by_name[nested_stage.name] = nested_stage
       end
 
       # Add nested stages to stage order (for topological sorting)
