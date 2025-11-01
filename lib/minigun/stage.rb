@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'securerandom'
+
 module Minigun
   # Unified context for all stage execution (producers and workers)
   StageContext = Struct.new(
@@ -27,9 +29,10 @@ module Minigun
   # Implements the Composite pattern where Pipeline is a composite Stage
   # Also handles loop-based stages (stages that manage their own input loop)
   class Stage
-    attr_reader :name, :options, :block
+    attr_reader :id, :name, :options, :block
 
     def initialize(name:, block: nil, options: {})
+      @id = SecureRandom.hex(8)  # Unique ID for this stage
       @name = name
       @block = block
       @options = options

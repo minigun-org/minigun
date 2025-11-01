@@ -21,6 +21,7 @@ end
 require_relative 'minigun/version'
 require_relative 'minigun/configuration'
 require_relative 'minigun/signal'
+require_relative 'minigun/name_registry'
 require_relative 'minigun/queue_wrappers'
 require_relative 'minigun/worker'
 require_relative 'minigun/execution/executor'
