@@ -184,11 +184,11 @@ end
 
 RSpec.describe Minigun::InputQueue do
   let(:raw_queue) { Queue.new }
-  let(:stage_name) { :test_stage }
+  let(:stage_id) { 'test_stage' }
   let(:sources_expected) { Set.new(%i[source_a source_b]) }
 
   let(:input_queue) do
-    described_class.new(raw_queue, stage_name, sources_expected)
+    described_class.new(raw_queue, stage_id, sources_expected)
   end
 
   describe '#pop' do
@@ -209,7 +209,7 @@ RSpec.describe Minigun::InputQueue do
       result = input_queue.pop
 
       expect(result).to be_a(Minigun::EndOfStage)
-      expect(result.stage_name).to eq(stage_name)
+      expect(result.stage_id).to eq(stage_id)
     end
 
     it 'returns EndOfStage when all sources are done' do

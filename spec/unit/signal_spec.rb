@@ -55,10 +55,10 @@ end
 
 RSpec.describe Minigun::EndOfStage do
   describe '#initialize' do
-    it 'creates a signal with stage_name' do
+    it 'creates a signal with stage_id' do
       signal = described_class.new(:test_stage)
 
-      expect(signal.stage_name).to eq(:test_stage)
+      expect(signal.stage_id).to eq(:test_stage)
     end
   end
 
@@ -80,10 +80,10 @@ RSpec.describe Minigun::EndOfStage do
   end
 
   describe 'immutability' do
-    it 'provides read-only access to stage_name' do
+    it 'provides read-only access to stage_id' do
       signal = described_class.new(:stage)
 
-      expect { signal.stage_name = :different }.to raise_error(NoMethodError)
+      expect { signal.stage_id = :different }.to raise_error(NoMethodError)
     end
   end
 end

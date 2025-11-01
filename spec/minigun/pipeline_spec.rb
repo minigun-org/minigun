@@ -3,8 +3,9 @@
 require 'spec_helper'
 
 RSpec.describe Minigun::Pipeline do
+  let(:task) { Minigun::Task.new }
   let(:config) { { max_threads: 3, max_processes: 2 } }
-  let(:pipeline) { described_class.new(:test_pipeline, config) }
+  let(:pipeline) { described_class.new(task, :test_pipeline, config) }
 
   describe '#initialize' do
     it 'creates a pipeline with a name' do
@@ -17,7 +18,8 @@ RSpec.describe Minigun::Pipeline do
     end
 
     it 'uses default config for missing options' do
-      default_pipeline = described_class.new(:default)
+      default_task = Minigun::Task.new
+      default_pipeline = described_class.new(default_task, :default)
       expect(default_pipeline.config[:max_threads]).to eq(5)
     end
 
@@ -33,8 +35,8 @@ RSpec.describe Minigun::Pipeline do
   describe '#add_stage' do
     it 'adds a producer stage' do
       pipeline.add_stage(:producer, :fetch) { 'fetch data' }
-      expect(pipeline.stages[:fetch]).to be_a(Minigun::ProducerStage)
-      expect(pipeline.stages[:fetch].name).to eq(:fetch)
+      expect(pipeline.find_stage(:fetch)).to be_a(Minigun::ProducerStage)
+      expect(pipeline.find_stage(:fetch).name).to eq(:fetch)
     end
 
     it 'adds multiple processor stages' do
@@ -42,16 +44,16 @@ RSpec.describe Minigun::Pipeline do
       pipeline.add_stage(:processor, :validate) { |item| item }
 
       # Verify both stages were added by name
-      expect(pipeline.stages[:transform]).not_to be_nil
-      expect(pipeline.stages[:validate]).not_to be_nil
-      expect(pipeline.stages[:transform].name).to eq(:transform)
-      expect(pipeline.stages[:validate].name).to eq(:validate)
+      expect(pipeline.find_stage(:transform)).not_to be_nil
+      expect(pipeline.find_stage(:validate)).not_to be_nil
+      expect(pipeline.find_stage(:transform).name).to eq(:transform)
+      expect(pipeline.find_stage(:validate).name).to eq(:validate)
     end
 
     it 'adds a consumer stage' do
       pipeline.add_stage(:consumer, :save) { |item| puts item }
-      expect(pipeline.stages[:save]).not_to be_nil
-      expect(pipeline.stages[:save].name).to eq(:save)
+      expect(pipeline.find_stage(:save)).not_to be_nil
+      expect(pipeline.find_stage(:save).name).to eq(:save)
     end
 
     it 'handles stage routing with :to option' do
@@ -59,8 +61,10 @@ RSpec.describe Minigun::Pipeline do
       pipeline.add_stage(:processor, :transform, to: :save) { |item| item }
       pipeline.add_stage(:consumer, :save) { |item| puts item }
 
-      expect(pipeline.dag.downstream(:source)).to include(:transform)
-      expect(pipeline.dag.downstream(:transform)).to include(:save)
+      pipeline.send(:build_dag_routing!) # Resolve forward references
+
+      expect(pipeline.ids_to_names(pipeline.downstream(:source))).to include(:transform)
+      expect(pipeline.ids_to_names(pipeline.downstream(:transform))).to include(:save)
     end
 
     it 'raises error on duplicate stage name' do
@@ -68,7 +72,7 @@ RSpec.describe Minigun::Pipeline do
 
       expect do
         pipeline.add_stage(:producer, :fetch) { |output| output << 'second' }
-      end.to raise_error(Minigun::Error, /Stage name collision.*fetch/)
+      end.to raise_error(Minigun::StageNameConflict, /Stage name.*fetch.*already exists/)
     end
 
     it 'raises error on duplicate stage name across different types' do
@@ -76,7 +80,7 @@ RSpec.describe Minigun::Pipeline do
 
       expect do
         pipeline.add_stage(:consumer, :my_stage) { |item| puts item }
-      end.to raise_error(Minigun::Error, /Stage name collision.*my_stage/)
+      end.to raise_error(Minigun::StageNameConflict, /Stage name.*my_stage.*already exists/)
     end
   end
 
@@ -179,16 +183,16 @@ RSpec.describe Minigun::Pipeline do
     end
 
     it 'finds PipelineStages with no upstream as producers' do
-      # Add a PipelineStage
-      pipeline_stage = Minigun::PipelineStage.new(name: :nested)
-      nested_pipeline = described_class.new(:nested, config)
-      pipeline_stage.pipeline = nested_pipeline
-      pipeline.stages[:nested] = pipeline_stage
+      # Add a PipelineStage (pass pipeline, not task)
+      pipeline_stage = Minigun::PipelineStage.new(pipeline, :nested)
+      nested_pipeline = described_class.new(task, :nested, config)
+      pipeline_stage.nested_pipeline = nested_pipeline
+      pipeline.stages[pipeline_stage.id] = pipeline_stage
 
-      # Add to DAG with no upstream
-      pipeline.dag.add_node(:nested)
+      # Add to DAG with no upstream (use stage ID)
+      pipeline.dag.add_node(pipeline_stage.id)
       pipeline.stage_order.clear
-      pipeline.stage_order << :nested
+      pipeline.stage_order << pipeline_stage.id
 
       producers = pipeline.send(:find_all_producers)
 
@@ -199,16 +203,17 @@ RSpec.describe Minigun::Pipeline do
       # Add a regular producer
       pipeline.add_stage(:producer, :source) { output << 1 }
 
-      # Add a PipelineStage with upstream
-      pipeline_stage = Minigun::PipelineStage.new(name: :nested)
-      nested_pipeline = described_class.new(:nested, config)
-      pipeline_stage.pipeline = nested_pipeline
-      pipeline.stages[:nested] = pipeline_stage
-      pipeline.stage_order << :nested
+      # Add a PipelineStage with upstream (pass pipeline, not task)
+      pipeline_stage = Minigun::PipelineStage.new(pipeline, :nested)
+      nested_pipeline = described_class.new(task, :nested, config)
+      pipeline_stage.nested_pipeline = nested_pipeline
+      pipeline.stages[pipeline_stage.id] = pipeline_stage
+      pipeline.stage_order << pipeline_stage.id
 
-      # Add to DAG with upstream from source
-      pipeline.dag.add_node(:nested)
-      pipeline.dag.add_edge(:source, :nested)
+      # Add to DAG with upstream from source (resolve to IDs)
+      source_stage = pipeline.find_stage(:source)
+      pipeline.dag.add_node(pipeline_stage.id)
+      pipeline.dag.add_edge(source_stage.id, pipeline_stage.id)
 
       producers = pipeline.send(:find_all_producers)
 
@@ -221,12 +226,12 @@ RSpec.describe Minigun::Pipeline do
       pipeline.add_stage(:producer, :atomic_source) { output << 1 }
 
       # Add PipelineStage producer
-      pipeline_stage = Minigun::PipelineStage.new(name: :pipeline_source)
-      nested_pipeline = described_class.new(:nested, config)
-      pipeline_stage.pipeline = nested_pipeline
-      pipeline.stages[:pipeline_source] = pipeline_stage
-      pipeline.stage_order << :pipeline_source
-      pipeline.dag.add_node(:pipeline_source)
+      pipeline_stage = Minigun::PipelineStage.new(pipeline, :pipeline_source)
+      nested_pipeline = described_class.new(task, :nested, config)
+      pipeline_stage.nested_pipeline = nested_pipeline
+      pipeline.stages[pipeline_stage.id] = pipeline_stage
+      pipeline.stage_order << pipeline_stage.id
+      pipeline.dag.add_node(pipeline_stage.id)
 
       producers = pipeline.send(:find_all_producers)
 
@@ -242,7 +247,7 @@ RSpec.describe Minigun::Pipeline do
 
       pipeline.send(:build_dag_routing!)
 
-      expect(pipeline.dag.downstream(:source)).to include(:sink)
+      expect(pipeline.ids_to_names(pipeline.downstream(:source))).to include(:sink)
     end
 
     it 'connects each producer to its next sequential non-producer' do
@@ -254,9 +259,9 @@ RSpec.describe Minigun::Pipeline do
       pipeline.send(:build_dag_routing!)
 
       # source_a should connect to process_a
-      expect(pipeline.dag.downstream(:source_a)).to include(:process_a)
+      expect(pipeline.ids_to_names(pipeline.downstream(:source_a))).to include(:process_a)
       # source_b should connect to process_b
-      expect(pipeline.dag.downstream(:source_b)).to include(:process_b)
+      expect(pipeline.ids_to_names(pipeline.downstream(:source_b))).to include(:process_b)
     end
 
     it 'does not connect producers that already have explicit routing' do
@@ -268,9 +273,9 @@ RSpec.describe Minigun::Pipeline do
       pipeline.send(:build_dag_routing!)
 
       # source_a already has explicit routing to process_a
-      expect(pipeline.dag.downstream(:source_a)).to eq([:process_a])
+      expect(pipeline.ids_to_names(pipeline.downstream(:source_a))).to eq([:process_a])
       # source_b should still get sequential routing
-      expect(pipeline.dag.downstream(:source_b)).to include(:process_b)
+      expect(pipeline.ids_to_names(pipeline.downstream(:source_b))).to include(:process_b)
     end
 
     it 'handles producers at the end with no following stage' do
@@ -282,8 +287,8 @@ RSpec.describe Minigun::Pipeline do
       expect { pipeline.send(:build_dag_routing!) }.not_to raise_error
 
       # source_a routes to sink, source_b has no downstream
-      expect(pipeline.dag.downstream(:source_a)).to include(:sink)
-      expect(pipeline.dag.downstream(:source_b)).to be_empty
+      expect(pipeline.ids_to_names(pipeline.downstream(:source_a))).to include(:sink)
+      expect(pipeline.ids_to_names(pipeline.downstream(:source_b))).to be_empty
     end
 
     it 'connects multiple producers to different stages, not all to first' do
@@ -297,9 +302,9 @@ RSpec.describe Minigun::Pipeline do
       pipeline.send(:build_dag_routing!)
 
       # Each producer connects to its next stage
-      expect(pipeline.dag.downstream(:source_a)).to include(:process_a)
-      expect(pipeline.dag.downstream(:source_b)).to include(:process_b)
-      expect(pipeline.dag.downstream(:source_c)).to include(:sink)
+      expect(pipeline.ids_to_names(pipeline.downstream(:source_a))).to include(:process_a)
+      expect(pipeline.ids_to_names(pipeline.downstream(:source_b))).to include(:process_b)
+      expect(pipeline.ids_to_names(pipeline.downstream(:source_c))).to include(:sink)
     end
 
     it 'handles mixed AtomicStage and PipelineStage producers' do
@@ -307,22 +312,22 @@ RSpec.describe Minigun::Pipeline do
       pipeline.add_stage(:producer, :atomic_source) { output << 1 }
       pipeline.add_stage(:processor, :process_atomic) { |item| output << (item * 10) }
 
-      # PipelineStage producer
-      pipeline_stage = Minigun::PipelineStage.new(name: :pipeline_source)
-      nested_pipeline = described_class.new(:nested, config)
-      pipeline_stage.pipeline = nested_pipeline
-      pipeline.stages[:pipeline_source] = pipeline_stage
-      pipeline.stage_order << :pipeline_source
-      pipeline.dag.add_node(:pipeline_source)
+      # PipelineStage producer (pass pipeline, not task)
+      pipeline_stage = Minigun::PipelineStage.new(pipeline, :pipeline_source)
+      nested_pipeline = described_class.new(task, :nested, config)
+      pipeline_stage.nested_pipeline = nested_pipeline
+      pipeline.stages[pipeline_stage.id] = pipeline_stage
+      pipeline.stage_order << pipeline_stage.id
+      pipeline.dag.add_node(pipeline_stage.id)
 
       pipeline.add_stage(:consumer, :sink) { |item| item }
 
       pipeline.send(:build_dag_routing!)
 
       # Atomic routes to process_atomic
-      expect(pipeline.dag.downstream(:atomic_source)).to include(:process_atomic)
+      expect(pipeline.ids_to_names(pipeline.downstream(:atomic_source))).to include(:process_atomic)
       # Pipeline routes to sink
-      expect(pipeline.dag.downstream(:pipeline_source)).to include(:sink)
+      expect(pipeline.ids_to_names(pipeline.downstream(:pipeline_source))).to include(:sink)
     end
   end
 
@@ -341,15 +346,15 @@ RSpec.describe Minigun::Pipeline do
       end.new
 
       # Create PipelineStage that acts as a producer
-      pipeline_stage = Minigun::PipelineStage.new(name: :source_pipeline)
-      source_pipeline = described_class.new(:source, config)
-      pipeline_stage.pipeline = source_pipeline
+      pipeline_stage = Minigun::PipelineStage.new(pipeline, :source_pipeline)
+      source_pipeline = described_class.new(task, :source, config)
+      pipeline_stage.nested_pipeline = source_pipeline
       source_pipeline.add_stage(:producer, :gen) { |output| 3.times { |i| output << i } }
       source_pipeline.add_stage(:processor, :double) { |item, output| output << (item * 2) }
 
-      pipeline.stages[:source_pipeline] = pipeline_stage
-      pipeline.stage_order.unshift(:source_pipeline)
-      pipeline.dag.add_node(:source_pipeline)
+      pipeline.stages[pipeline_stage.id] = pipeline_stage
+      pipeline.stage_order.unshift(pipeline_stage.id)
+      pipeline.dag.add_node(pipeline_stage.id)
 
       # Add consumer to main pipeline
       pipeline.add_stage(:consumer, :sink) { |item| results << item }
@@ -374,20 +379,22 @@ RSpec.describe Minigun::Pipeline do
       pipeline.add_stage(:producer, :source) { |output| 3.times { |i| output << i } }
 
       # PipelineStage as processor
-      pipeline_stage = Minigun::PipelineStage.new(name: :processor_pipeline)
-      proc_pipeline = described_class.new(:processor, config)
-      pipeline_stage.pipeline = proc_pipeline
+      pipeline_stage = Minigun::PipelineStage.new(pipeline, :processor_pipeline)
+      proc_pipeline = described_class.new(task, :processor, config)
+      pipeline_stage.nested_pipeline = proc_pipeline
       proc_pipeline.add_stage(:processor, :multiply) { |item, output| output << (item * 10) }
       proc_pipeline.add_stage(:processor, :add_one) { |item, output| output << (item + 1) }
 
-      pipeline.stages[:processor_pipeline] = pipeline_stage
-      pipeline.stage_order << :processor_pipeline
-      pipeline.dag.add_node(:processor_pipeline)
-      pipeline.dag.add_edge(:source, :processor_pipeline)
+      pipeline.stages[pipeline_stage.id] = pipeline_stage
+      pipeline.stage_order << pipeline_stage.id
+      pipeline.dag.add_node(pipeline_stage.id)
+      source_stage = pipeline.find_stage(:source)
+      pipeline.dag.add_edge(source_stage.id, pipeline_stage.id)
 
       # Consumer
       pipeline.add_stage(:consumer, :sink) { |item| results << item }
-      pipeline.dag.add_edge(:processor_pipeline, :sink)
+      sink_stage = pipeline.find_stage(:sink)
+      pipeline.dag.add_edge(pipeline_stage.id, sink_stage.id)
 
       pipeline.run(context)
 
@@ -405,31 +412,32 @@ RSpec.describe Minigun::Pipeline do
       end.new
 
       # First PipelineStage producer
-      ps1 = Minigun::PipelineStage.new(name: :pipeline_a)
-      p1 = described_class.new(:pa, config)
-      ps1.pipeline = p1
-      p1.add_stage(:producer, :gen) { |output| output << 10 }
+      ps1 = Minigun::PipelineStage.new(pipeline, :pipeline_a)
+      p1 = described_class.new(task, :pa, config)
+      ps1.nested_pipeline = p1
+      p1.add_stage(:producer, :gen_a) { |output| output << 10 }
       p1.add_stage(:processor, :double) { |item, output| output << (item * 2) }
 
-      pipeline.stages[:pipeline_a] = ps1
-      pipeline.stage_order << :pipeline_a
-      pipeline.dag.add_node(:pipeline_a)
+      pipeline.stages[ps1.id] = ps1
+      pipeline.stage_order << ps1.id
+      pipeline.dag.add_node(ps1.id)
 
       # Second PipelineStage producer
-      ps2 = Minigun::PipelineStage.new(name: :pipeline_b)
-      p2 = described_class.new(:pb, config)
-      ps2.pipeline = p2
-      p2.add_stage(:producer, :gen) { |output| output << 5 }
+      ps2 = Minigun::PipelineStage.new(pipeline, :pipeline_b)
+      p2 = described_class.new(task, :pb, config)
+      ps2.nested_pipeline = p2
+      p2.add_stage(:producer, :gen_b) { |output| output << 5 }
       p2.add_stage(:processor, :triple) { |item, output| output << (item * 3) }
 
-      pipeline.stages[:pipeline_b] = ps2
-      pipeline.stage_order << :pipeline_b
-      pipeline.dag.add_node(:pipeline_b)
+      pipeline.stages[ps2.id] = ps2
+      pipeline.stage_order << ps2.id
+      pipeline.dag.add_node(ps2.id)
 
       # Consumer
       pipeline.add_stage(:consumer, :sink) { |item| results << item }
-      pipeline.dag.add_edge(:pipeline_a, :sink)
-      pipeline.dag.add_edge(:pipeline_b, :sink)
+      sink_stage = pipeline.find_stage(:sink)
+      pipeline.dag.add_edge(ps1.id, sink_stage.id)
+      pipeline.dag.add_edge(ps2.id, sink_stage.id)
 
       pipeline.run(context)
 

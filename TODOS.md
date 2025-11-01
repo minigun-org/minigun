@@ -71,6 +71,14 @@ ipc_fork
 ipc_forks(10) do # creates a pipeline
 
 ractors
+=
+
+=====================================================
+
+think about potential for conflicts with the base context
+
+thread_pool
+cow_fork_pool
 
 
       # Execution block methods
@@ -104,6 +112,16 @@ ractors
         _with_execution_context(context, &)
       end
 
+=================
+
++        # Get pipeline name - pipeline might be a Pipeline or Task
++        pipeline_name = @pipeline.is_a?(Pipeline) ? @pipeline.name : nil
++        task.registry.register(self, pipeline_name: pipeline_name)
+       else
+
+======================
+
+lock DAG /pipelines/task when running (no modification possible)
 
 ===============================
 
@@ -115,7 +133,46 @@ parallel and sequential/sequence/series keywords --> influences DAG building
 
 ==============================
 
+Pipeline names should be consolidated with stage names
+
+==============================
+
+better unique ID generation
+_jf02ASj3 ??
+
+==============================
+
 make per item latency tracking optional (and stats?)
+
+============================
+
+allow this, and resolve names locally, and then up the chain. we may need a name resolution tree.
+
+routing to an ambiguous stage should raise an error, unless its an immediate neighbor
+
+do what's sensible here
+
+        pipeline :pipe_a do
+          processor :transform do |item, output|
+            output << (item + 100)
+          end
+
+          consumer :collect do |item, _output|
+            @mutex.synchronize { @results_a << item }
+          end
+        end
+
+        pipeline :pipe_b do
+          processor :transform do |item, output|
+            output << (item + 200)
+          end
+
+          consumer :collect do |item, _output|
+            @mutex.synchronize { @results_b << item }
+          end
+        end
+
+names string/symbol -- always convert to string for referencing
 
 =============================================
 
@@ -130,8 +187,7 @@ Support Cross-Pipeline Routing?
   task.pipeline(:foo)
   task.stages(:bar)
 
-  task.minigun.dag
-
+  task.minigun.da
 
   task.pipeline(:foo).stage(:bar)
   task.pipelines
@@ -141,6 +197,15 @@ Support Cross-Pipeline Routing?
 
 fix DataProcessingPipeline spec
 I see the issue now - when you're inside a pipeline block, the stages within it are part of a PipelineStage which doesn't support output.to(). The output parameter is just an Array for collecting items, not an OutputQueue.
+
+
+============================================
+
+supervision tree of processes
+
+========================================
+
+htop-like monitoring dashboard (CLI)
 
 ====================================
 
@@ -154,6 +219,32 @@ I see the issue now - when you're inside a pipeline block, the stages within it 
 - cow_fork doing IPC output
 - ipc 2 cow, cow to ipc, ipc to master
 - ipc/cow fan-out/fan-in
+- routing to inner stages of pipelines
+- routing to inner stages of cow and ipc fork via an ingress delegator
+
+===================================
+
+        # Skip router stages - they're added during insert_router_stages_for_fan_out
+        # which happens before validation, so they should exist
+        next if node_name.to_s.end_with?('_router')
+
+        # Skip internal stages that are created dynamically
+        next if node_name == :_entrance || node_name == :_exit
+
+        # Skip if it's a hash (shouldn't happen, but defensive)
+        next if node_name.is_a?(Hash)
+
+        unless find_stage(node_name)
+          raise Minigun::Error, "[Pipeline:#{@name}] Routing references non-existent stage '#{node_name}'"
+
+
+============================
+
+- rename end_of_stage --> end_of_all_upstreams?
+
+==================================
+
+- harden --> add inputoutputstream
 
 ==================================
 
