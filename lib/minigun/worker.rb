@@ -85,6 +85,20 @@ module Minigun
                          elsif parent_sources
                            # Entrance stage: Use parent pipeline's sources instead of local DAG
                            parent_sources
+                         elsif @stage.run_mode == :composite && @stage.respond_to?(:nested_pipeline)
+                           # PipelineStage: Check if parent routes to nested stages
+                           # If parent has queues for nested stages, this PipelineStage has upstream sources
+                           nested_pipeline = @stage.nested_pipeline
+                           if nested_pipeline
+                             parent_queues = @pipeline.stage_input_queues
+                             nested_stage_ids = nested_pipeline.stages.keys.to_set
+                             # Check if any parent stage routes to nested stages
+                             has_parent_routes = parent_queues&.any? { |stage_id, _queue| nested_stage_ids.include?(stage_id) } ||
+                                                 @pipeline.dag.upstream(@stage_id).any?
+                             has_parent_routes ? Set.new([:parent]) : Set.new(dag.upstream(@stage_id))
+                           else
+                             Set.new(dag.upstream(@stage_id))
+                           end
                          else
                            Set.new(dag.upstream(@stage_id))
                          end

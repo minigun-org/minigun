@@ -157,6 +157,24 @@ module Minigun
       # Store stage by ID (not name)
       @stages[stage_id] = stage
 
+      # Migrate hooks registered by name to stage ID (if stage has a name)
+      # This handles hooks defined before stages in the DSL
+      if stage.name
+        [:before, :after, :before_fork, :after_fork].each do |hook_type|
+          # Check both symbol and string forms of the name
+          name_str = stage.name.to_s
+          name_sym = stage.name.to_sym
+          name_hooks = @stage_hooks.dig(hook_type, name_str) || @stage_hooks.dig(hook_type, name_sym)
+          if name_hooks
+            @stage_hooks[hook_type] ||= {}
+            @stage_hooks[hook_type][stage_id] ||= []
+            @stage_hooks[hook_type][stage_id].concat(name_hooks)
+            @stage_hooks[hook_type].delete(name_str)
+            @stage_hooks[hook_type].delete(name_sym)
+          end
+        end
+      end
+
       # Note: Stage already registered its name in its constructor
 
       # Add to stage order by ID and DAG
