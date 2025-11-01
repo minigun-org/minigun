@@ -39,9 +39,9 @@ module Minigun
     attr_reader :name, :config, :stages, :hooks, :dag, :output_queues, :stage_order, :stats,
                 :context, :stage_hooks, :stage_input_queues, :runtime_edges, :input_queues, :parent_pipeline
 
-    def initialize(parent_pipeline, name, config = {}, stages: nil, hooks: nil, stage_hooks: nil, dag: nil, stage_order: nil, stats: nil)
-      @parent_pipeline = parent_pipeline
+    def initialize(name, parent_pipeline, config = {}, stages: nil, hooks: nil, stage_hooks: nil, dag: nil, stage_order: nil, stats: nil)
       @name = name
+      @parent_pipeline = parent_pipeline
       @config = {
         max_threads: config[:max_threads] || 5,
         max_processes: config[:max_processes] || 2,
@@ -93,8 +93,8 @@ module Minigun
       @stages.each { |stage| duped_stages << stage.dup }
 
       Pipeline.new(
-        @parent_pipeline,
         @name,
+        @parent_pipeline,
         @config.dup,
         stages: duped_stages, # REMOVE_THIS - change to just @stages.map(&:dup) Deep copy - dup each stage object
         hooks: {
@@ -141,7 +141,7 @@ module Minigun
       # Create stage instance
       stage = if type.is_a?(Class)
                 # Custom stage class provided (positional constructor style)
-                type.new(self, name, block, options)
+                type.new(name, self, block, options)
               else
                 # Extract stage_type from options if present (used by DSL)
                 actual_type = options.delete(:stage_type) || type
@@ -149,13 +149,13 @@ module Minigun
                 # Create appropriate stage subclass based on type symbol (pipeline-first positional style)
                 case actual_type
                 when :producer
-                  ProducerStage.new(self, name, block, options)
+                  ProducerStage.new(name, self, block, options)
                 when :processor, :consumer
-                  ConsumerStage.new(self, name, block, options)
+                  ConsumerStage.new(name, self, block, options)
                 when :stage
-                  Stage.new(self, name, block, options)
+                  Stage.new(name, self, block, options)
                 when :accumulator
-                  AccumulatorStage.new(self, name, block, options)
+                  AccumulatorStage.new(name, self, block, options)
                 else
                   raise Minigun::Error, "Unknown stage type: #{actual_type}"
                 end
@@ -372,9 +372,9 @@ module Minigun
         # Create the appropriate router subclass (pipeline-first positional style)
         router_name = :"#{stage.name}_router"
         router_stage = if routing_strategy == :round_robin
-                         RouterRoundRobinStage.new(self, router_name, downstream.dup, {})
+                         RouterRoundRobinStage.new(router_name, self, downstream.dup, {})
                        else
-                         RouterBroadcastStage.new(self, router_name, downstream.dup, {})
+                         RouterBroadcastStage.new(router_name, self, downstream.dup, {})
                        end
         stages_to_add << router_stage
 
@@ -552,7 +552,7 @@ module Minigun
         # Just forward items from parent to nested pipeline
         output << item
       end
-      entrance_stage = Minigun::EntranceStage.new(self, :_entrance, entrance_block, {})
+      entrance_stage = Minigun::EntranceStage.new(nil, self, entrance_block, {})
 
       # Add the :_entrance stage to the pipeline
       @stages << entrance_stage
@@ -582,7 +582,7 @@ module Minigun
       exit_block = proc do |item, _stage_output|
         parent_output << item if parent_output
       end
-      exit_stage = Minigun::ExitStage.new(self, :_exit, exit_block, {})
+      exit_stage = Minigun::ExitStage.new(nil, self, exit_block, {})
 
       # Add the :_exit stage to the pipeline
       @stages << exit_stage
