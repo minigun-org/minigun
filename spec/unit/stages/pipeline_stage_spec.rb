@@ -46,7 +46,6 @@ RSpec.describe Minigun::PipelineStage do
     it 'returns early if no pipeline is set' do
       stage = described_class.new(mock_pipeline, :my_pipeline, nil, {})
       stage_ctx = instance_double(Minigun::StageContext,
-                                  pipeline: instance_double(Minigun::Pipeline, context: Object.new),
                                   stage: stage,
                                   sources_expected: Set.new,
                                   input_queue: Queue.new,
@@ -65,9 +64,8 @@ RSpec.describe Minigun::PipelineStage do
       stage.pipeline = pipeline
 
       context = Object.new
-      parent_pipeline = instance_double(Minigun::Pipeline, context: context)
       stage_ctx = instance_double(Minigun::StageContext,
-                                  pipeline: parent_pipeline,
+                                  stage: stage,
                                   sources_expected: Set.new,
                                   input_queue: Queue.new,
                                   dag: instance_double(Minigun::DAG, downstream: []),
@@ -90,12 +88,10 @@ RSpec.describe Minigun::PipelineStage do
       pipeline = instance_double(Minigun::Pipeline)
       stage.pipeline = pipeline
 
-      context = Object.new
-      parent_pipeline = instance_double(Minigun::Pipeline, context: context)
       input_queue = Queue.new
       sources = Set.new([:upstream])
       stage_ctx = instance_double(Minigun::StageContext,
-                                  pipeline: parent_pipeline,
+                                  stage: stage,
                                   sources_expected: sources,
                                   input_queue: input_queue,
                                   dag: instance_double(Minigun::DAG, downstream: []),
@@ -122,11 +118,9 @@ RSpec.describe Minigun::PipelineStage do
       pipeline = instance_double(Minigun::Pipeline)
       stage.pipeline = pipeline
 
-      context = Object.new
-      parent_pipeline = instance_double(Minigun::Pipeline, context: context)
       output_queue = Queue.new
       stage_ctx = instance_double(Minigun::StageContext,
-                                  pipeline: parent_pipeline,
+                                  stage: stage,
                                   sources_expected: Set.new,
                                   input_queue: Queue.new,
                                   dag: instance_double(Minigun::DAG, downstream: []),
@@ -149,10 +143,8 @@ RSpec.describe Minigun::PipelineStage do
       pipeline = instance_double(Minigun::Pipeline)
       stage.pipeline = pipeline
 
-      context = Object.new
-      parent_pipeline = instance_double(Minigun::Pipeline, context: context)
       stage_ctx = instance_double(Minigun::StageContext,
-                                  pipeline: parent_pipeline,
+                                  stage: stage,
                                   sources_expected: Set.new,
                                   input_queue: Queue.new,
                                   dag: instance_double(Minigun::DAG, downstream: []),
@@ -175,10 +167,8 @@ RSpec.describe Minigun::PipelineStage do
       pipeline = instance_double(Minigun::Pipeline)
       stage.pipeline = pipeline
 
-      context = Object.new
-      parent_pipeline = instance_double(Minigun::Pipeline, context: context)
       stage_ctx = instance_double(Minigun::StageContext,
-                                  pipeline: parent_pipeline,
+                                  stage: stage,
                                   sources_expected: Set.new,
                                   input_queue: Queue.new,
                                   dag: instance_double(Minigun::DAG, downstream: []),

@@ -97,7 +97,6 @@ module Minigun
 
       StageContext.new(
         worker: self,
-        pipeline: @pipeline,
         stage: @stage,
         dag: dag,
         runtime_edges: @pipeline.runtime_edges,

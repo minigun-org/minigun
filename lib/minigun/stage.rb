@@ -6,7 +6,6 @@ module Minigun
   # Unified context for all stage execution (producers and workers)
   StageContext = Struct.new(
     # Common to all stages
-    :pipeline, # REMOVE_THIS, should be stage&.pipeline
     :stage,
     :dag,
     :runtime_edges,
@@ -28,13 +27,17 @@ module Minigun
     def stage_name
       stage&.name
     end
+
+    def pipeline
+      stage&.pipeline
+    end
   end
 
   # Base class for all execution units (stages and pipelines)
   # Implements the Composite pattern where Pipeline is a composite Stage
   # Also handles loop-based stages (stages that manage their own input loop)
   class Stage
-    attr_reader :name, :options, :block, :pipeline
+    attr_reader :pipeline, :name, :options, :block
 
     # Positional constructor: Stage.new(pipeline, name, block, options)
     def initialize(pipeline, name, block, options = {})
@@ -149,7 +152,6 @@ module Minigun
         downstream_queues,
         stage_ctx.stage_input_queues,
         stage_ctx.runtime_edges,
-        pipeline: stage_ctx.pipeline, # REMOVE_THIS
         stage_stats: stage_ctx.stage_stats
       )
     end
