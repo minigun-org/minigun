@@ -48,7 +48,7 @@ module Minigun
         @block = block
         @options = options
       end
-      
+
       @id = SecureRandom.hex(8)  # Unique ID for this stage
     end
 
