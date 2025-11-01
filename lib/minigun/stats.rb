@@ -5,13 +5,13 @@ require 'concurrent'
 module Minigun
   # Tracks execution statistics for a single stage
   class Stats
-    attr_reader :stage_name, :start_time, :end_time, :latency_samples, :latency_count
+    attr_reader :stage_id, :start_time, :end_time, :latency_samples, :latency_count
 
     # Latency tracking - reservoir sampling for uniform distribution
     RESERVOIR_SIZE = 1000
 
-    def initialize(stage_name, is_terminal: false)
-      @stage_name = stage_name
+    def initialize(stage_id, is_terminal: false)
+      @stage_id = stage_id
       @is_terminal = is_terminal
       @start_time = nil
       @end_time = nil
@@ -147,9 +147,9 @@ module Minigun
     end
 
     # Generate a summary hash
-    def to_h
-      {
-        stage_name: @stage_name,
+    def to_h(task = nil)
+      hash = {
+        stage_id: @stage_id,
         runtime: runtime.round(2),
         items_produced: items_produced,
         items_consumed: items_consumed,
@@ -158,7 +158,15 @@ module Minigun
         throughput: throughput.round(2),
         time_per_item: time_per_item.round(4),
         success_rate: success_rate.round(2)
-      }.tap do |h|
+      }
+
+      # Add display name if task is available
+      if task
+        stage = task.find_stage(@stage_id)
+        hash[:stage_name] = stage&.display_name || @stage_id
+      end
+
+      hash.tap do |h|
         if latency_data?
           h[:latency] = {
             p50: (p50 * 1000).round(2), # Convert to ms
@@ -175,7 +183,7 @@ module Minigun
     # Pretty print
     def to_s
       parts = [
-        "Stage: #{@stage_name}",
+        "Stage: #{@stage_id}",
         "Runtime: #{runtime.round(2)}s",
         "Items: #{total_items}",
         "Throughput: #{throughput.round(2)} items/s"
@@ -191,9 +199,10 @@ module Minigun
 
   # Aggregates statistics from multiple stages using DAG
   class AggregatedStats
-    attr_reader :pipeline_name, :stage_stats
+    attr_reader :pipeline_name, :stage_stats, :task
 
-    def initialize(pipeline_name, dag)
+    def initialize(task, pipeline_name, dag)
+      @task = task
       @pipeline_name = pipeline_name
       @dag = dag
       @stage_stats = {}
@@ -202,8 +211,8 @@ module Minigun
     end
 
     # Get or create stats for a stage
-    def for_stage(stage_name, is_terminal: false)
-      @stage_stats[stage_name] ||= Stats.new(stage_name, is_terminal: is_terminal)
+    def for_stage(stage_id, is_terminal: false)
+      @stage_stats[stage_id] ||= Stats.new(stage_id, is_terminal: is_terminal)
     end
 
     # Mark pipeline as started
@@ -267,11 +276,11 @@ module Minigun
         total_produced: total_produced,
         total_consumed: total_consumed,
         throughput: throughput.round(2),
-        stages: stages_in_order.map(&:to_h)
+        stages: stages_in_order.map { |s| s.to_h(@task) }
       }.tap do |h|
         if (bn = bottleneck)
           h[:bottleneck] = {
-            stage: bn.stage_name,
+            stage: bn.stage_id,
             throughput: bn.throughput.round(2)
           }
         end
@@ -287,7 +296,8 @@ module Minigun
       lines << "Throughput: #{throughput.round(2)} items/s"
 
       if (bn = bottleneck)
-        lines << "Bottleneck: #{bn.stage_name} (#{bn.throughput.round(2)} items/s)"
+        display_name = @task.find_stage(bn.stage_id)&.display_name || bn.stage_id
+        lines << "Bottleneck: #{display_name} (#{bn.throughput.round(2)} items/s)"
       end
 
       lines << "\nStages:"

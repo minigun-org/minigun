@@ -4,7 +4,7 @@ module Minigun
   # Task orchestrates one or more pipelines
   # Supports both single-pipeline (implicit) and multi-pipeline modes
   class Task
-    attr_reader :config, :root_pipeline
+    attr_reader :config, :root_pipeline, :registry
 
     def initialize(config: nil, root_pipeline: nil)
       @config = config || {
@@ -17,9 +17,17 @@ module Minigun
         use_ipc: false
       }
 
-      # Root pipeline - all stages and nested pipelines live here
-      @root_pipeline = root_pipeline || Pipeline.new(:default, @config)
-    end
+    # Task-specific name registry for stage identification
+    @registry = NameRegistry.new
+
+    # Root pipeline - all stages and nested pipelines live here
+    @root_pipeline = root_pipeline || Pipeline.new(self, :default, @config)
+  end
+
+  # Find a stage by ID or name across all pipelines
+  def find_stage(identifier)
+    @root_pipeline.find_stage(identifier)
+  end
 
     # Set config value (applies to all pipelines)
     def set_config(key, value)
@@ -58,11 +66,11 @@ module Minigun
     # Add a nested pipeline as a stage within the implicit pipeline
     def add_nested_pipeline(name, options = {}, &)
       # Create a PipelineStage and configure it
-      pipeline_stage = PipelineStage.new(name: name, options: options)
+      pipeline_stage = PipelineStage.new(@root_pipeline, name, nil, options)
 
       # Create the actual Pipeline instance for this nested pipeline
-      nested_pipeline = Pipeline.new(name, @config)
-      pipeline_stage.pipeline = nested_pipeline
+      nested_pipeline = Pipeline.new(self, name, @config)
+      pipeline_stage.nested_pipeline = nested_pipeline
 
       # Add stages to the nested pipeline via block
       if block_given?
@@ -90,12 +98,12 @@ module Minigun
         pipeline_stage = @root_pipeline.stages[name]
         raise Minigun::Error, "Stage #{name} already exists as a non-composite stage" unless pipeline_stage.run_mode == :composite
 
-        pipeline = pipeline_stage.pipeline
+        pipeline = pipeline_stage.nested_pipeline
       else
         # Create new PipelineStage and add to root_pipeline
-        pipeline_stage = PipelineStage.new(name: name, options: options)
-        pipeline = Pipeline.new(name, @config)
-        pipeline_stage.pipeline = pipeline
+        pipeline_stage = PipelineStage.new(@root_pipeline, name, nil, options)
+        pipeline = Pipeline.new(self, name, @config)
+        pipeline_stage.nested_pipeline = pipeline
 
         @root_pipeline.stages[name] = pipeline_stage
         @root_pipeline.stage_order << name

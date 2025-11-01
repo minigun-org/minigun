@@ -5,9 +5,10 @@ module Minigun
   # A Pipeline can be standalone or part of a multi-pipeline Task
   class Pipeline
     attr_reader :name, :config, :stages, :hooks, :dag, :output_queues, :stage_order, :stats,
-                :context, :stage_hooks, :stage_input_queues, :runtime_edges, :input_queues
+                :context, :stage_hooks, :stage_input_queues, :runtime_edges, :input_queues, :task
 
-    def initialize(name, config = {}, stages: nil, hooks: nil, stage_hooks: nil, dag: nil, stage_order: nil, stats: nil)
+    def initialize(task, name, config = {}, stages: nil, hooks: nil, stage_hooks: nil, dag: nil, stage_order: nil, stats: nil)
+      @task = task
       @name = name
       @config = {
         max_threads: config[:max_threads] || 5,
@@ -41,9 +42,29 @@ module Minigun
       @stats = stats # Will be initialized in run() if nil
     end
 
+    # Find a stage by ID or name
+    def find_stage(identifier)
+      # First try as ID
+      stage = @stages[identifier]
+      return stage if stage
+
+      # Then try as name
+      @stages.values.find { |s| s.name == identifier }
+    end
+
+    # Normalize a stage identifier (name or ID) to ID
+    def normalize_to_id(identifier)
+      return identifier if @stages.key?(identifier) # Already an ID
+
+      # Try to find by name
+      stage = find_stage(identifier)
+      stage&.id || identifier # Return original if not found
+    end
+
     # Duplicate this pipeline for inheritance
     def dup
       Pipeline.new(
+        @task,
         @name,
         @config.dup,
         stages: @stages.transform_values(&:dup), # Deep copy - dup each stage object
@@ -103,13 +124,13 @@ module Minigun
                 # Create appropriate stage subclass based on type symbol
                 case actual_type
                 when :producer
-                  ProducerStage.new(name: name, block: block, options: options)
+                  ProducerStage.new(self, name, block, options)
                 when :processor, :consumer
-                  ConsumerStage.new(name: name, block: block, options: options)
+                  ConsumerStage.new(self, name, block, options)
                 when :stage
-                  Stage.new(name: name, block: block, options: options)
+                  Stage.new(self, name, block, options)
                 when :accumulator
-                  AccumulatorStage.new(name: name, block: block, options: options)
+                  AccumulatorStage.new(self, name, block, options)
                 else
                   raise Minigun::Error, "Unknown stage type: #{actual_type}"
                 end
@@ -176,7 +197,7 @@ module Minigun
       @job_id = job_id
 
       # Initialize statistics tracking
-      @stats = AggregatedStats.new(@name, @dag)
+      @stats = AggregatedStats.new(@task, @name, @dag)
       @stats.start!
 
       log_debug "#{log_prefix} Starting"
@@ -270,9 +291,9 @@ module Minigun
         # Create the appropriate router subclass
         router_name = :"#{stage_name}_router"
         router_stage = if routing_strategy == :round_robin
-                         RouterRoundRobinStage.new(name: router_name, targets: downstream.dup)
+                         RouterRoundRobinStage.new(self, router_name, nil, { targets: downstream.dup })
                        else
-                         RouterBroadcastStage.new(name: router_name, targets: downstream.dup)
+                         RouterBroadcastStage.new(self, router_name, nil, { targets: downstream.dup })
                        end
         stages_to_add << [router_name, router_stage]
 
@@ -335,155 +356,187 @@ module Minigun
     private
 
     def build_dag_routing!
+      # FIRST: Merge nested pipeline DAGs (recursively builds nested pipelines first)
+      # This must happen before normalizing edges so nested stages are in the DAG
+      @stages.each_value do |stage|
+        puts "[DEBUG build_dag_routing] Checking stage #{stage.display_name}: is PipelineStage? #{stage.is_a?(PipelineStage)}"
+        if stage.is_a?(PipelineStage) && stage.nested_pipeline
+          puts "[DEBUG build_dag_routing] Merging nested pipeline for #{stage.display_name}"
+          merge_nested_pipeline_into_dag(stage)
+        end
+      end
+
+      # Resolve all pending edges (forward references) now that all stages exist
+      # DAG should ONLY contain IDs - this resolves any names from forward references
+      @dag.resolve_pending_edges!
+
       # Handle multiple producers specially - they should all connect to first non-producer
       handle_multiple_producers_routing!
 
       # Fill any remaining sequential gaps (handles fan-out, siblings, cycles)
+      puts "[DEBUG] Before fill_sequential_gaps: edges = #{@dag.edges.inspect}"
       fill_sequential_gaps_by_definition_order!
+      puts "[DEBUG] After fill_sequential_gaps: edges = #{@dag.edges.inspect}"
 
-      # If this pipeline has input_queues (nested pipeline), add :_entrance distributor
+      # If this pipeline has input_queues (nested pipeline), add entrance distributor
       insert_entrance_distributor_for_inputs! if @input_queues && !@input_queues.empty?
 
-      # If this pipeline has output_queues, add :_exit collector for terminal stages
+      # If this pipeline has output_queues, add exit collector for terminal stages
       insert_exit_collector_for_outputs! if @output_queues && !@output_queues.empty?
 
       @dag.validate!
       validate_stages_exist!
 
-      log_debug "#{log_prefix} DAG: #{@dag.topological_sort.join(' -> ')}"
+      # Log DAG using display names for readability
+      dag_display = @dag.topological_sort.map { |id| find_stage(id)&.display_name || id }.join(' -> ')
+      log_debug "#{log_prefix} DAG: #{dag_display}"
     end
 
     def validate_stages_exist!
-      @dag.nodes.each do |node_name|
-        raise Minigun::Error, "[Pipeline:#{@name}] Routing references non-existent stage '#{node_name}'" unless find_stage(node_name)
+      @dag.nodes.each do |node_id|
+        stage = find_stage(node_id)
+        unless stage
+          raise Minigun::Error, "[Pipeline:#{@name}] Routing references non-existent stage ID '#{node_id}'"
+        end
       end
     end
 
     def handle_multiple_producers_routing!
-      producers = @stage_order.select { |s| find_stage(s)&.run_mode == :autonomous }
+      producers = @stage_order.select { |stage_id| find_stage(stage_id)&.run_mode == :autonomous }
 
       # Each producer without explicit routing should connect to its next stage in definition order
-      producers.each do |producer_name|
+      producers.each do |producer_id|
         # Skip if this producer already has explicit downstream edges
-        next unless @dag.downstream(producer_name).empty?
+        next unless @dag.downstream(producer_id).empty?
 
         # Find the next non-autonomous stage after this producer
-        producer_index = @stage_order.index(producer_name)
-        next_stage = @stage_order[(producer_index + 1)..].find { |s| find_stage(s)&.run_mode != :autonomous }
+        producer_index = @stage_order.index(producer_id)
+        next_stage_id = @stage_order[(producer_index + 1)..].find { |stage_id| find_stage(stage_id)&.run_mode != :autonomous }
 
-        @dag.add_edge(producer_name, next_stage) if next_stage
+        @dag.add_edge(producer_id, next_stage_id) if next_stage_id
       end
     end
 
     def fill_sequential_gaps_by_definition_order!
       # Then fill remaining sequential gaps
-      @stage_order.each_with_index do |stage_name, index|
+      @stage_order.each_with_index do |stage_id, index|
         # Skip if already has downstream edges
-        next if @dag.downstream(stage_name).any?
+        next if @dag.downstream(stage_id).any?
         # Skip if this is the last stage
         next if index >= @stage_order.size - 1
 
         # Find the next non-producer stage
-        next_stage = nil
+        next_stage_id = nil
         next_stage_obj = nil
         ((index + 1)...@stage_order.size).each do |next_index|
-          candidate = @stage_order[next_index]
-          candidate_obj = find_stage(candidate)
+          candidate_id = @stage_order[next_index]
+          candidate_obj = find_stage(candidate_id)
+
+          # Skip if stage not found (shouldn't happen, but defensive)
+          next unless candidate_obj
 
           # Skip autonomous stages
           next if candidate_obj.run_mode == :autonomous
 
+          # Skip composite stages - they don't participate in sequential routing
+          next if candidate_obj.run_mode == :composite
+
           # Found a valid non-producer stage
-          next_stage = candidate
+          next_stage_id = candidate_id
           next_stage_obj = candidate_obj
           break
         end
 
         # No valid next stage found
-        next unless next_stage
-
-        # Skip if BOTH current and next are composite stages (isolated pipelines)
-        current_stage = find_stage(stage_name)
-        next if current_stage.run_mode == :composite && next_stage_obj.run_mode == :composite
+        next unless next_stage_id
+        next unless next_stage_obj  # Make sure we found the stage object
 
         # Skip if this is a fan-out pattern (next_stage is a sibling)
-        next if @dag.fan_out_siblings?(stage_name, next_stage)
+        next if @dag.fan_out_siblings?(stage_id, next_stage_id)
 
         # Skip if any sibling already routes to next_stage
-        siblings = @dag.siblings(stage_name)
-        next if siblings.any? { |sib| @dag.downstream(sib).include?(next_stage) }
+        siblings = @dag.siblings(stage_id)
+        next if siblings.any? { |sib_id| @dag.downstream(sib_id).include?(next_stage_id) }
 
         # Don't add edge if it would create a cycle
-        next if @dag.would_create_cycle?(stage_name, next_stage)
+        next if @dag.would_create_cycle?(stage_id, next_stage_id)
 
-        @dag.add_edge(stage_name, next_stage)
+        @dag.add_edge(stage_id, next_stage_id)
       end
     end
 
-    # Insert an :_entrance distributor stage for nested pipelines
-    # This receives items from the parent pipeline and distributes to entry stages
+    # Merge a nested pipeline's DAG into this pipeline's DAG
+    # This allows parent pipelines to route directly to nested stages
+    def merge_nested_pipeline_into_dag(pipeline_stage)
+      nested_pipeline = pipeline_stage.nested_pipeline
+      return unless nested_pipeline
+
+      # First, recursively build the nested pipeline's DAG
+      nested_pipeline.build_dag_routing!
+
+      # Merge nodes (stage IDs) from nested pipeline into parent DAG
+      nested_pipeline.dag.nodes.each do |nested_stage_id|
+        @dag.add_node(nested_stage_id)
+      end
+
+      # Merge edges from nested pipeline into parent DAG
+      nested_pipeline.dag.edges.each do |from_id, to_ids|
+        to_ids.each do |to_id|
+          @dag.add_edge(from_id, to_id)
+        end
+      end
+
+      # Store reference to nested pipeline stages in parent
+      nested_pipeline.stages.each do |nested_stage_id, nested_stage|
+        @stages[nested_stage_id] = nested_stage
+      end
+
+      # Add nested stages to stage order (for topological sorting)
+      nested_pipeline.stage_order.each do |stage_id|
+        @stage_order << stage_id unless @stage_order.include?(stage_id)
+      end
+
+      log_debug "[Pipeline:#{@name}] Merged nested pipeline '#{nested_pipeline.name}' with #{nested_pipeline.stages.size} stages"
+    end
+
     def insert_entrance_distributor_for_inputs!
-      # Find stages that have no upstream (would be entry points)
-      entry_stages = @stages.keys.select do |stage_name|
-        stage = @stages[stage_name]
-        # Skip autonomous stages (they're producers)
-        next false if stage.run_mode == :autonomous
-        # Entry stages have no upstream
-        @dag.upstream(stage_name).empty?
-      end
-
-      return if entry_stages.empty?
-
-      # Create a consumer stage that reads from parent input and emits to nested pipeline
-      # Use ConsumerStage (not ProducerStage) so it properly tracks multiple END signals
-      parent_input = @input_queues[:input]
-      entrance_block = proc do |item, output|
-        # Just forward items from parent to nested pipeline
-        output << item
-      end
-      entrance_stage = Minigun::ConsumerStage.new(name: :_entrance, block: entrance_block, options: {})
-
-      # Add the :_entrance stage to the pipeline
-      @stages[:_entrance] = entrance_stage
-      @stage_order.unshift(:_entrance) # Add at beginning
-      @dag.add_node(:_entrance)
-
-      # Connect :_entrance to entry stages
-      entry_stages.each do |stage_name|
-        @dag.add_edge(:_entrance, stage_name)
-      end
-
-      log_debug "[Pipeline:#{@name}] Added :_entrance distributor for entry stages: #{entry_stages.join(', ')}"
+      # Entrance stage is NO LONGER NEEDED with DAG-centric architecture
+      # Parent DAG includes nested stages, so parent routes directly to them
+      # This method is kept as a no-op for now in case we need special logic later
     end
 
-    # Insert an :_exit collector stage that terminal stages drain into
+    # Insert an exit collector stage that terminal stages drain into
     # This allows nested pipelines to send their outputs to the parent pipeline
     def insert_exit_collector_for_outputs!
       # Find terminal stages (stages with no downstream)
-      terminal_stages = @stages.keys.select { |stage_name| @dag.terminal?(stage_name) }
-      return if terminal_stages.empty?
+      terminal_stage_ids = @stages.keys.select { |stage_id| @dag.terminal?(stage_id) }
+      return if terminal_stage_ids.empty?
 
       # Create a consumer stage that forwards items to @output_queues[:output]
       # The block receives (item, output) but we ignore output and use @output_queues directly
+      # No name - exit stage is identified by ID only
       parent_output = @output_queues[:output]
       exit_block = proc do |item, _stage_output|
         parent_output << item if parent_output
       end
-      exit_stage = Minigun::ConsumerStage.new(name: :_exit, block: exit_block, options: {})
+      exit_stage = Minigun::ConsumerStage.new(self, nil, exit_block, {})
+      exit_id = exit_stage.id
 
-      # Add the :_exit stage to the pipeline
-      @stages[:_exit] = exit_stage
-      @stage_order << :_exit
-      @dag.add_node(:_exit)
+      # Add the exit stage to the pipeline by ID
+      @stages[exit_id] = exit_stage
+      @stage_order << exit_id
+      @dag.add_node(exit_id)
 
-      # Connect terminal stages to :_exit
-      terminal_stages.each do |stage_name|
-        @dag.add_edge(stage_name, :_exit)
+      # Connect terminal stages to exit (all by ID)
+      terminal_stage_ids.each do |terminal_stage_id|
+        @dag.add_edge(terminal_stage_id, exit_id)
       end
 
-      # Note: input queue for :_exit will be created automatically by build_stage_input_queues
+      # Note: input queue for exit will be created automatically by build_stage_input_queues
 
-      log_debug "[Pipeline:#{@name}] Added :_exit collector for terminal stages: #{terminal_stages.join(', ')}"
+      # Log using display names for readability
+      terminal_display = terminal_stage_ids.map { |id| @task.find_stage(id)&.display_name || id }.join(', ')
+      log_debug "[Pipeline:#{@name}] Added exit collector '#{exit_stage.display_name}' for terminal stages: #{terminal_display}"
     end
 
     def log_prefix

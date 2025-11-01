@@ -5,7 +5,7 @@ module Minigun
   StageContext = Struct.new(
     # Common to all stages
     :pipeline,
-    :stage_name,
+    :stage_id,  # Changed from stage_name - stages identified by ID internally
     :dag,
     :runtime_edges,
     :stage_input_queues,
@@ -21,18 +21,46 @@ module Minigun
     def executor
       worker&.executor
     end
+
+    # Convenience method to get stage display name (name if available, otherwise ID)
+    def stage_display_name
+      stage = pipeline.task.find_stage(stage_id)
+      stage&.display_name || stage_id
+    end
   end
 
   # Base class for all execution units (stages and pipelines)
   # Implements the Composite pattern where Pipeline is a composite Stage
   # Also handles loop-based stages (stages that manage their own input loop)
   class Stage
-    attr_reader :name, :options, :block
+    attr_reader :id, :name, :options, :block, :pipeline
 
-    def initialize(name:, block: nil, options: {})
-      @name = name
+    # Constructor takes pipeline as first arg (get task via pipeline.task)
+    # Handles ALL registration atomically - ID, name, local, and global
+    def initialize(pipeline, name = nil, block = nil, options = {})
+      @pipeline = pipeline
+      @name = name # Optional - only set if user provides it
       @block = block
       @options = options
+
+      # Generate ID and register atomically (if task is available)
+      if task
+        @id = task.registry.generate_id
+        task.registry.register(self, pipeline_name: @pipeline.name)
+      else
+        # Fallback for stages created without a pipeline/task (e.g., in tests)
+        @id = "orphan_#{SecureRandom.hex(4)}"
+      end
+    end
+
+    # Convenience method to get task from pipeline
+    def task
+      @pipeline&.task
+    end
+
+    # Display name for logging - use name if available, otherwise ID
+    def display_name
+      @name || @id
     end
 
     # Get the queue size for this stage
@@ -111,7 +139,7 @@ module Minigun
     def create_input_queue(stage_ctx)
       InputQueue.new(
         stage_ctx.input_queue,
-        stage_ctx.stage_name,
+        stage_ctx.stage_id,
         stage_ctx.sources_expected,
         stage_stats: stage_ctx.stage_stats
       )
@@ -119,27 +147,31 @@ module Minigun
 
     # Create wrapped output queue for this stage
     def create_output_queue(stage_ctx)
-      downstream = stage_ctx.dag.downstream(stage_ctx.stage_name)
-      downstream_queues = downstream.filter_map { |ds| stage_ctx.stage_input_queues[ds] }
+      downstream = stage_ctx.dag.downstream(stage_ctx.stage_id)
+      downstream_queues = downstream.filter_map do |ds|
+        queue_key = stage_ctx.pipeline.normalize_to_id(ds)
+        stage_ctx.stage_input_queues[queue_key]
+      end
       OutputQueue.new(
-        stage_ctx.stage_name,
+        stage_ctx.stage_id,
         downstream_queues,
         stage_ctx.stage_input_queues,
         stage_ctx.runtime_edges,
+        stage_ctx.pipeline,
         stage_stats: stage_ctx.stage_stats
       )
     end
 
     # Consolidated end signal logic used by all stage types
     def send_end_signals(stage_ctx)
-      dag_downstream = stage_ctx.dag.downstream(stage_ctx.stage_name)
-      dynamic_targets = stage_ctx.runtime_edges[stage_ctx.stage_name].to_a
+      dag_downstream = stage_ctx.dag.downstream(stage_ctx.stage_id)
+      dynamic_targets = stage_ctx.runtime_edges[stage_ctx.stage_id].to_a
       all_targets = (dag_downstream + dynamic_targets).uniq
 
       all_targets.each do |target|
-        next unless stage_ctx.stage_input_queues[target]
-
-        stage_ctx.stage_input_queues[target] << EndOfSource.new(stage_ctx.stage_name)
+        target_id = stage_ctx.pipeline.normalize_to_id(target)
+        next unless stage_ctx.stage_input_queues[target_id]
+        stage_ctx.stage_input_queues[target_id] << EndOfSource.new(stage_ctx.stage_id)
       end
     end
 
@@ -152,6 +184,10 @@ module Minigun
 
   # Producer stage - executes once, no input
   class ProducerStage < Stage
+    def initialize(pipeline, name, block = nil, options = {})
+      super(pipeline, name, block, options)
+    end
+
     def execute(context, _input_queue, output_queue, _stage_stats)
       if @block
         context.instance_exec(output_queue, &@block)
@@ -188,12 +224,16 @@ module Minigun
     private
 
     def execute_hooks(ctx, type)
-      ctx.pipeline.execute_stage_hooks(type, ctx.stage_name)
+      ctx.pipeline.execute_stage_hooks(type, ctx.stage_id)
     end
   end
 
   # Consumer/Processor stage - loops on input, processes items
   class ConsumerStage < Stage
+    def initialize(pipeline, name, block = nil, options = {})
+      super(pipeline, name, block, options)
+    end
+
     def execute(context, input_queue, output_queue, stage_stats)
       # Consumer stages pop from input_queue and process items
       loop do
@@ -223,7 +263,7 @@ module Minigun
 
     def run_stage(stage_ctx)
       # Execute before hooks
-      stage_ctx.pipeline.send(:execute_stage_hooks, :before, stage_ctx.stage_name)
+      stage_ctx.pipeline.send(:execute_stage_hooks, :before, stage_ctx.stage_id)
 
       # Create wrapped queues
       input_queue = create_input_queue(stage_ctx)
@@ -234,7 +274,7 @@ module Minigun
       stage_ctx.executor.execute_stage(self, context, input_queue, output_queue)
 
       # Execute after hooks
-      stage_ctx.pipeline.send(:execute_stage_hooks, :after, stage_ctx.stage_name)
+      stage_ctx.pipeline.send(:execute_stage_hooks, :after, stage_ctx.stage_id)
 
       # Flush and cleanup
       flush_if_needed(stage_ctx, output_queue)
@@ -257,8 +297,8 @@ module Minigun
   class AccumulatorStage < ConsumerStage
     attr_reader :max_size, :max_wait
 
-    def initialize(name:, block: nil, options: {})
-      super
+    def initialize(pipeline, name, block = nil, options = {})
+      super(pipeline, name, block, options)
       @max_size = options[:max_size] || 100
       @max_wait = options[:max_wait] || nil # Future: time-based batching
       @buffer = []
@@ -334,8 +374,10 @@ module Minigun
   class RouterStage < Stage
     attr_accessor :targets
 
-    def initialize(name:, targets:)
-      super(name: name, options: {})
+    def initialize(pipeline, name = nil, block = nil, options = {})
+      # Extract targets from options or block (for backward compatibility)
+      targets = options.delete(:targets) || (block.is_a?(Array) ? block : [])
+      super(pipeline, name, nil, options)
       @targets = targets
     end
 
@@ -344,7 +386,9 @@ module Minigun
     def send_end_signals(worker_ctx)
       # Broadcast EndOfSource to ALL router targets
       @targets.each do |target|
-        worker_ctx.stage_input_queues[target] << EndOfSource.new(worker_ctx.stage_name)
+        target_id = worker_ctx.pipeline.normalize_to_id(target)
+        next unless worker_ctx.stage_input_queues[target_id]
+        worker_ctx.stage_input_queues[target_id] << EndOfSource.new(worker_ctx.stage_id)
       end
     end
   end
@@ -365,7 +409,9 @@ module Minigun
 
         # Broadcast to all downstream stages (fan-out semantics)
         @targets.each do |target|
-          worker_ctx.stage_input_queues[target] << item
+          target_id = worker_ctx.pipeline.normalize_to_id(target)
+          next unless worker_ctx.stage_input_queues[target_id]
+          worker_ctx.stage_input_queues[target_id] << item
         end
       end
     ensure
@@ -376,7 +422,10 @@ module Minigun
   # Round-robin router - distributes items across downstream stages
   class RouterRoundRobinStage < RouterStage
     def run_stage(worker_ctx)
-      target_queues = @targets.map { |target| worker_ctx.stage_input_queues[target] }
+      target_queues = @targets.filter_map do |target|
+        target_id = worker_ctx.pipeline.normalize_to_id(target)
+        worker_ctx.stage_input_queues[target_id]
+      end
       round_robin_index = 0
 
       loop do

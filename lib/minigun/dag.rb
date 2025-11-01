@@ -7,12 +7,13 @@ module Minigun
   class DAG
     include TSort
 
-    attr_reader :nodes, :edges, :reverse_edges
+    attr_reader :nodes, :edges, :reverse_edges, :pending_edges
 
-    def initialize(nodes: [], edges: nil, reverse_edges: nil)
+    def initialize(nodes: [], edges: nil, reverse_edges: nil, pending_edges: nil)
       @nodes = nodes.dup # Track insertion order
-      @edges = edges ? edges.dup : Hash.new { |h, k| h[k] = [] } # stage_name => [downstream_stage_names]
-      @reverse_edges = reverse_edges ? reverse_edges.dup : Hash.new { |h, k| h[k] = [] } # stage_name => [upstream_stage_names]
+      @edges = edges ? edges.dup : Hash.new { |h, k| h[k] = [] } # stage_id => [downstream_stage_ids]
+      @reverse_edges = reverse_edges ? reverse_edges.dup : Hash.new { |h, k| h[k] = [] } # stage_id => [upstream_stage_ids]
+      @pending_edges = pending_edges ? pending_edges.dup : [] # Store unresolved forward references
     end
 
     # Duplicate this DAG
@@ -20,7 +21,8 @@ module Minigun
       DAG.new(
         nodes: @nodes.dup,
         edges: Hash.new { |h, k| h[k] = [] }.merge(@edges.transform_values(&:dup)),
-        reverse_edges: Hash.new { |h, k| h[k] = [] }.merge(@reverse_edges.transform_values(&:dup))
+        reverse_edges: Hash.new { |h, k| h[k] = [] }.merge(@reverse_edges.transform_values(&:dup)),
+        pending_edges: @pending_edges.dup
       )
     end
 
@@ -30,9 +32,15 @@ module Minigun
     end
 
     # Add an edge from source to target
+    # If target doesn't exist yet, store as pending edge for later resolution
     def add_edge(from, to)
       add_node(from)
-      add_node(to)
+
+      # If target doesn't exist yet, store as pending edge
+      unless @nodes.include?(to)
+        @pending_edges << [:to, from, to]
+        return
+      end
 
       # Check for circular dependencies
       raise Minigun::Error, "Circular dependency detected: adding edge #{from} -> #{to} would create a cycle" if would_create_cycle?(from, to)
@@ -45,6 +53,26 @@ module Minigun
     def remove_edge(from, to)
       @edges[from].delete(to)
       @reverse_edges[to].delete(from)
+    end
+
+    # Resolve all pending edges (forward references) now that all nodes exist
+    def resolve_pending_edges!
+      unresolved = []
+
+      @pending_edges.each do |direction, from, to|
+        if @nodes.include?(to)
+          # Check for circular dependencies
+          raise Minigun::Error, "Circular dependency detected: adding edge #{from} -> #{to} would create a cycle" if would_create_cycle?(from, to)
+
+          @edges[from] << to unless @edges[from].include?(to)
+          @reverse_edges[to] << from unless @reverse_edges[to].include?(from)
+        else
+          unresolved << [direction, from, to]
+        end
+      end
+
+      @pending_edges = unresolved
+      unresolved.empty? # Return true if all resolved
     end
 
     # Get all downstream stages from a given stage
