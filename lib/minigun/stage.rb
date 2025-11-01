@@ -48,8 +48,14 @@ module Minigun
         @block = block
         @options = options
       end
-
+      
       @id = SecureRandom.hex(8)  # Unique ID for this stage
+      
+      # Register with NameRegistry if we have access to task
+      # This enables ID and name-based lookups
+      if @pipeline && @pipeline.task && @pipeline.task.registry
+        @pipeline.task.registry.register(self)
+      end
     end
 
     # Get the queue size for this stage
