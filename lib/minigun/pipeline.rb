@@ -180,7 +180,7 @@ module Minigun
       # Add to stage order by ID and DAG
       @stage_order << stage_id
       @dag.add_node(stage_id)
-      
+
       # CRITICAL: If this is a PipelineStage, merge nested stages into parent DAG
       # This makes the DAG the single source of truth for all routing
       if stage.is_a?(PipelineStage) && stage.instance_variable_get(:@nested_pipeline)
@@ -315,13 +315,13 @@ module Minigun
         worker.start
         @stage_threads << worker
       end
-      
+
       # Also create workers for nested pipeline stages
       # (they're in parent DAG and have queues, but not in @stages)
       @stages.each_value do |stage|
         next unless stage.run_mode == :composite
         next unless stage.respond_to?(:nested_pipeline) && stage.nested_pipeline
-        
+
         nested_pipeline = stage.nested_pipeline
         nested_pipeline.stages.each_value do |nested_stage|
           worker = Worker.new(self, nested_stage, @config)
@@ -467,41 +467,41 @@ module Minigun
     def merge_nested_pipeline_into_dag(pipeline_stage)
       nested_pipeline = pipeline_stage.instance_variable_get(:@nested_pipeline)
       return unless nested_pipeline
-      
+
       # Add all nested stages as nodes in parent DAG
       nested_pipeline.stages.each_key do |nested_stage_id|
         @dag.add_node(nested_stage_id)
       end
-      
+
       # Merge nested pipeline's DAG edges into parent DAG
       nested_pipeline.dag.edges.each do |from_id, to_ids|
         to_ids.each do |to_id|
           @dag.add_edge(from_id, to_id)
         end
       end
-      
+
       # Don't connect PipelineStage to nested stages automatically
       # Let explicit routing (to:, from:, output.to()) handle connections
     end
-    
+
     # Merge a nested pipeline's stages and edges into this pipeline's DAG
     # This allows parent pipeline to route directly to nested stages
     def merge_nested_pipeline_into_dag(pipeline_stage)
       nested_pipeline = pipeline_stage.instance_variable_get(:@nested_pipeline)
       return unless nested_pipeline
-      
+
       # Add all nested stages as nodes in parent DAG
       nested_pipeline.stages.each_key do |nested_stage_id|
         @dag.add_node(nested_stage_id)
       end
-      
+
       # Merge nested pipeline's DAG edges into parent DAG
       nested_pipeline.dag.edges.each do |from_id, to_ids|
         to_ids.each do |to_id|
           @dag.add_edge(from_id, to_id)
         end
       end
-      
+
       # Don't connect PipelineStage to nested stages automatically
       # Let user define routing via output.to() or explicit DAG edges
     end
