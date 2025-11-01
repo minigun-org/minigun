@@ -5,10 +5,23 @@ module Minigun
   # A Pipeline can be standalone or part of a multi-pipeline Task
   class Pipeline
     attr_reader :name, :config, :stages, :hooks, :dag, :output_queues, :stage_order, :stats,
-                :context, :stage_hooks, :stage_input_queues, :runtime_edges, :input_queues
+                :context, :stage_hooks, :stage_input_queues, :runtime_edges, :input_queues, :task
 
-    def initialize(name, config = {}, stages: nil, hooks: nil, stage_hooks: nil, dag: nil, stage_order: nil, stats: nil)
-      @name = name
+    def initialize(*args, name: nil, config: {}, stages: nil, hooks: nil, stage_hooks: nil, dag: nil, stage_order: nil, stats: nil, **kwargs)
+      # Support both old and new signatures
+      # New: Pipeline.new(task, name, config, ...)
+      # Old: Pipeline.new(name, config, ...)
+      if args.length > 0 && args[0].respond_to?(:config) && args[0].respond_to?(:root_pipeline)
+        # New style: (task, name, config, ...)
+        @task = args[0]
+        @name = args[1]
+        config = args[2] || {}
+      else
+        # Old style: (name, config, ...)
+        @task = nil
+        @name = args[0] || name
+        config = args[1] || config
+      end
       @config = {
         max_threads: config[:max_threads] || 5,
         max_processes: config[:max_processes] || 2,
@@ -43,6 +56,7 @@ module Minigun
 
     # Duplicate this pipeline for inheritance
     def dup
+      # Use old-style constructor for dup (backward compatible)
       Pipeline.new(
         @name,
         @config.dup,
@@ -506,32 +520,32 @@ module Minigun
     def merge_nested_pipeline_into_dag(pipeline_stage)
       nested_pipeline = pipeline_stage.pipeline
       return unless nested_pipeline
-      
+
       # First, recursively build the nested pipeline's DAG
       nested_pipeline.send(:build_dag_routing!)
-      
+
       # Merge nodes (stage names) from nested pipeline into parent DAG
       nested_pipeline.dag.nodes.each do |nested_stage_name|
         @dag.add_node(nested_stage_name)
       end
-      
+
       # Merge edges from nested pipeline into parent DAG
       nested_pipeline.dag.edges.each do |from_name, to_names|
         to_names.each do |to_name|
           @dag.add_edge(from_name, to_name)
         end
       end
-      
+
       # Store reference to nested pipeline stages in parent
       nested_pipeline.stages.each do |nested_stage_name, nested_stage|
         @stages[nested_stage_name] = nested_stage
       end
-      
+
       # Add nested stages to stage order (for topological sorting)
       nested_pipeline.stage_order.each do |stage_name|
         @stage_order << stage_name unless @stage_order.include?(stage_name)
       end
-      
+
       log_debug "[Pipeline:#{@name}] Merged nested pipeline '#{nested_pipeline.name}' with #{nested_pipeline.stages.size} stages (infrastructure only - not activated)"
     end
 
