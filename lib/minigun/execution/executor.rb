@@ -221,15 +221,16 @@ module Minigun
 
           begin
             # Execute after_fork hooks in child process
-            # This executes both pipeline-level and stage-specific hooks
-            pipeline&.send(:execute_fork_hooks, :after_fork, stage.name)
+            # This executes both pipeline-level and stage-specific hooks (use ID)
+            pipeline&.send(:execute_fork_hooks, :after_fork, stage.id)
 
             # Child process has inherited item via COW
             # Execute the stage's block on this single item
             # Create a capture queue to collect results written to output_queue
             capture_queue = Queue.new
             capture_output = Minigun::OutputQueue.new(
-              stage.name,
+              nil,  # No pipeline (child process, no routing)
+              stage.id,  # Stage ID
               [capture_queue],
               {},
               {},
@@ -276,7 +277,8 @@ module Minigun
           # Fall back to processing inline for this item
           capture_queue = Queue.new
           capture_output = Minigun::OutputQueue.new(
-            stage.name,
+            nil,  # No pipeline (fallback mode, no routing)
+            stage.id,  # Stage ID
             [capture_queue],
             {},
             {},

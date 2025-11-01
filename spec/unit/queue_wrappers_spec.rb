@@ -209,7 +209,7 @@ RSpec.describe Minigun::InputQueue do
       result = input_queue.pop
 
       expect(result).to be_a(Minigun::EndOfStage)
-      expect(result.stage_name).to eq(stage_name)
+      expect(result.stage_id).to eq(stage_name)
     end
 
     it 'returns EndOfStage when all sources are done' do

@@ -193,10 +193,13 @@ RSpec.describe Minigun::Worker do
 
   describe 'router stage' do
     let(:router_stage) do
-      Minigun::RouterBroadcastStage.new(
+      stage = Minigun::RouterBroadcastStage.new(
         name: :router,
         targets: %i[target_a target_b]
       )
+      # In real pipeline, targets would be normalized to IDs, but for this test we'll use dummy IDs
+      stage.targets = ['target_a_id', 'target_b_id']
+      stage
     end
 
     it 'routes items without executing' do
@@ -204,9 +207,10 @@ RSpec.describe Minigun::Worker do
       target_a_queue = Queue.new
       target_b_queue = Queue.new
 
+      # Use stage IDs as keys (new behavior)
       allow(pipeline).to receive(:stage_input_queues)
-        .and_return({ router: input_queue, target_a: target_a_queue, target_b: target_b_queue })
-      allow(dag).to receive(:upstream).with(:router).and_return([:source])
+        .and_return({ router_stage.id => input_queue, 'target_a_id' => target_a_queue, 'target_b_id' => target_b_queue })
+      allow(dag).to receive(:upstream).with(router_stage.id).and_return([:source])
 
       # Put items and END signal
       input_queue << 1

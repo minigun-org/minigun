@@ -399,7 +399,7 @@ RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: Gem.win_platform? 
     dag = double('dag', terminal?: false)
     pipeline = double('pipeline', name: 'test_pipeline', dag: dag, send: nil)
     stage_stats = double('stage_stats', start!: nil, start_time: nil, increment_consumed: nil, increment_produced: nil, record_latency: nil)
-    double('stage_ctx', pipeline: pipeline, stage_name: :test, stage_stats: stage_stats, dag: dag)
+    double('stage_ctx', pipeline: pipeline, stage_name: :test, stage_id: SecureRandom.hex(8), stage_stats: stage_stats, dag: dag)
   end
   let(:executor) { described_class.new(stage_ctx, max_size: 2) }
 
@@ -490,7 +490,7 @@ RSpec.describe Minigun::Execution::IpcForkPoolExecutor, skip: Gem.win_platform? 
     dag = double('dag', terminal?: false)
     pipeline = double('pipeline', name: 'test_pipeline', dag: dag, send: nil)
     stage_stats = double('stage_stats', start!: nil, start_time: nil, increment_consumed: nil, increment_produced: nil, record_latency: nil)
-    double('stage_ctx', pipeline: pipeline, stage_name: :test, stage_stats: stage_stats, dag: dag)
+    double('stage_ctx', pipeline: pipeline, stage_name: :test, stage_id: SecureRandom.hex(8), stage_stats: stage_stats, dag: dag)
   end
   let(:executor) { described_class.new(stage_ctx, max_size: 2) }
 

@@ -152,7 +152,8 @@ module Minigun
       downstream = stage_ctx.dag.downstream(stage_ctx.stage_id)
       downstream_queues = downstream.filter_map { |ds_id| stage_ctx.stage_input_queues[ds_id] }
       OutputQueue.new(
-        stage_ctx.stage_id,  # Use ID
+        stage_ctx.pipeline,  # Pipeline first (for name-to-ID normalization)
+        stage_ctx.stage_id,
         downstream_queues,
         stage_ctx.stage_input_queues,
         stage_ctx.runtime_edges,

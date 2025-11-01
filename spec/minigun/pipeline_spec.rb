@@ -33,25 +33,27 @@ RSpec.describe Minigun::Pipeline do
   describe '#add_stage' do
     it 'adds a producer stage' do
       pipeline.add_stage(:producer, :fetch) { 'fetch data' }
-      expect(pipeline.stages[:fetch]).to be_a(Minigun::ProducerStage)
-      expect(pipeline.stages[:fetch].name).to eq(:fetch)
+      stage = pipeline.find_stage(:fetch)
+      expect(stage).to be_a(Minigun::ProducerStage)
+      expect(stage.name).to eq(:fetch)
     end
 
     it 'adds multiple processor stages' do
       pipeline.add_stage(:processor, :transform) { |item| item }
       pipeline.add_stage(:processor, :validate) { |item| item }
 
-      # Verify both stages were added by name
-      expect(pipeline.stages[:transform]).not_to be_nil
-      expect(pipeline.stages[:validate]).not_to be_nil
-      expect(pipeline.stages[:transform].name).to eq(:transform)
-      expect(pipeline.stages[:validate].name).to eq(:validate)
+      # Verify both stages were added by name (use find_stage)
+      expect(pipeline.find_stage(:transform)).not_to be_nil
+      expect(pipeline.find_stage(:validate)).not_to be_nil
+      expect(pipeline.find_stage(:transform).name).to eq(:transform)
+      expect(pipeline.find_stage(:validate).name).to eq(:validate)
     end
 
     it 'adds a consumer stage' do
       pipeline.add_stage(:consumer, :save) { |item| puts item }
-      expect(pipeline.stages[:save]).not_to be_nil
-      expect(pipeline.stages[:save].name).to eq(:save)
+      stage = pipeline.find_stage(:save)
+      expect(stage).not_to be_nil
+      expect(stage.name).to eq(:save)
     end
 
     it 'handles stage routing with :to option' do
@@ -59,8 +61,13 @@ RSpec.describe Minigun::Pipeline do
       pipeline.add_stage(:processor, :transform, to: :save) { |item| item }
       pipeline.add_stage(:consumer, :save) { |item| puts item }
 
-      expect(pipeline.dag.downstream(:source)).to include(:transform)
-      expect(pipeline.dag.downstream(:transform)).to include(:save)
+      # DAG now uses IDs, get stage IDs
+      source_id = pipeline.find_stage(:source).id
+      transform_id = pipeline.find_stage(:transform).id
+      save_id = pipeline.find_stage(:save).id
+
+      expect(pipeline.dag.downstream(source_id)).to include(transform_id)
+      expect(pipeline.dag.downstream(transform_id)).to include(save_id)
     end
 
     it 'raises error on duplicate stage name' do

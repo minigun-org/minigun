@@ -40,8 +40,9 @@ module Minigun
 
   # Wrapper around stage output that routes to downstream queues
   class OutputQueue
-    def initialize(stage_id, downstream_queues, all_stage_queues, runtime_edges, stage_stats: nil)
-      @stage_id = stage_id  # Now uses stage ID
+    def initialize(pipeline, stage_id, downstream_queues, all_stage_queues, runtime_edges, stage_stats: nil)
+      @pipeline = pipeline                     # Required for name-to-ID normalization in .to()
+      @stage_id = stage_id                    # Stage ID (primary identifier)
       @downstream_queues = downstream_queues  # Array of Queue objects
       @all_stage_queues = all_stage_queues    # Hash of all queues (keyed by ID) for .to() method
       @runtime_edges = runtime_edges           # Track dynamic routing (keyed by ID)
@@ -58,20 +59,24 @@ module Minigun
 
     # Magic sauce: explicit routing to specific stage
     # Returns a memoized OutputQueue that routes only to that stage
-    # target_stage can be ID or name (will be looked up)
+    # target_stage can be ID or name (will be normalized)
     def to(target_stage)
       # Return cached instance if available
       return @to_cache[target_stage] if @to_cache.key?(target_stage)
 
-      # all_stage_queues is now keyed by ID, so target_stage should be an ID
-      target_queue = @all_stage_queues[target_stage]
+      # Normalize target_stage to ID (handles both names and IDs)
+      target_id = @pipeline&.normalize_identifier(target_stage) || target_stage
+
+      # Look up the target queue by normalized ID
+      target_queue = @all_stage_queues[target_id]
       raise ArgumentError, "Unknown target stage: #{target_stage}" unless target_queue
 
-      # Track this as a runtime edge for END signal handling (use IDs)
-      @runtime_edges[@stage_id].add(target_stage)
+      # Track this as a runtime edge for END signal handling (use normalized ID)
+      @runtime_edges[@stage_id].add(target_id)
 
       # Create and cache the OutputQueue for this target
       @to_cache[target_stage] = OutputQueue.new(
+        @pipeline,
         @stage_id,
         [target_queue],
         @all_stage_queues,
