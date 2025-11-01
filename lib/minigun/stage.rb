@@ -458,16 +458,12 @@ module Minigun
   class PipelineStage < Stage
     attr_reader :nested_pipeline
 
-    # Positional constructor: PipelineStage.new(pipeline, name, block, options)
-    def initialize(pipeline, name, block, options = {})
+    # Positional constructor: PipelineStage.new(pipeline, name, nested_pipeline, block, options)
+    def initialize(pipeline, name, nested_pipeline, block, options = {})
       super(pipeline, name, block, options)
-      @nested_pipeline = nil
+      @nested_pipeline = nested_pipeline
     end
 
-    # Inject the nested pipeline instance
-    def nested_pipeline=(pipeline)
-      @nested_pipeline = pipeline
-    end
 
     def run_mode
       :composite # Manages internal stages

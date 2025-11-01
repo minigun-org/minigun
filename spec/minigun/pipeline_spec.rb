@@ -185,9 +185,8 @@ RSpec.describe Minigun::Pipeline do
 
     it 'finds PipelineStages with no upstream as producers' do
       # Add a PipelineStage (positional constructor style)
-      pipeline_stage = Minigun::PipelineStage.new(pipeline, :nested, nil, {})
       nested_pipeline = described_class.new(:nested, config)
-      pipeline_stage.nested_pipeline = nested_pipeline
+      pipeline_stage = Minigun::PipelineStage.new(pipeline, :nested, nested_pipeline, nil, {})
       pipeline.stages[:nested] = pipeline_stage
 
       # Add to DAG with no upstream (use stage object)
@@ -205,9 +204,8 @@ RSpec.describe Minigun::Pipeline do
       pipeline.add_stage(:producer, :source) { output << 1 }
 
       # Add a PipelineStage with upstream (positional constructor style)
-      pipeline_stage = Minigun::PipelineStage.new(pipeline, :nested, nil, {})
       nested_pipeline = described_class.new(:nested, config)
-      pipeline_stage.nested_pipeline = nested_pipeline
+      pipeline_stage = Minigun::PipelineStage.new(pipeline, :nested, nested_pipeline, nil, {})
       pipeline.stages[:nested] = pipeline_stage
       pipeline.stage_order << pipeline_stage  # Use object
 
@@ -227,9 +225,8 @@ RSpec.describe Minigun::Pipeline do
       pipeline.add_stage(:producer, :atomic_source) { output << 1 }
 
       # Add PipelineStage producer
-      pipeline_stage = Minigun::PipelineStage.new(pipeline, :pipeline_source, nil, {})
       nested_pipeline = described_class.new(:nested, config)
-      pipeline_stage.nested_pipeline = nested_pipeline
+      pipeline_stage = Minigun::PipelineStage.new(pipeline, :pipeline_source, nested_pipeline, nil, {})
       pipeline.stages[:pipeline_source] = pipeline_stage
       pipeline.stage_order << :pipeline_source
       pipeline.dag.add_node(:pipeline_source)
@@ -337,9 +334,8 @@ RSpec.describe Minigun::Pipeline do
       pipeline.add_stage(:processor, :process_atomic) { |item| output << (item * 10) }
 
       # PipelineStage producer
-      pipeline_stage = Minigun::PipelineStage.new(pipeline, :pipeline_source, nil, {})
       nested_pipeline = described_class.new(:nested, config)
-      pipeline_stage.nested_pipeline = nested_pipeline
+      pipeline_stage = Minigun::PipelineStage.new(pipeline, :pipeline_source, nested_pipeline, nil, {})
       pipeline.stages[:pipeline_source] = pipeline_stage
       pipeline.stage_order << pipeline_stage  # Use object
       pipeline.dag.add_node(pipeline_stage)    # Use object
@@ -374,9 +370,8 @@ RSpec.describe Minigun::Pipeline do
       end.new
 
       # Create PipelineStage that acts as a producer
-      pipeline_stage = Minigun::PipelineStage.new(pipeline, :source_pipeline, nil, {})
       source_pipeline = described_class.new(pipeline, :source, config)
-      pipeline_stage.nested_pipeline = source_pipeline
+      pipeline_stage = Minigun::PipelineStage.new(pipeline, :source_pipeline, source_pipeline, nil, {})
       source_pipeline.add_stage(:producer, :gen) { |output| 3.times { |i| output << i } }
       source_pipeline.add_stage(:processor, :double) { |item, output| output << (item * 2) }
 
@@ -407,9 +402,8 @@ RSpec.describe Minigun::Pipeline do
       pipeline.add_stage(:producer, :source) { |output| 3.times { |i| output << i } }
 
       # PipelineStage as processor
-      pipeline_stage = Minigun::PipelineStage.new(pipeline, :processor_pipeline, nil, {})
       proc_pipeline = described_class.new(pipeline, :processor, config)
-      pipeline_stage.nested_pipeline = proc_pipeline
+      pipeline_stage = Minigun::PipelineStage.new(pipeline, :processor_pipeline, proc_pipeline, nil, {})
       proc_pipeline.add_stage(:processor, :multiply) { |item, output| output << (item * 10) }
       proc_pipeline.add_stage(:processor, :add_one) { |item, output| output << (item + 1) }
 
@@ -440,9 +434,8 @@ RSpec.describe Minigun::Pipeline do
       end.new
 
       # First PipelineStage producer
-      ps1 = Minigun::PipelineStage.new(pipeline, :pipeline_a, nil, {})
       p1 = described_class.new(pipeline, :pa, config)
-      ps1.nested_pipeline = p1
+      ps1 = Minigun::PipelineStage.new(pipeline, :pipeline_a, p1, nil, {})
       p1.add_stage(:producer, :gen) { |output| output << 10 }
       p1.add_stage(:processor, :double) { |item, output| output << (item * 2) }
 
@@ -451,9 +444,8 @@ RSpec.describe Minigun::Pipeline do
       pipeline.dag.add_node(ps1)  # Use Stage object
 
       # Second PipelineStage producer
-      ps2 = Minigun::PipelineStage.new(pipeline, :pipeline_b, nil, {})
       p2 = described_class.new(pipeline, :pb, config)
-      ps2.nested_pipeline = p2
+      ps2 = Minigun::PipelineStage.new(pipeline, :pipeline_b, p2, nil, {})
       p2.add_stage(:producer, :gen) { |output| output << 5 }
       p2.add_stage(:processor, :triple) { |item, output| output << (item * 3) }
 
