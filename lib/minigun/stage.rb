@@ -51,12 +51,17 @@ module Minigun
       end
 
       @id = SecureRandom.hex(8)  # Unique ID for this stage
-
+      
       # Register with NameRegistry if we have access to task
       # This enables ID and name-based lookups
       if @pipeline && @pipeline.task && @pipeline.task.registry
         @pipeline.task.registry.register(self)
       end
+    end
+    
+    # Display name for logging - prefer name, fall back to ID
+    def display_name
+      @name || @id
     end
 
     # Get the queue size for this stage
