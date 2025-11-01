@@ -303,11 +303,11 @@ module Minigun
       # Try as name first (current behavior - backward compatible)
       stage = @stages[identifier]
       return stage if stage
-      
+
       # Try as ID (new behavior - supports future ID-based lookups)
       @stages.values.find { |s| s.id == identifier }
     end
-    
+
     # Normalize a stage identifier to a consistent format for internal use
     # Currently returns name for backward compatibility
     # Future: can return ID for internal operations

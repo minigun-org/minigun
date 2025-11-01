@@ -29,13 +29,27 @@ module Minigun
   # Implements the Composite pattern where Pipeline is a composite Stage
   # Also handles loop-based stages (stages that manage their own input loop)
   class Stage
-    attr_reader :id, :name, :options, :block
+    attr_reader :id, :name, :options, :block, :pipeline
 
-    def initialize(name:, block: nil, options: {})
+    def initialize(*args, name: nil, block: nil, options: {}, **kwargs)
+      # Support both old (keyword) and new (positional) signatures
+      # New: Stage.new(pipeline, name, block, options)
+      # Old: Stage.new(name: :foo, block: proc {}, options: {})
+      if args.length > 0 && args[0].is_a?(Pipeline)
+        # New positional style: (pipeline, name, block, options)
+        @pipeline = args[0]
+        @name = args[1]
+        @block = args[2]
+        @options = args[3] || {}
+      else
+        # Old keyword style (backward compatible)
+        @pipeline = nil
+        @name = name
+        @block = block
+        @options = options
+      end
+      
       @id = SecureRandom.hex(8)  # Unique ID for this stage
-      @name = name
-      @block = block
-      @options = options
     end
 
     # Get the queue size for this stage
