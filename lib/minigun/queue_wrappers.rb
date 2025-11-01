@@ -16,16 +16,23 @@ module Minigun
     def pop
       loop do
         item = @queue.pop
+        puts "[InputQueue:#{@stage_id}] Received: #{item.inspect}" if ENV['DEBUG_TIMEOUT']
 
         # Handle EndOfSource signals
         if item.is_a?(EndOfSource)
+          puts "[InputQueue:#{@stage_id}] Processing EndOfSource from #{item.source}" if ENV['DEBUG_TIMEOUT']
           @sources_expected << item.source # Discover dynamic sources
           @sources_done << item.source
+          puts "[InputQueue:#{@stage_id}] After EndOfSource: expected: #{@sources_expected.inspect}, done: #{@sources_done.inspect}" if ENV['DEBUG_TIMEOUT']
 
           # All sources done? Return sentinel
-          return EndOfStage.new(@stage_id) if @sources_done == @sources_expected
+          if @sources_done == @sources_expected
+            puts "[InputQueue:#{@stage_id}] All sources done, returning EndOfStage" if ENV['DEBUG_TIMEOUT']
+            return EndOfStage.new(@stage_id)
+          end
 
           # More sources pending, keep looping to get next item
+          puts "[InputQueue:#{@stage_id}] More sources pending, continuing" if ENV['DEBUG_TIMEOUT']
           next
         end
 
@@ -33,6 +40,7 @@ module Minigun
         @stage_stats&.increment_consumed
 
         # Regular item
+        puts "[InputQueue:#{@stage_id}] Returning regular item: #{item.inspect}" if ENV['DEBUG_TIMEOUT']
         return item
       end
     end

@@ -172,9 +172,16 @@ module Minigun
       dynamic_targets = stage_ctx.runtime_edges[stage_ctx.stage_id].to_a
       all_targets = (dag_downstream + dynamic_targets).uniq
 
+      puts "[SendEndSignals] From #{stage_ctx.stage_display_name} to targets: #{all_targets.inspect}" if ENV['DEBUG_TIMEOUT']
+
       all_targets.each do |target|
         target_id = stage_ctx.pipeline.normalize_to_id(target)
-        stage_ctx.stage_input_queues[target_id]&.<<(EndOfSource.new(stage_ctx.stage_id))
+        if stage_ctx.stage_input_queues[target_id]
+          puts "[SendEndSignals] Sending EndOfSource to #{target_id}" if ENV['DEBUG_TIMEOUT']
+          stage_ctx.stage_input_queues[target_id] << EndOfSource.new(stage_ctx.stage_id)
+        else
+          puts "[SendEndSignals] No queue found for #{target_id}" if ENV['DEBUG_TIMEOUT']
+        end
       end
     end
 
@@ -469,15 +476,12 @@ module Minigun
       :composite # Manages internal stages
     end
 
-    # Run the nested pipeline when this stage is executed as a worker
-    # In DAG-centric architecture, PipelineStages always run their nested pipelines
-    # The DAG merging ensures proper coordination between parent and nested stages
+    # PipelineStage acts as a synchronization point for nested pipelines
+    # Nested stages are managed by the parent pipeline's worker system
+    # PipelineStage just forwards EndOfSource signals to maintain DAG flow
     def run_stage(stage_ctx)
-      return unless @nested_pipeline
-
-      # Always run the nested pipeline
-      # DAG merging handles the coordination between parent and nested stages
-      @nested_pipeline.run(stage_ctx.pipeline.context)
+      # PipelineStage doesn't process items - it just forwards termination signals
+      # Nested stages run independently via the parent's worker system
     ensure
       send_end_signals(stage_ctx)
     end
