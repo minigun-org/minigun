@@ -49,7 +49,13 @@ module Minigun
         @block = block
         @options = options
       end
-
+      
+      # Auto-generate name if not provided (for routing support)
+      # Use "_" prefix + 8 char random hex
+      if @name.nil?
+        @name = :"_#{SecureRandom.hex(4)}"
+      end
+      
       @id = SecureRandom.hex(8)  # Unique ID for this stage
       
       # Register with NameRegistry if we have access to task
@@ -59,9 +65,9 @@ module Minigun
       end
     end
     
-    # Display name for logging - prefer name, fall back to ID
+    # Display name for logging
     def display_name
-      @name || @id
+      @name.to_s
     end
 
     # Get the queue size for this stage
