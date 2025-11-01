@@ -62,9 +62,10 @@ module Minigun
         log_debug 'No upstream sources, sending END signals and exiting'
 
         # Send EndOfSource to all downstream stages so they don't deadlock
-        downstream = stage_ctx.dag.downstream(stage_ctx.stage_name)
-        downstream.each do |target|
-          stage_ctx.stage_input_queues[target] << EndOfSource.new(stage_ctx.stage_name)
+        # DAG and queues now use IDs
+        downstream = stage_ctx.dag.downstream(stage_ctx.stage_id)
+        downstream.each do |target_id|
+          stage_ctx.stage_input_queues[target_id] << EndOfSource.new(stage_ctx.stage_id)
         end
 
         log_debug 'Done'
@@ -79,18 +80,20 @@ module Minigun
       stage_input_queues = @pipeline.stage_input_queues
 
       # Calculate sources for workers (empty for autonomous stages)
+      # DAG now uses IDs
       sources_expected = if @stage.run_mode == :autonomous
                            Set.new
-                         elsif @stage_name == :_entrance && @pipeline.input_queues
+                         elsif @stage.name == :_entrance && @pipeline.input_queues
                            # For :_entrance, use sources from parent pipeline if available
                            @pipeline.input_queues[:sources_expected] || Set.new
                          else
-                           Set.new(dag.upstream(@stage_name))
+                           Set.new(dag.upstream(@stage.id))
                          end
 
       # Create stats object for this specific stage
-      is_terminal = dag.terminal?(@stage_name)
-      stage_stats = @pipeline.stats.for_stage(@stage_name, is_terminal: is_terminal)
+      # DAG now uses IDs
+      is_terminal = dag.terminal?(@stage.id)
+      stage_stats = @pipeline.stats.for_stage(@stage.id, is_terminal: is_terminal)
 
       StageContext.new(
         worker: self,
@@ -102,7 +105,8 @@ module Minigun
         stage_input_queues: stage_input_queues,
         stage_stats: stage_stats,
         # Worker-specific (nil/empty for producers)
-        input_queue: stage_input_queues[@stage_name],
+        # stage_input_queues is now keyed by ID
+        input_queue: stage_input_queues[@stage.id],
         sources_expected: sources_expected,
         sources_done: Set.new
       )

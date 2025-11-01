@@ -40,7 +40,8 @@ module Minigun
 
     # Get all named pipelines (composite stages in root_pipeline)
     def pipelines
-      @root_pipeline.stages.select { |_name, stage| stage.run_mode == :composite }
+      # @root_pipeline.stages is now keyed by ID
+      @root_pipeline.stages.select { |_id, stage| stage.run_mode == :composite }
                     .transform_values(&:pipeline)
     end
 
@@ -74,14 +75,20 @@ module Minigun
         dsl.instance_eval(&)
       end
 
-      # Add the pipeline stage to the implicit pipeline
-      @root_pipeline.stages[name] = pipeline_stage
-      @root_pipeline.stage_order << name
-      @root_pipeline.dag.add_node(name)
+      # Add the pipeline stage to the implicit pipeline (by ID)
+      @root_pipeline.stages[pipeline_stage.id] = pipeline_stage
+      @root_pipeline.stages_by_name[name] = pipeline_stage if name
+      @root_pipeline.stage_order << pipeline_stage.id
+      @root_pipeline.dag.add_node(pipeline_stage.id)
 
-      # Extract routing if specified
+      # Extract routing if specified (normalize names to IDs)
       to_targets = options[:to]
-      Array(to_targets).each { |target| @root_pipeline.dag.add_edge(name, target) } if to_targets
+      if to_targets
+        Array(to_targets).each do |target|
+          target_id = @root_pipeline.normalize_identifier(target)
+          @root_pipeline.dag.add_edge(pipeline_stage.id, target_id)
+        end
+      end
 
       pipeline_stage
     end
@@ -89,11 +96,11 @@ module Minigun
     # Define a named pipeline with routing
     # Pipelines are just PipelineStage objects in root_pipeline
     def define_pipeline(name, options = {})
-      # Check if already exists
-      if @root_pipeline.stages.key?(name)
-        pipeline_stage = @root_pipeline.stages[name]
-        raise Minigun::Error, "Stage #{name} already exists as a non-composite stage" unless pipeline_stage.run_mode == :composite
+      # Check if already exists (check by name since that's how we look it up)
+      pipeline_stage = @root_pipeline.find_stage(name)
 
+      if pipeline_stage
+        raise Minigun::Error, "Stage #{name} already exists as a non-composite stage" unless pipeline_stage.run_mode == :composite
         pipeline = pipeline_stage.pipeline
       else
         # Create new PipelineStage and add to root_pipeline
@@ -102,23 +109,27 @@ module Minigun
         pipeline = Pipeline.new(self, name, @config)
         pipeline_stage.pipeline = pipeline
 
-        @root_pipeline.stages[name] = pipeline_stage
-        @root_pipeline.stage_order << name
-        @root_pipeline.dag.add_node(name)
+        # Add to root_pipeline (by ID)
+        @root_pipeline.stages[pipeline_stage.id] = pipeline_stage
+        @root_pipeline.stages_by_name[name] = pipeline_stage if name
+        @root_pipeline.stage_order << pipeline_stage.id
+        @root_pipeline.dag.add_node(pipeline_stage.id)
       end
 
-      # Handle routing in root_pipeline DAG
+      # Handle routing in root_pipeline DAG (by ID) - normalize names to IDs
       to_targets = options[:to]
       if to_targets
         Array(to_targets).each do |target|
-          @root_pipeline.dag.add_edge(name, target)
+          target_id = @root_pipeline.normalize_identifier(target)
+          @root_pipeline.dag.add_edge(pipeline_stage.id, target_id)
         end
       end
 
       from_sources = options[:from]
       if from_sources
         Array(from_sources).each do |source|
-          @root_pipeline.dag.add_edge(source, name)
+          source_id = @root_pipeline.normalize_identifier(source)
+          @root_pipeline.dag.add_edge(source_id, pipeline_stage.id)
         end
       end
 

@@ -16,10 +16,10 @@ module Minigun
   # Signal indicating one upstream source has completed
   # Flows through raw queues, consumed by InputQueue wrapper
   class EndOfSource < QueueSignal
-    attr_reader :source
+    attr_reader :source  # Now contains stage ID
 
-    def initialize(source)
-      @source = source
+    def initialize(source_id)
+      @source = source_id
     end
 
     def to_s
@@ -30,14 +30,14 @@ module Minigun
   # Signal indicating all upstream sources for a stage have completed
   # Created by InputQueue wrapper when all expected sources send EndOfSource
   class EndOfStage < QueueSignal
-    attr_reader :stage_name
+    attr_reader :stage_id  # Changed from stage_name - now contains stage ID
 
-    def initialize(stage_name)
-      @stage_name = stage_name
+    def initialize(stage_id)
+      @stage_id = stage_id
     end
 
     def to_s
-      "EndOfStage(#{@stage_name})"
+      "EndOfStage(#{@stage_id})"
     end
   end
 end

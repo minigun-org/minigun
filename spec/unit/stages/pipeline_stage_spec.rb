@@ -51,7 +51,8 @@ RSpec.describe Minigun::PipelineStage do
                                   dag: instance_double(Minigun::DAG, downstream: []),
                                   stage_input_queues: {},
                                   runtime_edges: {},
-                                  stage_name: :my_pipeline)
+                                  stage_name: :my_pipeline,
+                                  stage_id: stage.id)
 
       # Should not raise, just return
       expect { stage.run_stage(stage_ctx) }.not_to raise_error
