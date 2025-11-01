@@ -38,10 +38,10 @@ RSpec.describe Minigun::Task do
       block = proc { 'producer' }
       task.add_stage(:producer, :test_producer, &block)
 
-      expect(task.stages[:test_producer]).not_to be_nil
-      expect(task.stages[:test_producer].name).to eq(:test_producer)
-      expect(task.stages[:test_producer].block).to eq(block)
-      expect(task.stages[:test_producer]).to be_a(Minigun::ProducerStage)
+      expect(task.find_stage(:test_producer)).not_to be_nil
+      expect(task.find_stage(:test_producer).name).to eq(:test_producer)
+      expect(task.find_stage(:test_producer).block).to eq(block)
+      expect(task.find_stage(:test_producer)).to be_a(Minigun::ProducerStage)
     end
 
     it 'adds processor stages' do
@@ -52,27 +52,27 @@ RSpec.describe Minigun::Task do
       task.add_stage(:processor, :proc2, &block2)
 
       # Verify both were added
-      expect(task.stages[:proc1]).not_to be_nil
-      expect(task.stages[:proc2]).not_to be_nil
-      expect(task.stages[:proc1].name).to eq(:proc1)
-      expect(task.stages[:proc2].name).to eq(:proc2)
+      expect(task.find_stage(:proc1)).not_to be_nil
+      expect(task.find_stage(:proc2)).not_to be_nil
+      expect(task.find_stage(:proc1).name).to eq(:proc1)
+      expect(task.find_stage(:proc2).name).to eq(:proc2)
     end
 
     it 'adds accumulator stage' do
       block = proc { 'accumulator' }
       task.add_stage(:accumulator, :test_acc, &block)
 
-      expect(task.stages[:test_acc]).not_to be_nil
-      expect(task.stages[:test_acc].name).to eq(:test_acc)
-      expect(task.stages[:test_acc]).to be_a(Minigun::AccumulatorStage)
+      expect(task.find_stage(:test_acc)).not_to be_nil
+      expect(task.find_stage(:test_acc).name).to eq(:test_acc)
+      expect(task.find_stage(:test_acc)).to be_a(Minigun::AccumulatorStage)
     end
 
     it 'adds consumer stage' do
       block = proc { |x| x }
       task.add_stage(:consumer, :test_consumer, &block)
 
-      expect(task.stages[:test_consumer]).not_to be_nil
-      expect(task.stages[:test_consumer].name).to eq(:test_consumer)
+      expect(task.find_stage(:test_consumer)).not_to be_nil
+      expect(task.find_stage(:test_consumer).name).to eq(:test_consumer)
     end
   end
 

@@ -6,8 +6,8 @@ require_relative '../lib/minigun'
 class TimedBatchStage < Minigun::Stage
   attr_reader :batch_size, :timeout
 
-  def initialize(name:, options: {})
-    super
+  def initialize(pipeline, name = nil, block = nil, options = {})
+    super(pipeline, name, block, options)
     @batch_size = options[:batch_size] || 100
     @timeout = options[:timeout] || 5.0
   end

@@ -19,7 +19,9 @@ RSpec.describe Minigun::Worker do
   let(:stage) do
     double(
       'stage',
+      id: SecureRandom.uuid,
       name: :test_stage,
+      display_name: :test_stage,
       execution_context: nil,
       log_type: 'Worker',
       run_mode: :streaming
@@ -41,7 +43,7 @@ RSpec.describe Minigun::Worker do
     it 'creates a worker' do
       worker = described_class.new(pipeline, stage, config)
 
-      expect(worker.stage_name).to eq(:test_stage)
+      expect(worker.stage_id).to eq(stage.id)
       expect(worker).to be_a(described_class)
     end
 
@@ -191,10 +193,13 @@ RSpec.describe Minigun::Worker do
   end
 
   describe 'router stage' do
+    let(:task) { Minigun::Task.new }
     let(:router_stage) do
       Minigun::RouterBroadcastStage.new(
-        name: :router,
-        targets: %i[target_a target_b]
+        task.root_pipeline,
+        :router,
+        nil,
+        { targets: %i[target_a target_b] }
       )
     end
 
@@ -203,9 +208,12 @@ RSpec.describe Minigun::Worker do
       target_a_queue = Queue.new
       target_b_queue = Queue.new
 
+      # Use the router stage's actual ID as the key
+      router_id = router_stage.id
       allow(pipeline).to receive(:stage_input_queues)
-        .and_return({ router: input_queue, target_a: target_a_queue, target_b: target_b_queue })
-      allow(dag).to receive(:upstream).with(:router).and_return([:source])
+        .and_return({ router_id => input_queue, target_a: target_a_queue, target_b: target_b_queue })
+      allow(pipeline).to receive(:normalize_to_id) { |id| id } # Return input as-is
+      allow(dag).to receive(:upstream).with(router_id).and_return([:source])
 
       # Put items and END signal
       input_queue << 1

@@ -120,7 +120,9 @@ module Minigun
 
         # Log bottleneck if found
         if (bn = stats.bottleneck)
-          log_debug "[Job:#{@job_id}] Bottleneck: #{bn.stage_name} (#{bn.throughput.round(2)} items/s)"
+          # Get display name from stats (name if available, otherwise ID)
+          display_name = bn.to_h(@task)[:stage_name]
+          log_debug "[Job:#{@job_id}] Bottleneck: #{display_name} (#{bn.throughput.round(2)} items/s)"
         end
       end
 

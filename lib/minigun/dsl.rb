@@ -120,17 +120,38 @@ module Minigun
         opts = entry[:options]
 
         if name
-          # Named pipeline - define on instance task, then evaluate block in PipelineDSL context
+          # Named pipeline - define on instance task, then evaluate block with instance context
           @_minigun_task.define_pipeline(name, opts) do |pipeline|
             pipeline_dsl = PipelineDSL.new(pipeline, self)
-            pipeline_dsl.instance_eval(&entry[:block])
+            _pipeline_dsl_stack.push(pipeline_dsl)
+            begin
+              # Evaluate in instance context so @config, @results etc. are accessible
+              instance_eval(&entry[:block])
+            rescue => e
+              raise
+            ensure
+              _pipeline_dsl_stack.pop
+            end
           end
         else
-          # Unnamed pipeline - evaluate in PipelineDSL context on root pipeline
+          # Unnamed pipeline - evaluate with instance context on root pipeline
           pipeline_dsl = PipelineDSL.new(@_minigun_task.root_pipeline, self)
-          pipeline_dsl.instance_eval(&entry[:block])
+          _pipeline_dsl_stack.push(pipeline_dsl)
+          begin
+            # Evaluate in instance context so @config, @results etc. are accessible
+            instance_eval(&entry[:block])
+          rescue => e
+            raise
+          ensure
+            _pipeline_dsl_stack.pop
+          end
         end
       end
+    end
+
+    # Pipeline DSL delegation stack - allows nested pipelines to delegate correctly
+    def _pipeline_dsl_stack
+      @_pipeline_dsl_stack ||= []
     end
 
     # Context management for PipelineDSL when @context is set
@@ -161,35 +182,42 @@ module Minigun
         _execution_context_stack.last
       end
 
-      # Execution block methods
-      def threads(pool_size, &)
-        context = { type: :threads, pool_size: pool_size, mode: :pool }
-        _with_execution_context(context, &)
+      # Unified pipeline creation - ALL pipelines are the same!
+      # Can have executor configuration or be anonymous nested pipelines
+      def pipeline(name = nil, options = {}, &block)
+        # Generate a unique name if not provided
+        name ||= :"_pipeline_#{object_id}_#{@pipeline.stages.size}"
+
+        # Merge executor options if provided
+        pipeline_options = options.dup
+
+        # Create the nested pipeline
+        _add_nested_pipeline(name, pipeline_options, &block)
       end
 
-      def processes(pool_size, &)
-        context = { type: :cow_forks, pool_size: pool_size, mode: :pool }
-        _with_execution_context(context, &)
+      # Execution block methods - these are just shortcuts for pipeline with executor config
+      def threads(pool_size, &block)
+        pipeline(executor: :threads, pool_size: pool_size, &block)
       end
 
-      def ractors(pool_size, &)
-        context = { type: :ractors, pool_size: pool_size, mode: :pool }
-        _with_execution_context(context, &)
+      def processes(pool_size, &block)
+        pipeline(executor: :cow_forks, pool_size: pool_size, &block)
       end
 
-      def thread_per_batch(max:, &)
-        context = { type: :threads, max: max, mode: :per_batch }
-        _with_execution_context(context, &)
+      def ractors(pool_size, &block)
+        pipeline(executor: :ractors, pool_size: pool_size, &block)
       end
 
-      def process_per_batch(max:, &)
-        context = { type: :cow_forks, max: max, mode: :per_batch }
-        _with_execution_context(context, &)
+      def thread_per_batch(max:, &block)
+        pipeline(executor: :threads, max: max, mode: :per_batch, &block)
       end
 
-      def ractor_per_batch(max:, &)
-        context = { type: :ractors, max: max, mode: :per_batch }
-        _with_execution_context(context, &)
+      def process_per_batch(max:, &block)
+        pipeline(executor: :cow_forks, max: max, mode: :per_batch, &block)
+      end
+
+      def ractor_per_batch(max:, &block)
+        pipeline(executor: :ractors, max: max, mode: :per_batch, &block)
       end
 
       # Batching shorthand
@@ -213,16 +241,6 @@ module Minigun
         else
           _named_contexts[name] = ctx_def
         end
-      end
-
-      # Nested pipeline support
-      def pipeline(name, options = {}, &)
-        # This handles nested pipeline stages within a pipeline block
-        raise 'Nested pipelines require instance context' unless @context
-
-        # Get the task from context (instance or class)
-        task = @context._minigun_task
-        task.add_nested_pipeline(name, options, &)
       end
 
       # Main unified stage method
@@ -309,6 +327,78 @@ module Minigun
 
       private
 
+      # Unified method for creating ALL nested pipelines
+      # Handles both executor-configured pipelines and regular nested pipelines
+      def _add_nested_pipeline(name, options = {}, &block)
+        # Convert executor options to _execution_context format if present
+        stage_options = options.dup
+        has_executor = false
+        if options[:executor]
+          has_executor = true
+          executor_type = options[:executor]
+          # Normalize executor type names (threads -> thread, cow_forks -> cow_fork)
+          normalized_type = case executor_type
+                           when :threads then :thread
+                           when :cow_forks then :cow_fork
+                           when :ractors then :ractor
+                           else executor_type
+                           end
+
+          exec_ctx = {
+            type: normalized_type,
+            pool_size: options[:pool_size] || options[:max],
+            mode: options[:mode] || :pool
+          }
+          stage_options[:_execution_context] = exec_ctx
+        end
+
+        # Use ExecutorStage if executor config is present, otherwise use PipelineStage
+        stage_class = has_executor ? Minigun::ExecutorStage : Minigun::PipelineStage
+        pipeline_stage = stage_class.new(@pipeline, name, nil, stage_options)
+
+        # Create the actual Pipeline instance for this nested pipeline
+        nested_pipeline_config = {}
+        # If executor options were provided, set as default execution context for nested pipeline
+        # This makes all stages within the nested pipeline use this executor by default
+        if stage_options[:_execution_context]
+          nested_pipeline_config[:_default_execution_context] = stage_options[:_execution_context]
+        end
+
+        nested_pipeline = Minigun::Pipeline.new(@pipeline.task, name, nested_pipeline_config)
+        pipeline_stage.nested_pipeline = nested_pipeline
+
+        # Add stages to the nested pipeline via block
+        if block
+          nested_dsl = Minigun::DSL::PipelineDSL.new(nested_pipeline, @context)
+
+          if @context
+            # Push nested DSL onto the context's delegation stack
+            # This allows the block to be evaluated in the user's instance context
+            # while DSL method calls are delegated to the nested_dsl via method_missing stack
+            @context._pipeline_dsl_stack.push(nested_dsl)
+            begin
+              # Evaluate in the user's instance context to allow access to @config, @results, etc.
+              @context.instance_eval(&block)
+            ensure
+              @context._pipeline_dsl_stack.pop
+            end
+          else
+            # No context - evaluate in PipelineDSL context
+            nested_dsl.instance_eval(&block)
+          end
+        end
+
+        # Add the pipeline stage to the current pipeline by ID (stage already registered in Task)
+        pipeline_stage_id = pipeline_stage.id
+        @pipeline.stages[pipeline_stage_id] = pipeline_stage
+        @pipeline.stage_order << pipeline_stage_id
+        @pipeline.dag.add_node(pipeline_stage_id)
+
+        # DAG merge is deferred to build_dag_routing! when all pipelines are fully defined
+
+        pipeline_stage
+      end
+
       def _with_execution_context(context, &)
         _execution_context_stack.push(context)
         begin
@@ -355,6 +445,25 @@ module Minigun
       def normalize_execution_type(type)
         type.to_s.delete_suffix('s').delete_suffix('_pool').to_sym
       end
+    end
+
+    # Delegate DSL method calls through the pipeline_dsl stack recursively
+    # Checks each level from top to bottom until method is found
+    def method_missing(method_name, *args, **kwargs, &block)
+      stack = _pipeline_dsl_stack
+      stack.reverse_each do |dsl|
+        if dsl.respond_to?(method_name, true)
+          return dsl.send(method_name, *args, **kwargs, &block)
+        end
+      end
+      super
+    end
+
+    def respond_to_missing?(method_name, include_private = false)
+      _pipeline_dsl_stack.reverse_each do |dsl|
+        return true if dsl.respond_to?(method_name, include_private)
+      end
+      super
     end
 
     # Full production execution with Runner (signal handling, job ID, stats)

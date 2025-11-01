@@ -4,9 +4,9 @@ require 'spec_helper'
 
 RSpec.describe Minigun::Stats do
   describe '#initialize' do
-    it 'creates stats with stage name' do
+    it 'creates stats with stage id' do
       stats = described_class.new(:test_stage)
-      expect(stats.stage_name).to eq(:test_stage)
+      expect(stats.stage_id).to eq(:test_stage)
     end
 
     it 'defaults is_terminal to false' do
@@ -17,7 +17,7 @@ RSpec.describe Minigun::Stats do
     it 'accepts is_terminal parameter' do
       stats = described_class.new(:test_stage, is_terminal: true)
       stats.items_consumed # Just verify it was set
-      expect(stats.stage_name).to eq(:test_stage)
+      expect(stats.stage_id).to eq(:test_stage)
     end
   end
 
@@ -462,6 +462,14 @@ RSpec.describe Minigun::Stats do
 end
 
 RSpec.describe Minigun::AggregatedStats do
+  let(:task) do
+    instance_double(Minigun::Task).tap do |t|
+      # Mock find_stage to return stage objects with display_name
+      allow(t).to receive(:find_stage) do |id|
+        instance_double(Minigun::Stage, id: id, name: id, display_name: id)
+      end
+    end
+  end
   let(:dag) do
     dag = Minigun::DAG.new
     dag.add_node(:producer)
@@ -474,22 +482,22 @@ RSpec.describe Minigun::AggregatedStats do
 
   describe '#initialize' do
     it 'creates aggregated stats with pipeline name and dag' do
-      stats = described_class.new('test_pipeline', dag)
+      stats = described_class.new(task, 'test_pipeline', dag)
       expect(stats.pipeline_name).to eq('test_pipeline')
     end
   end
 
   describe '#for_stage' do
     it 'creates stats for a stage' do
-      agg_stats = described_class.new('test_pipeline', dag)
+      agg_stats = described_class.new(task, 'test_pipeline', dag)
       stage_stats = agg_stats.for_stage(:producer)
 
       expect(stage_stats).to be_a(Minigun::Stats)
-      expect(stage_stats.stage_name).to eq(:producer)
+      expect(stage_stats.stage_id).to eq(:producer)
     end
 
     it 'returns same stats instance for same stage' do
-      agg_stats = described_class.new('test_pipeline', dag)
+      agg_stats = described_class.new(task, 'test_pipeline', dag)
       stats1 = agg_stats.for_stage(:producer)
       stats2 = agg_stats.for_stage(:producer)
 
@@ -497,7 +505,7 @@ RSpec.describe Minigun::AggregatedStats do
     end
 
     it 'passes is_terminal flag correctly' do
-      agg_stats = described_class.new('test_pipeline', dag)
+      agg_stats = described_class.new(task, 'test_pipeline', dag)
 
       # Producer is non-terminal
       producer_stats = agg_stats.for_stage(:producer, is_terminal: false)
@@ -513,7 +521,7 @@ RSpec.describe Minigun::AggregatedStats do
 
   describe '#start! and #finish!' do
     it 'records pipeline start and finish time' do
-      agg_stats = described_class.new('test_pipeline', dag)
+      agg_stats = described_class.new(task, 'test_pipeline', dag)
       agg_stats.start!
       sleep(0.01)
       agg_stats.finish!
@@ -524,12 +532,12 @@ RSpec.describe Minigun::AggregatedStats do
 
   describe '#runtime' do
     it 'returns 0 when not started' do
-      agg_stats = described_class.new('test_pipeline', dag)
+      agg_stats = described_class.new(task, 'test_pipeline', dag)
       expect(agg_stats.runtime).to eq(0)
     end
 
     it 'calculates runtime when finished' do
-      agg_stats = described_class.new('test_pipeline', dag)
+      agg_stats = described_class.new(task, 'test_pipeline', dag)
       agg_stats.start!
       sleep(0.01)
       agg_stats.finish!
@@ -540,7 +548,7 @@ RSpec.describe Minigun::AggregatedStats do
 
   describe '#total_produced' do
     it 'sums produced items from source stages' do
-      agg_stats = described_class.new('test_pipeline', dag)
+      agg_stats = described_class.new(task, 'test_pipeline', dag)
 
       producer_stats = agg_stats.for_stage(:producer)
       producer_stats.increment_produced(10)
@@ -556,7 +564,7 @@ RSpec.describe Minigun::AggregatedStats do
       multi_dag.add_edge(:producer1, :consumer)
       multi_dag.add_edge(:producer2, :consumer)
 
-      agg_stats = described_class.new('test_pipeline', multi_dag)
+      agg_stats = described_class.new(task, 'test_pipeline', multi_dag)
       agg_stats.for_stage(:producer1).increment_produced(5)
       agg_stats.for_stage(:producer2).increment_produced(7)
 
@@ -566,7 +574,7 @@ RSpec.describe Minigun::AggregatedStats do
 
   describe '#total_consumed' do
     it 'sums consumed items from terminal stages' do
-      agg_stats = described_class.new('test_pipeline', dag)
+      agg_stats = described_class.new(task, 'test_pipeline', dag)
 
       consumer_stats = agg_stats.for_stage(:consumer)
       consumer_stats.increment_consumed(8)
@@ -582,7 +590,7 @@ RSpec.describe Minigun::AggregatedStats do
       multi_dag.add_edge(:producer, :consumer1)
       multi_dag.add_edge(:producer, :consumer2)
 
-      agg_stats = described_class.new('test_pipeline', multi_dag)
+      agg_stats = described_class.new(task, 'test_pipeline', multi_dag)
       agg_stats.for_stage(:consumer1).increment_consumed(3)
       agg_stats.for_stage(:consumer2).increment_consumed(4)
 
@@ -592,7 +600,7 @@ RSpec.describe Minigun::AggregatedStats do
 
   describe '#total_items' do
     it 'sums total items across all stages' do
-      agg_stats = described_class.new('test_pipeline', dag)
+      agg_stats = described_class.new(task, 'test_pipeline', dag)
 
       # Producer is non-terminal: counts produced
       agg_stats.for_stage(:producer, is_terminal: false).increment_produced(10)
@@ -612,12 +620,12 @@ RSpec.describe Minigun::AggregatedStats do
 
   describe '#throughput' do
     it 'returns 0 when runtime is 0' do
-      agg_stats = described_class.new('test_pipeline', dag)
+      agg_stats = described_class.new(task, 'test_pipeline', dag)
       expect(agg_stats.throughput).to eq(0)
     end
 
     it 'calculates items per second based on produced items' do
-      agg_stats = described_class.new('test_pipeline', dag)
+      agg_stats = described_class.new(task, 'test_pipeline', dag)
       agg_stats.start!
       agg_stats.for_stage(:producer).increment_produced(100)
       sleep(0.1)
@@ -630,12 +638,12 @@ RSpec.describe Minigun::AggregatedStats do
 
   describe '#bottleneck' do
     it 'returns nil when no stages' do
-      agg_stats = described_class.new('test_pipeline', dag)
+      agg_stats = described_class.new(task, 'test_pipeline', dag)
       expect(agg_stats.bottleneck).to be_nil
     end
 
     it 'identifies stage with lowest throughput' do
-      agg_stats = described_class.new('test_pipeline', dag)
+      agg_stats = described_class.new(task, 'test_pipeline', dag)
 
       # Producer: fast (1000 items in 0.01s = 100,000 items/s)
       producer = agg_stats.for_stage(:producer, is_terminal: false)
@@ -660,37 +668,37 @@ RSpec.describe Minigun::AggregatedStats do
 
       bottleneck = agg_stats.bottleneck
       expect(bottleneck).to be_a(Minigun::Stats)
-      expect(bottleneck.stage_name).to eq(:processor)
+      expect(bottleneck.to_h(task)[:stage_name]).to eq(:processor)
     end
   end
 
   describe '#stages_in_order' do
     it 'returns stages in topological order' do
-      agg_stats = described_class.new('test_pipeline', dag)
+      agg_stats = described_class.new(task, 'test_pipeline', dag)
 
       agg_stats.for_stage(:producer)
       agg_stats.for_stage(:processor)
       agg_stats.for_stage(:consumer)
 
       stages = agg_stats.stages_in_order
-      expect(stages.map(&:stage_name)).to eq(%i[producer processor consumer])
+      expect(stages.map { |s| s.to_h(task)[:stage_name] }).to eq(%i[producer processor consumer])
     end
 
     it 'skips stages without stats' do
-      agg_stats = described_class.new('test_pipeline', dag)
+      agg_stats = described_class.new(task, 'test_pipeline', dag)
 
       agg_stats.for_stage(:producer)
       agg_stats.for_stage(:consumer)
       # processor is skipped
 
       stages = agg_stats.stages_in_order
-      expect(stages.map(&:stage_name)).to eq(%i[producer consumer])
+      expect(stages.map { |s| s.to_h(task)[:stage_name] }).to eq(%i[producer consumer])
     end
   end
 
   describe '#to_h' do
     it 'returns hash with pipeline stats' do
-      agg_stats = described_class.new('test_pipeline', dag)
+      agg_stats = described_class.new(task, 'test_pipeline', dag)
       agg_stats.start!
 
       producer = agg_stats.for_stage(:producer)
@@ -709,7 +717,7 @@ RSpec.describe Minigun::AggregatedStats do
     end
 
     it 'includes bottleneck info when present' do
-      agg_stats = described_class.new('test_pipeline', dag)
+      agg_stats = described_class.new(task, 'test_pipeline', dag)
 
       producer = agg_stats.for_stage(:producer)
       producer.start!
@@ -726,7 +734,7 @@ RSpec.describe Minigun::AggregatedStats do
 
   describe '#summary' do
     it 'returns human-readable summary' do
-      agg_stats = described_class.new('test_pipeline', dag)
+      agg_stats = described_class.new(task, 'test_pipeline', dag)
       agg_stats.start!
 
       producer = agg_stats.for_stage(:producer)

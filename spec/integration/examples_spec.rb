@@ -550,12 +550,19 @@ RSpec.describe 'Examples Integration' do
       bottleneck = stats.bottleneck
       expect(bottleneck).to be_a(Minigun::Stats)
       # Both process and collect can be bottlenecks depending on timing
-      expect(%i[process collect]).to include(bottleneck.stage_name)
+      # Convert stage_id to name for comparison
+      stage = demo._minigun_task.find_stage(bottleneck.stage_id)
+      expect(%i[process collect]).to include(stage&.name)
 
       # Verify stage stats
       stages = stats.stages_in_order
       expect(stages.size).to eq(3)
-      expect(stages.map(&:stage_name)).to eq(%i[generate process collect])
+      # Convert stage_ids to names for comparison
+      stage_names = stages.map do |s|
+        stage = demo._minigun_task.find_stage(s.stage_id)
+        stage&.name
+      end
+      expect(stage_names).to eq(%i[generate process collect])
     end
   end
 
@@ -759,9 +766,9 @@ RSpec.describe 'Examples Integration' do
       small_pipeline = ConfigurableDownloader.new(threads: 5, batch_size: 10)
       large_pipeline = ConfigurableDownloader.new(threads: 20, batch_size: 50)
 
-      expect(small_pipeline.threads).to eq(5)
+      expect(small_pipeline.thread_count).to eq(5)
       expect(small_pipeline.batch_size).to eq(10)
-      expect(large_pipeline.threads).to eq(20)
+      expect(large_pipeline.thread_count).to eq(20)
       expect(large_pipeline.batch_size).to eq(50)
 
       small_pipeline.run
@@ -777,8 +784,8 @@ RSpec.describe 'Examples Integration' do
       load File.expand_path('../../examples/31_data_processor.rb', __dir__)
 
       processor = DataProcessor.new(threads: 10, processes: 2, batch_size: 100)
-      expect(processor.threads).to eq(10)
-      expect(processor.processes).to eq(2)
+      expect(processor.thread_count).to eq(10)
+      expect(processor.process_count).to eq(2)
       expect(processor.batch_size).to eq(100)
 
       processor.run
