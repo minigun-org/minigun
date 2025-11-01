@@ -394,9 +394,7 @@ module Minigun
         @pipeline.stage_order << pipeline_stage_id
         @pipeline.dag.add_node(pipeline_stage_id)
 
-        # Merge nested pipeline's DAG into parent DAG (DAG-centric architecture)
-        # This allows parent stages to route directly to nested stages
-        @pipeline.merge_nested_pipeline_into_dag(pipeline_stage)
+        # DAG merge is deferred to build_dag_routing! when all pipelines are fully defined
 
         pipeline_stage
       end

@@ -181,11 +181,7 @@ module Minigun
       @stage_order << stage_id
       @dag.add_node(stage_id)
 
-      # CRITICAL: If this is a PipelineStage, merge nested stages into parent DAG
-      # This makes the DAG the single source of truth for all routing
-      if stage.is_a?(PipelineStage) && stage.instance_variable_get(:@nested_pipeline)
-        merge_nested_pipeline_into_dag(stage)
-      end
+      # DAG merge is deferred to build_dag_routing! when all pipelines are fully defined
     end
 
     # Resolve a stage identifier (name or ID) to an ID
@@ -464,46 +460,58 @@ module Minigun
 
     # Merge a nested pipeline's stages and edges into this pipeline's DAG
     # This allows parent pipeline to route directly to nested stages
+    # Called during build_dag_routing! when all nested pipelines are fully defined
     def merge_nested_pipeline_into_dag(pipeline_stage)
       nested_pipeline = pipeline_stage.instance_variable_get(:@nested_pipeline)
       return unless nested_pipeline
 
+      puts "[DEBUG merge] Merging nested pipeline '#{nested_pipeline.name}'"
+      puts "[DEBUG merge] Nested stages: #{nested_pipeline.stages.keys.inspect}"
+      puts "[DEBUG merge] Nested DAG edges before build: #{nested_pipeline.dag.edges.inspect}"
+
+      # Recursively build nested pipeline's internal DAG routing first
+      # This ensures nested stages have proper edges when merged into parent DAG
+      nested_pipeline.send(:build_dag_routing!)
+
+      puts "[DEBUG merge] Nested DAG edges after build: #{nested_pipeline.dag.edges.inspect}"
+
       # Add all nested stages as nodes in parent DAG
       nested_pipeline.stages.each_key do |nested_stage_id|
+        puts "[DEBUG merge] Adding node #{nested_stage_id} to parent DAG"
         @dag.add_node(nested_stage_id)
       end
 
       # Merge nested pipeline's DAG edges into parent DAG
       nested_pipeline.dag.edges.each do |from_id, to_ids|
         to_ids.each do |to_id|
+          puts "[DEBUG merge] Adding edge #{from_id} -> #{to_id} to parent DAG"
           @dag.add_edge(from_id, to_id)
         end
       end
 
-      # Don't connect PipelineStage to nested stages automatically
-      # Let explicit routing (to:, from:, output.to()) handle connections
-    end
-
-    # Merge a nested pipeline's stages and edges into this pipeline's DAG
-    # This allows parent pipeline to route directly to nested stages
-    def merge_nested_pipeline_into_dag(pipeline_stage)
-      nested_pipeline = pipeline_stage.instance_variable_get(:@nested_pipeline)
-      return unless nested_pipeline
-
-      # Add all nested stages as nodes in parent DAG
-      nested_pipeline.stages.each_key do |nested_stage_id|
-        @dag.add_node(nested_stage_id)
+      # Connect PipelineStage wrapper to nested entry points (stages with no upstream in nested pipeline)
+      entry_stages = nested_pipeline.stages.keys.select do |stage_id|
+        nested_pipeline.dag.upstream(stage_id).empty?
+      end.reject do |stage_id|
+        # Skip autonomous stages (producers)
+        nested_pipeline.stages[stage_id].run_mode == :autonomous
       end
 
-      # Merge nested pipeline's DAG edges into parent DAG
-      nested_pipeline.dag.edges.each do |from_id, to_ids|
-        to_ids.each do |to_id|
-          @dag.add_edge(from_id, to_id)
-        end
+      entry_stages.each do |entry_stage_id|
+        puts "[DEBUG merge] Connecting PipelineStage #{pipeline_stage.id} -> nested entry #{entry_stage_id}"
+        @dag.add_edge(pipeline_stage.id, entry_stage_id)
       end
 
-      # Don't connect PipelineStage to nested stages automatically
-      # Let user define routing via output.to() or explicit DAG edges
+      # Connect nested exit stages to PipelineStage's downstream stages
+      # This maintains the flow: upstream → PipelineStage → nested stages → downstream
+      exit_stages = nested_pipeline.stages.keys.select do |stage_id|
+        nested_pipeline.dag.downstream(stage_id).empty?
+      end
+
+      puts "[DEBUG merge] Nested entry stages: #{entry_stages.inspect}"
+      puts "[DEBUG merge] Nested exit stages: #{exit_stages.inspect}"
+      puts "[DEBUG merge] Parent DAG nodes after merge: #{@dag.nodes.to_a.inspect}"
+      puts "[DEBUG merge] Parent DAG edges after merge: #{@dag.edges.inspect}"
     end
 
     # Helper method for tests: get upstream stages by name or ID
@@ -541,6 +549,16 @@ module Minigun
     private
 
     def build_dag_routing!
+      # FIRST: Merge nested pipeline DAGs (recursively builds nested pipelines first)
+      # This must happen before normalizing edges so nested stages are in the DAG
+      @stages.each_value do |stage|
+        puts "[DEBUG build_dag_routing] Checking stage #{stage.display_name}: is PipelineStage? #{stage.is_a?(PipelineStage)}"
+        if stage.is_a?(PipelineStage) && stage.instance_variable_get(:@nested_pipeline)
+          puts "[DEBUG build_dag_routing] Merging nested pipeline for #{stage.display_name}"
+          merge_nested_pipeline_into_dag(stage)
+        end
+      end
+
       # Normalize all DAG edges: convert names to IDs (handles forward references)
       normalize_dag_edges!
 
@@ -548,7 +566,9 @@ module Minigun
       handle_multiple_producers_routing!
 
       # Fill any remaining sequential gaps (handles fan-out, siblings, cycles)
+      puts "[DEBUG] Before fill_sequential_gaps: edges = #{@dag.edges.inspect}"
       fill_sequential_gaps_by_definition_order!
+      puts "[DEBUG] After fill_sequential_gaps: edges = #{@dag.edges.inspect}"
 
       # If this pipeline has input_queues (nested pipeline), add entrance distributor
       insert_entrance_distributor_for_inputs! if @input_queues && !@input_queues.empty?
