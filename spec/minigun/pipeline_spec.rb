@@ -435,7 +435,7 @@ RSpec.describe Minigun::Pipeline do
 
       # First PipelineStage producer
       p1 = described_class.new(:pa, pipeline, config)
-      ps1 = described_class.new(:pipeline_a, pipeline, p1, nil, {})
+      ps1 = Minigun::PipelineStage.new(:pipeline_a, pipeline, p1, nil, {})
       p1.add_stage(:producer, :gen) { |output| output << 10 }
       p1.add_stage(:processor, :double) { |item, output| output << (item * 2) }
 
@@ -445,7 +445,7 @@ RSpec.describe Minigun::Pipeline do
 
       # Second PipelineStage producer
       p2 = described_class.new(:pb, pipeline, config)
-      ps2 = described_class.new(:pipeline_b, pipeline, p2, nil, {})
+      ps2 = Minigun::PipelineStage.new(:pipeline_b, pipeline, p2, nil, {})
       p2.add_stage(:producer, :gen) { |output| output << 5 }
       p2.add_stage(:processor, :triple) { |item, output| output << (item * 3) }
 
