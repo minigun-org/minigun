@@ -120,7 +120,7 @@ end
 
 RSpec.describe 'Stage common behavior' do
   let(:mock_pipeline) { instance_double(Minigun::Pipeline, name: 'test_pipeline') }
-  let(:stage) { Minigun::ConsumerStage.new(mock_pipeline, :test, proc { |x, _output| x * 2 }, { foo: 'bar' }) }
+  let(:stage) { Minigun::ConsumerStage.new(:test, mock_pipeline, proc { |x, _output| x * 2 }, { foo: 'bar' }) }
 
   describe '#initialize' do
     it 'creates a stage with required attributes' do
@@ -131,7 +131,7 @@ RSpec.describe 'Stage common behavior' do
     end
 
     it 'works without options' do
-      simple = Minigun::ConsumerStage.new(mock_pipeline, :simple, proc { |_x, _output| }, {})
+      simple = Minigun::ConsumerStage.new(:simple, mock_pipeline, proc { |_x, _output| }, {})
       expect(simple.name).to eq(:simple)
       expect(simple.options).to eq({})
     end
@@ -141,8 +141,8 @@ RSpec.describe 'Stage common behavior' do
     it 'executes the block with given context and item' do
       result = nil
       stage = Minigun::ConsumerStage.new(
-        mock_pipeline,
         :test,
+        mock_pipeline,
         proc { |item, _output| result = item * 2 },
         {}
       )
@@ -169,8 +169,8 @@ RSpec.describe 'Stage common behavior' do
       context = context_class.new(100)
 
       stage = Minigun::ConsumerStage.new(
-        mock_pipeline,
         :test,
+        mock_pipeline,
         proc { |item, _output| @value + item },
         {}
       )
@@ -190,8 +190,8 @@ RSpec.describe 'Stage common behavior' do
     it 'converts to hash representation' do
       block = proc { |_x, _output| }
       stage = Minigun::ConsumerStage.new(
-        mock_pipeline,
         :test,
+        mock_pipeline,
         block,
         { opt: 'val' }
       )
@@ -208,8 +208,8 @@ RSpec.describe 'Stage common behavior' do
     it 'provides hash-like access to attributes' do
       block = proc { |_x, _output| }
       stage = Minigun::ConsumerStage.new(
-        mock_pipeline,
         :test,
+        mock_pipeline,
         block,
         { foo: 'bar' }
       )
@@ -220,7 +220,7 @@ RSpec.describe 'Stage common behavior' do
     end
 
     it 'returns nil for unknown keys' do
-      stage = Minigun::ConsumerStage.new(mock_pipeline, :test, proc { |_x, _output| }, {})
+      stage = Minigun::ConsumerStage.new(:test, mock_pipeline, proc { |_x, _output| }, {})
       expect(stage[:unknown]).to be_nil
     end
   end

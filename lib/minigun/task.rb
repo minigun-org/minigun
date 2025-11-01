@@ -18,7 +18,7 @@ module Minigun
       }
 
       # Root pipeline - all stages and nested pipelines live here
-      @root_pipeline = root_pipeline || Pipeline.new(nil, :default, @config)
+      @root_pipeline = root_pipeline || Pipeline.new(:default, nil, @config)
     end
 
     # Set config value (applies to all pipelines)
@@ -58,10 +58,10 @@ module Minigun
     # Add a nested pipeline as a stage within the implicit pipeline
     def add_nested_pipeline(name, options = {}, &)
       # Create the actual Pipeline instance for this nested pipeline
-      nested_pipeline = Pipeline.new(@root_pipeline, name, @config)
+      nested_pipeline = Pipeline.new(name, @root_pipeline, @config)
 
       # Create a PipelineStage and configure it (pipeline-first positional style)
-      pipeline_stage = PipelineStage.new(@root_pipeline, name, nested_pipeline, nil, options)
+      pipeline_stage = PipelineStage.new(name, @root_pipeline, nested_pipeline, nil, options)
 
       # Add stages to the nested pipeline via block
       if block_given?
@@ -106,8 +106,8 @@ module Minigun
         pipeline = pipeline_stage.nested_pipeline
       else
         # Create new PipelineStage and add to root_pipeline (pipeline-first positional style)
-        pipeline = Pipeline.new(@root_pipeline, name, @config)
-        pipeline_stage = PipelineStage.new(@root_pipeline, name, pipeline, nil, options)
+        pipeline = Pipeline.new(name, @root_pipeline, @config)
+        pipeline_stage = PipelineStage.new(name, @root_pipeline, pipeline, nil, options)
 
         @root_pipeline.stages << pipeline_stage
         @root_pipeline.stage_order << pipeline_stage  # Use object for stage_order
