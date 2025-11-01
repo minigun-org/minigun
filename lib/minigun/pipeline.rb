@@ -29,7 +29,8 @@ module Minigun
         use_ipc: config[:use_ipc] || false
       }
 
-      @stages = stages || {} # { stage_name => Stage }
+      @stages = stages || {} # { stage_name => Stage } - legacy name-based lookup
+      @stages_by_id = {} # { stage_id => Stage } - new ID-based lookup (populated on demand)
 
       # Pipeline-level hooks (run once per pipeline)
       @hooks = hooks || {
@@ -132,8 +133,11 @@ module Minigun
       # Check for name collision
       raise Minigun::Error, "Stage name collision: '#{name}' is already defined in pipeline '#{@name}'" if @stages.key?(name)
 
-      # Store stage by name
+      # Store stage by name (legacy)
       @stages[name] = stage
+      
+      # Also store by ID for future ID-based operations
+      @stages_by_id[stage.id] = stage
 
       # Add to stage order and DAG
       @stage_order << name
@@ -307,9 +311,10 @@ module Minigun
         update[:add_router_edges].each { |(from, to)| @dag.add_edge(from, to) }
       end
 
-      # Add router stages to @stages
+      # Add router stages to @stages (by name) and @stages_by_id
       stages_to_add.each do |name, stage|
         @stages[name] = stage
+        @stages_by_id[stage.id] = stage
       end
     end
 
@@ -317,9 +322,9 @@ module Minigun
       # Try as name first (current behavior - backward compatible)
       stage = @stages[identifier]
       return stage if stage
-
-      # Try as ID (new behavior - supports future ID-based lookups)
-      @stages.values.find { |s| s.id == identifier }
+      
+      # Try as ID (new behavior - much faster with @stages_by_id)
+      @stages_by_id[identifier]
     end
 
     # Normalize a stage identifier to a consistent format for internal use
@@ -473,6 +478,7 @@ module Minigun
 
       # Add the :_entrance stage to the pipeline
       @stages[:_entrance] = entrance_stage
+      @stages_by_id[entrance_stage.id] = entrance_stage
       @stage_order.unshift(:_entrance) # Add at beginning
       @dag.add_node(:_entrance)
 
@@ -501,6 +507,7 @@ module Minigun
 
       # Add the :_exit stage to the pipeline
       @stages[:_exit] = exit_stage
+      @stages_by_id[exit_stage.id] = exit_stage
       @stage_order << :_exit
       @dag.add_node(:_exit)
 
@@ -536,9 +543,10 @@ module Minigun
         end
       end
 
-      # Store reference to nested pipeline stages in parent
+      # Store reference to nested pipeline stages in parent (by name and ID)
       nested_pipeline.stages.each do |nested_stage_name, nested_stage|
         @stages[nested_stage_name] = nested_stage
+        @stages_by_id[nested_stage.id] = nested_stage
       end
 
       # Add nested stages to stage order (for topological sorting)
