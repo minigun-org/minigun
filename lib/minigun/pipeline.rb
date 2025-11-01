@@ -307,6 +307,15 @@ module Minigun
       # Try as ID (new behavior - supports future ID-based lookups)
       @stages.values.find { |s| s.id == identifier }
     end
+    
+    # Normalize a stage identifier to a consistent format for internal use
+    # Currently returns name for backward compatibility
+    # Future: can return ID for internal operations
+    def normalize_identifier(identifier)
+      # For now, just return as-is (names are primary keys)
+      # This sets up infrastructure for future ID-based internals
+      identifier
+    end
 
     def terminal_stage?(stage_name)
       @dag.terminal?(stage_name)
