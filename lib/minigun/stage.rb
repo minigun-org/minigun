@@ -6,9 +6,8 @@ module Minigun
   # Unified context for all stage execution (producers and workers)
   StageContext = Struct.new(
     # Common to all stages
-    :pipeline,
+    :pipeline, # REMOVE_THIS, should be stage&.pipeline
     :stage,
-    :stage_name, # REMOVE_THIS -- if needed, use stage.name, but prefer doing references by stage
     :dag,
     :runtime_edges,
     :stage_input_queues,
@@ -23,6 +22,11 @@ module Minigun
     # Convenience method to access executor through worker
     def executor
       worker&.executor
+    end
+
+    # Convenience method for stage name (delegates to stage object)
+    def stage_name
+      stage&.name
     end
   end
 
@@ -124,6 +128,14 @@ module Minigun
     # Execution strategy: :autonomous, :streaming, or :composite
     def run_mode
       :streaming # Default: process stream of items in worker loop
+    end
+
+    def to_s
+      "#{self.class.name}(#{name})"
+    end
+
+    def inspect
+      to_s
     end
 
     private
@@ -437,6 +449,22 @@ module Minigun
       end
     ensure
       send_end_signals(worker_ctx)
+    end
+  end
+
+  # Special entrance stage for nested pipelines
+  # Automatically created when a pipeline has input from parent
+  class EntranceStage < ConsumerStage
+    def initialize(name: :_entrance, block: nil, options: {})
+      super(name: name, block: block, options: options)
+    end
+  end
+
+  # Special exit stage for nested pipelines
+  # Automatically created when a pipeline has output to parent
+  class ExitStage < ConsumerStage
+    def initialize(name: :_exit, block: nil, options: {})
+      super(name: name, block: block, options: options)
     end
   end
 
