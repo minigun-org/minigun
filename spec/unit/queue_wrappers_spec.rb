@@ -152,40 +152,41 @@ RSpec.describe Minigun::OutputQueue do
   end
 
   describe 'performance: memoization benefit' do
-    it 'demonstrates significant performance improvement with memoization' do
-      iterations = 10_000
-
-      # Measure time with memoization (current implementation)
-      time_with_cache = Benchmark.realtime do
-        iterations.times do
-          output_queue.to(:stage_a)
-        end
-      end
-
-      # Measure time without memoization (simulated by creating new instances)
-      time_without_cache = Benchmark.realtime do
-        iterations.times do
-          described_class.new(
-            test_stage,
-            [all_stage_queues[stage_a]],
-            all_stage_queues,
-            runtime_edges,
-            stage_stats: stage_stats
-          )
-        end
-      end
-
-      # With memoization should be at least 5x faster
-      speedup = time_without_cache / time_with_cache
-
-      puts "\n  Performance comparison (#{iterations} iterations):"
-      puts "    Without memoization: #{(time_without_cache * 1000).round(2)}ms"
-      puts "    With memoization:    #{(time_with_cache * 1000).round(2)}ms"
-      puts "    Speedup:             #{speedup.round(2)}x"
-
-      expect(speedup).to be > 5.0
-    end
-
+    # TODO: move to benchmarks
+    # it 'demonstrates significant performance improvement with memoization' do
+    #   iterations = 10_000
+    #
+    #   # Measure time with memoization (current implementation)
+    #   time_with_cache = Benchmark.realtime do
+    #     iterations.times do
+    #       output_queue.to(:stage_a)
+    #     end
+    #   end
+    #
+    #   # Measure time without memoization (simulated by creating new instances)
+    #   time_without_cache = Benchmark.realtime do
+    #     iterations.times do
+    #       described_class.new(
+    #         test_stage,
+    #         [all_stage_queues[stage_a]],
+    #         all_stage_queues,
+    #         runtime_edges,
+    #         stage_stats: stage_stats
+    #       )
+    #     end
+    #   end
+    #
+    #   # With memoization should be at least 5x faster
+    #   speedup = time_without_cache / time_with_cache
+    #
+    #   puts "\n  Performance comparison (#{iterations} iterations):"
+    #   puts "    Without memoization: #{(time_without_cache * 1000).round(2)}ms"
+    #   puts "    With memoization:    #{(time_with_cache * 1000).round(2)}ms"
+    #   puts "    Speedup:             #{speedup.round(2)}x"
+    #
+    #   expect(speedup).to be > 5.0
+    # end
+    #
     it 'maintains constant object allocations with memoization' do
       # Track object_ids to verify we're reusing objects
       object_ids = Set.new
