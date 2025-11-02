@@ -315,7 +315,7 @@ RSpec.describe Minigun::Execution::ThreadPoolExecutor do
   end
 end
 
-RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: Gem.win_platform? do
+RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: !Process.respond_to?(:fork) do
   let(:stage_ctx) do
     dag = double('dag', terminal?: false)
     pipeline = double('pipeline', name: 'test_pipeline', dag: dag, send: nil)
@@ -398,7 +398,7 @@ RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: Gem.win_platform? 
   end
 end
 
-RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: Gem.win_platform? do
+RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: !Process.respond_to?(:fork) do
   let(:stage_ctx) do
     dag = double('dag', terminal?: false)
     pipeline = double('pipeline', name: 'test_pipeline', dag: dag, send: nil)
@@ -496,7 +496,7 @@ RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: Gem.win_platform? 
   end
 end
 
-RSpec.describe Minigun::Execution::IpcForkPoolExecutor, skip: Gem.win_platform? do
+RSpec.describe Minigun::Execution::IpcForkPoolExecutor, skip: !Process.respond_to?(:fork) do
   let(:stage_ctx) do
     dag = double('dag', terminal?: false)
     pipeline = double('pipeline', name: 'test_pipeline', dag: dag, send: nil)
