@@ -389,7 +389,13 @@ module Minigun
     def send_end_signals(worker_ctx)
       # Broadcast EndOfSource to ALL router targets
       @targets.each do |target|
-        worker_ctx.stage_input_queues[target] << EndOfSource.new(worker_ctx.stage)
+        queue = worker_ctx.stage_input_queues[target]
+        if queue.nil?
+          puts "[DEBUG send_end_signals] Target: #{target.inspect} (#{target.class}) - queue is nil!"
+          puts "[DEBUG] Available queues: #{worker_ctx.stage_input_queues.keys.map(&:inspect).join(', ')}"
+          raise "No queue for target #{target.inspect}"
+        end
+        queue << EndOfSource.new(worker_ctx.stage)
       end
     end
   end

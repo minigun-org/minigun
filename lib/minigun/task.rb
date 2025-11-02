@@ -108,6 +108,8 @@ module Minigun
         pipeline = pipeline_stage.nested_pipeline
       else
         # Create new PipelineStage and add to root_pipeline (pipeline-first positional style)
+        # Both PipelineStage and EntranceStage get the pipeline's name
+        # Routing to the PipelineStage will be redirected to the EntranceStage
         pipeline = Pipeline.new(name, self, @root_pipeline, @config)
         pipeline_stage = PipelineStage.new(name, @root_pipeline, pipeline, nil, options)
 

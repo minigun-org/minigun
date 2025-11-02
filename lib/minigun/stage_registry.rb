@@ -112,6 +112,21 @@ module Minigun
 
     private
 
+    # If stage is a PipelineStage, resolve to its EntranceStage for routing
+    # Otherwise return the stage as-is
+    def resolve_to_entrance(stage)
+      return nil unless stage
+      
+      # Check if this is a PipelineStage with a nested pipeline
+      if stage.is_a?(Minigun::PipelineStage) && stage.nested_pipeline
+        # Find the entrance stage (first stage in nested pipeline)
+        entrance = stage.nested_pipeline.stages.first
+        return entrance if entrance.is_a?(Minigun::EntranceStage)
+      end
+      
+      stage
+    end
+
     # Normalize name to string (symbols and strings both work)
     def normalize_name(name)
       return nil if name.nil?

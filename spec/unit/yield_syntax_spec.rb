@@ -207,7 +207,7 @@ RSpec.describe 'Yield Syntax Support' do
   describe 'yield with routing' do
     # Known limitation: stages with only dynamically-routed inputs don't wait for input
     # This is tracked separately as a general dynamic routing limitation
-    it 'supports yield(item, to: :stage_name) - known limitation with dynamic routing', skip: 'Known limitation with dynamic routing' do
+    it 'supports yield(item, to: :stage_name)' do
       router_stage = Class.new(Minigun::ConsumerStage) do
         def call(item, _output)
           if item.even?

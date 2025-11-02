@@ -20,6 +20,9 @@ module Minigun
 
       @stages = stages || []
       @deferred_edges = [] # Store edges with forward references: [{from: stage, to: :name}, ...]
+      
+      # Entrance stage will be created lazily in insert_entrance_distributor_for_inputs!
+      @entrance_stage = nil
 
       # Pipeline-level hooks (run once per pipeline)
       @hooks = hooks || {
@@ -513,19 +516,18 @@ module Minigun
         # Skip autonomous stages (they're producers)
         next false if stage.run_mode == :autonomous
         # Entry stages have no upstream
-        @dag.upstream(stage).empty?
+        @dag.upstream(stage).empty()
       end
 
-      return if entry_stages.empty?
+      return if entry_stages.empty()
 
-      # Create a consumer stage that reads from parent input and emits to nested pipeline
-      # Use ConsumerStage (not ProducerStage) so it properly tracks multiple END signals
-      parent_input = @input_queues[:input]
+      # Create entrance stage lazily (now that @input_queues is set)
       entrance_block = proc do |item, output|
         # Just forward items from parent to nested pipeline
         output << item
       end
-      entrance_stage = Minigun::EntranceStage.new(nil, self, entrance_block, {})
+      entrance_stage = Minigun::EntranceStage.new(@name, self, entrance_block, {})
+      @entrance_stage = entrance_stage
 
       # Add the :_entrance stage to the pipeline (at the beginning)
       @stages.unshift(entrance_stage)

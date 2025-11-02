@@ -175,8 +175,6 @@ RSpec.describe 'Examples Integration' do
 
   describe '07_multi_pipeline_data_processing.rb' do
     it 'processes data through validation and routing pipelines' do
-      skip 'Priority-based routing from within pipeline stages not yet supported'
-
       load File.expand_path('../../examples/07_multi_pipeline_data_processing.rb', __dir__)
 
       processor = DataProcessingPipeline.new
@@ -1396,7 +1394,7 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
-  describe '66_cow_and_ipc_fork_executors.rb', skip: Gem.win_platform? do
+  describe '66_cow_and_ipc_fork_executors.rb', skip: !Process.respond_to?(:fork) do
     it 'demonstrates COW and IPC fork executors' do
       load File.expand_path('../../examples/66_cow_and_ipc_fork_executors.rb', __dir__)
 
