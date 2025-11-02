@@ -536,12 +536,11 @@ module Minigun
       pipeline_stage = @parent_pipeline&.stages&.find { |s| s.is_a?(PipelineStage) && s.nested_pipeline == self }
       routing_strategy = pipeline_stage&.options&.[](:routing) || :broadcast
 
-      # Create router stage
-      router_name = :"_entrance_router"
+      # Create anonymous router stage
       @entrance_router = if routing_strategy == :round_robin
-                           RouterRoundRobinStage.new(router_name, self, entry_stages.dup, {})
+                           RouterRoundRobinStage.new(nil, self, entry_stages.dup, {})
                          else
-                           RouterBroadcastStage.new(router_name, self, entry_stages.dup, {})
+                           RouterBroadcastStage.new(nil, self, entry_stages.dup, {})
                          end
 
       # Add router to pipeline
