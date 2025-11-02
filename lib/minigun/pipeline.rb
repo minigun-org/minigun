@@ -310,7 +310,7 @@ module Minigun
         # Skip autonomous stages - they don't have input queues
         next if stage.run_mode == :autonomous
 
-        # Special case: EntranceStage uses the parent pipeline's input queue
+        # Special case: entrance distributor uses the parent pipeline's input queue
         if stage.is_a?(EntranceStage) && @input_queues && @input_queues[:input]
           queues[stage] = @input_queues[:input]  # Key by object
           next
@@ -425,7 +425,7 @@ module Minigun
       # Fill any remaining sequential gaps (handles fan-out, siblings, cycles)
       fill_sequential_gaps_by_definition_order!
 
-      # If this pipeline has input_queues (nested pipeline), add :_entrance distributor
+      # If this pipeline has input_queues (nested pipeline), add entrance distributor
       insert_entrance_distributor_for_inputs! if @input_queues && !@input_queues.empty?
 
       # If this pipeline has output_queues, add :_exit collector for terminal stages
@@ -504,7 +504,7 @@ module Minigun
       end
     end
 
-    # Insert an :_entrance distributor stage for nested pipelines
+    # Insert an entrance distributor stage for nested pipelines
     # This receives items from the parent pipeline and distributes to entry stages
     def insert_entrance_distributor_for_inputs!
       # Find stages that have no upstream (would be entry points)
@@ -527,17 +527,17 @@ module Minigun
       end
       entrance_stage = Minigun::EntranceStage.new(nil, self, entrance_block, {})
 
-      # Add the :_entrance stage to the pipeline (at the beginning)
+      # Add the entrance stage to the pipeline (at the beginning)
       @stages.unshift(entrance_stage)
       @dag.add_node(entrance_stage)
 
-      # Connect :_entrance to entry stages (all objects)
+      # Connect entrance to entry stages (all objects)
       entry_stages.each do |stage|
         @dag.add_edge(entrance_stage, stage)
       end
 
       entry_names = entry_stages.map(&:name).join(', ')
-      log_debug "[Pipeline:#{@name}] Added :_entrance distributor for entry stages: #{entry_names}"
+      log_debug "[Pipeline:#{@name}] Added entrance distributor for entry stages: #{entry_names}"
     end
 
     # Insert an :_exit collector stage that terminal stages drain into
