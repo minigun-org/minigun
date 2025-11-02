@@ -467,7 +467,7 @@ module Minigun
       # @stages contains Stage objects in definition order
       @stages.each_with_index do |stage, index|
         # Skip if already has downstream edges
-        next if @dag.downstream(stage).any?
+        next if !@dag.downstream(stage).empty?
         # Skip if this is the last stage
         next if index >= @stages.size - 1
 

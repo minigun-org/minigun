@@ -133,7 +133,7 @@ module Minigun
       visited = Set.new
       queue = [to]
 
-      while queue.any?
+      while !queue.empty?
         current = queue.shift
         next if visited.include?(current)
 
