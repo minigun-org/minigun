@@ -5,11 +5,13 @@ require 'spec_helper'
 RSpec.describe Minigun::PipelineStage do
   let(:config) { { max_threads: 2, max_processes: 1 } }
   let(:mock_context) { Object.new }
-  let(:mock_pipeline) { instance_double(Minigun::Pipeline, name: 'test_pipeline', context: mock_context) }
+  let(:mock_registry) { instance_double(Minigun::StageRegistry, register: nil) }
+  let(:mock_task) { instance_double(Minigun::Task, stage_registry: mock_registry) }
+  let(:mock_pipeline) { instance_double(Minigun::Pipeline, name: 'test_pipeline', context: mock_context, task: mock_task) }
 
   describe '#initialize' do
     it 'creates a PipelineStage with a nested pipeline' do
-      nested = Minigun::Pipeline.new(:nested, nil, config)
+      nested = Minigun::Pipeline.new(:nested, nil, nil, config)
       stage = described_class.new(:my_pipeline, mock_pipeline, nested, nil, {})
       expect(stage.name).to eq(:my_pipeline)
       expect(stage.nested_pipeline).to eq(nested)
@@ -18,7 +20,7 @@ RSpec.describe Minigun::PipelineStage do
 
   describe '#run_mode' do
     it 'returns :composite' do
-      nested = Minigun::Pipeline.new(:nested, nil, config)
+      nested = Minigun::Pipeline.new(:nested, nil, nil, config)
       stage = described_class.new(:my_pipeline, mock_pipeline, nested, nil, {})
       expect(stage.run_mode).to eq(:composite)
     end

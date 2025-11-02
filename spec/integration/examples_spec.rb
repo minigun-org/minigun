@@ -247,6 +247,23 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
+  describe '10_routing_to_nested_stages.rb' do
+    it 'demonstrates routing to nested pipeline stages' do
+      load File.expand_path('../../examples/10_routing_to_nested_stages.rb', __dir__)
+
+      example = RoutingToNestedStagesExample.new
+      begin
+        example.run
+
+        # Should process all 5 items through the nested :save stage
+        # Works on both Windows (inline) and Linux (with tempfile)
+        expect(example.results.sort).to eq([1, 2, 3, 4, 5])
+      ensure
+        example.cleanup
+      end
+    end
+  end
+
   describe '10_web_crawler.rb' do
     it 'crawls and processes pages' do
       load File.expand_path('../../examples/10_web_crawler.rb', __dir__)
@@ -1150,13 +1167,20 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '28_broadcast_fan_out.rb' do
-    it 'demonstrates broadcast fan-out pattern' do
+    it 'demonstrates broadcast fan-out pattern', timeout: 5 do
       load File.expand_path('../../examples/28_broadcast_fan_out.rb', __dir__)
 
       example = BroadcastFanOutExample.new
       example.run
 
-      expect(example.results.size).to be > 0
+      # Each of 3 items goes to 3 branches = 9 results
+      expect(example.results.size).to eq(9)
+
+      # Verify broadcast: each branch should have processed all 3 items
+      by_branch = example.results.group_by { |r| r[:branch] }
+      expect(by_branch[:validation].size).to eq(3)
+      expect(by_branch[:transform].size).to eq(3)
+      expect(by_branch[:analysis].size).to eq(3)
     end
   end
 
@@ -1399,6 +1423,42 @@ RSpec.describe 'Examples Integration' do
         expect(result[:computed]).to eq((idx * 10) ** 2)
         expect(result).to have_key(:pid)
       end
+    end
+  end
+
+  describe '67_stage_name_conflict.rb' do
+    it 'demonstrates stage name conflict detection' do
+      load File.expand_path('../../examples/67_stage_name_conflict.rb', __dir__)
+
+      # Should not raise - the example catches the error internally
+      expect { ConflictingPipeline.new.run }.to raise_error(Minigun::StageNameConflict)
+
+      # Test that scoped names work
+      example = ScopedNamesExample.new
+      example.run
+      expect(example.results.size).to eq(6)
+    end
+  end
+
+  describe '68_ambiguous_routing.rb' do
+    it 'demonstrates ambiguous routing detection' do
+      load File.expand_path('../../examples/68_ambiguous_routing.rb', __dir__)
+
+      # Test ambiguous children scenario
+      example1 = AmbiguousChildrenDemo.new
+      error = example1.demonstrate_ambiguity
+      expect(error).to be_a(Minigun::AmbiguousRoutingError)
+      expect(error.message).to include('found 2 matches')
+
+      # Test unique names scenario
+      example2 = UniqueNamesDemo.new
+      stages = example2.demonstrate_unique_names
+      expect(stages.size).to eq(2)
+
+      # Test local priority scenario
+      example3 = LocalPriorityExample.new
+      example3.run
+      expect(example3.results).to eq(['local:1'])
     end
   end
 
