@@ -12,7 +12,7 @@ require 'set'
 # - Edge cases and chaos scenarios
 # - Resource cleanup
 
-RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: Gem.win_platform? do
+RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun.fork? do
   let(:dag) { double('dag', terminal?: false) }
   let(:pipeline) do
     double('pipeline',
