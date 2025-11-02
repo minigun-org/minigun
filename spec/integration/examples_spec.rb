@@ -242,7 +242,7 @@ RSpec.describe 'Examples Integration' do
       example.run
 
       # All 10 items should be processed by both consumers (via explicit fan-out routing)
-      expect(example.fork_results.sort).to eq((1..10).to_a) if Process.respond_to?(:fork)
+      expect(example.fork_results.sort).to eq((1..10).to_a) if Minigun.fork?
       expect(example.thread_results.sort).to eq((1..10).to_a)
     end
   end
@@ -410,7 +410,7 @@ RSpec.describe 'Examples Integration' do
       expect(example.results.size).to eq(10)
       expect(example.connection_events).to include(match(/Connected to database/))
 
-      if Process.respond_to?(:fork)
+      if Minigun.fork?
         # On platforms with fork support, verify fork hooks fired
         expect(example.connection_events).to include(match(/Disconnected from database before fork/))
         expect(example.connection_events).to include(match(/Reconnected to database in child/))
@@ -433,7 +433,7 @@ RSpec.describe 'Examples Integration' do
       expect(example.resource_events).to include('Initialized API client')
       expect(example.resource_events).to include('Shutdown API client')
 
-      if Process.respond_to?(:fork)
+      if Minigun.fork?
         # On platforms with fork support, verify fork-related resource management
         expect(example.resource_events).to include('Closing connections before fork')
         expect(example.resource_events).to include('Reopening connections in child process')
@@ -464,7 +464,7 @@ RSpec.describe 'Examples Integration' do
       expect(example.stats).to have_key(:consumer_count)
       expect(example.stats).to have_key(:transformer_count)
 
-      if Process.respond_to?(:fork)
+      if Minigun.fork?
         # On platforms with fork support, verify fork statistics
         expect(example.stats[:forks_created]).to be > 0
         expect(example.stats[:child_processes]).not_to be_empty
@@ -509,7 +509,7 @@ RSpec.describe 'Examples Integration' do
       expect(example.events).to include(:validate_start, :validate_end)
       expect(example.events).to include(:transform_start, :transform_end)
 
-      if Process.respond_to?(:fork)
+      if Minigun.fork?
         # On platforms with fork support, verify fork hooks fired
         expect(example.events).to include(:before_fork, :after_fork)
       end
@@ -612,7 +612,7 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
-  describe '27_process_execution.rb', skip: !Process.respond_to?(:fork) do
+  describe '27_process_execution.rb', skip: !Minigun.fork? do
     it 'demonstrates process-based execution with isolation' do
       load File.expand_path('../../examples/27_process_execution.rb', __dir__)
 
@@ -1396,7 +1396,7 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
-  describe '66_cow_and_ipc_fork_executors.rb', skip: Gem.win_platform? do
+  describe '66_cow_and_ipc_fork_executors.rb', skip: !Minigun.fork? do
     it 'demonstrates COW and IPC fork executors' do
       load File.expand_path('../../examples/66_cow_and_ipc_fork_executors.rb', __dir__)
 

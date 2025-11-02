@@ -118,7 +118,7 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
         expect(proc_block_idx).to be < proc_after_idx
 
         # Fork hooks happen in order (only if forking is supported)
-        if Process.respond_to?(:fork)
+        if Minigun.fork?
           expect(order).to include('9_pipeline_before_fork')
           expect(order).to include('10_consumer_before_fork')
           expect(order).to include('11_consumer_after_fork')

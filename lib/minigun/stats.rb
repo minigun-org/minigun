@@ -148,7 +148,7 @@ module Minigun
 
     # Check if we have latency data
     def latency_data?
-      @latency_samples.any?
+      !@latency_samples.empty?
     end
 
     # Generate a summary hash

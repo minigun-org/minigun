@@ -157,7 +157,7 @@ module Minigun
       end
 
       def execute_stage(stage, user_context, input_queue, output_queue)
-        unless Process.respond_to?(:fork)
+        unless Minigun.fork?
           warn '[Minigun] Process forking not available, falling back to inline'
           return stage.execute(user_context, input_queue, output_queue, @stage_ctx.stage_stats)
         end
@@ -339,7 +339,7 @@ module Minigun
       end
 
       def execute_stage(stage, user_context, input_queue, output_queue)
-        unless Process.respond_to?(:fork)
+        unless Minigun.fork?
           warn '[Minigun] Process forking not available, falling back to inline'
           return stage.execute(user_context, input_queue, output_queue, @stage_ctx.stage_stats)
         end

@@ -355,7 +355,7 @@ module Minigun
       buffer = nil
 
       @mutex.synchronize do
-        if @buffer.any?
+        if !@buffer.empty?
           buffer = @buffer.dup
           @buffer.clear
         end
@@ -483,7 +483,7 @@ module Minigun
 
       # Set up input/output queues for the nested pipeline
       # The pipeline will create :_entrance and :_exit stages based on these
-      if stage_ctx.sources_expected.any?
+      if !stage_ctx.sources_expected.empty?
         # Has upstream: set input queue so pipeline creates :_entrance
         # Also pass the expected source count for proper END signal handling
         @nested_pipeline.instance_variable_set(:@input_queues, {
