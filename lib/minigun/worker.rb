@@ -57,21 +57,12 @@ module Minigun
       # Only check streaming stages (autonomous and composite manage their own execution)
       return false unless @stage.run_mode == :streaming
 
-      # If no upstream sources, this stage is disconnected
-      if stage_ctx.sources_expected.empty?
-        log_debug 'No upstream sources, sending END signals and exiting'
-
-        # Send EndOfSource to all downstream stages so they don't deadlock
-        # DAG and queues now use Stage objects
-        downstream = stage_ctx.dag.downstream(stage_ctx.stage)
-        downstream.each do |target|
-          stage_ctx.stage_input_queues[target] << EndOfSource.new(stage_ctx.stage)
-        end
-
-        log_debug 'Done'
-        return true
-      end
-
+      # If no upstream sources and no potential for dynamic routing, this stage is disconnected
+      # Note: stages with empty sources_expected might still receive dynamically routed items
+      # via output.to(:stage) or yield(item, to: :stage), so we let them run
+      # They will naturally exit when they receive EndOfSource from their dynamic sources
+      # (The InputQueue's pop method adds discovered sources to sources_expected)
+      
       false
     end
 

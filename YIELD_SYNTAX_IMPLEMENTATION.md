@@ -93,17 +93,18 @@ This makes the `output` parameter completely optional while maintaining backward
 
 - **`examples/00_quick_start_yield.rb`**: Basic yield syntax demonstration
 - **`examples/63_yield_with_classes.rb`**: Comprehensive example with routing
+- **`examples/69_yield_routing.rb`**: Dynamic routing with yield and to: parameter
 
 ### 5. Tests
 
 - **`spec/unit/yield_syntax_spec.rb`**: Unit tests covering all arity combinations
 - **`spec/integration/examples_spec.rb`**: Integration tests for yield examples
 
-### 6. Known Limitations
+### 6. Dynamic Routing Support
 
-**Dynamic Routing Issue**: Stages that only receive dynamically-routed items (via `yield(item, to: :stage_name)`) don't have static upstream connections in the DAG, so they don't wait for input and exit immediately. This is a general limitation with Minigun's current dynamic routing implementation, not specific to the yield syntax.
+**Dynamic Routing**: Stages can receive items exclusively through dynamic routing (via `yield(item, to: :stage_name)` or `output.to(:stage_name) << item`) without requiring static upstream connections in the DAG. The system automatically discovers dynamic sources when `EndOfSource` signals arrive and properly handles stage lifecycle.
 
-**Workaround**: Ensure stages receiving dynamic routes also have at least one static upstream connection in the DAG.
+This enables flexible routing patterns where stages are targeted based on runtime decisions without needing predefined DAG connections.
 
 ### 7. Backward Compatibility
 
