@@ -444,15 +444,6 @@ module Minigun
     end
   end
 
-  # Special entrance stage for nested pipelines
-  # Automatically created when a pipeline has input from parent
-  class EntranceStage < ConsumerStage
-    # Positional constructor: EntranceStage.new(name, pipeline, block, options)
-    def initialize(name, pipeline, block, options = {})
-      super(name, pipeline, block, options)
-    end
-  end
-
   # Special exit stage for nested pipelines
   # Automatically created when a pipeline has output to parent
   class ExitStage < ConsumerStage
@@ -482,10 +473,10 @@ module Minigun
       return unless @nested_pipeline
 
       # Set up input/output queues for the nested pipeline
-      # The pipeline will create :_entrance and :_exit stages based on these
+      # Pass the PipelineStage's input queue to nested pipeline so entry stages can use it
       if !stage_ctx.sources_expected.empty?
-        # Has upstream: set input queue so pipeline creates :_entrance
-        # Also pass the expected source count for proper END signal handling
+        # Has upstream: pass input queue to nested pipeline
+        # The nested pipeline will handle distributing to its entry stages
         @nested_pipeline.instance_variable_set(:@input_queues, {
           input: stage_ctx.input_queue,
           sources_expected: stage_ctx.sources_expected
@@ -495,7 +486,7 @@ module Minigun
       # Always set output queue so pipeline creates :_exit
       @nested_pipeline.instance_variable_set(:@output_queues, { output: create_output_queue(stage_ctx) })
 
-      # Run the nested pipeline (it will automatically create :_entrance/:_exit as needed)
+      # Run the nested pipeline (it will handle input distribution to entry stages)
       @nested_pipeline.run(stage_ctx.root_pipeline.context)
     ensure
       send_end_signals(stage_ctx)

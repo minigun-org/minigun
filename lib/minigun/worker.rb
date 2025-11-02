@@ -83,11 +83,20 @@ module Minigun
       # DAG now uses Stage objects instead of names
       sources_expected = if @stage.run_mode == :autonomous
                            Set.new
-                         elsif @stage.is_a?(Minigun::EntranceStage) && @pipeline.input_queues
-                           # For EntranceStage, use sources from parent pipeline if available
-                           @pipeline.input_queues[:sources_expected] || Set.new
                          else
-                           Set.new(dag.upstream(@stage))
+                           # Check if this stage is an entrance router or single entry stage for nested pipeline
+                           input_queues = @pipeline.instance_variable_get(:@input_queues)
+                           entrance_router = @pipeline.instance_variable_get(:@entrance_router)
+
+                           if @stage == entrance_router && input_queues
+                             # For entrance router, use sources from parent pipeline
+                             input_queues[:sources_expected] || Set.new
+                           elsif dag.upstream(@stage).empty? && input_queues && input_queues[:sources_expected]
+                             # For single entry stage with no upstream, use sources from parent pipeline if available
+                             input_queues[:sources_expected]
+                           else
+                             Set.new(dag.upstream(@stage))
+                           end
                          end
 
       # Create stats object for this specific stage

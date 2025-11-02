@@ -49,6 +49,7 @@ pickle-email-*.html
 .envrc
 .ruby-gemset
 .rspec_status
+.claude
 
 # Redis DB
 dump.rdb

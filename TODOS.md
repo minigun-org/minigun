@@ -22,10 +22,6 @@ TODO: Refactor so more things are moved from Stage to Worker, e.g.
 - sending of end signals?
 - rename #run_worker_loop as its not a loop. Maybe #run_in_worker? other ideas? --> DONE: renamed to #run_stage
 
-=======================================
-
-@stage_name == :_entrance and :_exit (YUCK)
-
 ================================
 
 This needs to be in all stage:
