@@ -20,7 +20,7 @@ module Minigun
 
       @stages = stages || []
       @deferred_edges = [] # Store edges with forward references: [{from: stage, to: :name}, ...]
-      
+
       # Entrance stage will be created lazily in insert_entrance_distributor_for_inputs!
       @entrance_stage = nil
 
