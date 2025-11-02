@@ -444,15 +444,6 @@ module Minigun
     end
   end
 
-  # Special entrance stage for nested pipelines
-  # Automatically created when a pipeline has input from parent
-  class EntranceStage < ConsumerStage
-    # Positional constructor: EntranceStage.new(name, pipeline, block, options)
-    def initialize(name, pipeline, block, options = {})
-      super(name, pipeline, block, options)
-    end
-  end
-
   # Special exit stage for nested pipelines
   # Automatically created when a pipeline has output to parent
   class ExitStage < ConsumerStage
