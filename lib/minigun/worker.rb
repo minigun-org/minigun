@@ -211,11 +211,12 @@ module Minigun
     # TODO: Move this elsewhere? DSL class?
     def default_pool_size(type)
       case type
-      when :thread then @config[:max_threads] || 5
-      when :cow_fork then @config[:max_processes] || 2
-      when :ipc_fork then @config[:max_processes] || 2
-      when :ractor then @config[:max_ractors] || 4
-      else 5
+      when :fiber_pool then @config[:max_fibers] || 5
+      when :thread_pool then @config[:max_threads] || 5
+      when :ractor_pool then @config[:max_ractors] || 5
+      when :cow_fork, :ipc_fork then @config[:max_processes] || 3
+      else
+        raise ArgumentError.new("Unknown execution type: #{type}")
       end
     end
 

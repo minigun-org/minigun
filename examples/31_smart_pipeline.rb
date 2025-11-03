@@ -34,7 +34,7 @@ class SmartPipeline
       100.times { |i| output << i }
     end
 
-    threads(@threads) do
+    thread_pool(@threads) do
       processor :work do |item, output|
         output << (item * 2)
       end
@@ -42,7 +42,7 @@ class SmartPipeline
 
     batch @batch_size
 
-    process_per_batch(max: @processes) do
+    cow_fork(@processes) do
       processor :heavy_work do |batch, _output|
         batch.map { |x| x**2 }
       end

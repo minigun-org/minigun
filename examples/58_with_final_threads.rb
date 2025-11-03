@@ -22,7 +22,7 @@ class WithFinalThreadsExample
       20.times { |i| output << i }
     end
 
-    threads(3) do
+    thread_pool(3) do
       processor :work do |item, output|
         output << (item * 2)
       end
@@ -30,13 +30,13 @@ class WithFinalThreadsExample
 
     batch 5
 
-    process_per_batch(max: 2) do
+    cow_fork(2) do
       processor :process_batch do |batch, output|
         batch.each { |item| output << (item + 100) }
       end
     end
 
-    threads(2) do
+    thread_pool(2) do
       consumer :save do |item|
         @mutex.synchronize { @results << item }
       end

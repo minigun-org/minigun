@@ -35,7 +35,7 @@ class ConfigurablePipeline
       10.times { |i| output << i }
     end
 
-    threads(@config.thread_pool_size) do
+    thread_pool(@config.thread_pool_size) do
       processor :download do |item, output|
         output << (item * 2)
       end
@@ -43,7 +43,7 @@ class ConfigurablePipeline
 
     batch @config.batch_size
 
-    process_per_batch(max: @config.process_pool_size) do
+    cow_fork(@config.process_pool_size) do
       processor :parse do |batch, output|
         batch.map { |x| x + 100 }.each { |result| output << result }
       end

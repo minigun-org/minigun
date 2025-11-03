@@ -65,7 +65,7 @@ class ThreadExample
     end
 
     # Use thread pool for concurrent processing
-    threads(5) do
+    thread_pool(5) do
       processor :process do |item, output|
         sleep 0.01 # Simulate work
         output << (item * 2)
@@ -146,7 +146,7 @@ if Minigun.fork?
 
       # Process isolation for CPU-bound tasks
       batch 1
-      process_per_batch(max: 2) do
+      cow_fork(2) do
         processor :process do |batch, output|
           batch.each do |item|
             output << { item: item, pid: Process.pid, result: item * 100 }
@@ -190,7 +190,7 @@ class ParallelExample
       10.times { |i| output << i }
     end
 
-    threads(5) do
+    thread_pool(5) do
       processor :process do |item, output|
         sleep 0.01 # Simulate work
         output << (item * 3)
@@ -233,7 +233,7 @@ class ErrorExample
       5.times { |i| output << i }
     end
 
-    threads(2) do
+    thread_pool(2) do
       processor :process do |item, output|
         raise StandardError, "Error on item #{item}" if item == 2
 
@@ -273,7 +273,7 @@ class TerminationExample
       10.times { |i| output << i }
     end
 
-    threads(3) do
+    thread_pool(3) do
       processor :process do |item, output|
         output << item
       end

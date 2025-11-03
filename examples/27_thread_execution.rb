@@ -20,7 +20,7 @@ class ThreadExample
     end
 
     # Use thread pool for concurrent processing
-    threads(5) do
+    thread_pool(5) do
       processor :process do |item, output|
         sleep 0.01 # Simulate work
         output << (item * 2)

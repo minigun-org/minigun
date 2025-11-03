@@ -90,7 +90,7 @@ class MixedPipeline
     end
 
     # Use block context for some stages
-    threads(20) do
+    thread_pool(20) do
       processor :download do |item, output|
         output << (item * 2)
       end

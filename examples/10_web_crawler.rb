@@ -107,7 +107,7 @@ class WebCrawler
     end
 
     # Stage 2: Fetch pages (with deduplication)
-    threads(20) do
+    thread_pool(20) do
       processor :fetch_pages do |page_info, output|
         url = page_info[:url]
         depth = page_info[:depth]

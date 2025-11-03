@@ -22,7 +22,7 @@ class ThreadsBatchConsumerExample
       20.times { |i| output << i }
     end
 
-    threads(3) do
+    thread_pool(3) do
       processor :work do |item, output|
         output << (item * 2)
       end

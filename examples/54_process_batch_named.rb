@@ -31,7 +31,7 @@ class ProcessBatchNamedExample
 
     batch 5
 
-    process_per_batch(max: 2) do
+    cow_fork(2) do
       processor :process_batch do |batch, output|
         batch.each { |item| output << (item * 2) }
       end

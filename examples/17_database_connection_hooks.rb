@@ -75,7 +75,7 @@ class DatabaseConnectionExample
     accumulator :batch, max_size: 5
 
     # Use process_per_batch to process batches
-    process_per_batch(max: 2) do
+    cow_fork(2) do
       consumer :process_users do |batch|
         batch.each do |user_id|
           @connection_events << "Processing user #{user_id} in PID #{Process.pid}"

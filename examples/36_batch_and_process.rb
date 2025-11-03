@@ -41,7 +41,7 @@ class BatchProcessor
 
     # Spawn a new process for each batch
     # Max 4 concurrent processes
-    process_per_batch(max: 4) do
+    cow_fork(4) do
       consumer :process_in_isolation do |batch|
         Process.pid
 
@@ -100,7 +100,7 @@ class DynamicBatching
     # Small batches for quick processing
     batch 25
 
-    process_per_batch(max: 8) do
+    cow_fork(8) do
       processor :quick_process do |batch, _output|
         @mutex.synchronize { @small_batches += 1 }
         batch.map { |x| x * 2 }
@@ -110,7 +110,7 @@ class DynamicBatching
     # Re-batch into larger chunks
     batch 100
 
-    process_per_batch(max: 2) do
+    cow_fork(2) do
       consumer :heavy_process do |_batch|
         @mutex.synchronize { @large_batches += 1 }
       end
@@ -154,7 +154,7 @@ class ConfigurableBatching
     batch @batch_size
 
     # Runtime-configurable max processes
-    process_per_batch(max: @max_processes) do
+    cow_fork(@max_processes) do
       consumer :process do |batch|
         @mutex.synchronize { @processed += batch.size }
       end
