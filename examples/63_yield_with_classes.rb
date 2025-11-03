@@ -57,6 +57,8 @@ class YieldWithClassesExample
     custom_stage(ParityRouter, :route_by_parity, from: :generate)
 
     # Use custom processor stages
+    # (:await option is not needed because these will receive
+    # normally-routed EndOfStage signals when their upstreams finish.)
     custom_stage(EvenProcessor, :process_even)
     custom_stage(OddProcessor, :process_odd)
 

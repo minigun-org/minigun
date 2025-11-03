@@ -211,6 +211,9 @@ module Minigun
         raise Minigun::Error, "[Pipeline:#{@name}] Cannot find stage: #{target}" unless target_obj
         @dag.add_edge(from_obj, target_obj)
       end
+
+      # Disconnected stage detection happens after DAG is fully built
+      # See: apply_await_to_disconnected_stages! called from build_dag_routing!
     end
 
     # Add a pipeline-level hook
@@ -443,7 +446,34 @@ module Minigun
       @dag.validate!
       validate_stages_exist!
 
+      # Apply await: false to stages that are fully disconnected (no upstreams)
+      # This handles rerouted stages and other disconnected scenarios
+      apply_await_to_disconnected_stages!
+
       log_debug "#{log_prefix} DAG: #{@dag.topological_sort.map(&:name).join(' -> ')}"
+    end
+
+    def apply_await_to_disconnected_stages!
+      # After DAG is fully built, identify stages with no upstreams and auto-configure await behavior.
+      # Stages without upstreams fall into three categories:
+      # 1. Producers (autonomous) - expected to have no upstreams, skip these
+      # 2. Rerouted or orphaned stages - auto-set await: false for immediate shutdown
+      # 3. Dynamic routing targets - user should explicitly set await: true
+      @stages.each do |stage|
+        # Skip producers - they're autonomous and don't need upstreams
+        next if stage.run_mode == :autonomous
+
+        # Check if stage has any upstreams
+        upstreams = @dag.upstream(stage)
+        next unless upstreams.empty?
+
+        # Stage has no upstreams and no explicit await configuration
+        # Default to immediate shutdown (await: false) to catch pipeline bugs quickly
+        unless stage.options.key?(:await)
+          stage.options[:await] = false
+          Minigun.logger.debug "[Pipeline:#{@name}] Stage #{stage.name} has no DAG upstreams, auto-set await: false"
+        end
+      end
     end
 
     def validate_stages_exist!

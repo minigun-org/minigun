@@ -26,7 +26,9 @@ RSpec.describe Minigun::Worker do
       execution_context: nil,
       log_type: 'Worker',
       run_mode: :streaming,
-      task: task
+      task: task,
+      options: {}, # Add options stub for await feature
+      run_stage: nil # Stub run_stage method
     )
   end
 
@@ -152,23 +154,26 @@ RSpec.describe Minigun::Worker do
   end
 
   describe 'disconnected stage handling' do
-    it 'exits early if no upstream sources' do
+    it 'warns and waits with default 5s timeout if no upstream sources' do
       input_queue = Queue.new
       allow(task).to receive(:find_queue).with(stage).and_return(input_queue)
       allow(dag).to receive(:upstream).with(stage).and_return([])
       allow(dag).to receive(:downstream).with(stage).and_return([])
+      allow(stage).to receive(:options).and_return({}) # No await option set
 
       worker = described_class.new(pipeline, stage, config)
 
+      allow(Minigun.logger).to receive(:warn).and_call_original
       allow(Minigun.logger).to receive(:debug).and_call_original
 
       worker.start
       worker.join
 
-      expect(Minigun.logger).to have_received(:debug).with(/No upstream sources, sending END signals and exiting/)
+      # Should log warning about default 5s timeout
+      expect(Minigun.logger).to have_received(:warn).with(/Stage has no DAG upstream connections, using default 5s await timeout/)
     end
 
-    it 'sends END signals to downstream if disconnected' do
+    it 'sends END signals to downstream after timeout if disconnected' do
       input_queue = Queue.new
       downstream_stage = double('downstream_stage', name: :downstream, task: task)
       downstream_queue = Queue.new
@@ -177,18 +182,70 @@ RSpec.describe Minigun::Worker do
       allow(task).to receive(:find_queue).with(downstream_stage).and_return(downstream_queue)
       allow(dag).to receive(:upstream).with(stage).and_return([])
       allow(dag).to receive(:downstream).with(stage).and_return([downstream_stage])
+      allow(stage).to receive(:options).and_return({ await: 0.1 }) # Short timeout for test
 
       worker = described_class.new(pipeline, stage, config)
       worker.start
       worker.join
 
-      # Should have sent END signal to downstream
+      # Should have sent END signal to downstream after timeout
       msg = begin
         downstream_queue.pop(true)
       rescue StandardError
         nil
       end
       expect(msg).to be_a(Minigun::EndOfSource) if msg
+    end
+
+    it 'immediately shuts down with await: false' do
+      input_queue = Queue.new
+      downstream_stage = double('downstream_stage', name: :downstream, task: task)
+      downstream_queue = Queue.new
+
+      allow(task).to receive(:find_queue).with(stage).and_return(input_queue)
+      allow(task).to receive(:find_queue).with(downstream_stage).and_return(downstream_queue)
+      allow(dag).to receive(:upstream).with(stage).and_return([])
+      allow(dag).to receive(:downstream).with(stage).and_return([downstream_stage])
+      allow(stage).to receive(:options).and_return({ await: false }) # Immediate shutdown
+
+      worker = described_class.new(pipeline, stage, config)
+
+      allow(Minigun.logger).to receive(:debug).and_call_original
+
+      worker.start
+      worker.join
+
+      # Should have sent END signal to downstream immediately
+      msg = begin
+        downstream_queue.pop(true)
+      rescue StandardError
+        nil
+      end
+      expect(msg).to be_a(Minigun::EndOfSource) if msg
+      expect(Minigun.logger).to have_received(:debug).with(/Shutting down immediately/)
+    end
+
+    it 'waits indefinitely with await: true' do
+      input_queue = Queue.new
+      allow(task).to receive(:find_queue).with(stage).and_return(input_queue)
+      allow(dag).to receive(:upstream).with(stage).and_return([])
+      allow(dag).to receive(:downstream).with(stage).and_return([])
+      allow(stage).to receive(:options).and_return({ await: true }) # Infinite wait
+      allow(stage).to receive(:run_stage) # Mock stage execution to avoid hanging
+
+      worker = described_class.new(pipeline, stage, config)
+
+      allow(Minigun.logger).to receive(:debug).and_call_original
+
+      # Start worker in background
+      worker.start
+      sleep 0.2 # Give it time to start
+
+      # Should log that it's awaiting indefinitely
+      expect(Minigun.logger).to have_received(:debug).with(/Awaiting items indefinitely/)
+
+      # Clean up
+      Thread.kill(worker.thread) if worker.thread&.alive?
     end
   end
 
