@@ -20,8 +20,21 @@ module Minigun
       # Initialize the stage_registry for stage management
       @stage_registry = StageRegistry.new
 
+      # Queue registry for cross-pipeline routing (Stage => Queue)
+      @stage_queues = {}
+
       # Root pipeline - all stages and nested pipelines live here
       @root_pipeline = root_pipeline || Pipeline.new(:default, self, nil, @config)
+    end
+
+    # Register a stage's input queue for cross-pipeline routing
+    def register_stage_queue(stage, queue)
+      @stage_queues[stage] = queue
+    end
+
+    # Find a stage's input queue for cross-pipeline routing
+    def find_queue(stage)
+      @stage_queues[stage]
     end
 
     # Set config value (applies to all pipelines)

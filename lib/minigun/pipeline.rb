@@ -318,23 +318,29 @@ module Minigun
 
         # Entrance router uses PipelineStage's queue
         if stage == @entrance_router && @input_queues && @input_queues[:input]
-          queues[stage] = @input_queues[:input]
+          queue = @input_queues[:input]
+          queues[stage] = queue
+          @task&.register_stage_queue(stage, queue)
           next
         end
 
         # Single entry stage uses PipelineStage's queue directly (no router)
         if entry_stages.size == 1 && stage == entry_stages.first && @input_queues && @input_queues[:input]
-          queues[stage] = @input_queues[:input]
+          queue = @input_queues[:input]
+          queues[stage] = queue
+          @task&.register_stage_queue(stage, queue)
           next
         end
 
         # Use stage's queue_size setting (bounded SizedQueue or unbounded Queue)
         size = stage.queue_size
-        queues[stage] = if size.nil?
-                          Queue.new # Unbounded queue
-                        else
-                          SizedQueue.new(size) # Bounded queue with backpressure
-                        end
+        queue = if size.nil?
+                  Queue.new # Unbounded queue
+                else
+                  SizedQueue.new(size) # Bounded queue with backpressure
+                end
+        queues[stage] = queue
+        @task&.register_stage_queue(stage, queue)
       end
 
       queues
