@@ -63,7 +63,7 @@ class CowFanOutExample
 
     # Three COW fork consumer stages (fan-out targets)
     cow_fork(2) do
-      consumer :process_a, await: true do |item|
+      consumer :process_a do |item|
         pid = Process.pid
         puts "[ProcessA:cow_fork] Processing #{item[:id]} in ephemeral fork PID #{pid}"
         sleep 0.03
@@ -77,7 +77,7 @@ class CowFanOutExample
     end
 
     cow_fork(2) do
-      consumer :process_b, await: true do |item|
+      consumer :process_b do |item|
         pid = Process.pid
         puts "[ProcessB:cow_fork] Processing #{item[:id]} in ephemeral fork PID #{pid}"
         sleep 0.03
@@ -91,7 +91,7 @@ class CowFanOutExample
     end
 
     cow_fork(2) do
-      consumer :process_c, await: true do |item|
+      consumer :process_c do |item|
         pid = Process.pid
         puts "[ProcessC:cow_fork] Processing #{item[:id]} in ephemeral fork PID #{pid}"
         sleep 0.03

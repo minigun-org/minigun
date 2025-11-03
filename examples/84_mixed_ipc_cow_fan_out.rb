@@ -63,7 +63,7 @@ class MixedIpcCowFanOutExample
 
     # IPC fork consumer A (persistent workers)
     ipc_fork(1) do
-      consumer :process_ipc_a, await: true do |item|
+      consumer :process_ipc_a do |item|
         pid = Process.pid
         puts "[ProcessIpcA:ipc_fork] Processing #{item[:id]} in persistent worker PID #{pid}"
         sleep 0.03
@@ -78,7 +78,7 @@ class MixedIpcCowFanOutExample
 
     # COW fork consumer B (ephemeral forks)
     cow_fork(2) do
-      consumer :process_cow_b, await: true do |item|
+      consumer :process_cow_b do |item|
         pid = Process.pid
         puts "[ProcessCowB:cow_fork] Processing #{item[:id]} in ephemeral fork PID #{pid}"
         sleep 0.03
@@ -94,7 +94,7 @@ class MixedIpcCowFanOutExample
 
     # IPC fork consumer C (persistent workers)
     ipc_fork(1) do
-      consumer :process_ipc_c, await: true do |item|
+      consumer :process_ipc_c do |item|
         pid = Process.pid
         puts "[ProcessIpcC:ipc_fork] Processing #{item[:id]} in persistent worker PID #{pid}"
         sleep 0.03

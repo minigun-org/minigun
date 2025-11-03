@@ -51,7 +51,7 @@ class MasterToIpcViaToExample
 
     # IPC fork stage A - receives even IDs
     ipc_fork(2) do
-      consumer :process_a, await: true do |item|
+      consumer :process_a do |item|
         pid = Process.pid
         puts "[ProcessA:ipc_fork] Processing #{item[:id]} in PID #{pid}"
         sleep 0.03
@@ -66,7 +66,7 @@ class MasterToIpcViaToExample
 
     # IPC fork stage B - receives odd IDs
     ipc_fork(2) do
-      consumer :process_b, await: true do |item|
+      consumer :process_b do |item|
         pid = Process.pid
         puts "[ProcessB:ipc_fork] Processing #{item[:id]} in PID #{pid}"
         sleep 0.03

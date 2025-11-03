@@ -63,7 +63,7 @@ class IpcFanOutExample
 
     # Three IPC fork consumer stages (fan-out targets)
     ipc_fork(1) do
-      consumer :process_a, await: true do |item|
+      consumer :process_a do |item|
         pid = Process.pid
         puts "[ProcessA:ipc_fork] Processing #{item[:id]} in PID #{pid}"
         sleep 0.03
@@ -77,7 +77,7 @@ class IpcFanOutExample
     end
 
     ipc_fork(1) do
-      consumer :process_b, await: true do |item|
+      consumer :process_b do |item|
         pid = Process.pid
         puts "[ProcessB:ipc_fork] Processing #{item[:id]} in PID #{pid}"
         sleep 0.03
@@ -91,7 +91,7 @@ class IpcFanOutExample
     end
 
     ipc_fork(1) do
-      consumer :process_c, await: true do |item|
+      consumer :process_c do |item|
         pid = Process.pid
         puts "[ProcessC:ipc_fork] Processing #{item[:id]} in PID #{pid}"
         sleep 0.03

@@ -1473,6 +1473,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   # Phase 1.0: Cross-Boundary Routing Examples (70-88)
+  # Note: Fork-based examples are skipped on Windows (fork not supported)
 
   describe '70_thread_to_ipc_fork.rb' do
     it 'routes from thread pool to IPC fork (terminal consumer)', skip: !Minigun.fork? do
