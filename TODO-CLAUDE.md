@@ -9,6 +9,7 @@ Minigun is a high-performance data processing pipeline framework for Ruby with s
 ### Phase 1.0: Cross-Boundary Routing
 
 - [ ] **Cross-Boundary Routing**
+  - Remove "skip" from hanging example tests.
   - IPC fork getting input via `to` from various sources (IPC, COW, threads, master)
   - IPC fork doing output routing
   - IPC to COW, COW to IPC, IPC to master routing
@@ -34,6 +35,10 @@ Minigun is a high-performance data processing pipeline framework for Ruby with s
 - [ ] child culling (look at puma)
 - [ ] supervision tree of processes
 - [ ] htop-like monitoring dashboard (CLI)
+- [ ] Interactive examples in web docs
+- [ ] ASCII art drawing of tree
+- [ ] IPC batches?
+- [ ] Acks on queued items, guaranteed delivery?
 
 - [ ] **Hooks** (fork, stage, nesting)
 
