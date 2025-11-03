@@ -220,7 +220,8 @@ end
 
 RSpec.describe Minigun::InputQueue do
   let(:raw_queue) { Queue.new }
-  let(:test_stage) { double('test_stage', name: :test_stage) }
+  let(:task) { double('task', register_stage_queue: nil) }
+  let(:test_stage) { double('test_stage', name: :test_stage, task: task) }
   let(:source_a) { double('source_a', name: :source_a) }
   let(:source_b) { double('source_b', name: :source_b) }
   let(:sources_expected) { Set.new([source_a, source_b]) }

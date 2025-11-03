@@ -320,7 +320,7 @@ module Minigun
         if stage == @entrance_router && @input_queues && @input_queues[:input]
           queue = @input_queues[:input]
           queues[stage] = queue
-          @task&.register_stage_queue(stage, queue)
+          register_queue(stage, queue)
           next
         end
 
@@ -328,7 +328,7 @@ module Minigun
         if entry_stages.size == 1 && stage == entry_stages.first && @input_queues && @input_queues[:input]
           queue = @input_queues[:input]
           queues[stage] = queue
-          @task&.register_stage_queue(stage, queue)
+          register_queue(stage, queue)
           next
         end
 
@@ -340,7 +340,7 @@ module Minigun
                   SizedQueue.new(size) # Bounded queue with backpressure
                 end
         queues[stage] = queue
-        @task&.register_stage_queue(stage, queue)
+        register_queue(stage, queue)
       end
 
       queues
@@ -603,6 +603,11 @@ module Minigun
 
     def log_debug(msg)
       Minigun.logger.debug(msg)
+    end
+
+    # Register a queue with the task's queue registry
+    def register_queue(stage, queue)
+      @task&.register_stage_queue(stage, queue)
     end
 
     def log_error(msg)
