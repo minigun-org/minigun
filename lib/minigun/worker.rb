@@ -63,22 +63,48 @@ module Minigun
       # They will naturally exit when they receive EndOfSource from their dynamic sources
       # (The InputQueue's pop method adds discovered sources to sources_expected)
       
+      # If no upstream sources, this stage is disconnected
+#       if stage_ctx.sources_expected.empty?
+#         log_debug 'No upstream sources, sending END signals and exiting'
+
+#         # Send EndOfSource to all downstream stages so they don't deadlock
+#         # DAG and queues now use Stage objects
+#         task = stage_ctx.stage.task
+#         downstream = stage_ctx.dag.downstream(stage_ctx.stage)
+#         downstream.each do |target|
+#           queue = task&.find_queue(target)
+#           queue&.<< EndOfSource.new(stage_ctx.stage)
+#         end
+
+#         log_debug 'Done'
+#         return true
+#       end
+
       false
     end
 
     def create_stage_context
       dag = @pipeline.dag
-      stage_input_queues = @pipeline.stage_input_queues
+      task = @pipeline.task
 
       # Calculate sources for workers (empty for autonomous stages)
       # DAG now uses Stage objects instead of names
       sources_expected = if @stage.run_mode == :autonomous
                            Set.new
-                         elsif @stage.is_a?(Minigun::EntranceStage) && @pipeline.input_queues
-                           # For EntranceStage, use sources from parent pipeline if available
-                           @pipeline.input_queues[:sources_expected] || Set.new
                          else
-                           Set.new(dag.upstream(@stage))
+                           # Check if this stage is an entrance router or single entry stage for nested pipeline
+                           input_queues = @pipeline.instance_variable_get(:@input_queues)
+                           entrance_router = @pipeline.instance_variable_get(:@entrance_router)
+
+                           if @stage == entrance_router && input_queues
+                             # For entrance router, use sources from parent pipeline
+                             input_queues[:sources_expected] || Set.new
+                           elsif dag.upstream(@stage).empty? && input_queues && input_queues[:sources_expected]
+                             # For single entry stage with no upstream, use sources from parent pipeline if available
+                             input_queues[:sources_expected]
+                           else
+                             Set.new(dag.upstream(@stage))
+                           end
                          end
 
       # Create stats object for this specific stage
@@ -91,10 +117,9 @@ module Minigun
         stage: @stage,
         dag: dag,
         runtime_edges: @pipeline.runtime_edges,
-        stage_input_queues: stage_input_queues,
         stage_stats: stage_stats,
         # Worker-specific (nil/empty for producers)
-        input_queue: stage_input_queues[@stage],
+        input_queue: task&.find_queue(@stage),
         sources_expected: sources_expected,
         sources_done: Set.new
       )
@@ -117,6 +142,7 @@ module Minigun
       case type
       when :thread then @config[:max_threads] || 5
       when :cow_fork then @config[:max_processes] || 2
+      when :ipc_fork then @config[:max_processes] || 2
       when :ractor then @config[:max_ractors] || 4
       else 5
       end

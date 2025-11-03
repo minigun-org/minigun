@@ -4,7 +4,7 @@ require 'spec_helper'
 
 RSpec.describe Minigun::Pipeline do
   let(:config) { { max_threads: 3, max_processes: 2 } }
-  let(:task) { instance_double(Minigun::Task, stage_registry: nil) }
+  let(:task) { Minigun::Task.new }
   let(:pipeline) { described_class.new(:test_pipeline, task, nil, config) }
 
   describe '#initialize' do
@@ -78,7 +78,7 @@ RSpec.describe Minigun::Pipeline do
 
       expect do
         pipeline.add_stage(:producer, :fetch) { |output| output << 'second' }
-      end.to raise_error(Minigun::Error, /Stage name collision.*fetch/)
+      end.to raise_error(Minigun::StageNameConflict, /Stage name.*fetch/)
     end
 
     it 'raises error on duplicate stage name across different types' do
@@ -86,7 +86,7 @@ RSpec.describe Minigun::Pipeline do
 
       expect do
         pipeline.add_stage(:consumer, :my_stage) { |item| puts item }
-      end.to raise_error(Minigun::Error, /Stage name collision.*my_stage/)
+      end.to raise_error(Minigun::StageNameConflict, /Stage name.*my_stage/)
     end
   end
 
@@ -371,7 +371,7 @@ RSpec.describe Minigun::Pipeline do
       end.new
 
       # Create PipelineStage that acts as a producer
-      source_pipeline = described_class.new(:source, nil, pipeline, config)
+      source_pipeline = described_class.new(:source, task, pipeline, config)
       pipeline_stage = Minigun::PipelineStage.new(:source_pipeline, pipeline, source_pipeline, nil, {})
       source_pipeline.add_stage(:producer, :gen) { |output| 3.times { |i| output << i } }
       source_pipeline.add_stage(:processor, :double) { |item, output| output << (item * 2) }
@@ -402,7 +402,7 @@ RSpec.describe Minigun::Pipeline do
       pipeline.add_stage(:producer, :source) { |output| 3.times { |i| output << i } }
 
       # PipelineStage as processor
-      proc_pipeline = described_class.new(:processor, nil, pipeline, config)
+      proc_pipeline = described_class.new(:processor, task, pipeline, config)
       pipeline_stage = Minigun::PipelineStage.new(:processor_pipeline, pipeline, proc_pipeline, nil, {})
       proc_pipeline.add_stage(:processor, :multiply) { |item, output| output << (item * 10) }
       proc_pipeline.add_stage(:processor, :add_one) { |item, output| output << (item + 1) }
@@ -433,7 +433,7 @@ RSpec.describe Minigun::Pipeline do
       end.new
 
       # First PipelineStage producer
-      p1 = described_class.new(:pa, nil, pipeline, config)
+      p1 = described_class.new(:pa, task, pipeline, config)
       ps1 = Minigun::PipelineStage.new(:pipeline_a, pipeline, p1, nil, {})
       p1.add_stage(:producer, :gen) { |output| output << 10 }
       p1.add_stage(:processor, :double) { |item, output| output << (item * 2) }
@@ -442,7 +442,7 @@ RSpec.describe Minigun::Pipeline do
       pipeline.dag.add_node(ps1)  # Use Stage object
 
       # Second PipelineStage producer
-      p2 = described_class.new(:pb, nil, pipeline, config)
+      p2 = described_class.new(:pb, task, pipeline, config)
       ps2 = Minigun::PipelineStage.new(:pipeline_b, pipeline, p2, nil, {})
       p2.add_stage(:producer, :gen) { |output| output << 5 }
       p2.add_stage(:processor, :triple) { |item, output| output << (item * 3) }

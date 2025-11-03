@@ -5,7 +5,7 @@ module Minigun
   # A Pipeline can be standalone or part of a multi-pipeline Task
   class Pipeline
     attr_reader :name, :config, :stages, :hooks, :dag, :output_queues, :stats,
-                :context, :stage_hooks, :stage_input_queues, :runtime_edges, :input_queues, :parent_pipeline, :task
+                :context, :stage_hooks, :runtime_edges, :input_queues, :parent_pipeline, :task
 
     def initialize(name, task, parent_pipeline, config = {}, stages: nil, hooks: nil, stage_hooks: nil, dag: nil, stats: nil)
       @name = name
@@ -20,6 +20,7 @@ module Minigun
 
       @stages = stages || []
       @deferred_edges = [] # Store edges with forward references: [{from: stage, to: :name}, ...]
+      @entrance_router = nil # Router stage for nested pipeline entrance (if multiple entry stages)
 
       # Pipeline-level hooks (run once per pipeline)
       @hooks = hooks || {
@@ -282,8 +283,8 @@ module Minigun
       # Insert router stages for fan-out
       insert_router_stages_for_fan_out
 
-      # Create one input queue per stage (except producers)
-      @stage_input_queues = build_stage_input_queues
+      # Create one input queue per stage (except producers) and register with Task
+      build_stage_input_queues
       @produced_count = Concurrent::AtomicFixnum.new(0)
       @stage_threads = []
 
@@ -302,30 +303,38 @@ module Minigun
       @stage_threads.each(&:join)
     end
 
-    # Build one input queue per stage (except producers)
+    # Build one input queue per stage (except producers) and register with Task
     def build_stage_input_queues
-      queues = {}
+      # Find entrance infrastructure (router or single entry stage)
+      entry_stages = @stages.select do |s|
+        s.run_mode != :autonomous && @dag.upstream(s).empty?
+      end
 
       @stages.each do |stage|
         # Skip autonomous stages - they don't have input queues
         next if stage.run_mode == :autonomous
 
-        # Special case: EntranceStage uses the parent pipeline's input queue
-        if stage.is_a?(EntranceStage) && @input_queues && @input_queues[:input]
-          queues[stage] = @input_queues[:input]  # Key by object
+        # Entrance router uses PipelineStage's queue
+        if stage == @entrance_router && @input_queues && @input_queues[:input]
+          register_queue(stage, @input_queues[:input])
+          next
+        end
+
+        # Single entry stage uses PipelineStage's queue directly (no router)
+        if entry_stages.size == 1 && stage == entry_stages.first && @input_queues && @input_queues[:input]
+          register_queue(stage, @input_queues[:input])
           next
         end
 
         # Use stage's queue_size setting (bounded SizedQueue or unbounded Queue)
         size = stage.queue_size
-        queues[stage] = if size.nil?
-                          Queue.new # Unbounded queue
-                        else
-                          SizedQueue.new(size) # Bounded queue with backpressure
-                        end
+        queue = if size.nil?
+                  Queue.new # Unbounded queue
+                else
+                  SizedQueue.new(size) # Bounded queue with backpressure
+                end
+        register_queue(stage, queue)
       end
-
-      queues
     end
 
     # Insert RouterStage instances for fan-out patterns
@@ -425,7 +434,7 @@ module Minigun
       # Fill any remaining sequential gaps (handles fan-out, siblings, cycles)
       fill_sequential_gaps_by_definition_order!
 
-      # If this pipeline has input_queues (nested pipeline), add :_entrance distributor
+      # If this pipeline has input_queues (nested pipeline), add entrance distributor
       insert_entrance_distributor_for_inputs! if @input_queues && !@input_queues.empty?
 
       # If this pipeline has output_queues, add :_exit collector for terminal stages
@@ -467,7 +476,7 @@ module Minigun
       # @stages contains Stage objects in definition order
       @stages.each_with_index do |stage, index|
         # Skip if already has downstream edges
-        next if @dag.downstream(stage).any?
+        next if !@dag.downstream(stage).empty?
         # Skip if this is the last stage
         next if index >= @stages.size - 1
 
@@ -504,40 +513,44 @@ module Minigun
       end
     end
 
-    # Insert an :_entrance distributor stage for nested pipelines
-    # This receives items from the parent pipeline and distributes to entry stages
+    # Insert an entrance distributor for nested pipelines
+    # Uses RouterStage for multiple entries, direct connection for single entry
     def insert_entrance_distributor_for_inputs!
       # Find stages that have no upstream (would be entry points)
-      # After normalization, DAG uses Stage objects
       entry_stages = @stages.select do |stage|
-        # Skip autonomous stages (they're producers)
         next false if stage.run_mode == :autonomous
-        # Entry stages have no upstream
         @dag.upstream(stage).empty?
       end
 
       return if entry_stages.empty?
 
-      # Create a consumer stage that reads from parent input and emits to nested pipeline
-      # Use ConsumerStage (not ProducerStage) so it properly tracks multiple END signals
-      parent_input = @input_queues[:input]
-      entrance_block = proc do |item, output|
-        # Just forward items from parent to nested pipeline
-        output << item
-      end
-      entrance_stage = Minigun::EntranceStage.new(nil, self, entrance_block, {})
+      # Single entry stage: it uses PipelineStage's queue directly (no router needed)
+      # This is handled in build_stage_input_queues
+      return if entry_stages.size == 1
 
-      # Add the :_entrance stage to the pipeline (at the beginning)
-      @stages.unshift(entrance_stage)
-      @dag.add_node(entrance_stage)
+      # Multiple entry stages: create a router to distribute items
+      # Get routing strategy from parent_pipeline's config (where PipelineStage lives)
+      pipeline_stage = @parent_pipeline&.stages&.find { |s| s.is_a?(PipelineStage) && s.nested_pipeline == self }
+      routing_strategy = pipeline_stage&.options&.[](:routing) || :broadcast
 
-      # Connect :_entrance to entry stages (all objects)
+      # Create anonymous router stage
+      @entrance_router = if routing_strategy == :round_robin
+                           RouterRoundRobinStage.new(nil, self, entry_stages.dup, {})
+                         else
+                           RouterBroadcastStage.new(nil, self, entry_stages.dup, {})
+                         end
+
+      # Add router to pipeline
+      @stages.unshift(@entrance_router)
+      @dag.add_node(@entrance_router)
+
+      # Connect router to entry stages
       entry_stages.each do |stage|
-        @dag.add_edge(entrance_stage, stage)
+        @dag.add_edge(@entrance_router, stage)
       end
 
       entry_names = entry_stages.map(&:name).join(', ')
-      log_debug "[Pipeline:#{@name}] Added :_entrance distributor for entry stages: #{entry_names}"
+      log_debug "[Pipeline:#{@name}] Added #{routing_strategy} entrance router for entry stages: #{entry_names}"
     end
 
     # Insert an :_exit collector stage that terminal stages drain into
@@ -581,6 +594,11 @@ module Minigun
 
     def log_debug(msg)
       Minigun.logger.debug(msg)
+    end
+
+    # Register a queue with the task's queue registry
+    def register_queue(stage, queue)
+      @task&.register_stage_queue(stage, queue)
     end
 
     def log_error(msg)

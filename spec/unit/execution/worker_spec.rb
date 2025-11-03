@@ -3,12 +3,15 @@
 require 'spec_helper'
 
 RSpec.describe Minigun::Worker do
+  let(:stage_registry) { instance_double(Minigun::StageRegistry, register: nil) }
+  let(:task) { instance_double(Minigun::Task, find_queue: nil, stage_registry: stage_registry) }
+
   let(:pipeline) do
     instance_double(
       Minigun::Pipeline,
       name: 'test_pipeline',
       dag: dag,
-      stage_input_queues: {},
+      task: task,
       runtime_edges: {},
       context: user_context,
       stats: stats,
@@ -22,7 +25,8 @@ RSpec.describe Minigun::Worker do
       name: :test_stage,
       execution_context: nil,
       log_type: 'Worker',
-      run_mode: :streaming
+      run_mode: :streaming,
+      task: task
     )
   end
 
@@ -55,8 +59,7 @@ RSpec.describe Minigun::Worker do
   describe '#start' do
     it 'starts a worker thread' do
       input_queue = Queue.new
-      allow(pipeline).to receive(:stage_input_queues)
-        .and_return({ test_stage: input_queue })
+      allow(task).to receive(:find_queue).with(stage).and_return(input_queue)
       allow(dag).to receive(:upstream).with(:test_stage).and_return([:upstream])
       allow(dag).to receive(:downstream).with(:test_stage).and_return([])
 
@@ -89,8 +92,7 @@ RSpec.describe Minigun::Worker do
   describe '#join' do
     it 'waits for worker thread to complete' do
       input_queue = Queue.new
-      allow(pipeline).to receive(:stage_input_queues)
-        .and_return({ test_stage: input_queue })
+      allow(task).to receive(:find_queue).with(stage).and_return(input_queue)
 
       worker = described_class.new(pipeline, stage, config)
 
@@ -151,10 +153,10 @@ RSpec.describe Minigun::Worker do
 
   describe 'disconnected stage handling' do
     it 'exits early if no upstream sources' do
-      allow(pipeline).to receive(:stage_input_queues)
-        .and_return({ test_stage: Queue.new })
-      allow(dag).to receive(:upstream).with(:test_stage).and_return([])
-      allow(dag).to receive(:downstream).with(:test_stage).and_return([])
+      input_queue = Queue.new
+      allow(task).to receive(:find_queue).with(stage).and_return(input_queue)
+      allow(dag).to receive(:upstream).with(stage).and_return([])
+      allow(dag).to receive(:downstream).with(stage).and_return([])
 
       worker = described_class.new(pipeline, stage, config)
 
@@ -167,14 +169,14 @@ RSpec.describe Minigun::Worker do
     end
 
     it 'sends END signals to downstream if disconnected' do
-      allow(pipeline).to receive(:stage_input_queues)
-        .and_return({ test_stage: Queue.new, downstream: Queue.new })
-      allow(dag).to receive(:upstream).with(:test_stage).and_return([])
-      allow(dag).to receive(:downstream).with(:test_stage).and_return([:downstream])
-
+      input_queue = Queue.new
+      downstream_stage = double('downstream_stage', name: :downstream, task: task)
       downstream_queue = Queue.new
-      allow(pipeline).to receive(:stage_input_queues)
-        .and_return({ test_stage: Queue.new, downstream: downstream_queue })
+
+      allow(task).to receive(:find_queue).with(stage).and_return(input_queue)
+      allow(task).to receive(:find_queue).with(downstream_stage).and_return(downstream_queue)
+      allow(dag).to receive(:upstream).with(stage).and_return([])
+      allow(dag).to receive(:downstream).with(stage).and_return([downstream_stage])
 
       worker = described_class.new(pipeline, stage, config)
       worker.start
@@ -213,8 +215,9 @@ RSpec.describe Minigun::Worker do
       target_a_queue = Queue.new
       target_b_queue = Queue.new
 
-      allow(pipeline).to receive(:stage_input_queues)
-        .and_return({ broadcast_router => input_queue, target_a_stage => target_a_queue, target_b_stage => target_b_queue })
+      allow(task).to receive(:find_queue).with(broadcast_router).and_return(input_queue)
+      allow(task).to receive(:find_queue).with(target_a_stage).and_return(target_a_queue)
+      allow(task).to receive(:find_queue).with(target_b_stage).and_return(target_b_queue)
       allow(dag).to receive(:upstream).with(broadcast_router).and_return([source_stage])
 
       # Put items and END signal
@@ -261,8 +264,7 @@ RSpec.describe Minigun::Worker do
   describe 'logging' do
     it 'logs when starting' do
       input_queue = Queue.new
-      allow(pipeline).to receive(:stage_input_queues)
-        .and_return({ test_stage: input_queue })
+      allow(task).to receive(:find_queue).with(stage).and_return(input_queue)
 
       input_queue << Minigun::EndOfSource.new(:upstream)
 
@@ -277,8 +279,7 @@ RSpec.describe Minigun::Worker do
 
     it 'logs when done' do
       input_queue = Queue.new
-      allow(pipeline).to receive(:stage_input_queues)
-        .and_return({ test_stage: input_queue })
+      allow(task).to receive(:find_queue).with(stage).and_return(input_queue)
       allow(dag).to receive(:upstream).with(:test_stage).and_return([:upstream])
       allow(dag).to receive(:downstream).with(:test_stage).and_return([])
 
