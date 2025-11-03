@@ -202,8 +202,23 @@ module Minigun
         _with_execution_context(context, &)
       end
 
+      # Alias for threads - more explicit naming
+      alias_method :thread_pool, :threads
+
       def processes(pool_size, &)
-        context = { type: :cow_forks, pool_size: pool_size, mode: :pool }
+        context = { type: :cow_fork, pool_size: pool_size, mode: :pool }
+        _with_execution_context(context, &)
+      end
+
+      # COW fork pool - explicit naming for copy-on-write forking
+      def cow_fork(pool_size, &)
+        context = { type: :cow_fork, pool_size: pool_size, mode: :pool }
+        _with_execution_context(context, &)
+      end
+
+      # IPC fork pool - explicit naming for IPC-based forking
+      def ipc_fork(pool_size, &)
+        context = { type: :ipc_fork, pool_size: pool_size, mode: :pool }
         _with_execution_context(context, &)
       end
 
@@ -218,7 +233,7 @@ module Minigun
       end
 
       def process_per_batch(max:, &)
-        context = { type: :cow_forks, max: max, mode: :per_batch }
+        context = { type: :cow_fork, max: max, mode: :per_batch }
         _with_execution_context(context, &)
       end
 

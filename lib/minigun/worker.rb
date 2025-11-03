@@ -136,6 +136,7 @@ module Minigun
       case type
       when :thread then @config[:max_threads] || 5
       when :cow_fork then @config[:max_processes] || 2
+      when :ipc_fork then @config[:max_processes] || 2
       when :ractor then @config[:max_ractors] || 4
       else 5
       end
