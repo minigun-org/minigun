@@ -253,14 +253,8 @@ module Minigun
 
             # Child process has inherited item via COW
             # Execute the stage's block on this single item
-            # Create a capture queue to collect results written to output_queue
-            capture_queue = Queue.new
-            capture_output = Minigun::OutputQueue.new(
-              stage,
-              [capture_queue],
-              {},
-              stage_stats: stage_stats
-            )
+            # Use IPC-backed output queue for routing support
+            capture_output = Minigun::IpcOutputQueue.new(writer, stage_stats)
 
             # Execute stage block with item and capture output queue
             start_time = Time.now if stage_stats
@@ -271,19 +265,8 @@ module Minigun
             end
             stage_stats&.record_latency(Time.now - start_time) if stage_stats
 
-            # Collect all results written to capture queue
-            results = []
-            loop do
-              result = capture_queue.pop(true)  # non_block = true
-              results << result
-            rescue ThreadError
-              break
-            end
-
-            # Send first result (or nil if none) back to parent via IPC pipe
-            # For multiple results, we send them as an array
-            result_to_send = results.size == 1 ? results.first : (results.empty? ? nil : results)
-            write_result_to_pipe(result_to_send, writer)
+            # Results already sent via IpcOutputQueue during execution
+            # Just close the pipe to signal completion
           rescue => e
             # Send error back to parent via IPC
             write_error_to_pipe(e, writer)
@@ -340,11 +323,15 @@ module Minigun
 
             begin
               if process_status.success?
-                # Read result from child via IPC pipe
-                read_result_from_pipe(reader, output_queue)
+                # Read all results from child via IPC pipe (may be multiple with routing)
+                loop do
+                  read_result_from_pipe(reader, output_queue, @stage_ctx)
+                end
               else
                 warn "[Minigun] COW forked process #{pid} failed with status: #{process_status.exitstatus}"
               end
+            rescue EOFError, IOError
+              # Normal - child closed pipe after sending results
             ensure
               reader.close rescue nil
             end
@@ -496,7 +483,7 @@ module Minigun
           result_threads << Thread.new do
             begin
               loop do
-                read_result_from_pipe(worker[:from_worker], output_queue)
+                read_result_from_pipe(worker[:from_worker], output_queue, @stage_ctx)
               end
             rescue EOFError, IOError => e
               # Worker closed pipe, done (suppress warnings for normal EOF)
