@@ -1473,8 +1473,10 @@ RSpec.describe 'Examples Integration' do
       expect(example.results.map { |r| r[:id] }.sort).to eq((1..10).to_a)
 
       # Multiple IPC workers should have been used
-      pids = example.results.map { |r| r[:pid] }.uniq
-      expect(pids.size).to be >= 2
+      if Minigun.fork?
+        pids = example.results.map { |r| r[:pid] }.uniq
+        expect(pids.size).to be >= 2
+      end
 
       example.cleanup
     end
@@ -1508,8 +1510,10 @@ RSpec.describe 'Examples Integration' do
       expect(example.results.map { |r| r[:id] }.sort).to eq((1..10).to_a)
 
       # COW forks create many ephemeral processes
-      pids = example.results.map { |r| r[:pid] }.uniq
-      expect(pids.size).to be >= 2
+      if Minigun.fork?
+        pids = example.results.map { |r| r[:pid] }.uniq
+        expect(pids.size).to be >= 2
+      end
 
       example.cleanup
     end
