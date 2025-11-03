@@ -57,10 +57,10 @@ class YieldWithClassesExample
     custom_stage(ParityRouter, :route_by_parity, from: :generate)
 
     # Use custom processor stages
-    # (:await option is not needed because these will receive
-    # normally-routed EndOfStage signals when their upstreams finish.)
-    custom_stage(EvenProcessor, :process_even)
-    custom_stage(OddProcessor, :process_odd)
+    # Note: These stages receive items via dynamic routing (yield with to:)
+    # so they need await: true to wait for items
+    custom_stage(EvenProcessor, :process_even, await: true)
+    custom_stage(OddProcessor, :process_odd, await: true)
 
     # Collect even results (still using block syntax - both work!)
     consumer :collect_even, from: :process_even do |item|

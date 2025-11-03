@@ -207,7 +207,7 @@ RSpec.describe 'Yield Syntax Support' do
   describe 'yield with routing' do
     # Known limitation: stages with only dynamically-routed inputs don't wait for input
     # This is tracked separately as a general dynamic routing limitation
-    it 'supports yield(item, to: :stage_name) - known limitation with dynamic routing', skip: 'Known limitation with dynamic routing' do
+    it 'supports yield(item, to: :stage_name)' do
       router_stage = Class.new(Minigun::ConsumerStage) do
         def call(item, _output)
           if item.even?
@@ -249,8 +249,9 @@ RSpec.describe 'Yield Syntax Support' do
             5.times { |i| output << i }
           end
           custom_stage(router_stage, :router)
-          custom_stage(even_processor_stage, :even_processor)
-          custom_stage(odd_processor_stage, :odd_processor)
+          # These stages receive items via dynamic routing (yield with to:)
+          custom_stage(even_processor_stage, :even_processor, await: true)
+          custom_stage(odd_processor_stage, :odd_processor, await: true)
           consumer :collect_even, from: :even_processor do |item|
             mutex.synchronize { even_results << item }
           end
@@ -261,8 +262,8 @@ RSpec.describe 'Yield Syntax Support' do
       end
 
       example_class.new.run
-      expect(even_results.sort).to eq([0, 4, 8])
-      expect(odd_results.sort).to eq([3, 9, 15])
+      expect(even_results.sort).to eq([0, 4, 8])  # 0*2, 2*2, 4*2
+      expect(odd_results.sort).to eq([3, 9])  # 1*3, 3*3
     end
   end
 
