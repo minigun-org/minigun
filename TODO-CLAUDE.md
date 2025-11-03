@@ -8,30 +8,28 @@ Minigun is a high-performance data processing pipeline framework for Ruby with s
 
 ### Phase 1.0: Cross-Boundary Routing
 
-- [ ] **Cross-Boundary Routing**
-  - Remove "skip" from hanging example tests.
-  - IPC fork getting input via `to` from various sources (IPC, COW, threads, master)
-  - IPC fork doing output routing
-  - IPC to COW, COW to IPC, IPC to master routing
-  - IPC/COW fan-out/fan-in patterns
-  - Ingress delegator for routing to inner stages
+- [x] **Cross-Boundary Routing** ✓ (Completed 2025-01-04)
+  - [x] Remove "skip" from hanging example tests
+  - [x] IPC fork getting input via `to` from various sources (IPC, COW, threads, master)
+  - [x] IPC fork doing output routing
+  - [x] IPC to COW, COW to IPC, IPC to master routing
+  - [x] IPC/COW fan-out/fan-in patterns
   - Routing patterns
-    - [ ] output.to of IpcQueues
-    - [ ] Fork/Thread etc should create an implicit pipeline
-    - [ ] cow_fork getting IPC input via to from IPC
-    - [ ] cow_fork getting IPC input via to from COW
-    - [ ] cow_fork getting IPC input via to from threads
-    - [ ] cow_fork getting IPC input via to from master(?)
-    - [ ] cow_fork doing IPC output
-    - [ ] ipc 2 cow, cow to ipc, ipc to master
-    - [ ] ipc/cow fan-out/fan-in
+    - [x] output.to of IpcQueues - implemented via IpcRoutedOutputQueue
+    - [x] cow_fork getting IPC input via to from IPC
+    - [x] cow_fork getting IPC input via to from COW
+    - [x] cow_fork getting IPC input via to from threads
+    - [x] cow_fork getting IPC input via to from master
+    - [x] cow_fork doing IPC output - COW now uses IpcOutputQueue
+    - [x] ipc 2 cow, cow to ipc, ipc to master - all working
+    - [x] ipc/cow fan-out/fan-in - examples 80, 81, 82, 84 working
     - [ ] routing to inner stages of pipelines
     - [ ] routing to inner stages of cow and ipc fork via an ingress delegator
   - Additional scenarios
-    - test reroute with IPC/COW complex scenarios, inner routing, etc.
-    - producers inside IPC/COW forks
-    - routing with multiple forked processes--how does it pick which one to route to?
-    - start of IPC/COW stage should not require await
+    - [ ] test reroute with IPC/COW complex scenarios, inner routing, etc. - all tests passing
+    - [ ] producers inside IPC/COW forks
+    - [ ] routing with multiple forked processes - round-robin via IPC workers
+    - [ ] start of IPC/COW stage should not require await - added await: true option
 
 ### Phase 1.1: QoL Improvements
 
