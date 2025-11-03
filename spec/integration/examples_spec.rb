@@ -1475,7 +1475,7 @@ RSpec.describe 'Examples Integration' do
   # Phase 1.0: Cross-Boundary Routing Examples (70-88)
 
   describe '70_thread_to_ipc_fork.rb' do
-    it 'routes from thread pool to IPC fork (terminal consumer)' do
+    it 'routes from thread pool to IPC fork (terminal consumer)', skip: !Minigun.fork? do
       load File.expand_path('../../examples/70_thread_to_ipc_fork.rb', __dir__)
 
       example = ThreadToIpcForkExample.new
@@ -1512,7 +1512,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '72_thread_to_cow_fork.rb' do
-    it 'routes from thread pool to COW fork (terminal consumer)' do
+    it 'routes from thread pool to COW fork (terminal consumer)', skip: !Minigun.fork? do
       load File.expand_path('../../examples/72_thread_to_cow_fork.rb', __dir__)
 
       example = ThreadToCowForkExample.new
@@ -1611,7 +1611,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '78_master_to_ipc_via_to.rb' do
-    it 'routes from master to IPC fork via output.to()' do
+    it 'routes from master to IPC fork via output.to()', skip: !Minigun.fork? do
       load File.expand_path('../../examples/78_master_to_ipc_via_to.rb', __dir__)
 
       example = MasterToIpcViaToExample.new
@@ -1628,7 +1628,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '79_master_to_cow_via_to.rb' do
-    it 'routes from master to COW fork via output.to()' do
+    it 'routes from master to COW fork via output.to()', skip: !Minigun.fork? do
       load File.expand_path('../../examples/79_master_to_cow_via_to.rb', __dir__)
 
       example = MasterToCowViaToExample.new
@@ -1647,7 +1647,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '80_ipc_fan_out.rb' do
-    it 'demonstrates IPC fork fan-out pattern' do
+    it 'demonstrates IPC fork fan-out pattern', skip: !Minigun.fork? do
       load File.expand_path('../../examples/80_ipc_fan_out.rb', __dir__)
 
       example = IpcFanOutExample.new
@@ -1665,7 +1665,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '81_ipc_fan_in.rb' do
-    it 'demonstrates IPC fork fan-in pattern' do
+    it 'demonstrates IPC fork fan-in pattern', skip: !Minigun.fork? do
       load File.expand_path('../../examples/81_ipc_fan_in.rb', __dir__)
 
       example = IpcFanInExample.new
@@ -1682,7 +1682,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '82_cow_fan_out.rb' do
-    it 'demonstrates COW fork fan-out pattern' do
+    it 'demonstrates COW fork fan-out pattern', skip: !Minigun.fork? do
       load File.expand_path('../../examples/82_cow_fan_out.rb', __dir__)
 
       example = CowFanOutExample.new
@@ -1702,7 +1702,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '83_cow_fan_in.rb' do
-    it 'demonstrates COW fork fan-in pattern' do
+    it 'demonstrates COW fork fan-in pattern', skip: !Minigun.fork? do
       load File.expand_path('../../examples/83_cow_fan_in.rb', __dir__)
 
       example = CowFanInExample.new
@@ -1721,7 +1721,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '84_mixed_ipc_cow_fan_out.rb' do
-    it 'demonstrates mixed IPC/COW fork fan-out' do
+    it 'demonstrates mixed IPC/COW fork fan-out', skip: !Minigun.fork? do
       load File.expand_path('../../examples/84_mixed_ipc_cow_fan_out.rb', __dir__)
 
       example = MixedIpcCowFanOutExample.new
@@ -1758,7 +1758,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '86_ipc_spawns_nested_cow.rb' do
-    it 'demonstrates IPC workers spawning nested COW forks' do
+    it 'demonstrates IPC workers spawning nested COW forks', skip: !Minigun.fork? do
       load File.expand_path('../../examples/86_ipc_spawns_nested_cow.rb', __dir__)
 
       example = IpcSpawnsNestedCowExample.new
@@ -1778,7 +1778,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '87_cow_spawns_nested_ipc.rb' do
-    it 'demonstrates COW forks spawning nested IPC workers' do
+    it 'demonstrates COW forks spawning nested IPC workers', skip: !Minigun.fork? do
       load File.expand_path('../../examples/87_cow_spawns_nested_ipc.rb', __dir__)
 
       example = CowSpawnsNestedIpcExample.new
