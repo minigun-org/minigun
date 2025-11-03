@@ -1321,7 +1321,19 @@ RSpec.describe 'Examples Integration' do
       example.run
 
       expect(example.even_results.sort).to eq([0, 4, 8, 12, 16])
-      # NOTE: odd_results may be empty due to routing issue, but that's tracked separately
+      expect(example.odd_results.sort).to eq([3, 9, 15, 21, 27])
+    end
+  end
+
+  describe '69_yield_routing.rb' do
+    it 'demonstrates yield with dynamic routing using to: parameter' do
+      load File.expand_path('../../examples/69_yield_routing.rb', __dir__)
+
+      example = YieldRoutingExample.new
+      example.run
+
+      expect(example.even_results.sort).to eq([0, 4, 8, 12, 16])
+      expect(example.odd_results.sort).to eq([3, 9, 15, 21, 27])
     end
   end
 
