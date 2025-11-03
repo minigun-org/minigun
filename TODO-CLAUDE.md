@@ -34,6 +34,8 @@ Minigun is a high-performance data processing pipeline framework for Ruby with s
 - [ ] child culling (look at puma)
 - [ ] supervision tree of processes
 - [ ] htop-like monitoring dashboard (CLI)
+- [ ] Interactive examples in web docs
+- [ ] ASCII art drawing of tree
 
 - [ ] **Hooks** (fork, stage, nesting)
 
