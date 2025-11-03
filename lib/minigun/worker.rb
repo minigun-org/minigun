@@ -64,10 +64,9 @@ module Minigun
       # If has upstream, no special handling needed
       return false if has_upstream
 
-      # Stage is DAG-disconnected - might be:
-      # 1. Truly disconnected (a pipeline definition bug)
-      # 2. Reached via explicit routing (output.to(:stage_name))
-      #
+      # Stage has no DAG upstream - two possible scenarios:
+      # 1. Truly disconnected (pipeline bug, should fail fast)
+      # 2. Dynamic routing target (receives items via output.to(:stage_name))
       # Use await: option to control behavior
       await = @stage.options[:await]
 
