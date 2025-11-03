@@ -199,6 +199,9 @@ module Minigun
       raise Minigun::Error, "[Pipeline:#{@name}] Cannot find stage: #{from_stage}" unless from_obj
 
       # Remove existing outgoing edges from this stage
+      # NOTE: We defer the edges-building until DAG is finalized
+      # So we need to use @deferred_edges to track what to remove
+      # But for now, let's just remove directly from edges if they exist
       old_targets = @dag.downstream(from_obj).dup
       old_targets.each do |target|
         @dag.edges[from_obj].delete(target)
@@ -211,6 +214,9 @@ module Minigun
         raise Minigun::Error, "[Pipeline:#{@name}] Cannot find stage: #{target}" unless target_obj
         @dag.add_edge(from_obj, target_obj)
       end
+
+      # NOTE: We cannot determine disconnected stages here because DAG might not be fully built yet
+      # The await: false marking happens later in apply_await_to_disconnected_stages!
     end
 
     # Add a pipeline-level hook
@@ -443,7 +449,34 @@ module Minigun
       @dag.validate!
       validate_stages_exist!
 
+      # Apply await: false to stages that are fully disconnected (no upstreams)
+      # This handles rerouted stages and other disconnected scenarios
+      apply_await_to_disconnected_stages!
+
       log_debug "#{log_prefix} DAG: #{@dag.topological_sort.map(&:name).join(' -> ')}"
+    end
+
+    def apply_await_to_disconnected_stages!
+      # After DAG is fully built, check for stages with no upstreams
+      # These are either:
+      # 1. Producers (expected to have no upstreams)
+      # 2. Rerouted stages (should shutdown immediately)
+      # 3. Intentionally disconnected for dynamic routing (need await: true)
+
+      @stages.each do |stage|
+        # Skip producers - they're supposed to have no upstreams
+        next if stage.run_mode == :autonomous
+
+        # Check if stage has any upstreams
+        upstreams = @dag.upstream(stage)
+        next unless upstreams.empty?
+
+        # Stage has no upstreams - mark for immediate shutdown unless explicitly configured
+        unless stage.options.key?(:await)
+          stage.options[:await] = false
+          Minigun.logger.debug "[Pipeline:#{@name}] Stage #{stage.name} has no DAG upstreams, auto-set await: false"
+        end
+      end
     end
 
     def validate_stages_exist!

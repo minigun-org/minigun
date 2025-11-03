@@ -1832,6 +1832,33 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
+  describe '91_complex_reroute.rb' do
+    it 'demonstrates complex rerouting with multiple upstreams' do
+      load File.expand_path('../../examples/91_complex_reroute.rb', __dir__)
+
+      # Base pipeline: both producers feed merger + a_only processes producer_a
+      base = ComplexRerouteExample.new
+      base.run
+      expect(base.results.size).to eq(9)
+      expect(base.results.count { |r| !r[:processed_by] }).to eq(6) # From merger
+      expect(base.results.count { |r| r[:processed_by] == 'a_only' }).to eq(3)
+
+      # Reroute one upstream: merger still runs with producer_b
+      reroute_one = RerouteOneUpstreamExample.new
+      reroute_one.run
+      expect(reroute_one.results.size).to eq(6)
+      expect(reroute_one.results.count { |r| !r[:processed_by] }).to eq(3) # Merger still processes producer_b
+      expect(reroute_one.results.count { |r| r[:processed_by] == 'a_only' }).to eq(3)
+
+      # Reroute both upstreams: merger and a_only shut down immediately
+      reroute_both = RerouteBothUpstreamsExample.new
+      reroute_both.run
+      expect(reroute_both.results.size).to eq(6)
+      # All items go directly from producers to collect (no processing - no merged_at, no processed_by)
+      expect(reroute_both.results.all? { |r| !r[:merged_at] && !r[:processed_by] }).to be true
+    end
+  end
+
   # Coverage check: ensure all example files have tests
   describe 'Example Coverage' do
     it 'has tests for all example files' do
