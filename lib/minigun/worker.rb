@@ -70,14 +70,24 @@ module Minigun
       # Use await: option to control behavior
       await = @stage.options[:await]
 
+      # Auto-await for fork/IPC stages (commonly used for dynamic routing)
+      exec_ctx = @stage.execution_context
+      is_fork_stage = exec_ctx && %i[ipc_fork cow_fork].include?(exec_ctx[:type])
+
       case await
       when nil
-        # Default: warn + 5 second timeout
-        log_warning "Stage has no DAG upstream connections, using default 5s await timeout. " \
-                    "If this is intentional (dynamic routing via output.to(:#{@stage_name})), " \
-                    "consider setting 'await: true'. " \
-                    "If unintentional, check your pipeline routing."
-        wait_for_first_item(timeout: 5, stage_ctx: stage_ctx)
+        if is_fork_stage
+          # Fork stages with no upstream automatically await (common pattern for output.to routing)
+          log_debug 'Fork stage with no DAG upstream, awaiting items indefinitely (auto-await)'
+          false
+        else
+          # Default: warn + 5 second timeout
+          log_warning "Stage has no DAG upstream connections, using default 5s await timeout. " \
+                      "If this is intentional (dynamic routing via output.to(:#{@stage_name})), " \
+                      "consider setting 'await: true'. " \
+                      "If unintentional, check your pipeline routing."
+          wait_for_first_item(timeout: 5, stage_ctx: stage_ctx)
+        end
 
       when true
         # Explicit infinite wait - no warning, no timeout
