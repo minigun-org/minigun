@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'timeout'
+
 module Minigun
   # Unified worker for all stage types (producers and consumers)
   # Manages thread lifecycle and delegates to stage.run_stage()
@@ -57,24 +59,98 @@ module Minigun
       # Only check streaming stages (autonomous and composite manage their own execution)
       return false unless @stage.run_mode == :streaming
 
-      # If no upstream sources, this stage is disconnected
-      if stage_ctx.sources_expected.empty?
-        log_debug 'No upstream sources, sending END signals and exiting'
+      # Check if stage has DAG upstream connections
+      has_upstream = !stage_ctx.sources_expected.empty?
 
-        # Send EndOfSource to all downstream stages so they don't deadlock
-        # DAG and queues now use Stage objects
-        task = stage_ctx.stage.task
-        downstream = stage_ctx.dag.downstream(stage_ctx.stage)
-        downstream.each do |target|
-          queue = task&.find_queue(target)
-          queue&.<< EndOfSource.new(stage_ctx.stage)
+      # If has upstream, no special handling needed
+      return false if has_upstream
+
+      # Stage is DAG-disconnected - might be:
+      # 1. Truly disconnected (a pipeline definition bug)
+      # 2. Reached via explicit routing (output.to(:stage_name))
+      #
+      # Use await: option to control behavior
+      await = @stage.options[:await]
+
+      case await
+      when nil
+        # Default: warn + 5 second timeout
+        log_warning "Stage has no DAG upstream connections, using default 5s await timeout. " \
+                    "If this is intentional (dynamic routing via output.to(:#{@stage_name})), " \
+                    "consider setting 'await: true'. " \
+                    "If unintentional, check your pipeline routing."
+        wait_for_first_item(timeout: 5, stage_ctx: stage_ctx)
+
+      when true
+        # Explicit infinite wait - no warning, no timeout
+        log_debug 'Awaiting items indefinitely (await: true)'
+        false
+
+      when false
+        # Explicit immediate shutdown - no warning
+        log_debug 'Shutting down immediately (await: false, no DAG upstream)'
+        graceful_shutdown(stage_ctx)
+        true
+
+      when Integer, Float
+        # Explicit timeout - no warning
+        log_debug "Awaiting items with #{await}s timeout (await: #{await})"
+        wait_for_first_item(timeout: await, stage_ctx: stage_ctx)
+
+      else
+        log_error "Invalid await option: #{await.inspect}. Expected: true, false, or number. Using default 5s timeout."
+        wait_for_first_item(timeout: 5, stage_ctx: stage_ctx)
+      end
+    end
+
+    # Wait for first item to arrive via dynamic routing
+    # Returns true if timed out (should shutdown), false if item received (continue)
+    def wait_for_first_item(timeout:, stage_ctx:)
+      input_queue = stage_ctx.input_queue
+      raw_queue = input_queue.instance_variable_get(:@queue)
+
+      # Try to pop with timeout using Timeout module
+      begin
+        Timeout.timeout(timeout) do
+          # Use Queue's non-blocking pop with a loop and small sleep
+          # to avoid spinning while still being responsive
+          loop do
+            begin
+              # Try non-blocking pop
+              item = raw_queue.pop(true)
+              # Got an item! Push it back so run_stage can process it
+              raw_queue.push(item)
+              log_debug "Received item within #{timeout}s timeout, continuing normal operation"
+              return false
+            rescue ThreadError
+              # Queue is empty, sleep briefly and retry
+              sleep 0.1
+            end
+          end
         end
-
-        log_debug 'Done'
+      rescue Timeout::Error
+        # Timeout expired with no items
+        log_debug "Timeout after #{timeout}s with no items, shutting down gracefully"
+        graceful_shutdown(stage_ctx)
         return true
       end
+    end
 
-      false
+    # Gracefully shutdown stage by sending END signals to downstream
+    def graceful_shutdown(stage_ctx)
+      log_debug 'Sending END signals to downstream stages'
+
+      # Send EndOfSource to all downstream stages so they don't deadlock
+      task = stage_ctx.stage.task
+      dag = stage_ctx.dag
+      downstream = dag.downstream(stage_ctx.stage)
+
+      downstream.each do |target|
+        queue = task&.find_queue(target)
+        queue&.<< EndOfSource.new(stage_ctx.stage)
+      end
+
+      log_debug 'Graceful shutdown complete'
     end
 
     def create_stage_context
@@ -144,6 +220,10 @@ module Minigun
 
     def log_debug(msg)
       Minigun.logger.debug "[Pipeline:#{@pipeline.name}][#{@stage.log_type}:#{@stage_name}] #{msg}"
+    end
+
+    def log_warning(msg)
+      Minigun.logger.warn "[Pipeline:#{@pipeline.name}][#{@stage.log_type}:#{@stage_name}] #{msg}"
     end
 
     def log_error(msg)
