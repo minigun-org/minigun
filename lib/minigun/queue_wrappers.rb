@@ -142,6 +142,41 @@ module Minigun
 
   # IPC-backed output queue that writes results back to parent via IPC pipe
   # Used by IpcForkPoolExecutor workers to send results to parent process
+  # Wrapper for IPC output that encodes routing information
+  class IpcRoutedOutputQueue
+    def initialize(pipe_writer, stage_stats, target_stage)
+      @pipe_writer = pipe_writer
+      @stage_stats = stage_stats
+      @target_stage = target_stage
+    end
+
+    def <<(item)
+      # Send result with routing target back to parent via IPC
+      begin
+        Marshal.dump({
+          type: :routed_result,
+          target: @target_stage,
+          result: item
+        }, @pipe_writer)
+        @pipe_writer.flush
+        @stage_stats&.increment_produced
+      rescue TypeError, ArgumentError => e
+        Minigun.logger.warn "[Minigun] Cannot serialize routed result for IPC: #{e.message}"
+        begin
+          Marshal.dump({
+            type: :serialization_error,
+            error: "Cannot serialize result: #{e.message}",
+            item_type: item.class.to_s
+          }, @pipe_writer)
+          @pipe_writer.flush
+        rescue
+          raise
+        end
+      end
+      self
+    end
+  end
+
   class IpcOutputQueue
     def initialize(pipe_writer, stage_stats)
       @pipe_writer = pipe_writer
@@ -178,10 +213,10 @@ module Minigun
       self
     end
 
-    def to(_target_stage)
-      # For IPC workers, routing is handled by parent process
-      # Just return self as a proxy
-      self
+    def to(target_stage)
+      # For IPC workers, routing must be encoded in the result
+      # Return a wrapper that includes routing information
+      IpcRoutedOutputQueue.new(@pipe_writer, @stage_stats, target_stage)
     end
 
     def to_proc

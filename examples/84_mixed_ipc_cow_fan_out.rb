@@ -23,11 +23,14 @@ class MixedIpcCowFanOutExample
     @results_ipc_a = []
     @results_ipc_c = []
     @results_cow_b = []
-    @mutex = Mutex.new
-    @results_cow_file = "/tmp/minigun_mixed_fan_out_cow_#{Process.pid}.txt"
+    @results_ipc_a_file = "/tmp/minigun_84_ipc_a_#{Process.pid}.txt"
+    @results_ipc_c_file = "/tmp/minigun_84_ipc_c_#{Process.pid}.txt"
+    @results_cow_file = "/tmp/minigun_84_cow_b_#{Process.pid}.txt"
   end
 
   def cleanup
+    File.unlink(@results_ipc_a_file) if File.exist?(@results_ipc_a_file)
+    File.unlink(@results_ipc_c_file) if File.exist?(@results_ipc_c_file)
     File.unlink(@results_cow_file) if File.exist?(@results_cow_file)
   end
 
@@ -60,20 +63,22 @@ class MixedIpcCowFanOutExample
 
     # IPC fork consumer A (persistent workers)
     ipc_fork(1) do
-      consumer :process_ipc_a do |item|
+      consumer :process_ipc_a, await: true do |item|
         pid = Process.pid
         puts "[ProcessIpcA:ipc_fork] Processing #{item[:id]} in persistent worker PID #{pid}"
         sleep 0.03
 
-        @mutex.synchronize do
-          @results_ipc_a << item.merge(worker_pid: pid, fork_type: 'IPC')
+        File.open(@results_ipc_a_file, 'a') do |f|
+          f.flock(File::LOCK_EX)
+          f.puts "#{item[:id]}:#{item[:routed_to]}:#{pid}:IPC"
+          f.flock(File::LOCK_UN)
         end
       end
     end
 
     # COW fork consumer B (ephemeral forks)
     cow_fork(2) do
-      consumer :process_cow_b do |item|
+      consumer :process_cow_b, await: true do |item|
         pid = Process.pid
         puts "[ProcessCowB:cow_fork] Processing #{item[:id]} in ephemeral fork PID #{pid}"
         sleep 0.03
@@ -81,7 +86,7 @@ class MixedIpcCowFanOutExample
         # COW-shared input, write to file
         File.open(@results_cow_file, 'a') do |f|
           f.flock(File::LOCK_EX)
-          f.puts "#{item[:id]}:#{pid}:COW"
+          f.puts "#{item[:id]}:#{item[:routed_to]}:#{pid}:COW"
           f.flock(File::LOCK_UN)
         end
       end
@@ -89,23 +94,39 @@ class MixedIpcCowFanOutExample
 
     # IPC fork consumer C (persistent workers)
     ipc_fork(1) do
-      consumer :process_ipc_c do |item|
+      consumer :process_ipc_c, await: true do |item|
         pid = Process.pid
         puts "[ProcessIpcC:ipc_fork] Processing #{item[:id]} in persistent worker PID #{pid}"
         sleep 0.03
 
-        @mutex.synchronize do
-          @results_ipc_c << item.merge(worker_pid: pid, fork_type: 'IPC')
+        File.open(@results_ipc_c_file, 'a') do |f|
+          f.flock(File::LOCK_EX)
+          f.puts "#{item[:id]}:#{item[:routed_to]}:#{pid}:IPC"
+          f.flock(File::LOCK_UN)
         end
       end
     end
 
     after_run do
-      # Read COW results from temp file
+      # Read results from temp files
+      if File.exist?(@results_ipc_a_file)
+        @results_ipc_a = File.readlines(@results_ipc_a_file).map do |line|
+          id, routed_to, worker_pid, fork_type = line.strip.split(':')
+          { id: id.to_i, routed_to: routed_to, worker_pid: worker_pid.to_i, fork_type: fork_type }
+        end
+      end
+
       if File.exist?(@results_cow_file)
         @results_cow_b = File.readlines(@results_cow_file).map do |line|
-          id, pid, fork_type = line.strip.split(':')
-          { id: id.to_i, worker_pid: pid.to_i, fork_type: fork_type }
+          id, routed_to, worker_pid, fork_type = line.strip.split(':')
+          { id: id.to_i, routed_to: routed_to, worker_pid: worker_pid.to_i, fork_type: fork_type }
+        end
+      end
+
+      if File.exist?(@results_ipc_c_file)
+        @results_ipc_c = File.readlines(@results_ipc_c_file).map do |line|
+          id, routed_to, worker_pid, fork_type = line.strip.split(':')
+          { id: id.to_i, routed_to: routed_to, worker_pid: worker_pid.to_i, fork_type: fork_type }
         end
       end
     end

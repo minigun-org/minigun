@@ -30,6 +30,8 @@ Minigun is a high-performance data processing pipeline framework for Ruby with s
   - Additional scenarios
     - test reroute with IPC/COW complex scenarios, inner routing, etc.
     - producers inside IPC/COW forks
+    - routing with multiple forked processes--how does it pick which one to route to?
+    - start of IPC/COW stage should not require await
 
 ### Phase 1.1: QoL Improvements
 

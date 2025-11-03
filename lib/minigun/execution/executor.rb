@@ -102,7 +102,7 @@ module Minigun
       end
 
       # Read result from child via IPC pipe
-      def read_result_from_pipe(reader, output_queue)
+      def read_result_from_pipe(reader, output_queue, stage_ctx = nil)
         response = Marshal.load(reader)
         case response[:type]
         when :result
@@ -112,6 +112,33 @@ module Minigun
             result.each { |item| output_queue << item }
           elsif !result.nil?
             output_queue << result
+          end
+        when :routed_result
+          # Handle explicitly routed result from IPC worker
+          target = response[:target]
+          result = response[:result]
+          if stage_ctx && target
+            # Route to specific target stage
+            task = stage_ctx.stage.task
+            target_stage = task.stage_registry.find(target, from_pipeline: stage_ctx.stage.pipeline)
+            if target_stage
+              target_queue = task.find_queue(target_stage)
+              if target_queue
+                target_queue << result
+                # Track runtime edge for END signal handling
+                runtime_edges = stage_ctx.runtime_edges
+                runtime_edges[stage_ctx.stage] ||= Set.new
+                runtime_edges[stage_ctx.stage].add(target_stage)
+              else
+                warn "[Minigun] Target queue not found for routed result: #{target}"
+                output_queue << result # Fallback to default output
+              end
+            else
+              warn "[Minigun] Target stage not found for routed result: #{target}"
+              output_queue << result # Fallback to default output
+            end
+          else
+            output_queue << result # Fallback if no routing context
           end
         when :error
           error_msg = response[:error] || "Unknown error in forked process"

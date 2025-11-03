@@ -21,7 +21,11 @@ class IpcFanInExample
 
   def initialize
     @results = []
-    @mutex = Mutex.new
+    @results_file = "/tmp/minigun_81_ipc_#{Process.pid}.txt"
+  end
+
+  def cleanup
+    File.unlink(@results_file) if File.exist?(@results_file)
   end
 
   pipeline do
@@ -55,8 +59,20 @@ class IpcFanInExample
         puts "[Aggregator:ipc_fork] Processing #{item[:id]} from #{item[:source]} in PID #{pid}"
         sleep 0.03
 
-        @mutex.synchronize do
-          @results << item.merge(worker_pid: pid)
+        File.open(@results_file, 'a') do |f|
+          f.flock(File::LOCK_EX)
+          f.puts "#{item[:id]}:#{item[:value]}:#{item[:source]}:#{pid}"
+          f.flock(File::LOCK_UN)
+        end
+      end
+    end
+
+    after_run do
+      # Read results from temp file
+      if File.exist?(@results_file)
+        @results = File.readlines(@results_file).map do |line|
+          id, value, source, worker_pid = line.strip.split(':')
+          { id: id, value: value.to_i, source: source, worker_pid: worker_pid.to_i }
         end
       end
     end
@@ -105,5 +121,7 @@ if __FILE__ == $PROGRAM_NAME
   rescue NotImplementedError => e
     puts "\nForking not available on this platform: #{e.message}"
     puts "(This is expected on Windows)"
+  ensure
+    example.cleanup
   end
 end
