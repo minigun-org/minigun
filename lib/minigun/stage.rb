@@ -9,7 +9,6 @@ module Minigun
     :stage,
     :dag,
     :runtime_edges,
-    :stage_input_queues,
     :stage_stats,
     # Worker-specific (nil/empty for producers)
     :worker,
@@ -162,11 +161,11 @@ module Minigun
     def create_output_queue(stage_ctx)
       # DAG and queues now use Stage objects
       downstream = stage_ctx.dag.downstream(stage_ctx.stage)
-      downstream_queues = downstream.filter_map { |ds| stage_ctx.stage_input_queues[ds] }
+      task = stage_ctx.stage.task
+      downstream_queues = downstream.filter_map { |ds| task&.find_queue(ds) }
       OutputQueue.new(
         stage_ctx.stage,
         downstream_queues,
-        stage_ctx.stage_input_queues,
         stage_ctx.runtime_edges,
         stage_stats: stage_ctx.stage_stats
       )
@@ -177,11 +176,13 @@ module Minigun
       dag_downstream = stage_ctx.dag.downstream(stage_ctx.stage)
       dynamic_targets = stage_ctx.runtime_edges[stage_ctx.stage].to_a
       all_targets = (dag_downstream + dynamic_targets).uniq
+      task = stage_ctx.stage.task
 
       all_targets.each do |target|
-        next unless stage_ctx.stage_input_queues[target]
+        queue = task&.find_queue(target)
+        next unless queue
 
-        stage_ctx.stage_input_queues[target] << EndOfSource.new(stage_ctx.stage)
+        queue << EndOfSource.new(stage_ctx.stage)
       end
     end
 
@@ -388,8 +389,10 @@ module Minigun
 
     def send_end_signals(worker_ctx)
       # Broadcast EndOfSource to ALL router targets
+      task = worker_ctx.stage.task
       @targets.each do |target|
-        worker_ctx.stage_input_queues[target] << EndOfSource.new(worker_ctx.stage)
+        queue = task&.find_queue(target)
+        queue&.<< EndOfSource.new(worker_ctx.stage)
       end
     end
   end
@@ -397,6 +400,8 @@ module Minigun
   # Broadcast router - sends each item to ALL downstream stages
   class RouterBroadcastStage < RouterStage
     def run_stage(worker_ctx)
+      task = worker_ctx.stage.task
+
       loop do
         item = worker_ctx.input_queue.pop
 
@@ -410,7 +415,8 @@ module Minigun
 
         # Broadcast to all downstream stages (fan-out semantics)
         @targets.each do |target|
-          worker_ctx.stage_input_queues[target] << item
+          queue = task&.find_queue(target)
+          queue&.<< item
         end
       end
     ensure
@@ -421,7 +427,8 @@ module Minigun
   # Round-robin router - distributes items across downstream stages
   class RouterRoundRobinStage < RouterStage
     def run_stage(worker_ctx)
-      target_queues = @targets.map { |target| worker_ctx.stage_input_queues[target] }
+      task = worker_ctx.stage.task
+      target_queues = @targets.map { |target| task&.find_queue(target) }.compact
       round_robin_index = 0
 
       loop do

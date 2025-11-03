@@ -63,9 +63,11 @@ module Minigun
 
         # Send EndOfSource to all downstream stages so they don't deadlock
         # DAG and queues now use Stage objects
+        task = stage_ctx.stage.task
         downstream = stage_ctx.dag.downstream(stage_ctx.stage)
         downstream.each do |target|
-          stage_ctx.stage_input_queues[target] << EndOfSource.new(stage_ctx.stage)
+          queue = task&.find_queue(target)
+          queue&.<< EndOfSource.new(stage_ctx.stage)
         end
 
         log_debug 'Done'
@@ -77,7 +79,7 @@ module Minigun
 
     def create_stage_context
       dag = @pipeline.dag
-      stage_input_queues = @pipeline.stage_input_queues
+      task = @pipeline.task
 
       # Calculate sources for workers (empty for autonomous stages)
       # DAG now uses Stage objects instead of names
@@ -109,10 +111,9 @@ module Minigun
         stage: @stage,
         dag: dag,
         runtime_edges: @pipeline.runtime_edges,
-        stage_input_queues: stage_input_queues,
         stage_stats: stage_stats,
         # Worker-specific (nil/empty for producers)
-        input_queue: stage_input_queues[@stage],
+        input_queue: task&.find_queue(@stage),
         sources_expected: sources_expected,
         sources_done: Set.new
       )

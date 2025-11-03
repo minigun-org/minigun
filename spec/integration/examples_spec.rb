@@ -175,8 +175,6 @@ RSpec.describe 'Examples Integration' do
 
   describe '07_multi_pipeline_data_processing.rb' do
     it 'processes data through validation and routing pipelines' do
-      skip 'Priority-based routing from within pipeline stages not yet supported'
-
       load File.expand_path('../../examples/07_multi_pipeline_data_processing.rb', __dir__)
 
       processor = DataProcessingPipeline.new
