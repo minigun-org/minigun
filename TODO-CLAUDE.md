@@ -4,45 +4,57 @@
 
 Minigun is a high-performance data processing pipeline framework for Ruby with support for threads, COW forks, and IPC forks. This document outlines a comprehensive enhancement plan based on the current codebase state and TODOS.md.
 
-## Current State Assessment
-
-### Recently Completed ✅
-- ✅ StageRegistry for cross-pipeline routing (#18)
-- ✅ Stage name as first positional argument (#17)
-- ✅ Basic stage refactoring (#14, #15)
-- ✅ JRuby support improvements (#21)
-
-### In Progress / Pending Commit 🔄
-- Multiple example files modified (27_*, 28_*, 31_*, 67_*, 68_*)
-- Unit test updates (stage_registry_spec.rb)
-- Command documentation updates
-
 ## Enhancement Roadmap
 
-### Phase 1: Core Stability & Code Quality (High Priority)
+### Phase 1.0: Cross-Boundary Routing
 
-#### 1.1 Refactoring & Architecture
-**Priority: HIGH**
+- [ ] **Cross-Boundary Routing**
+  - IPC fork getting input via `to` from various sources (IPC, COW, threads, master)
+  - IPC fork doing output routing
+  - IPC to COW, COW to IPC, IPC to master routing
+  - IPC/COW fan-out/fan-in patterns
+  - Ingress delegator for routing to inner stages
+  - Routing patterns
+    - [ ] output.to of IpcQueues
+    - [ ] Fork/Thread etc should create an implicit pipeline
+    - [ ] cow_fork getting IPC input via to from IPC
+    - [ ] cow_fork getting IPC input via to from COW
+    - [ ] cow_fork getting IPC input via to from threads
+    - [ ] cow_fork getting IPC input via to from master(?)
+    - [ ] cow_fork doing IPC output
+    - [ ] ipc 2 cow, cow to ipc, ipc to master
+    - [ ] ipc/cow fan-out/fan-in
+    - [ ] routing to inner stages of pipelines
+    - [ ] routing to inner stages of cow and ipc fork via an ingress delegator
 
-- [ ] **Stage to Worker Refactoring**
-  - Move queue creation from Stage to Worker
-  - Move start/end stats tracking to Worker (need tests for all stage types)
-  - Move error catching to Worker
-  - Move sending of end signals to Worker
-  - Consider making some stages "silent" (no stats logging)
+### Phase 1.1: QoL Improvements
 
-- [ ] **Signal System Cleanup**
-  - Consolidate signal handling patterns
-  - Replace `item.is_a?(AllUpstreamsDone)` checks with consistent pattern
-  - Replace `item.is_a?(Message) && item.end_of_stream?` checks
-  - Consider creating a proper Signal class hierarchy
-  - Convert routing signals `result.is_a?(Hash) && result.key?(:item) && result.key?(:target)` to proper Signal
+- [ ] to_mermaid
+- [ ] signal trapping, child state management/killing
+- [ ] child culling (look at puma)
+- [ ] supervision tree of processes
+- [ ] htop-like monitoring dashboard (CLI)
 
-- [ ] **Internal Stage Names Cleanup**
-  - Remove hardcoded `:_entrance` and `:_exit` names (marked as "YUCK" in todos)
-  - Find better abstraction for entry/exit points
-  - Update router stage naming conventions (currently `*_router` suffix)
+- [ ] **Hooks** (fork, stage, nesting)
 
+- [ ] Add process supervision tree?
+
+- [ ] **IPC Reliability**
+  - Address potential reliability issues with IPC
+  - Add timeout handling
+  - Handle pipe failures gracefully
+  - Stats reporting back to parent process via IPC
+
+- [ ] **Execution Context Improvements**
+  - Implement proposed DSL:
+    ```ruby
+    threads(10) do ... end
+    processes(10) do ... end
+    ractors(10) do ... end
+    thread_per_batch(max: 10) do ... end
+    process_per_batch(max: 10) do ... end
+    ractor_per_batch(max: 10) do ... end
+    ```
 #### 1.2 Error Handling & Reliability
 **Priority: HIGH**
 
@@ -58,12 +70,6 @@ Minigun is a high-performance data processing pipeline framework for Ruby with s
   - Child process culling (reference Puma's implementation)
   - Supervision tree for processes
   - Wait for last forked process to finish properly
-
-- [ ] **IPC Reliability**
-  - Address potential reliability issues with IPC
-  - Add timeout handling
-  - Handle pipe failures gracefully
-  - Stats reporting back to parent process via IPC
 
 ### Phase 2: Features & Functionality (Medium Priority)
 
@@ -93,17 +99,6 @@ Minigun is a high-performance data processing pipeline framework for Ruby with s
   - Add examples for ractor usage
   - Test ractor limitations and workarounds
 
-- [ ] **Execution Context Improvements**
-  - Implement proposed DSL:
-    ```ruby
-    threads(10) do ... end
-    processes(10) do ... end
-    ractors(10) do ... end
-    thread_per_batch(max: 10) do ... end
-    process_per_batch(max: 10) do ... end
-    ractor_per_batch(max: 10) do ... end
-    ```
-
 #### 2.3 Routing & Connectivity
 **Priority: MEDIUM**
 
@@ -113,13 +108,6 @@ Minigun is a high-performance data processing pipeline framework for Ruby with s
   - Routing to inner stages of pipelines (double nested)
   - Ambiguous routing error handling (error unless immediate neighbor)
   - Aliases: `produce_to_stage`, `consume_from_stage`
-
-- [ ] **Cross-Boundary Routing**
-  - IPC fork getting input via `to` from various sources (IPC, COW, threads, master)
-  - IPC fork doing output routing
-  - IPC to COW, COW to IPC, IPC to master routing
-  - IPC/COW fan-out/fan-in patterns
-  - Ingress delegator for routing to inner stages
 
 #### 2.4 Configuration System
 **Priority: MEDIUM**

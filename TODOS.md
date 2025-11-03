@@ -180,72 +180,12 @@ names string/symbol -- always convert to string for referencing
 
 =============================================
 
-Support Cross-Pipeline Routing?
-- use stage identifiers instead of names?
-- Yes! We'd need to:
-- Build a global queue registry in Task or Runner that includes ALL stages from ALL pipelines
-- Pass this global registry to OutputQueue instead of just local stage_input_queues
-- Handle END signals across pipelines (more complex - need to track which pipelines are done)
-- Something like:
-
-  task.pipeline(:foo)
-  task.stages(:bar)
-
-  task.minigun.dag
-
-  task.pipeline(:foo).stage(:bar)
-  task.pipelines
-  task.stages
-
-===============================================
-
 fix DataProcessingPipeline spec
 I see the issue now - when you're inside a pipeline block, the stages within it are part of a PipelineStage which doesn't support output.to(). The output parameter is just an Array for collecting items, not an OutputQueue.
 
-
-============================================
-
-supervision tree of processes
-
-========================================
-
-htop-like monitoring dashboard (CLI)
-
 ====================================
 
-- hooks (fork, stage, nesting)
-- output.to of IpcQueues
-- Fork/Thread etc should create an implicit pipeline
-- cow_fork getting IPC input via to from IPC
-- cow_fork getting IPC input via to from COW
-- cow_fork getting IPC input via to from threads
-- cow_fork getting IPC input via to from master(?)
-- cow_fork doing IPC output
-- ipc 2 cow, cow to ipc, ipc to master
-- ipc/cow fan-out/fan-in
-- routing to inner stages of pipelines
-- routing to inner stages of cow and ipc fork via an ingress delegator
-
 ===================================
-
-        # Skip router stages - they're added during insert_router_stages_for_fan_out
-        # which happens before validation, so they should exist
-        next if node_name.to_s.end_with?('_router')
-
-        # Skip internal stages that are created dynamically
-        next if node_name == :_entrance || node_name == :_exit
-
-        # Skip if it's a hash (shouldn't happen, but defensive)
-        next if node_name.is_a?(Hash)
-
-        unless find_stage(node_name)
-          raise Minigun::Error, "[Pipeline:#{@name}] Routing references non-existent stage '#{node_name}'"
-
-============================
-
-- rename end_of_stage --> end_of_all_upstreams?
-
-==================================
 
 - harden --> add inputoutputstream
 
@@ -265,14 +205,9 @@ This method looks suss:
 - consolidate accumulator and batch
 
 =========================
-
-- signal trapping, child state management/killing
-- child culling (look at puma)
-
 ============================
 
 - mermaid diagrams
-
 
 ==========================
 
