@@ -1807,6 +1807,31 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
+  describe '90_await_modes.rb' do
+    it 'demonstrates different await modes for dynamic routing' do
+      load File.expand_path('../../examples/90_await_modes.rb', __dir__)
+
+      # Test await modes example
+      example1 = AwaitModesExample.new
+      example1.run
+
+      # All stages should receive 3 items each
+      expect(example1.default_results.size).to eq(3)
+      expect(example1.infinite_results.size).to eq(3)
+      expect(example1.custom_results.size).to eq(3)
+      expect(example1.normal_results.size).to eq(3)
+
+      # Test immediate shutdown example
+      example2 = ImmediateShutdownExample.new
+      example2.run
+
+      # Connected stage should receive 1 item
+      expect(example2.connected_results.size).to eq(1)
+      # Disconnected stage should receive 0 items (shuts down immediately)
+      expect(example2.disconnected_results.size).to eq(0)
+    end
+  end
+
   # Coverage check: ensure all example files have tests
   describe 'Example Coverage' do
     it 'has tests for all example files' do

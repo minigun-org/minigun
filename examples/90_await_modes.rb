@@ -118,24 +118,32 @@ end
 class ImmediateShutdownExample
   include Minigun::DSL
 
-  attr_reader :results
+  attr_reader :connected_results, :disconnected_results
 
   def initialize
-    @results = []
+    @connected_results = []
+    @disconnected_results = []
   end
 
   pipeline do
     producer :source do |output|
-      puts "\n[Source] Generating items"
-      output << { id: 1 }
+      puts "\n[Source] Generating item"
+      output.to(:connected_stage) << { id: 1 }
+      # Note: not routing to :disconnected_stage
+    end
+
+    # This stage receives items and works normally
+    consumer :connected_stage, await: true do |item|
+      puts "  [Connected] Received item #{item[:id]}"
+      @connected_results << item
     end
 
     # This stage has no DAG upstream and await: false
-    # It will shutdown immediately (before router can send to it)
+    # It will shutdown immediately since nothing routes to it
     # This demonstrates intentional fast-fail for disconnected stages
-    consumer :will_shutdown, await: false do |item|
-      puts "  [WillShutdown] Should never see this!"
-      @results << item
+    consumer :disconnected_stage, await: false do |item|
+      puts "  [Disconnected] Should never see this!"
+      @disconnected_results << item
     end
   end
 end
@@ -166,7 +174,8 @@ example2 = ImmediateShutdownExample.new
 example2.run
 
 puts "\nResults:"
-puts "  Items received: #{example2.results.size} (should be 0)"
+puts "  Connected stage: #{example2.connected_results.size} items (should be 1)"
+puts "  Disconnected stage: #{example2.disconnected_results.size} items (should be 0)"
 
 puts "\n" + "=" * 80
 puts "Summary"

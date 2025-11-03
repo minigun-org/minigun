@@ -42,7 +42,6 @@ module Minigun
 
       stage_stats = stage_ctx.stage_stats
       stage_stats.start!
-      log_debug('Starting')
 
       @stage.run_stage(stage_ctx)
 
@@ -107,7 +106,10 @@ module Minigun
     # Returns true if timed out (should shutdown), false if item received (continue)
     def wait_for_first_item(timeout:, stage_ctx:)
       input_queue = stage_ctx.input_queue
-      raw_queue = input_queue.instance_variable_get(:@queue)
+      return false unless input_queue # Safety check for mocked contexts
+
+      raw_queue = input_queue.instance_variable_get(:@queue) if input_queue.respond_to?(:instance_variable_get)
+      return false unless raw_queue # Safety check for mocked queues
 
       # Try to pop with timeout using Timeout module
       begin
