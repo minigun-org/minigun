@@ -72,6 +72,8 @@ module Minigun
       raise ArgumentError, "Unknown target stage: #{target} (resolved to #{target_stage.name})" unless target_queue
 
       # Track this as a runtime edge for END signal handling
+      # Ensure the entry exists before adding to it (important for fork contexts)
+      @runtime_edges[@stage] ||= Set.new
       @runtime_edges[@stage].add(target_stage)
 
       # Create and cache the OutputQueue for this target

@@ -610,7 +610,7 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
-  describe '27_process_execution.rb', skip: !Minigun.fork? do
+  describe '27_process_execution.rb' do
     it 'demonstrates process-based execution with isolation' do
       load File.expand_path('../../examples/27_process_execution.rb', __dir__)
 
@@ -1406,7 +1406,7 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
-  describe '66_cow_and_ipc_fork_executors.rb', skip: !Minigun.fork? do
+  describe '66_cow_and_ipc_fork_executors.rb' do
     it 'demonstrates COW and IPC fork executors' do
       load File.expand_path('../../examples/66_cow_and_ipc_fork_executors.rb', __dir__)
 
@@ -1611,7 +1611,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '78_master_to_ipc_via_to.rb' do
-    it 'routes from master to IPC fork via output.to()', skip: 'Hangs - IPC fork with explicit routing and no downstream needs investigation' do
+    it 'routes from master to IPC fork via output.to()' do
       load File.expand_path('../../examples/78_master_to_ipc_via_to.rb', __dir__)
 
       example = MasterToIpcViaToExample.new
@@ -1647,7 +1647,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '80_ipc_fan_out.rb' do
-    it 'demonstrates IPC fork fan-out pattern', skip: 'Hangs - IPC fork fan-out with explicit routing needs investigation' do
+    it 'demonstrates IPC fork fan-out pattern' do
       load File.expand_path('../../examples/80_ipc_fan_out.rb', __dir__)
 
       example = IpcFanOutExample.new
@@ -1665,7 +1665,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '81_ipc_fan_in.rb' do
-    it 'demonstrates IPC fork fan-in pattern', skip: 'Hangs - IPC fork with multiple producers needs investigation' do
+    it 'demonstrates IPC fork fan-in pattern' do
       load File.expand_path('../../examples/81_ipc_fan_in.rb', __dir__)
 
       example = IpcFanInExample.new
@@ -1682,7 +1682,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '82_cow_fan_out.rb' do
-    it 'demonstrates COW fork fan-out pattern', skip: 'Hangs - COW fork fan-out with explicit routing needs investigation' do
+    it 'demonstrates COW fork fan-out pattern' do
       load File.expand_path('../../examples/82_cow_fan_out.rb', __dir__)
 
       example = CowFanOutExample.new
@@ -1721,7 +1721,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '84_mixed_ipc_cow_fan_out.rb' do
-    it 'demonstrates mixed IPC/COW fork fan-out', skip: 'Hangs - Mixed fork fan-out with explicit routing needs investigation' do
+    it 'demonstrates mixed IPC/COW fork fan-out' do
       load File.expand_path('../../examples/84_mixed_ipc_cow_fan_out.rb', __dir__)
 
       example = MixedIpcCowFanOutExample.new

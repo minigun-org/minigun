@@ -27,11 +27,20 @@ Minigun is a high-performance data processing pipeline framework for Ruby with s
     - [ ] ipc/cow fan-out/fan-in
     - [ ] routing to inner stages of pipelines
     - [ ] routing to inner stages of cow and ipc fork via an ingress delegator
+  - Additional scenarios
+    - test reroute with IPC/COW complex scenarios, inner routing, etc.
+    - producers inside IPC/COW forks
 
 ### Phase 1.1: QoL Improvements
 
+- [ ] **Graceful shutdown**
+  - [ ] signal trapping, child state management/killing
+  - [ ] Kill child threads/forks/ractors
+  - [ ] Ctrl+C once to start graceful shutdown (send end signals from all producers)
+  - [ ] Press Ctrl+C again to force quit.
+
+
 - [ ] to_mermaid
-- [ ] signal trapping, child state management/killing
 - [ ] child culling (look at puma)
 - [ ] supervision tree of processes
 - [ ] htop-like monitoring dashboard (CLI)
