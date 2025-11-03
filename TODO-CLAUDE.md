@@ -36,6 +36,8 @@ Minigun is a high-performance data processing pipeline framework for Ruby with s
 - [ ] htop-like monitoring dashboard (CLI)
 - [ ] Interactive examples in web docs
 - [ ] ASCII art drawing of tree
+- [ ] IPC batches?
+- [ ] Acks on queued items, guaranteed delivery?
 
 - [ ] **Hooks** (fork, stage, nesting)
 
