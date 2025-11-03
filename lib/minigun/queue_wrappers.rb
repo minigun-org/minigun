@@ -40,10 +40,9 @@ module Minigun
 
   # Wrapper around stage output that routes to downstream queues
   class OutputQueue
-    def initialize(stage, downstream_queues, all_stage_queues, runtime_edges, stage_stats: nil)
+    def initialize(stage, downstream_queues, runtime_edges, stage_stats: nil)
       @stage = stage
       @downstream_queues = downstream_queues # Array of Queue objects
-      @all_stage_queues = all_stage_queues   # Hash keyed by Stage objects
       @runtime_edges = runtime_edges         # Track dynamic routing (keyed by Stage objects)
       @stage_stats = stage_stats             # Stats object for tracking (optional)
       @to_cache = {}                         # Memoization cache for .to() results
@@ -79,7 +78,6 @@ module Minigun
       @to_cache[target] = OutputQueue.new(
         @stage,
         [target_queue],
-        @all_stage_queues,
         @runtime_edges,
         stage_stats: @stage_stats
       )

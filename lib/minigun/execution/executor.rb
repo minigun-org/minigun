@@ -232,7 +232,6 @@ module Minigun
               stage,
               [capture_queue],
               {},
-              {},
               stage_stats: stage_stats
             )
 
@@ -278,7 +277,6 @@ module Minigun
           capture_output = Minigun::OutputQueue.new(
             stage,
             [capture_queue],
-            {},
             {},
             stage_stats: stage_stats
           )

@@ -5,7 +5,7 @@ module Minigun
   # A Pipeline can be standalone or part of a multi-pipeline Task
   class Pipeline
     attr_reader :name, :config, :stages, :hooks, :dag, :output_queues, :stats,
-                :context, :stage_hooks, :stage_input_queues, :runtime_edges, :input_queues, :parent_pipeline, :task
+                :context, :stage_hooks, :runtime_edges, :input_queues, :parent_pipeline, :task
 
     def initialize(name, task, parent_pipeline, config = {}, stages: nil, hooks: nil, stage_hooks: nil, dag: nil, stats: nil)
       @name = name
@@ -283,8 +283,8 @@ module Minigun
       # Insert router stages for fan-out
       insert_router_stages_for_fan_out
 
-      # Create one input queue per stage (except producers)
-      @stage_input_queues = build_stage_input_queues
+      # Create one input queue per stage (except producers) and register with Task
+      build_stage_input_queues
       @produced_count = Concurrent::AtomicFixnum.new(0)
       @stage_threads = []
 
@@ -303,10 +303,8 @@ module Minigun
       @stage_threads.each(&:join)
     end
 
-    # Build one input queue per stage (except producers)
+    # Build one input queue per stage (except producers) and register with Task
     def build_stage_input_queues
-      queues = {}
-
       # Find entrance infrastructure (router or single entry stage)
       entry_stages = @stages.select do |s|
         s.run_mode != :autonomous && @dag.upstream(s).empty?
@@ -318,17 +316,13 @@ module Minigun
 
         # Entrance router uses PipelineStage's queue
         if stage == @entrance_router && @input_queues && @input_queues[:input]
-          queue = @input_queues[:input]
-          queues[stage] = queue
-          register_queue(stage, queue)
+          register_queue(stage, @input_queues[:input])
           next
         end
 
         # Single entry stage uses PipelineStage's queue directly (no router)
         if entry_stages.size == 1 && stage == entry_stages.first && @input_queues && @input_queues[:input]
-          queue = @input_queues[:input]
-          queues[stage] = queue
-          register_queue(stage, queue)
+          register_queue(stage, @input_queues[:input])
           next
         end
 
@@ -339,11 +333,8 @@ module Minigun
                 else
                   SizedQueue.new(size) # Bounded queue with backpressure
                 end
-        queues[stage] = queue
         register_queue(stage, queue)
       end
-
-      queues
     end
 
     # Insert RouterStage instances for fan-out patterns

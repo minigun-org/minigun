@@ -49,7 +49,6 @@ RSpec.describe Minigun::OutputQueue do
     described_class.new(
       test_stage,
       downstream_queues,
-      all_stage_queues,
       runtime_edges,
       stage_stats: stage_stats
     )

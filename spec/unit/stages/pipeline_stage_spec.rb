@@ -6,7 +6,7 @@ RSpec.describe Minigun::PipelineStage do
   let(:config) { { max_threads: 2, max_processes: 1 } }
   let(:mock_context) { Object.new }
   let(:mock_registry) { instance_double(Minigun::StageRegistry, register: nil) }
-  let(:mock_task) { instance_double(Minigun::Task, stage_registry: mock_registry) }
+  let(:mock_task) { instance_double(Minigun::Task, stage_registry: mock_registry, find_queue: nil) }
   let(:mock_pipeline) { instance_double(Minigun::Pipeline, name: 'test_pipeline', context: mock_context, task: mock_task) }
 
   describe '#initialize' do
@@ -36,7 +36,6 @@ RSpec.describe Minigun::PipelineStage do
                                   sources_expected: Set.new,
                                   input_queue: Queue.new,
                                   dag: instance_double(Minigun::DAG, downstream: []),
-                                  stage_input_queues: {},
                                   runtime_edges: {},
                                   stage_name: :my_pipeline)
 
@@ -57,7 +56,6 @@ RSpec.describe Minigun::PipelineStage do
                                   sources_expected: Set.new,
                                   input_queue: Queue.new,
                                   dag: instance_double(Minigun::DAG, downstream: []),
-                                  stage_input_queues: {},
                                   runtime_edges: {},
                                   stage_name: :my_pipeline)
 
@@ -85,7 +83,6 @@ RSpec.describe Minigun::PipelineStage do
                                   sources_expected: sources,
                                   input_queue: input_queue,
                                   dag: instance_double(Minigun::DAG, downstream: []),
-                                  stage_input_queues: {},
                                   runtime_edges: {},
                                   stage_name: :my_pipeline)
 
@@ -116,7 +113,6 @@ RSpec.describe Minigun::PipelineStage do
                                   sources_expected: Set.new,
                                   input_queue: Queue.new,
                                   dag: instance_double(Minigun::DAG, downstream: []),
-                                  stage_input_queues: {},
                                   runtime_edges: {},
                                   stage_name: :my_pipeline)
 
@@ -142,7 +138,6 @@ RSpec.describe Minigun::PipelineStage do
                                   sources_expected: Set.new,
                                   input_queue: Queue.new,
                                   dag: instance_double(Minigun::DAG, downstream: []),
-                                  stage_input_queues: {},
                                   runtime_edges: {},
                                   stage_name: :my_pipeline)
 
@@ -168,7 +163,6 @@ RSpec.describe Minigun::PipelineStage do
                                   sources_expected: Set.new,
                                   input_queue: Queue.new,
                                   dag: instance_double(Minigun::DAG, downstream: []),
-                                  stage_input_queues: {},
                                   runtime_edges: {},
                                   stage_name: :my_pipeline)
 
