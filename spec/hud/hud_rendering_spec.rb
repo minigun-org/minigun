@@ -104,14 +104,14 @@ RSpec.describe 'HUD Full Rendering' do
       expected = strip_ascii(<<-ASCII)
 ┌─ FLOW DIAGRAM ───────────────────────────────┐┌─ PROCESS STATISTICS ─────────────────────────────────────────────────┐
 │                                              ││                                                                      │
-│                ┌────────────┐                ││ Runtime:     X.Xs | Throughput:      X.XX i
-│                │ ▶ generate │                ││ Produced: X | Consumed: X│
-│                └────────────┘                ││                                                                      │
+│               ┌──────────────┐               ││ Runtime:     X.Xs | Throughput:      X.XX i
+│               │  ▶ generate  │               ││ Produced: X | Consumed: X│
+│               └── X.XX/s ───┘               ││                                                                      │
 │                       │                      ││ STAGE                    ITEMS      THRU       P50       P99         │
 │                       │                      ││ ──────────────────────────────────────────────────────────────────   │
-│                ┌────────────┐                ││ ▶ generate          ⚡   X   X.XX/s         -         -         │
-│                │ ◀ process  │                ││ ◀ process           ⚠   X   X.XX/s    X.Xms    X.Xms         │
-│                └────────────┘                ││                                                                      │
+│                ┌─────────────┐               ││ ▶ generate          ⚡   X   X.XX/s         -         -         │
+│                │ ◀ process⚠  │               ││ ◀ process           ⚠   X   X.XX/s    X.Xms    X.Xms         │
+│                └── X.XX/s ───┘               ││                                                                      │
 │                                              ││                                                                      │
 │                                              ││                                                                      │
 │                                              ││                                                                      │

@@ -35,6 +35,23 @@ module Minigun
         @cached_visible_stages = visible_stages
         @cached_dag = dag
 
+        # Create DiagramStage instances for each stage
+        @cached_stages = {}
+        visible_stages.each do |stage_data|
+          stage_name = stage_data[:stage_name]
+          pos = @cached_layout[stage_name]
+          next unless pos
+
+          @cached_stages[stage_name] = DiagramStage.new(
+            name: stage_name,
+            type: stage_data[:type] || :processor,
+            x: pos[:x],
+            y: pos[:y],
+            width: pos[:width],
+            height: pos[:height]
+          )
+        end
+
         # Calculate actual diagram content height
         unless @cached_layout.empty?
           max_y = @cached_layout.values.map { |pos| pos[:y] + pos[:height] }.max
@@ -57,21 +74,22 @@ module Minigun
         # Render connections first (so they appear behind boxes)
         render_connections(terminal, @cached_layout, @cached_visible_stages, @cached_dag, x_offset, y_offset)
 
-        # Render stage boxes
-        @cached_layout.each do |stage_name, pos|
+        # Render stage boxes using DiagramStage instances
+        @cached_stages.each do |stage_name, diagram_stage|
           stage_data = @cached_visible_stages.find { |s| s[:stage_name] == stage_name }
           next unless stage_data
 
-          render_stage_box(terminal, stage_data, pos, x_offset, y_offset)
+          diagram_stage.render(terminal, stage_data, x_offset, y_offset)
         end
 
         # Update animation
         @animation_frame = (@animation_frame + 1) % 60
 
-        # Clear cached layout for next frame
+        # Clear cached data for next frame
         @cached_layout = nil
         @cached_visible_stages = nil
         @cached_dag = nil
+        @cached_stages = nil
       end
 
       private
@@ -79,40 +97,59 @@ module Minigun
       # Calculate box positions using DAG-based layered layout
       def calculate_layout(stages, dag)
         layout = {}
-        box_width = 14
-        box_height = 3
+        min_box_width = 14
+        box_height = 3  # 3 lines: top border, content, bottom border (with optional throughput)
         layer_height = 5  # Vertical spacing between layers (room for connection spine)
         box_spacing = 2   # Horizontal spacing between boxes
+
+        # Calculate box widths based on stage names
+        # Allow 4 chars for icon + status indicator, 2 for borders, 2 for padding
+        box_widths = {}
+        stages.each do |stage|
+          name_length = stage[:stage_name].to_s.length
+          box_widths[stage[:stage_name]] = [name_length + 8, min_box_width].max
+        end
 
         # Calculate layers based on DAG topological depth
         layers = calculate_layers_from_dag(stages, dag)
 
         # Find maximum layer width to center layers relative to each other
         max_layer_width = layers.map do |layer_stages|
-          (layer_stages.size * box_width) + ((layer_stages.size - 1) * box_spacing)
+          layer_widths = layer_stages.map { |name| box_widths[name] }
+          layer_widths.sum + ((layer_stages.size - 1) * box_spacing)
         end.max || 0
 
-        # Position stages in each layer (centered relative to each other)
+        # Position stages in each layer (centered so all layer centers align)
+        # Calculate the center position of the widest layer
+        max_center = max_layer_width / 2
+
         layers.each_with_index do |layer_stages, layer_idx|
           y = 0 + (layer_idx * layer_height)
 
-          # Calculate total width needed for this layer
-          total_width = (layer_stages.size * box_width) + ((layer_stages.size - 1) * box_spacing)
+          # Calculate total width using actual box widths
+          layer_widths = layer_stages.map { |name| box_widths[name] }
+          total_width = layer_widths.sum + ((layer_stages.size - 1) * box_spacing)
 
-          # Center this layer relative to the widest layer
-          start_x = (max_layer_width - total_width) / 2
+          # Calculate the center of this layer if it started at x=0
+          layer_center = total_width / 2
 
-          # Position each stage in the layer horizontally
-          layer_stages.each_with_index do |stage_name, stage_idx|
-            x = start_x + (stage_idx * (box_width + box_spacing))
+          # Position layer so its center aligns with max_center
+          start_x = max_center - layer_center
+
+          # Position each stage using its specific width
+          current_x = start_x
+          layer_stages.each do |stage_name|
+            box_width_for_stage = box_widths[stage_name]
 
             layout[stage_name] = {
-              x: x,
+              x: current_x,
               y: y,
-              width: box_width,
+              width: box_width_for_stage,
               height: box_height,
               layer: layer_idx
             }
+
+            current_x += box_width_for_stage + box_spacing
           end
         end
 
@@ -545,74 +582,6 @@ module Minigun
       end
 
       # Render a stage as a box with icon, name, and status
-      def render_stage_box(terminal, stage_data, pos, x_offset, y_offset)
-        name = stage_data[:stage_name]
-        status = determine_status(stage_data)
-        type = stage_data[:type] || :processor
-
-        # Truncate name to fit in box
-        max_name_len = pos[:width] - 4  # Leave room for icon and padding
-        display_name = if name.to_s.length > max_name_len
-                         name.to_s[0...(max_name_len - 1)] + "…"
-                       else
-                         name.to_s
-                       end
-
-        # Icon only (no status indicator for clean layout)
-        icon = Theme.stage_icon(type)
-
-        # Color based on status
-        color = case status
-                when :active then Theme.stage_active
-                when :bottleneck then Theme.stage_bottleneck
-                when :error then Theme.stage_error
-                when :done then Theme.stage_done
-                else Theme.stage_idle
-                end
-
-        x = pos[:x]
-        y = pos[:y]
-        w = pos[:width]
-        h = pos[:height]
-
-        # Draw box borders
-        # Top border
-        terminal.write_at(x_offset + x, y_offset + y, "┌" + ("─" * (w - 2)) + "┐", color: Theme.border)
-
-        # Middle line with content (icon + name, no status indicator)
-        content = "#{icon} #{display_name}"
-        padding_left = [(w - content.length - 2) / 2, 1].max
-        padding_right = [w - content.length - padding_left - 2, 1].max
-
-        terminal.write_at(x_offset + x, y_offset + y + 1,
-                         "│" + (" " * padding_left) + content + (" " * padding_right) + "│",
-                         color: color)
-
-        # Bottom border (no throughput for clean layout)
-        bottom_line = "└" + ("─" * (w - 2)) + "┘"
-        terminal.write_at(x_offset + x, y_offset + y + 2, bottom_line, color: Theme.border)
-      end
-
-      def determine_status(stage_data)
-        return :error if stage_data[:items_failed] && stage_data[:items_failed] > 0
-        return :bottleneck if stage_data[:is_bottleneck]
-
-        if stage_data[:throughput]
-          if stage_data[:throughput] > 0
-            :active
-          else
-            :idle
-          end
-        elsif stage_data[:runtime] && stage_data[:runtime] > 0
-          if stage_data[:end_time]
-            :done
-          else
-            :active
-          end
-        else
-          :idle
-        end
-      end
 
       def format_throughput(value)
         if value >= 1_000_000

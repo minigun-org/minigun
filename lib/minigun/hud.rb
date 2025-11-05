@@ -3,6 +3,7 @@
 require_relative 'hud/terminal'
 require_relative 'hud/theme'
 require_relative 'hud/keyboard'
+require_relative 'hud/diagram_stage'
 require_relative 'hud/flow_diagram'
 require_relative 'hud/flow_diagram_frame'
 require_relative 'hud/process_list'

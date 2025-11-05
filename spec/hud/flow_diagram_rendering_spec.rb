@@ -14,7 +14,7 @@ RSpec.describe 'FlowDiagram Rendering' do
   end
 
   # Helper to capture the ASCII output from FlowDiagram
-  def render_diagram(pipeline_instance, width: 46, height: 36)
+  def render_diagram(pipeline_instance, width: 50, height: 36)
     # Create a mock terminal buffer
     buffer = Array.new(height) { ' ' * width }
 
@@ -57,7 +57,9 @@ RSpec.describe 'FlowDiagram Rendering' do
     # Stub dynamic elements for deterministic output:
     # 1. Zero out throughput so connections render as static (not animated)
     stats_data[:stages].each { |s| s[:throughput] = 0 }
-    # 2. Reset animation frame to 0
+    # 2. Clear bottleneck flags (they're non-deterministic in tests)
+    stats_data[:stages].each { |s| s[:is_bottleneck] = false }
+    # 3. Reset animation frame to 0
     flow_diagram.instance_variable_set(:@animation_frame, 0)
 
     # Render at x_offset=0, y_offset=0 (first frame, no animation)
@@ -73,26 +75,26 @@ RSpec.describe 'FlowDiagram Rendering' do
 
   describe 'Linear Pipeline (Sequential)' do
     it 'renders a simple linear 4-stage pipeline vertically' do
-      # Expected: Clean layout (left-aligned, static connections)
+      # Expected: Layout with dynamic box widths (bottleneck indicators stubbed out)
       expected = strip_ascii(<<-ASCII)
-┌────────────┐
-│ ▶ generate │
-└────────────┘
-       │
-       │
-┌────────────┐
-│  ◀ double  │
-└────────────┘
-       │
-       │
-┌────────────┐
-│ ◀ add_ten  │
-└────────────┘
-       │
-       │
-┌────────────┐
-│ ◀ collect  │
-└────────────┘
+┌──────────────┐
+│  ▶ generate  │
+└──────────────┘
+        │
+        │
+ ┌────────────┐
+ │  ◀ double  │
+ └────────────┘
+        │
+        │
+ ┌─────────────┐
+ │  ◀ add_ten  │
+ └─────────────┘
+        │
+        │
+ ┌─────────────┐
+ │  ◀ collect  │
+ └─────────────┘
 ASCII
 
       # Create pipeline
@@ -180,11 +182,11 @@ ASCII
 
   describe 'Fan-Out Pattern' do
     it 'renders a fan-out to 3 consumers' do
-      # Expected: Producer centered above 3 consumers
+      # Expected: Producer centered above 3 consumers (generate box is wider)
       expected = strip_ascii(<<-ASCII)
-                ┌────────────┐
-                │ ▶ generate │
-                └────────────┘
+               ┌──────────────┐
+               │  ▶ generate  │
+               └──────────────┘
                        │
        ┌───────────────┼───────────────┐
 ┌────────────┐  ┌────────────┐  ┌────────────┐
@@ -219,10 +221,6 @@ ASCII
       output = render_diagram(pipeline)
       actual = normalize_output(output)
 
-      puts "\n=== FAN-OUT ACTUAL ==="
-      puts actual
-      puts "======================\n"
-
       # Literal assertion of ASCII layout
       expect(strip_ascii(actual)).to eq(expected)
     end
@@ -231,22 +229,23 @@ ASCII
   describe 'Complex Routing' do
     it 'renders multiple parallel paths with different depths' do
       # Expected: Multiple paths with different lengths merging to final
+      # (process and process2 boxes are wider based on their names)
       expected = strip_ascii(<<-ASCII)
                 ┌────────────┐
                 │  ▶ source  │
                 └────────────┘
                        │
-       ┌───────────────┼───────────────┐
-┌────────────┐  ┌────────────┐  ┌────────────┐
-│   ◀ slow   │  │ ◀ process  │  │   ◀ fast   │
-└────────────┘  └────────────┘  └────────────┘
-       │               │               │
-       │               │               │
-       │        ┌────────────┐         │
-       │        │ ◀ process2 │         │
-       │        └────────────┘         │
-       │               │               │
-       └───────────────┼───────────────┘
+       ┌───────────────┼────────────────┐
+┌────────────┐  ┌─────────────┐  ┌────────────┐
+│   ◀ slow   │  │  ◀ process  │  │   ◀ fast   │
+└────────────┘  └─────────────┘  └────────────┘
+       │               │                │
+       │               │                │
+       │       ┌──────────────┐         │
+       │       │  ◀ process2  │         │
+       │       └──────────────┘         │
+       │               │                │
+       └───────────────┼────────────────┘
                 ┌────────────┐
                 │  ◀ final   │
                 └────────────┘
