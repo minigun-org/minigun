@@ -1872,6 +1872,178 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
+  describe '92_reroute_ipc_basic.rb' do
+    it 'demonstrates rerouting with IPC fork executors' do
+      load File.expand_path('../../examples/92_reroute_ipc_basic.rb', __dir__)
+
+      # All three test cases should pass
+      base = RerouteIpcBasicExample.new
+      base.run
+      expect(base.results.map { |r| r[:value] }.sort).to eq([2, 4, 6, 8, 10])
+      base.cleanup
+
+      skip_example = RerouteIpcSkipExample.new
+      skip_example.run
+      expect(skip_example.results.map { |r| r[:value] }.sort).to eq([1, 2, 3, 4, 5])
+      skip_example.cleanup
+
+      insert_example = RerouteIpcInsertExample.new
+      insert_example.run
+      expect(insert_example.results.map { |r| r[:value] }.sort).to eq([6, 12, 18, 24, 30])
+      insert_example.cleanup
+    end
+  end
+
+  describe '93_reroute_cow_basic.rb' do
+    it 'demonstrates rerouting with COW fork executors' do
+      load File.expand_path('../../examples/93_reroute_cow_basic.rb', __dir__)
+
+      base = RerouteCowBasicExample.new
+      base.run
+      expect(base.results.map { |r| r[:value] }.sort).to eq([1, 4, 9, 16, 25])
+      base.cleanup
+
+      skip_example = RerouteCowSkipExample.new
+      skip_example.run
+      expect(skip_example.results.map { |r| r[:value] }.sort).to eq([1, 2, 3, 4, 5])
+      skip_example.cleanup
+
+      insert_example = RerouteCowInsertExample.new
+      insert_example.run
+      expect(insert_example.results.map { |r| r[:value] }.sort).to eq([1, 64, 729, 4096, 15625])
+      insert_example.cleanup
+    end
+  end
+
+  describe '94_reroute_mixed_executors.rb' do
+    it 'demonstrates rerouting across different executor types' do
+      load File.expand_path('../../examples/94_reroute_mixed_executors.rb', __dir__)
+
+      base = RerouteMixedExecutorsExample.new
+      base.run
+      expect(base.results.map { |r| r[:value] }.sort).to eq([22, 24, 26, 28, 30, 32])
+      base.cleanup
+
+      reverse = RerouteReverseOrderExample.new
+      reverse.run
+      expect(reverse.results.map { |r| r[:value] }.sort).to eq([2, 4, 6, 8, 10, 12])
+      reverse.cleanup
+    end
+  end
+
+  describe '95_reroute_to_inner_fork_stages.rb' do
+    it 'demonstrates rerouting to stages inside fork blocks' do
+      load File.expand_path('../../examples/95_reroute_to_inner_fork_stages.rb', __dir__)
+
+      base = RerouteToInnerIpcStagesExample.new
+      base.run
+      expect(base.results_b.map { |r| r[:value] }.sort).to eq([20, 40, 60])
+      base.cleanup
+
+      direct = RerouteDirectlyToInnerIpcExample.new
+      direct.run
+      expect(direct.results_b.map { |r| r[:value] }.sort).to eq([10, 20, 30, 40, 50, 60])
+      direct.cleanup
+
+      to_cow = RerouteFromInnerIpcToCowExample.new
+      to_cow.run
+      expect(to_cow.results_a.map { |r| r[:value] }.sort).to eq([20, 40, 60])
+      to_cow.cleanup
+
+      complex = RerouteIpcInnerComplexExample.new
+      complex.run
+      expect(complex.results_b.map { |r| r[:value] }.sort).to eq([110, 120, 130, 140, 150, 160])
+      complex.cleanup
+    end
+  end
+
+  describe '96_reroute_fork_fan_patterns.rb' do
+    it 'demonstrates rerouting with fork-based fan-out/fan-in' do
+      load File.expand_path('../../examples/96_reroute_fork_fan_patterns.rb', __dir__)
+
+      # Fan-out patterns should work with rerouting
+      fan_out = RerouteForkFanOutExample.new
+      fan_out.run
+      expect(fan_out.results_a.size).to eq(3)
+      expect(fan_out.results_b.size).to eq(3)
+      expect(fan_out.results_c.size).to eq(3)
+      fan_out.cleanup
+
+      # Fan-in patterns should work with rerouting
+      fan_in = RerouteForkFanInExample.new
+      fan_in.run
+      expect(fan_in.results.size).to eq(9)
+      fan_in.cleanup
+    end
+  end
+
+  describe '97_dynamic_routing_to_inner_fork_stages.rb' do
+    it 'demonstrates dynamic routing to stages inside fork blocks' do
+      load File.expand_path('../../examples/97_dynamic_routing_to_inner_fork_stages.rb', __dir__)
+
+      # Routing from thread to inner IPC/COW stages
+      example1 = DynamicRoutingToInnerIpcExample.new
+      example1.run
+      # Items should be split: 3 to A (IDs % 3 == 0), 3 to B (% 3 == 1), 3 to C (% 3 == 2)
+      expect(example1.results_a.size).to eq(3)
+      expect(example1.results_b.size).to eq(3)
+      expect(example1.results_c.size).to eq(3)
+      example1.cleanup
+
+      # Routing from inner IPC to inner COW stages (even/odd split)
+      example2 = DynamicRoutingFromInnerToInnerExample.new
+      example2.run
+      expect(example2.results.size).to eq(6)
+      # Items should be split between paths X (even IDs) and Y (odd IDs)
+      by_path = example2.results.group_by { |r| r[:path] }
+      expect(by_path['X'].size).to eq(3)
+      expect(by_path['Y'].size).to eq(3)
+      example2.cleanup
+    end
+  end
+
+  describe '98_await_stages_complex_routing.rb' do
+    it 'demonstrates complex multi-level routing with await stages' do
+      load File.expand_path('../../examples/98_await_stages_complex_routing.rb', __dir__)
+
+      # Test 1: Multi-level routing
+      example1 = ComplexAwaitRoutingExample.new
+      example1.run
+
+      # Verify item distribution
+      expect(example1.high_priority.size).to eq(10)
+      expect(example1.low_priority.size).to eq(5)
+      expect(example1.errors.size).to eq(5)
+
+      # Verify enrichment chain for high priority items
+      expect(example1.high_priority).to all(satisfy { |item| item[:validated] && item[:enriched] })
+
+      # Verify low priority items are processed
+      expect(example1.low_priority).to all(satisfy { |item| item[:processed] })
+
+      # Verify errors are handled
+      expect(example1.errors).to all(satisfy { |item| item[:error] })
+
+      example1.cleanup
+
+      # Test 2: IPC fork with await stages
+      example2 = AwaitWithIpcExample.new
+      example2.run
+
+      expect(example2.results.size).to eq(10)
+
+      by_worker = example2.results.group_by { |r| r[:worker] }
+      expect(by_worker[:a].size).to eq(5)
+      expect(by_worker[:b].size).to eq(5)
+
+      # Verify workers ran in different PIDs
+      pids = example2.results.map { |r| r[:pid] }.uniq
+      expect(pids.size).to be > 1
+
+      example2.cleanup
+    end
+  end
+
   # Coverage check: ensure all example files have tests
   describe 'Example Coverage' do
     it 'has tests for all example files' do

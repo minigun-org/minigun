@@ -130,6 +130,9 @@ module Minigun
         case message[:type]
         when :item
           return message[:item]
+        when :routed_item
+          # Item targeted at specific nested stage - return with routing metadata
+          return RoutedItem.new(message[:target_stage], message[:item])
         when :end_of_stage, :shutdown
           return EndOfStage.new(@stage)
         end
@@ -188,6 +191,10 @@ module Minigun
       begin
         if item.nil?
           Marshal.dump({ type: :no_result }, @pipe_writer)
+        elsif item.is_a?(Minigun::EndOfStage)
+          # EndOfStage contains Stage objects which aren't marshalable
+          # Send as a control message instead
+          Marshal.dump({ type: :end_of_stage }, @pipe_writer)
         else
           Marshal.dump({ type: :result, result: item }, @pipe_writer)
         end
