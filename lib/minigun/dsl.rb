@@ -414,15 +414,102 @@ module Minigun
     end
 
     # Full production execution with Runner (signal handling, job ID, stats)
-    def run
+    # Options:
+    #   background: true - Run in background thread (returns immediately)
+    def run(background: false)
       _evaluate_pipeline_blocks!
-      @_minigun_task.run(self)
+
+      if background
+        # Run in background thread for IRB/console usage
+        @_background_thread = Thread.new do
+          begin
+            @_minigun_task.run(self)
+          rescue => e
+            warn "Background task error: #{e.message}"
+            warn e.backtrace.join("\n")
+          end
+        end
+
+        # Give it a moment to start
+        sleep 0.1
+
+        puts "Task running in background (Thread ##{@_background_thread.object_id})"
+        puts "Use task.hud to open the HUD monitor"
+        puts "Use task.stop to stop execution"
+        self
+      else
+        @_minigun_task.run(self)
+      end
     end
 
     # Direct pipeline execution (lightweight, no Runner overhead)
-    def perform
+    # Options:
+    #   background: true - Run in background thread (returns immediately)
+    def perform(background: false)
       _evaluate_pipeline_blocks!
-      @_minigun_task.root_pipeline.run(self)
+
+      if background
+        @_background_thread = Thread.new do
+          begin
+            @_minigun_task.root_pipeline.run(self)
+          rescue => e
+            warn "Background task error: #{e.message}"
+            warn e.backtrace.join("\n")
+          end
+        end
+
+        sleep 0.1
+        puts "Task running in background (Thread ##{@_background_thread.object_id})"
+        puts "Use task.hud to open the HUD monitor"
+        self
+      else
+        @_minigun_task.root_pipeline.run(self)
+      end
+    end
+
+    # Open HUD monitor for running pipeline
+    # Only works if task is running in background
+    def hud
+      _evaluate_pipeline_blocks! unless @_pipeline_blocks_evaluated
+
+      unless @_minigun_task
+        raise "Task not initialized. Run task.run(background: true) first."
+      end
+
+      pipeline = @_minigun_task.root_pipeline
+
+      unless pipeline.instance_variable_get(:@stats)
+        raise "Pipeline stats not initialized. Make sure task is running with task.run(background: true)"
+      end
+
+      # Launch HUD (blocks until user quits)
+      Minigun::HUD.launch(pipeline)
+    end
+
+    # Stop background execution
+    def stop
+      if @_background_thread&.alive?
+        @_background_thread.kill
+        @_background_thread.join(1)
+        puts "Background task stopped"
+      else
+        puts "No background task running"
+      end
+    end
+
+    # Check if task is running in background
+    def running?
+      @_background_thread&.alive? || false
+    end
+
+    # Wait for background task to complete
+    def wait
+      if @_background_thread
+        @_background_thread.join
+        puts "Background task completed"
+      else
+        puts "No background task to wait for"
+      end
     end
 
     # Convenience aliases

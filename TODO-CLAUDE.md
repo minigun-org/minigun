@@ -50,16 +50,19 @@ Minigun is a high-performance data processing pipeline framework for Ruby with s
   - use ascii colors
   - Before doing anything, plan it all out.
 
-- [ ] Running hud
-  - task.hud to run in rake
-  - task.hud to run in IRB/Rails console
+- [X] Running hud
+  - [X] task.hud to run in IRB/Rails console
+  - [ ] Test task.hud to run in rake
+
+- [ ] Add hud to all examples when running
+  - [ ] Add idiomatic representation for each example
 
 - [ ] HUD IPC support
-  - Process tree, forked routing
+  - [ ] Process tree, forked routing
 
 - [ ] HUD QoL
-  - Error/log stream at bottom
-  - 
+  - [ ] % completion metrics
+  - [ ] Error/log stream at bottom
 
 
 ### Phase 1.1: QoL Improvements
