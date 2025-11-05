@@ -379,17 +379,18 @@ module Minigun
         ticks_since_finished
       end
 
+      # Check if connection has flowing animation (vs idle/drained state)
+      def connection_flowing?(stage_data)
+        stage_data[:status] == :running
+      end
+
       # Draw a fan-out connection (one source to multiple targets)
       def render_fanout_connection(terminal, from_pos, target_positions, stage_data, x_offset, y_offset)
         from_x = from_pos[:x] + from_pos[:width] / 2
         from_y = from_pos[:y] + from_pos[:height]
 
-        # Get drain distance (non-nil when stage finished)
         drain_distance = get_drain_distance(stage_data)
-
-        # Connection is active if flowing OR draining
-        # When draining, keep animation visible until fully drained
-        active = (stage_data[:throughput] && stage_data[:throughput] > 0) || !drain_distance.nil?
+        active = connection_flowing?(stage_data)
 
         # Calculate split point (horizontal spine where fan-out occurs)
         split_y = from_y + 1
@@ -457,11 +458,8 @@ module Minigun
         to_x = to_pos[:x] + to_pos[:width] / 2
         to_y = to_pos[:y]
 
-        # Get drain distance (non-nil when stage finished)
         drain_distance = get_drain_distance(stage_data)
-
-        # Connection is active if flowing OR draining
-        active = (stage_data[:throughput] && stage_data[:throughput] > 0) || !drain_distance.nil?
+        active = connection_flowing?(stage_data)
 
         # Calculate merge point (where horizontal lines converge)
         # Place it 1 line above the target
@@ -546,11 +544,8 @@ module Minigun
         to_x = to_pos[:x] + to_pos[:width] / 2
         to_y = to_pos[:y]
 
-        # Get drain distance (non-nil when stage finished)
         drain_distance = get_drain_distance(stage_data)
-
-        # Connection is active if flowing OR draining
-        active = (stage_data[:throughput] && stage_data[:throughput] > 0) || !drain_distance.nil?
+        active = connection_flowing?(stage_data)
 
         # Distance counter starts at 0 from source
         distance = 0

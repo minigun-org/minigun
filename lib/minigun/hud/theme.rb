@@ -97,12 +97,8 @@ module Minigun
         Terminal::COLORS[:cyan]
       end
 
-      # Draining animation colors (darker, showing flow winding down)
+      # Draining animation color (darker, showing flow winding down)
       def self.drain_dim
-        Terminal::COLORS[:gray]
-      end
-
-      def self.drain_medium
         Terminal::COLORS[:gray]
       end
 
@@ -265,17 +261,24 @@ module Minigun
       # @param drain_distance [Integer, nil] How far the drain has progressed from source (nil if not draining)
       # @return [Array<String, String>] [character, color_code]
       def self.animated_flow_char(char_type, distance, animation_frame, active, drain_distance: nil)
-        # Show animation if active OR draining (drain_distance is non-nil)
-        return [static_char_for_type(char_type), muted] unless active || !drain_distance.nil?
+        # Check if this cell has been drained (wave reached it)
+        drained = !drain_distance.nil? && distance <= drain_distance
 
-        # Check if this cell has been reached by the drain wave
-        # drain_distance is the number of ticks since finishing
-        # Cells are drained when distance <= drain_distance (inclusive)
-        draining = !drain_distance.nil? && distance <= drain_distance
+        # Check if drain is in progress but wave hasn't reached this cell yet
+        draining = !drain_distance.nil? && distance > drain_distance
 
-        # Use draining animation if this cell has been reached by the drain wave
-        # Otherwise use normal flow animation
-        frames = draining ? DRAIN_ANIMATION[char_type] : FLOW_ANIMATION[char_type]
+        # Determine which animation to use:
+        # - If drained: gray static (drained)
+        # - If active OR draining: cyan animated (flowing/draining)
+        # - Otherwise: gray static (idle/not started)
+        frames = if drained
+                   DRAIN_ANIMATION[char_type]
+                 elsif active || draining
+                   FLOW_ANIMATION[char_type]
+                 else
+                   DRAIN_ANIMATION[char_type] # Gray for idle state
+                 end
+
         return [static_char_for_type(char_type), muted] unless frames
 
         # Calculate phase based on distance from source and global animation frame
