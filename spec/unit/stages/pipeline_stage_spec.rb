@@ -31,6 +31,10 @@ RSpec.describe Minigun::PipelineStage do
     it 'returns early if no pipeline is set' do
       task = Minigun::Task.new
       pipeline = task.root_pipeline
+
+      # Initialize runtime_edges manually since we're not calling run()
+      pipeline.instance_variable_set(:@runtime_edges, Concurrent::Hash.new { |h, k| h[k] = Concurrent::Set.new })
+
       stage = described_class.new(:my_pipeline, pipeline, nil, nil, {})
       stage_ctx = instance_double(Minigun::StageContext,
                                   pipeline: pipeline,

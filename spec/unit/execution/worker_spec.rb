@@ -15,8 +15,9 @@ RSpec.describe Minigun::Worker do
 
   before do
     allow(Minigun.logger).to receive(:info)
-    # Initialize stats manually since we're not calling run()
+    # Initialize stats and runtime_edges manually since we're not calling run()
     pipeline.instance_variable_set(:@stats, Minigun::AggregatedStats.new(pipeline, dag))
+    pipeline.instance_variable_set(:@runtime_edges, Concurrent::Hash.new { |h, k| h[k] = Concurrent::Set.new })
   end
 
   # Helper to ensure queue is registered for a stage
