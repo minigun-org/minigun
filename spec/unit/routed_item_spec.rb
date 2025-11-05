@@ -13,7 +13,11 @@ RSpec.describe Minigun::RoutedItem do
     end
 
     it 'accepts Stage objects as target' do
-      stage = double('Stage', name: :my_stage)
+      config = { max_threads: 1, max_processes: 1 }
+      task = Minigun::Task.new(config: config)
+      pipeline = task.root_pipeline
+      stage = Minigun::ProducerStage.new(:my_stage, pipeline, proc {}, {})
+
       item = 'test_data'
       routed = Minigun::RoutedItem.new(stage, item)
 
