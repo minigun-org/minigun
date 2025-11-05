@@ -40,26 +40,43 @@ require 'minigun/hud'
 
 ## Quick Start
 
-### Option 1: Automatic (Recommended)
+### Option 1: Interactive (IRB/Console)
 
-Use `Minigun::HUD.run_with_hud` to automatically run your task with HUD monitoring:
+Perfect for development and debugging. Run your task in the background, then open HUD:
 
 ```ruby
 class MyPipelineTask
   include Minigun::DSL
 
   pipeline do
-    producer :generate { 100.times { |i| emit(i) } }
-    processor :double { |n| emit(n * 2) }
-    consumer :save { |n| save_to_db(n) }
+    producer :generate { loop { emit(Time.now) } }
+    processor :process, threads: 4 { |item| emit(transform(item)) }
+    consumer :save { |item| save_to_db(item) }
   end
 end
 
-# Run with HUD
+# In IRB or your console:
+task = MyPipelineTask.new
+task.run(background: true)  # Runs in background thread
+
+task.hud                    # Opens HUD (blocks until you press 'q')
+# HUD closed, but task still running!
+
+task.running?               # => true
+task.hud                    # Reopen HUD anytime
+task.stop                   # Stop execution when done
+```
+
+### Option 2: Automatic (One-liner)
+
+Use `Minigun::HUD.run_with_hud` to automatically run your task with HUD monitoring:
+
+```ruby
+# Run with HUD (blocks until complete or user quits)
 Minigun::HUD.run_with_hud(MyPipelineTask)
 ```
 
-### Option 2: Manual Control
+### Option 3: Manual Control
 
 For more control, manually create and manage the HUD controller:
 
@@ -153,6 +170,69 @@ ruby examples/hud_demo.rb
 This demo creates a multi-stage pipeline with varying latencies to demonstrate the HUD's monitoring capabilities.
 
 ## API Reference
+
+### Task Instance Methods
+
+When using the DSL, tasks have these methods for background execution and monitoring:
+
+#### `task.run(background: true)`
+
+Run the task in a background thread. Returns immediately.
+
+**Example:**
+```ruby
+task = MyTask.new
+task.run(background: true)
+# Task running in background (Thread #12345)
+# Use task.hud to open the HUD monitor
+# Use task.stop to stop execution
+```
+
+#### `task.hud`
+
+Open HUD monitor for the running pipeline. Blocks until user quits (`q`).
+Can be called multiple times - close and reopen as needed.
+
+**Example:**
+```ruby
+task.hud  # Opens HUD
+# Press 'q' to close
+task.hud  # Open again
+```
+
+#### `task.running?`
+
+Check if task is running in background. Returns `true` or `false`.
+
+**Example:**
+```ruby
+task.running?  # => true
+task.stop
+task.running?  # => false
+```
+
+#### `task.stop`
+
+Stop background execution immediately.
+
+**Example:**
+```ruby
+task.stop
+# Background task stopped
+```
+
+#### `task.wait`
+
+Wait for background task to complete. Blocks until finished.
+
+**Example:**
+```ruby
+task.run(background: true)
+task.wait  # Blocks until complete
+# Background task completed
+```
+
+### Module Methods
 
 ### `Minigun::HUD.launch(pipeline)`
 

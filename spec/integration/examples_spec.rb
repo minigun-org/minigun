@@ -2054,6 +2054,17 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
+  describe 'irb_with_hud.rb' do
+    it 'defines DataProcessingTask for IRB usage' do
+      # IRB example demonstrates background execution
+      # Just verify the file defines the expected class
+      irb_code = File.read(File.expand_path('../../examples/irb_with_hud.rb', __dir__))
+      expect(irb_code).to include('class DataProcessingTask')
+      expect(irb_code).to include('background: true')
+      expect(irb_code).to include('task.hud')
+    end
+  end
+
   # Coverage check: ensure all example files have tests
   describe 'Example Coverage' do
     it 'has tests for all example files' do
