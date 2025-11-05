@@ -4,15 +4,19 @@ require 'spec_helper'
 
 RSpec.describe Minigun::PipelineStage do
   let(:config) { { max_threads: 2, max_processes: 1 } }
-  let(:mock_context) { Object.new }
-  let(:mock_registry) { instance_double(Minigun::StageRegistry, register: nil) }
-  let(:mock_task) { instance_double(Minigun::Task, stage_registry: mock_registry, find_queue: nil) }
-  let(:mock_pipeline) { instance_double(Minigun::Pipeline, name: 'test_pipeline', context: mock_context, task: mock_task) }
+  let(:task) { Minigun::Task.new(config: config) }
+  let(:pipeline) { task.root_pipeline }
+  let(:context) { Object.new }
+
+  before do
+    # Initialize runtime_edges for tests that don't call run()
+    pipeline.instance_variable_set(:@runtime_edges, Concurrent::Hash.new { |h, k| h[k] = Concurrent::Set.new })
+  end
 
   describe '#initialize' do
     it 'creates a PipelineStage with a nested pipeline' do
-      nested = Minigun::Pipeline.new(:nested, nil, nil, config)
-      stage = described_class.new(:my_pipeline, mock_pipeline, nested, nil, {})
+      nested = Minigun::Pipeline.new(:nested, task, pipeline, config)
+      stage = described_class.new(:my_pipeline, pipeline, nested, nil, {})
       expect(stage.name).to eq(:my_pipeline)
       expect(stage.nested_pipeline).to eq(nested)
     end
@@ -20,8 +24,8 @@ RSpec.describe Minigun::PipelineStage do
 
   describe '#run_mode' do
     it 'returns :composite' do
-      nested = Minigun::Pipeline.new(:nested, nil, nil, config)
-      stage = described_class.new(:my_pipeline, mock_pipeline, nested, nil, {})
+      nested = Minigun::Pipeline.new(:nested, task, pipeline, config)
+      stage = described_class.new(:my_pipeline, pipeline, nested, nil, {})
       expect(stage.run_mode).to eq(:composite)
     end
   end
@@ -29,157 +33,171 @@ RSpec.describe Minigun::PipelineStage do
 
   describe '#run_stage' do
     it 'returns early if no pipeline is set' do
-      task = Minigun::Task.new
-      pipeline = task.root_pipeline
-
-      # Initialize runtime_edges manually since we're not calling run()
-      pipeline.instance_variable_set(:@runtime_edges, Concurrent::Hash.new { |h, k| h[k] = Concurrent::Set.new })
-
       stage = described_class.new(:my_pipeline, pipeline, nil, nil, {})
-      stage_ctx = instance_double(Minigun::StageContext,
-                                  pipeline: pipeline,
-                                  stage: stage,
-                                  sources_expected: Set.new,
-                                  input_queue: Queue.new,
-                                  dag: instance_double(Minigun::DAG, downstream: []),
-                                  runtime_edges: pipeline.runtime_edges,
-                                  stage_name: :my_pipeline)
+      stage_ctx = Minigun::StageContext.new(
+        stage: stage,
+        dag: pipeline.dag,
+        runtime_edges: pipeline.runtime_edges,
+        stage_stats: nil,
+        worker: nil,
+        input_queue: Queue.new,
+        sources_expected: Set.new,
+        sources_done: Set.new
+      )
 
       # Should not raise, just return
       expect { stage.run_stage(stage_ctx) }.not_to raise_error
     end
 
     it 'runs the nested pipeline when pipeline is set' do
-      context = Object.new
-      root_pipeline_mock = instance_double(Minigun::Pipeline, context: context, task: mock_task)
-      nested_pipeline = instance_double(Minigun::Pipeline, context: context)
-      stage = described_class.new(:my_pipeline, root_pipeline_mock, nested_pipeline, nil, {})
+      # Set context on the root pipeline, as that's where run gets it from
+      pipeline.instance_variable_set(:@context, context)
 
-      stage_ctx = instance_double(Minigun::StageContext,
-                                  pipeline: root_pipeline_mock,
-                                  root_pipeline: root_pipeline_mock,
-                                  stage: stage,
-                                  sources_expected: Set.new,
-                                  input_queue: Queue.new,
-                                  dag: instance_double(Minigun::DAG, downstream: []),
-                                  runtime_edges: {},
-                                  stage_name: :my_pipeline)
+      nested_pipeline = Minigun::Pipeline.new(:nested, task, pipeline, config)
 
-      # Mock the output queue creation
-      allow(stage).to receive(:create_output_queue).and_return(Queue.new)
-      allow(stage).to receive(:send_end_signals)
+      stage = described_class.new(:my_pipeline, pipeline, nested_pipeline, nil, {})
+      stage_ctx = Minigun::StageContext.new(
+        stage: stage,
+        dag: pipeline.dag,
+        runtime_edges: pipeline.runtime_edges,
+        stage_stats: nil,
+        worker: nil,
+        input_queue: Queue.new,
+        sources_expected: Set.new,
+        sources_done: Set.new
+      )
 
-      # Expect nested_pipeline.run to be called
-      expect(nested_pipeline).to receive(:run).with(context)
+      # Track whether nested_pipeline.run was called with correct context
+      run_called = false
+      allow(nested_pipeline).to receive(:run) do |ctx|
+        run_called = true
+        expect(ctx).to eq(context)
+      end
 
       stage.run_stage(stage_ctx)
+      expect(run_called).to be true
     end
 
     it 'sets input_queues when stage has upstream sources' do
-      context = Object.new
-      nested_pipeline = instance_double(Minigun::Pipeline, context: context)
-      stage = described_class.new(:my_pipeline, mock_pipeline, nested_pipeline, nil, {})
+      nested_pipeline = Minigun::Pipeline.new(:nested, task, pipeline, config)
+      nested_pipeline.instance_variable_set(:@context, context)
+
+      stage = described_class.new(:my_pipeline, pipeline, nested_pipeline, nil, {})
 
       input_queue = Queue.new
-      sources = Set.new([:upstream])
-      stage_ctx = instance_double(Minigun::StageContext,
-                                  pipeline: mock_pipeline,
-                                  root_pipeline: mock_pipeline,
-                                  stage: stage,
-                                  sources_expected: sources,
-                                  input_queue: input_queue,
-                                  dag: instance_double(Minigun::DAG, downstream: []),
-                                  runtime_edges: {},
-                                  stage_name: :my_pipeline)
+      upstream_stage = Minigun::ProducerStage.new(:upstream, pipeline, proc {}, {})
+      sources = Set.new([upstream_stage])
 
-      allow(stage).to receive(:create_output_queue).and_return(Queue.new)
-      allow(stage).to receive(:send_end_signals)
+      stage_ctx = Minigun::StageContext.new(
+        stage: stage,
+        dag: pipeline.dag,
+        runtime_edges: pipeline.runtime_edges,
+        stage_stats: nil,
+        worker: nil,
+        input_queue: input_queue,
+        sources_expected: sources,
+        sources_done: Set.new
+      )
+
       allow(nested_pipeline).to receive(:run)
 
-      # Expect input_queues to be set on the nested pipeline with sources_expected
-      expect(nested_pipeline).to receive(:instance_variable_set).with(
-        :@input_queues,
-        { input: input_queue, sources_expected: sources }
-      )
-      expect(nested_pipeline).to receive(:instance_variable_set).with(:@output_queues, anything)
-
       stage.run_stage(stage_ctx)
+
+      # Verify input_queues was set on the nested pipeline with sources_expected
+      input_queues = nested_pipeline.instance_variable_get(:@input_queues)
+      expect(input_queues[:input]).to eq(input_queue)
+      expect(input_queues[:sources_expected]).to eq(sources)
     end
 
     it 'always sets output_queues' do
-      context = Object.new
-      nested_pipeline = instance_double(Minigun::Pipeline, context: context)
-      stage = described_class.new(:my_pipeline, mock_pipeline, nested_pipeline, nil, {})
+      nested_pipeline = Minigun::Pipeline.new(:nested, task, pipeline, config)
+      nested_pipeline.instance_variable_set(:@context, context)
 
-      output_queue = Queue.new
-      stage_ctx = instance_double(Minigun::StageContext,
-                                  pipeline: mock_pipeline,
-                                  root_pipeline: mock_pipeline,
-                                  stage: stage,
-                                  sources_expected: Set.new,
-                                  input_queue: Queue.new,
-                                  dag: instance_double(Minigun::DAG, downstream: []),
-                                  runtime_edges: {},
-                                  stage_name: :my_pipeline)
+      stage = described_class.new(:my_pipeline, pipeline, nested_pipeline, nil, {})
 
-      allow(stage).to receive(:create_output_queue).and_return(output_queue)
-      allow(stage).to receive(:send_end_signals)
+      stage_ctx = Minigun::StageContext.new(
+        stage: stage,
+        dag: pipeline.dag,
+        runtime_edges: pipeline.runtime_edges,
+        stage_stats: nil,
+        worker: nil,
+        input_queue: Queue.new,
+        sources_expected: Set.new,
+        sources_done: Set.new
+      )
+
       allow(nested_pipeline).to receive(:run)
 
-      # Expect output_queues to be set on the nested pipeline
-      expect(nested_pipeline).to receive(:instance_variable_set).with(:@output_queues, { output: output_queue })
-
       stage.run_stage(stage_ctx)
+
+      # Verify output_queues was set on the nested pipeline
+      output_queues = nested_pipeline.instance_variable_get(:@output_queues)
+      expect(output_queues).to have_key(:output)
+      expect(output_queues[:output]).to be_a(Minigun::OutputQueue)
     end
 
     it 'sends end signals to downstream stages after pipeline completes' do
-      context = Object.new
-      nested_pipeline = instance_double(Minigun::Pipeline, context: context)
-      stage = described_class.new(:my_pipeline, mock_pipeline, nested_pipeline, nil, {})
+      nested_pipeline = Minigun::Pipeline.new(:nested, task, pipeline, config)
+      nested_pipeline.instance_variable_set(:@context, context)
 
-      stage_ctx = instance_double(Minigun::StageContext,
-                                  pipeline: mock_pipeline,
-                                  root_pipeline: mock_pipeline,
-                                  stage: stage,
-                                  sources_expected: Set.new,
-                                  input_queue: Queue.new,
-                                  dag: instance_double(Minigun::DAG, downstream: []),
-                                  runtime_edges: {},
-                                  stage_name: :my_pipeline)
+      stage = described_class.new(:my_pipeline, pipeline, nested_pipeline, nil, {})
 
-      allow(stage).to receive(:create_output_queue).and_return(Queue.new)
-      allow(nested_pipeline).to receive(:instance_variable_set)
+      # Create a downstream stage to receive signals
+      downstream_stage = Minigun::ProducerStage.new(:downstream, pipeline, proc {}, {})
+      pipeline.dag.add_edge(stage, downstream_stage)
+
+      stage_ctx = Minigun::StageContext.new(
+        stage: stage,
+        dag: pipeline.dag,
+        runtime_edges: pipeline.runtime_edges,
+        stage_stats: nil,
+        worker: nil,
+        input_queue: Queue.new,
+        sources_expected: Set.new,
+        sources_done: Set.new
+      )
+
       allow(nested_pipeline).to receive(:run)
 
-      # Expect send_end_signals to be called after pipeline runs
-      expect(stage).to receive(:send_end_signals).with(stage_ctx)
+      # Track if send_end_signals is called
+      send_end_signals_called = false
+      allow(stage).to receive(:send_end_signals) do |ctx|
+        send_end_signals_called = true
+        expect(ctx).to eq(stage_ctx)
+      end
 
       stage.run_stage(stage_ctx)
+      expect(send_end_signals_called).to be true
     end
 
     it 'sends end signals even if pipeline raises an error' do
-      context = Object.new
-      nested_pipeline = instance_double(Minigun::Pipeline, context: context)
-      stage = described_class.new(:my_pipeline, mock_pipeline, nested_pipeline, nil, {})
+      nested_pipeline = Minigun::Pipeline.new(:nested, task, pipeline, config)
+      nested_pipeline.instance_variable_set(:@context, context)
 
-      stage_ctx = instance_double(Minigun::StageContext,
-                                  pipeline: mock_pipeline,
-                                  root_pipeline: mock_pipeline,
-                                  stage: stage,
-                                  sources_expected: Set.new,
-                                  input_queue: Queue.new,
-                                  dag: instance_double(Minigun::DAG, downstream: []),
-                                  runtime_edges: {},
-                                  stage_name: :my_pipeline)
+      stage = described_class.new(:my_pipeline, pipeline, nested_pipeline, nil, {})
 
-      allow(stage).to receive(:create_output_queue).and_return(Queue.new)
-      allow(nested_pipeline).to receive(:instance_variable_set)
+      stage_ctx = Minigun::StageContext.new(
+        stage: stage,
+        dag: pipeline.dag,
+        runtime_edges: pipeline.runtime_edges,
+        stage_stats: nil,
+        worker: nil,
+        input_queue: Queue.new,
+        sources_expected: Set.new,
+        sources_done: Set.new
+      )
+
       allow(nested_pipeline).to receive(:run).and_raise(StandardError, 'test error')
 
-      # Expect send_end_signals to be called even on error
-      expect(stage).to receive(:send_end_signals).with(stage_ctx)
+      # Track if send_end_signals is called even on error
+      send_end_signals_called = false
+      allow(stage).to receive(:send_end_signals) do |ctx|
+        send_end_signals_called = true
+        expect(ctx).to eq(stage_ctx)
+      end
 
       expect { stage.run_stage(stage_ctx) }.to raise_error(StandardError, 'test error')
+      expect(send_end_signals_called).to be true
     end
   end
 end
