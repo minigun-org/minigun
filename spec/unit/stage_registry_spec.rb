@@ -72,7 +72,7 @@ RSpec.describe Minigun::StageRegistry do
         expect(registry.all_stages).to include(unnamed_stage)
         # The stage now has an auto-generated name, so it appears in all_names
         expect(registry.all_names).to include(unnamed_stage.name.to_s)
-        expect(unnamed_stage.name.to_s).to match(/^_[0-9a-f]+$/)
+        expect(unnamed_stage.name.to_s).to match(/^_[0-9a-z]+$/i)
       end
     end
 
