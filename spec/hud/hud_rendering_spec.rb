@@ -28,6 +28,36 @@ RSpec.describe 'HUD Full Rendering' do
 
     raise "No pipeline found" unless pipeline
 
+    # Stub all Stats instances BEFORE running pipeline
+    allow_any_instance_of(Minigun::Stats).to receive(:throughput).and_return(10.5)
+    allow_any_instance_of(Minigun::Stats).to receive(:total_items).and_return(5)
+    allow_any_instance_of(Minigun::Stats).to receive(:runtime).and_return(0.5)
+
+    # Stub latency methods individually per stage type
+    allow_any_instance_of(Minigun::Stats).to receive(:p50).and_wrap_original do |method, *args|
+      stage = method.receiver.instance_variable_get(:@stage)
+      if stage && stage.instance_of?(Minigun::ProducerStage)
+        nil  # Producers have no latency
+      else
+        0.0085  # 8.5ms for consumers
+      end
+    end
+
+    allow_any_instance_of(Minigun::Stats).to receive(:p99).and_wrap_original do |method, *args|
+      stage = method.receiver.instance_variable_get(:@stage)
+      if stage && stage.instance_of?(Minigun::ProducerStage)
+        nil  # Producers have no latency
+      else
+        0.012  # 12ms for consumers
+      end
+    end
+
+    # Stub AggregatedStats
+    allow_any_instance_of(Minigun::AggregatedStats).to receive(:runtime).and_return(0.5)
+    allow_any_instance_of(Minigun::AggregatedStats).to receive(:total_produced).and_return(5)
+    allow_any_instance_of(Minigun::AggregatedStats).to receive(:total_consumed).and_return(5)
+    allow_any_instance_of(Minigun::AggregatedStats).to receive(:throughput).and_return(10.0)
+
     # Run pipeline briefly to initialize stats
     thread = Thread.new { pipeline_instance.run }
     sleep 0.1
@@ -87,31 +117,19 @@ RSpec.describe 'HUD Full Rendering' do
     end.join("\n")
   end
 
-  # Helper to strip dynamic values (numbers, times, rates) for structural comparison
-  def strip_dynamic(text)
-    text.gsub(/[⠀⠁⠃⠇⠏⠟⠿⡿⣿]/, '│')              # Animation chars -> static vertical
-        .gsub(/\d+\.\d+[KM]? i\/s/, 'X.XX i/s')   # Item rates (with space)
-        .gsub(/\d+\.\d+[KM]? i$/, 'X.XX i')       # Item rates (end of line)
-        .gsub(/\d+\.\d+[KM]?\/s/, 'X.XX/s')       # Throughput rates
-        .gsub(/\d+\.\d+ms/, 'X.Xms')              # Latency
-        .gsub(/\d+\.\d+s/, 'X.Xs')                # Runtime
-        .gsub(/:\s+\d+/, ': X')                   # Counts like "Produced: 5"
-        .gsub(/\s+\d+\s+/, '   X   ')             # Column values like "  5  "
-  end
-
   describe 'Standard Terminal Size (120x30)' do
     it 'renders complete HUD with both panels' do
       expected = strip_ascii(<<-ASCII)
 ┌─ FLOW DIAGRAM ───────────────────────────────┐┌─ PROCESS STATISTICS ─────────────────────────────────────────────────┐
 │                                              ││                                                                      │
-│               ┌──────────────┐               ││ Runtime:     X.Xs | Throughput:      X.XX i
-│               │  ▶ generate  │               ││ Produced: X | Consumed: X│
-│               └── X.XX/s ───┘               ││                                                                      │
-│                       │                      ││ STAGE                    ITEMS      THRU       P50       P99         │
-│                       │                      ││ ──────────────────────────────────────────────────────────────────   │
-│                ┌─────────────┐               ││ ▶ generate          ⚡   X   X.XX/s         -         -         │
-│                │ ◀ process⚠  │               ││ ◀ process           ⚠   X   X.XX/s    X.Xms    X.Xms         │
-│                └── X.XX/s ───┘               ││                                                                      │
+│               ┌──────────────┐               ││ Runtime:     0.50s | Throughput:      10.00 i
+│               │ ▶ generate⚠  │               ││ Produced:        5 | Consumed:        5│
+│               └─── 10.5/s ───┘               ││                                                                      │
+│                       ⠀                      ││ STAGE                    ITEMS      THRU       P50       P99         │
+│                       ⠁                      ││ ──────────────────────────────────────────────────────────────────   │
+│                ┌─────────────┐               ││ ▶ generate          ⚠        5    10.5/s         -         -         │
+│                │  ◀ process  │               ││ ◀ process           ⚡        5    10.5/s     8.5ms    12.0ms         │
+│                └── 10.5/s ───┘               ││                                                                      │
 │                                              ││                                                                      │
 │                                              ││                                                                      │
 │                                              ││                                                                      │
@@ -151,8 +169,8 @@ ASCII
       buffer = render_hud(pipeline_class.new, width: 120, height: 30)
       actual = normalize_output(buffer)
 
-      # Strip dynamic values and assert full ASCII layout
-      expect(strip_ascii(strip_dynamic(actual))).to eq(expected)
+      # Assert full ASCII layout (values are stubbed to be deterministic)
+      expect(strip_ascii(actual)).to eq(expected)
     end
   end
 
