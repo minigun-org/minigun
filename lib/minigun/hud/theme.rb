@@ -59,7 +59,7 @@ module Minigun
       end
 
       def self.stage_done
-        Terminal::COLORS[:green_dim]
+        Terminal::COLORS[:gray]
       end
 
       # Performance indicators
@@ -95,6 +95,15 @@ module Minigun
 
       def self.flow_medium
         Terminal::COLORS[:cyan]
+      end
+
+      # Draining animation colors (darker, showing flow winding down)
+      def self.drain_dim
+        Terminal::COLORS[:gray]
+      end
+
+      def self.drain_medium
+        Terminal::COLORS[:gray]
       end
 
       # Subtle flowing animation for each box drawing character type
@@ -233,16 +242,40 @@ module Minigun
         ]
       }.freeze
 
+      # Draining state (static, no animation - just gray)
+      DRAIN_ANIMATION = {
+        vertical: [['│', :drain_dim]],
+        horizontal: [['─', :drain_dim]],
+        corner_tl: [['┌', :drain_dim]],
+        corner_tr: [['┐', :drain_dim]],
+        corner_bl: [['└', :drain_dim]],
+        corner_br: [['┘', :drain_dim]],
+        t_down: [['┬', :drain_dim]],
+        t_up: [['┴', :drain_dim]],
+        t_right: [['├', :drain_dim]],
+        t_left: [['┤', :drain_dim]],
+        cross: [['┼', :drain_dim]]
+      }.freeze
+
       # Get animated character and color for a given char type and distance
       # @param char_type [Symbol] Type of character (:vertical, :horizontal, :corner_tl, etc.)
       # @param distance [Integer] Distance from source (for phase calculation)
       # @param animation_frame [Integer] Global animation frame counter
       # @param active [Boolean] Whether the connection is active
+      # @param drain_distance [Integer, nil] How far the drain has progressed from source (nil if not draining)
       # @return [Array<String, String>] [character, color_code]
-      def self.animated_flow_char(char_type, distance, animation_frame, active)
-        return [static_char_for_type(char_type), muted] unless active
+      def self.animated_flow_char(char_type, distance, animation_frame, active, drain_distance: nil)
+        # Show animation if active OR draining (drain_distance is non-nil)
+        return [static_char_for_type(char_type), muted] unless active || !drain_distance.nil?
 
-        frames = FLOW_ANIMATION[char_type]
+        # Check if this cell has been reached by the drain wave
+        # drain_distance is the number of ticks since finishing
+        # Cells are drained when distance <= drain_distance (inclusive)
+        draining = !drain_distance.nil? && distance <= drain_distance
+
+        # Use draining animation if this cell has been reached by the drain wave
+        # Otherwise use normal flow animation
+        frames = draining ? DRAIN_ANIMATION[char_type] : FLOW_ANIMATION[char_type]
         return [static_char_for_type(char_type), muted] unless frames
 
         # Calculate phase based on distance from source and global animation frame
