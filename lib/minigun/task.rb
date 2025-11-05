@@ -108,7 +108,7 @@ module Minigun
       nested_pipeline = Pipeline.new(name, self, @root_pipeline, @config)
 
       # Create a PipelineStage and configure it (pipeline-first positional style)
-      pipeline_stage = PipelineStage.new(name, @root_pipeline, nested_pipeline, nil, options)
+      pipeline_stage = PipelineStage.new(name, @root_pipeline, nested_pipeline, options)
 
       # Add stages to the nested pipeline via block
       if block_given?
@@ -153,7 +153,7 @@ module Minigun
       else
         # Create new PipelineStage and add to root_pipeline (pipeline-first positional style)
         pipeline = Pipeline.new(name, self, @root_pipeline, @config)
-        pipeline_stage = PipelineStage.new(name, @root_pipeline, pipeline, nil, options)
+        pipeline_stage = PipelineStage.new(name, @root_pipeline, pipeline, options)
 
         @root_pipeline.stages << pipeline_stage
         @root_pipeline.dag.add_node(pipeline_stage)

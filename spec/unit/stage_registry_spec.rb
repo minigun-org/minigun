@@ -19,7 +19,7 @@ RSpec.describe Minigun::StageRegistry do
 
   # Helper to create a real composite stage (PipelineStage)
   def create_composite_stage(name, pipeline, nested_pipeline)
-    Minigun::PipelineStage.new(name, pipeline, nested_pipeline, nil, {})
+    Minigun::PipelineStage.new(name, pipeline, nested_pipeline, {})
   end
 
   # Helper to manually add stage to pipeline's stages array (for nested pipeline tests)

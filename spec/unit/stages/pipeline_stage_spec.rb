@@ -16,7 +16,7 @@ RSpec.describe Minigun::PipelineStage do
   describe '#initialize' do
     it 'creates a PipelineStage with a nested pipeline' do
       nested = Minigun::Pipeline.new(:nested, task, pipeline, config)
-      stage = described_class.new(:my_pipeline, pipeline, nested, nil, {})
+      stage = described_class.new(:my_pipeline, pipeline, nested, {})
       expect(stage.name).to eq(:my_pipeline)
       expect(stage.nested_pipeline).to eq(nested)
     end
@@ -25,7 +25,7 @@ RSpec.describe Minigun::PipelineStage do
   describe '#run_mode' do
     it 'returns :composite' do
       nested = Minigun::Pipeline.new(:nested, task, pipeline, config)
-      stage = described_class.new(:my_pipeline, pipeline, nested, nil, {})
+      stage = described_class.new(:my_pipeline, pipeline, nested, {})
       expect(stage.run_mode).to eq(:composite)
     end
   end
@@ -33,7 +33,7 @@ RSpec.describe Minigun::PipelineStage do
 
   describe '#run_stage' do
     it 'returns early if no pipeline is set' do
-      stage = described_class.new(:my_pipeline, pipeline, nil, nil, {})
+      stage = described_class.new(:my_pipeline, pipeline, nil, {})
       stage_ctx = Minigun::StageContext.new(
         stage: stage,
         dag: pipeline.dag,
@@ -55,7 +55,7 @@ RSpec.describe Minigun::PipelineStage do
 
       nested_pipeline = Minigun::Pipeline.new(:nested, task, pipeline, config)
 
-      stage = described_class.new(:my_pipeline, pipeline, nested_pipeline, nil, {})
+      stage = described_class.new(:my_pipeline, pipeline, nested_pipeline, {})
       stage_ctx = Minigun::StageContext.new(
         stage: stage,
         dag: pipeline.dag,
@@ -82,7 +82,7 @@ RSpec.describe Minigun::PipelineStage do
       nested_pipeline = Minigun::Pipeline.new(:nested, task, pipeline, config)
       nested_pipeline.instance_variable_set(:@context, context)
 
-      stage = described_class.new(:my_pipeline, pipeline, nested_pipeline, nil, {})
+      stage = described_class.new(:my_pipeline, pipeline, nested_pipeline, {})
 
       input_queue = Queue.new
       upstream_stage = Minigun::ProducerStage.new(:upstream, pipeline, proc {}, {})
@@ -113,7 +113,7 @@ RSpec.describe Minigun::PipelineStage do
       nested_pipeline = Minigun::Pipeline.new(:nested, task, pipeline, config)
       nested_pipeline.instance_variable_set(:@context, context)
 
-      stage = described_class.new(:my_pipeline, pipeline, nested_pipeline, nil, {})
+      stage = described_class.new(:my_pipeline, pipeline, nested_pipeline, {})
 
       stage_ctx = Minigun::StageContext.new(
         stage: stage,
@@ -140,7 +140,7 @@ RSpec.describe Minigun::PipelineStage do
       nested_pipeline = Minigun::Pipeline.new(:nested, task, pipeline, config)
       nested_pipeline.instance_variable_set(:@context, context)
 
-      stage = described_class.new(:my_pipeline, pipeline, nested_pipeline, nil, {})
+      stage = described_class.new(:my_pipeline, pipeline, nested_pipeline, {})
 
       # Create a downstream stage to receive signals
       downstream_stage = Minigun::ProducerStage.new(:downstream, pipeline, proc {}, {})
@@ -174,7 +174,7 @@ RSpec.describe Minigun::PipelineStage do
       nested_pipeline = Minigun::Pipeline.new(:nested, task, pipeline, config)
       nested_pipeline.instance_variable_set(:@context, context)
 
-      stage = described_class.new(:my_pipeline, pipeline, nested_pipeline, nil, {})
+      stage = described_class.new(:my_pipeline, pipeline, nested_pipeline, {})
 
       stage_ctx = Minigun::StageContext.new(
         stage: stage,

@@ -490,9 +490,9 @@ module Minigun
   class PipelineStage < Stage
     attr_reader :nested_pipeline
 
-    # Positional constructor: PipelineStage.new(name, pipeline, nested_pipeline, block, options)
-    def initialize(name, pipeline, nested_pipeline, block, options = {})
-      super(name, pipeline, block, options)
+    # Positional constructor: PipelineStage.new(name, pipeline, nested_pipeline, options)
+    def initialize(name, pipeline, nested_pipeline, options = {})
+      super(name, pipeline, nil, options)
       @nested_pipeline = nested_pipeline
     end
 
