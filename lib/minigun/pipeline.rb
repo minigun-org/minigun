@@ -5,7 +5,8 @@ module Minigun
   # A Pipeline can be standalone or part of a multi-pipeline Task
   class Pipeline
     attr_reader :name, :config, :stages, :hooks, :dag, :output_queues, :stats,
-                :context, :stage_hooks, :runtime_edges, :input_queues, :parent_pipeline, :task
+                :context, :stage_hooks, :runtime_edges, :input_queues, :parent_pipeline, :task,
+                :entrance_router
 
     def initialize(name, task, parent_pipeline, config = {}, stages: nil, hooks: nil, stage_hooks: nil, dag: nil, stats: nil)
       @name = name

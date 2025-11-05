@@ -3,41 +3,15 @@
 require 'spec_helper'
 
 RSpec.describe Minigun::Worker do
-  let(:stage_registry) { instance_double(Minigun::StageRegistry, register: nil) }
-  let(:task) { instance_double(Minigun::Task, find_queue: nil, stage_registry: stage_registry) }
-
-  let(:pipeline) do
-    instance_double(
-      Minigun::Pipeline,
-      name: 'test_pipeline',
-      dag: dag,
-      task: task,
-      runtime_edges: {},
-      context: user_context,
-      stats: stats,
-      stage_hooks: stage_hooks
-    )
-  end
-
-  let(:stage) do
-    double(
-      'stage',
-      name: :test_stage,
-      execution_context: nil,
-      log_type: 'Worker',
-      run_mode: :streaming,
-      task: task,
-      options: {}, # Add options stub for await feature
-      run_stage: nil # Stub run_stage method
-    )
-  end
-
+  let(:task) { Minigun::Task.new }
+  let(:pipeline) { task.root_pipeline }
+  let(:stage) { Minigun::ConsumerStage.new(:test_stage, pipeline, proc { |item, output| output << item }, {}) }
   let(:config) { { max_threads: 5, max_processes: 2 } }
-  let(:user_context) { double('context') }
-  let(:stage_stats) { double('stage_stats', start!: nil, finish!: nil) }
-  let(:stats) { double('stats', for_stage: stage_stats) }
+  let(:user_context) { {} }
+  let(:stage_stats) { Minigun::Stats.new(stage) }
+  let(:stats) { pipeline.stats }
   let(:stage_hooks) { {} }
-  let(:dag) { instance_double(Minigun::DAG, upstream: [], downstream: [], terminal?: false) }
+  let(:dag) { pipeline.dag }
 
   before do
     allow(Minigun.logger).to receive(:info)
@@ -60,20 +34,6 @@ RSpec.describe Minigun::Worker do
 
   describe '#start' do
     it 'starts a worker thread' do
-      input_queue = Queue.new
-      allow(task).to receive(:find_queue).with(stage).and_return(input_queue)
-      allow(dag).to receive(:upstream).with(:test_stage).and_return([:upstream])
-      allow(dag).to receive(:downstream).with(:test_stage).and_return([])
-
-      # Stub run_stage to simulate stage execution
-      allow(stage).to receive(:run_stage) do |worker_ctx|
-        # Simulate basic loop: wait for END signal
-        loop do
-          msg = worker_ctx.input_queue.pop
-          break if msg.is_a?(Minigun::EndOfSource)
-        end
-      end
-
       worker = described_class.new(pipeline, stage, config)
 
       worker.start
@@ -82,7 +42,9 @@ RSpec.describe Minigun::Worker do
       expect(worker.thread).to be_a(Thread)
 
       # Put END signal so the worker exits
-      input_queue << Minigun::EndOfSource.new(:upstream)
+      input_queue = task.find_queue(stage)
+      upstream_stage = Minigun::ProducerStage.new(:upstream, pipeline, proc {}, {})
+      input_queue << Minigun::EndOfSource.new(upstream_stage)
 
       worker.join
 
@@ -93,13 +55,12 @@ RSpec.describe Minigun::Worker do
 
   describe '#join' do
     it 'waits for worker thread to complete' do
-      input_queue = Queue.new
-      allow(task).to receive(:find_queue).with(stage).and_return(input_queue)
-
       worker = described_class.new(pipeline, stage, config)
 
       # Put END signal
-      input_queue << Minigun::EndOfSource.new(:upstream)
+      input_queue = task.find_queue(stage)
+      upstream_stage = Minigun::ProducerStage.new(:upstream, pipeline, proc {}, {})
+      input_queue << Minigun::EndOfSource.new(upstream_stage)
 
       worker.start
       worker.join
