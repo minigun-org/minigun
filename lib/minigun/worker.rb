@@ -113,12 +113,9 @@ module Minigun
 
     # Wait for first item to arrive via dynamic routing
     # Returns true if timed out (should shutdown), false if item received (continue)
+    # TODO: This implementation looks wonky, consider alternatives
     def wait_for_first_item(timeout:, stage_ctx:)
-      input_queue = stage_ctx.input_queue
-      return false unless input_queue # Safety check for mocked contexts
-
-      raw_queue = input_queue.instance_variable_get(:@queue) if input_queue.respond_to?(:instance_variable_get)
-      return false unless raw_queue # Safety check for mocked queues
+      raw_queue = stage_ctx.input_queue
 
       # Try to pop with timeout using Timeout module
       begin
@@ -174,8 +171,8 @@ module Minigun
                            Set.new
                          else
                            # Check if this stage is an entrance router or single entry stage for nested pipeline
-                           input_queues = @pipeline.instance_variable_get(:@input_queues)
-                           entrance_router = @pipeline.instance_variable_get(:@entrance_router)
+                           input_queues = @pipeline.input_queues
+                           entrance_router = @pipeline.entrance_router
 
                            if @stage == entrance_router && input_queues
                              # For entrance router, use sources from parent pipeline

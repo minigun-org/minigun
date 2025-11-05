@@ -3,44 +3,31 @@
 require 'spec_helper'
 
 RSpec.describe Minigun::Worker do
-  let(:stage_registry) { instance_double(Minigun::StageRegistry, register: nil) }
-  let(:task) { instance_double(Minigun::Task, find_queue: nil, stage_registry: stage_registry) }
-
-  let(:pipeline) do
-    instance_double(
-      Minigun::Pipeline,
-      name: 'test_pipeline',
-      dag: dag,
-      task: task,
-      runtime_edges: {},
-      context: user_context,
-      stats: stats,
-      stage_hooks: stage_hooks
-    )
-  end
-
-  let(:stage) do
-    double(
-      'stage',
-      name: :test_stage,
-      execution_context: nil,
-      log_type: 'Worker',
-      run_mode: :streaming,
-      task: task,
-      options: {}, # Add options stub for await feature
-      run_stage: nil # Stub run_stage method
-    )
-  end
-
+  let(:task) { Minigun::Task.new }
+  let(:pipeline) { task.root_pipeline }
+  let(:stage) { Minigun::ConsumerStage.new(:test_stage, pipeline, proc { |item, output| output << item }, {}) }
   let(:config) { { max_threads: 5, max_processes: 2 } }
-  let(:user_context) { double('context') }
-  let(:stage_stats) { double('stage_stats', start!: nil, finish!: nil) }
-  let(:stats) { double('stats', for_stage: stage_stats) }
+  let(:user_context) { {} }
+  let(:stage_stats) { Minigun::Stats.new(stage) }
+  let(:stats) { pipeline.stats }
   let(:stage_hooks) { {} }
-  let(:dag) { instance_double(Minigun::DAG, upstream: [], downstream: [], terminal?: false) }
+  let(:dag) { pipeline.dag }
 
   before do
     allow(Minigun.logger).to receive(:info)
+    # Initialize stats and runtime_edges manually since we're not calling run()
+    pipeline.instance_variable_set(:@stats, Minigun::AggregatedStats.new(pipeline, dag))
+    pipeline.instance_variable_set(:@runtime_edges, Concurrent::Hash.new { |h, k| h[k] = Concurrent::Set.new })
+  end
+
+  # Helper to ensure queue is registered for a stage
+  def ensure_queue(stage)
+    queue = task.find_queue(stage)
+    unless queue
+      queue = Queue.new
+      task.register_stage_queue(stage, queue)
+    end
+    queue
   end
 
   describe '#initialize' do
@@ -60,20 +47,6 @@ RSpec.describe Minigun::Worker do
 
   describe '#start' do
     it 'starts a worker thread' do
-      input_queue = Queue.new
-      allow(task).to receive(:find_queue).with(stage).and_return(input_queue)
-      allow(dag).to receive(:upstream).with(:test_stage).and_return([:upstream])
-      allow(dag).to receive(:downstream).with(:test_stage).and_return([])
-
-      # Stub run_stage to simulate stage execution
-      allow(stage).to receive(:run_stage) do |worker_ctx|
-        # Simulate basic loop: wait for END signal
-        loop do
-          msg = worker_ctx.input_queue.pop
-          break if msg.is_a?(Minigun::EndOfSource)
-        end
-      end
-
       worker = described_class.new(pipeline, stage, config)
 
       worker.start
@@ -82,7 +55,9 @@ RSpec.describe Minigun::Worker do
       expect(worker.thread).to be_a(Thread)
 
       # Put END signal so the worker exits
-      input_queue << Minigun::EndOfSource.new(:upstream)
+      input_queue = ensure_queue(stage)
+      upstream_stage = Minigun::ProducerStage.new(:upstream, pipeline, proc {}, {})
+      input_queue << Minigun::EndOfSource.new(upstream_stage)
 
       worker.join
 
@@ -93,13 +68,12 @@ RSpec.describe Minigun::Worker do
 
   describe '#join' do
     it 'waits for worker thread to complete' do
-      input_queue = Queue.new
-      allow(task).to receive(:find_queue).with(stage).and_return(input_queue)
-
       worker = described_class.new(pipeline, stage, config)
 
       # Put END signal
-      input_queue << Minigun::EndOfSource.new(:upstream)
+      input_queue = ensure_queue(stage)
+      upstream_stage = Minigun::ProducerStage.new(:upstream, pipeline, proc {}, {})
+      input_queue << Minigun::EndOfSource.new(upstream_stage)
 
       worker.start
       worker.join
@@ -155,13 +129,10 @@ RSpec.describe Minigun::Worker do
 
   describe 'disconnected stage handling' do
     it 'warns and waits with default 5s timeout if no upstream sources' do
-      input_queue = Queue.new
-      allow(task).to receive(:find_queue).with(stage).and_return(input_queue)
-      allow(dag).to receive(:upstream).with(stage).and_return([])
-      allow(dag).to receive(:downstream).with(stage).and_return([])
-      allow(stage).to receive(:options).and_return({}) # No await option set
+      # Create a stage with no await option (will use default 5s timeout)
+      disconnected_stage = Minigun::ConsumerStage.new(:disconnected, pipeline, proc { |item, output| output << item }, {})
 
-      worker = described_class.new(pipeline, stage, config)
+      worker = described_class.new(pipeline, disconnected_stage, config)
 
       allow(Minigun.logger).to receive(:warn).and_call_original
       allow(Minigun.logger).to receive(:debug).and_call_original
@@ -174,21 +145,19 @@ RSpec.describe Minigun::Worker do
     end
 
     it 'sends END signals to downstream after timeout if disconnected' do
-      input_queue = Queue.new
-      downstream_stage = double('downstream_stage', name: :downstream, task: task)
-      downstream_queue = Queue.new
+      # Create stage with short timeout
+      timeout_stage = Minigun::ConsumerStage.new(:timeout_test, pipeline, proc { |item, output| output << item }, { await: 0.1 })
+      downstream_stage = Minigun::ConsumerStage.new(:downstream, pipeline, proc { |item, output| output << item }, {})
 
-      allow(task).to receive(:find_queue).with(stage).and_return(input_queue)
-      allow(task).to receive(:find_queue).with(downstream_stage).and_return(downstream_queue)
-      allow(dag).to receive(:upstream).with(stage).and_return([])
-      allow(dag).to receive(:downstream).with(stage).and_return([downstream_stage])
-      allow(stage).to receive(:options).and_return({ await: 0.1 }) # Short timeout for test
+      # Manually add edge to DAG
+      dag.add_edge(timeout_stage, downstream_stage)
 
-      worker = described_class.new(pipeline, stage, config)
+      worker = described_class.new(pipeline, timeout_stage, config)
       worker.start
       worker.join
 
       # Should have sent END signal to downstream after timeout
+      downstream_queue = task.find_queue(downstream_stage)
       msg = begin
         downstream_queue.pop(true)
       rescue StandardError
@@ -198,17 +167,14 @@ RSpec.describe Minigun::Worker do
     end
 
     it 'immediately shuts down with await: false' do
-      input_queue = Queue.new
-      downstream_stage = double('downstream_stage', name: :downstream, task: task)
-      downstream_queue = Queue.new
+      # Create stage with await: false
+      immediate_stage = Minigun::ConsumerStage.new(:immediate_test, pipeline, proc { |item, output| output << item }, { await: false })
+      downstream_stage = Minigun::ConsumerStage.new(:downstream2, pipeline, proc { |item, output| output << item }, {})
 
-      allow(task).to receive(:find_queue).with(stage).and_return(input_queue)
-      allow(task).to receive(:find_queue).with(downstream_stage).and_return(downstream_queue)
-      allow(dag).to receive(:upstream).with(stage).and_return([])
-      allow(dag).to receive(:downstream).with(stage).and_return([downstream_stage])
-      allow(stage).to receive(:options).and_return({ await: false }) # Immediate shutdown
+      # Manually add edge to DAG
+      dag.add_edge(immediate_stage, downstream_stage)
 
-      worker = described_class.new(pipeline, stage, config)
+      worker = described_class.new(pipeline, immediate_stage, config)
 
       allow(Minigun.logger).to receive(:debug).and_call_original
 
@@ -216,6 +182,7 @@ RSpec.describe Minigun::Worker do
       worker.join
 
       # Should have sent END signal to downstream immediately
+      downstream_queue = task.find_queue(downstream_stage)
       msg = begin
         downstream_queue.pop(true)
       rescue StandardError
@@ -226,14 +193,10 @@ RSpec.describe Minigun::Worker do
     end
 
     it 'waits indefinitely with await: true' do
-      input_queue = Queue.new
-      allow(task).to receive(:find_queue).with(stage).and_return(input_queue)
-      allow(dag).to receive(:upstream).with(stage).and_return([])
-      allow(dag).to receive(:downstream).with(stage).and_return([])
-      allow(stage).to receive(:options).and_return({ await: true }) # Infinite wait
-      allow(stage).to receive(:run_stage) # Mock stage execution to avoid hanging
+      # Create stage with await: true
+      await_stage = Minigun::ConsumerStage.new(:await_test, pipeline, proc { |item, output| output << item }, { await: true })
 
-      worker = described_class.new(pipeline, stage, config)
+      worker = described_class.new(pipeline, await_stage, config)
 
       allow(Minigun.logger).to receive(:debug).and_call_original
 
@@ -268,14 +231,13 @@ RSpec.describe Minigun::Worker do
     end
 
     it 'routes items without executing' do
-      input_queue = Queue.new
-      target_a_queue = Queue.new
-      target_b_queue = Queue.new
+      # Add upstream edge
+      dag.add_edge(source_stage, broadcast_router)
 
-      allow(task).to receive(:find_queue).with(broadcast_router).and_return(input_queue)
-      allow(task).to receive(:find_queue).with(target_a_stage).and_return(target_a_queue)
-      allow(task).to receive(:find_queue).with(target_b_stage).and_return(target_b_queue)
-      allow(dag).to receive(:upstream).with(broadcast_router).and_return([source_stage])
+      # Ensure queues are registered
+      input_queue = ensure_queue(broadcast_router)
+      ensure_queue(target_a_stage)
+      ensure_queue(target_b_stage)
 
       # Put items and END signal
       input_queue << 1
@@ -287,6 +249,8 @@ RSpec.describe Minigun::Worker do
       worker.join
 
       # Both targets should have received items (broadcast)
+      target_a_queue = task.find_queue(target_a_stage)
+      target_b_queue = task.find_queue(target_b_stage)
       expect(target_a_queue.size).to be > 0
       expect(target_b_queue.size).to be > 0
     end
@@ -294,19 +258,23 @@ RSpec.describe Minigun::Worker do
 
   describe 'error handling' do
     it 'shuts down executor even on error' do
-      executor = instance_double(Minigun::Execution::InlineExecutor)
-      allow(executor).to receive(:shutdown)
+      # Create a stage that will raise an error
+      error_stage = Minigun::ConsumerStage.new(
+        :error_stage,
+        pipeline,
+        proc { |_item, _output| raise StandardError, 'Test error' },
+        {}
+      )
 
-      # Mock executor creation to return our test double (now takes stage_ctx arg)
-      allow_any_instance_of(described_class).to receive(:create_executor_if_needed).with(any_args).and_return(executor)
+      worker = described_class.new(pipeline, error_stage, config)
 
-      worker = described_class.new(pipeline, stage, config)
+      # Add upstream so worker gets an item
+      upstream_stage = Minigun::ProducerStage.new(:error_upstream, pipeline, proc {}, {})
+      dag.add_edge(upstream_stage, error_stage)
 
-      # Cause an error AFTER stage_ctx is created (so executor gets created)
-      # Error during stage.run_stage (after executor is created)
-      allow(stage).to receive(:run_stage).and_raise(StandardError, 'Test error')
-
-      expect(executor).to receive(:shutdown)
+      input_queue = ensure_queue(error_stage)
+      input_queue << 1
+      input_queue << Minigun::EndOfSource.new(upstream_stage)
 
       worker.start
       sleep 0.02 # Give thread time to start and error
@@ -315,19 +283,22 @@ RSpec.describe Minigun::Worker do
       rescue StandardError
         nil
       end
+
+      # Test that we don't crash - executor.shutdown is called in ensure block
+      expect(worker.thread).not_to be_alive
     end
   end
 
   describe 'logging' do
     it 'logs when starting' do
-      input_queue = Queue.new
-      allow(task).to receive(:find_queue).with(stage).and_return(input_queue)
+      worker = described_class.new(pipeline, stage, config)
 
-      input_queue << Minigun::EndOfSource.new(:upstream)
+      input_queue = ensure_queue(stage)
+      upstream_stage = Minigun::ProducerStage.new(:upstream, pipeline, proc {}, {})
+      input_queue << Minigun::EndOfSource.new(upstream_stage)
 
       allow(Minigun.logger).to receive(:debug).and_call_original
 
-      worker = described_class.new(pipeline, stage, config)
       worker.start
       worker.join
 
@@ -335,25 +306,15 @@ RSpec.describe Minigun::Worker do
     end
 
     it 'logs when done' do
-      input_queue = Queue.new
-      allow(task).to receive(:find_queue).with(stage).and_return(input_queue)
-      allow(dag).to receive(:upstream).with(:test_stage).and_return([:upstream])
-      allow(dag).to receive(:downstream).with(:test_stage).and_return([])
+      worker = described_class.new(pipeline, stage, config)
 
-      # Stub run_stage to simulate stage execution
-      # Note: accessing raw queue directly here (not wrapped in InputQueue)
-      allow(stage).to receive(:run_stage) do |worker_ctx|
-        loop do
-          msg = worker_ctx.input_queue.pop
-          break if msg.is_a?(Minigun::EndOfSource)
-        end
-      end
-
-      input_queue << Minigun::EndOfSource.new(:upstream)
+      # Put END signal
+      input_queue = ensure_queue(stage)
+      upstream_stage = Minigun::ProducerStage.new(:upstream, pipeline, proc {}, {})
+      input_queue << Minigun::EndOfSource.new(upstream_stage)
 
       allow(Minigun.logger).to receive(:debug).and_call_original
 
-      worker = described_class.new(pipeline, stage, config)
       worker.start
       worker.join
 

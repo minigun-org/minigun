@@ -59,12 +59,11 @@ module Minigun
     end
 
     def task
-      return unless @pipeline&.respond_to?(:task)
       @pipeline.task
     end
 
     def root_pipeline
-      pipeline&.root_pipeline
+      @pipeline.root_pipeline
     end
 
     # Get the queue size for this stage
@@ -179,7 +178,7 @@ module Minigun
       task = stage_ctx.stage.task
 
       all_targets.each do |target|
-        queue = task&.find_queue(target)
+        queue = task.find_queue(target)
         next unless queue
 
         queue << EndOfSource.new(stage_ctx.stage)

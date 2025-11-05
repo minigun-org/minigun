@@ -16,25 +16,28 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun.fork? do
   # Create real Task and Pipeline objects for proper testing
   let(:task) { Minigun::Task.new }
   let(:pipeline) { task.root_pipeline }
-  let(:mock_stage) { double('Stage', name: 'test_stage', task: task) }
-  let(:stage_stats) { Minigun::Stats.new(mock_stage) }
+  # Create a simple test stage for stats with unique name - this will be replaced by real stages in tests
+  let(:test_stage) do
+    Minigun::ConsumerStage.new(:jepsen_test_stage_stats, pipeline, proc { |item, output| output << item }, {})
+  end
+  let(:stage_stats) { Minigun::Stats.new(test_stage) }
   let(:stage_ctx) do
-    Struct.new(:stage_stats, :pipeline, :root_pipeline, :stage).new(stage_stats, pipeline, pipeline, mock_stage)
+    Struct.new(:stage_stats, :pipeline, :root_pipeline, :stage).new(stage_stats, pipeline, pipeline, test_stage)
   end
 
   # Helper to create a real stage that processes items
   def create_stage(name: 'test_stage', processor: nil, expects_context: false)
     processor ||= ->(item, output) { output << (item * 2) }
 
-    # Use the real pipeline from the task
-    real_pipeline = task.root_pipeline
+    # Use the pipeline from the task
+    pipeline = task.root_pipeline
 
     # Create real ConsumerStage with a block that processes (item, output)
     # RSpec mocks don't work across forks, so we need real objects
     # ConsumerStage#execute handles the input loop and calls block per item
     Minigun::ConsumerStage.new(
       name.to_sym,
-      real_pipeline,
+      pipeline,
       proc { |item, output_queue|
         # Block is executed via instance_exec(user_context), so 'self' is the user context
         # If expects_context=true, pass user context to processor; otherwise pass output_queue
@@ -730,13 +733,17 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun.fork? do
         task_for_test = Minigun::Task.new
         pipeline_for_test = task_for_test.root_pipeline
 
+        # Create real stages for testing
+        test_stage_1 = Minigun::ConsumerStage.new(:multi_stage_test_1, pipeline_for_test, proc { |item, output| output << (item * 2) }, {})
+        test_stage_2 = Minigun::ConsumerStage.new(:multi_stage_test_2, pipeline_for_test, proc { |item, output| output << (item * 3) }, {})
+
         stage_ctx_1 = Struct.new(:stage_stats, :pipeline, :root_pipeline, :stage).new(
           stage_stats, pipeline_for_test, pipeline_for_test,
-          double('Stage', name: 'test_stage_1', task: task_for_test)
+          test_stage_1
         )
         stage_ctx_2 = Struct.new(:stage_stats, :pipeline, :root_pipeline, :stage).new(
           stage_stats, pipeline_for_test, pipeline_for_test,
-          double('Stage', name: 'test_stage_2', task: task_for_test)
+          test_stage_2
         )
 
         # Create two separate IPC executors sharing same task
@@ -750,14 +757,7 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun.fork? do
         items1.each { |i| input_queue1 << i }
         input_queue1 << Minigun::EndOfStage.new('test')
 
-        stage1 = Minigun::ConsumerStage.new(
-          :multi_stage_test_1,
-          pipeline_for_test,
-          proc { |item, output| output << (item * 2) },
-          {}
-        )
-
-        executor1.execute_stage(stage1, {}, input_queue1, output_queue1)
+        executor1.execute_stage(test_stage_1, {}, input_queue1, output_queue1)
         results1 = []
         results1 << output_queue1.pop until output_queue1.empty?
 
@@ -768,15 +768,8 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun.fork? do
         items2.each { |i| input_queue2 << i }
         input_queue2 << Minigun::EndOfStage.new('test')
 
-        stage2 = Minigun::ConsumerStage.new(
-          :multi_stage_test_2,
-          pipeline_for_test,
-          proc { |item, output| output << (item * 3) },
-          {}
-        )
-
         # This should not hang due to FD leaks
-        executor2.execute_stage(stage2, {}, input_queue2, output_queue2)
+        executor2.execute_stage(test_stage_2, {}, input_queue2, output_queue2)
         results2 = []
         results2 << output_queue2.pop until output_queue2.empty?
 
@@ -844,9 +837,18 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun.fork? do
           Thread.new do
             local_task = Minigun::Task.new
             local_pipeline = local_task.root_pipeline
+
+            # Create the stage first
+            local_stage = Minigun::ConsumerStage.new(
+              "concurrent_test_#{thread_id}".to_sym,
+              local_pipeline,
+              proc { |item, output| output << (item * 2) },
+              {}
+            )
+
             local_stage_ctx = Struct.new(:stage_stats, :pipeline, :root_pipeline, :stage).new(
               stage_stats, local_pipeline, local_pipeline,
-              double('Stage', name: "test_stage_#{thread_id}", task: local_task)
+              local_stage
             )
 
             local_executor = Minigun::Execution.create_executor(:ipc_fork, local_stage_ctx, max_size: 2)
@@ -858,14 +860,7 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun.fork? do
             items.each { |i| input_queue << i }
             input_queue << Minigun::EndOfStage.new('test')
 
-            stage = Minigun::ConsumerStage.new(
-              "concurrent_test_#{thread_id}".to_sym,
-              local_pipeline,
-              proc { |item, output| output << (item * 2) },
-              {}
-            )
-
-            local_executor.execute_stage(stage, {}, input_queue, output_queue)
+            local_executor.execute_stage(local_stage, {}, input_queue, output_queue)
 
             results = []
             results << output_queue.pop until output_queue.empty?

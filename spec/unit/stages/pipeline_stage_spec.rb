@@ -29,14 +29,20 @@ RSpec.describe Minigun::PipelineStage do
 
   describe '#run_stage' do
     it 'returns early if no pipeline is set' do
-      stage = described_class.new( :my_pipeline, nil, nil, {})
+      task = Minigun::Task.new
+      pipeline = task.root_pipeline
+
+      # Initialize runtime_edges manually since we're not calling run()
+      pipeline.instance_variable_set(:@runtime_edges, Concurrent::Hash.new { |h, k| h[k] = Concurrent::Set.new })
+
+      stage = described_class.new(:my_pipeline, pipeline, nil, nil, {})
       stage_ctx = instance_double(Minigun::StageContext,
-                                  pipeline: mock_pipeline,
+                                  pipeline: pipeline,
                                   stage: stage,
                                   sources_expected: Set.new,
                                   input_queue: Queue.new,
                                   dag: instance_double(Minigun::DAG, downstream: []),
-                                  runtime_edges: {},
+                                  runtime_edges: pipeline.runtime_edges,
                                   stage_name: :my_pipeline)
 
       # Should not raise, just return
@@ -45,7 +51,7 @@ RSpec.describe Minigun::PipelineStage do
 
     it 'runs the nested pipeline when pipeline is set' do
       context = Object.new
-      root_pipeline_mock = instance_double(Minigun::Pipeline, context: context)
+      root_pipeline_mock = instance_double(Minigun::Pipeline, context: context, task: mock_task)
       nested_pipeline = instance_double(Minigun::Pipeline, context: context)
       stage = described_class.new(:my_pipeline, root_pipeline_mock, nested_pipeline, nil, {})
 
