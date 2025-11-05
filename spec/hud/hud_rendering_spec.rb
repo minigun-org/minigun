@@ -125,8 +125,8 @@ RSpec.describe 'HUD Full Rendering' do
 │               ┌──────────────┐               ││ Runtime:     0.50s | Throughput:      10.00 i
 │               │ ▶ generate⚠  │               ││ Produced:        5 | Consumed:        5│
 │               └─── 10.5/s ───┘               ││                                                                      │
-│                       ⠀                      ││ STAGE                    ITEMS      THRU       P50       P99         │
-│                       ⠁                      ││ ──────────────────────────────────────────────────────────────────   │
+│                       │                      ││ STAGE                    ITEMS      THRU       P50       P99         │
+│                       │                      ││ ──────────────────────────────────────────────────────────────────   │
 │                ┌─────────────┐               ││ ▶ generate          ⚠        5    10.5/s         -         -         │
 │                │  ◀ process  │               ││ ◀ process           ⚡        5    10.5/s     8.5ms    12.0ms         │
 │                └── 10.5/s ───┘               ││                                                                      │

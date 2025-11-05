@@ -9,6 +9,7 @@ module Minigun
 
       def initialize(_frame_width, _frame_height)
         @animation_frame = 0
+        @render_tick = 0  # Counter for slowing down animation
         @width = 0  # Actual width of diagram content
         @height = 0  # Actual height of diagram content
       end
@@ -82,8 +83,13 @@ module Minigun
           diagram_stage.render(terminal, stage_data, x_offset, y_offset)
         end
 
+        # Update animation (every 2 renders for half speed)
+        @render_tick += 1
+        if @render_tick % 2 == 0
+          @animation_frame = (@animation_frame + 1) % 24
+        end
         # Update animation
-        @animation_frame = (@animation_frame + 1) % 60
+        # @animation_frame = (@animation_frame + 1) % 24
 
         # Clear cached data for next frame
         @cached_layout = nil
@@ -366,14 +372,17 @@ module Minigun
 
         # Check if connection is active
         active = stage_data[:throughput] && stage_data[:throughput] > 0
-        color = active ? Theme.primary : Theme.muted
 
         # Calculate split point (horizontal spine where fan-out occurs)
-        first_target_y = target_positions.first[:y]
         split_y = from_y + 1
 
+        # Distance counter starts at 0 from source box exit
+        distance = 0
+
         # Draw vertical line from source to split point
-        terminal.write_at(x_offset + from_x, y_offset + from_y, "│", color: color)
+        char, color = Theme.animated_flow_char(:vertical, distance, @animation_frame, active)
+        terminal.write_at(x_offset + from_x, y_offset + from_y, char, color: color)
+        distance += 1
 
         # Get X positions of all targets (sorted)
         target_xs = target_positions.map { |pos| pos[:x] + pos[:width] / 2 }.sort
@@ -383,47 +392,43 @@ module Minigun
         # Check if there's a target directly below the source
         has_center_target = target_xs.include?(from_x)
 
-        # Draw horizontal spine with junctions
-        # Pattern with center target:  ┌───────────────┼───────────────┐
-        # Pattern without center:      ┌───────────────┴───────────────┐
+        # Draw horizontal spine with distance radiating from center
+        # Distance flows outward from center (from_x)
         (leftmost_x..rightmost_x).each do |x|
-          # Determine the proper box-drawing character
-          char = if x == leftmost_x
-                   # Left corner
-                   "┌"
-                 elsif x == rightmost_x
-                   # Right corner
-                   "┐"
-                 elsif x == from_x
-                   # Source position: ┼ if target below, ┴ if not
-                   has_center_target ? "┼" : "┴"
-                 else
-                   # Regular horizontal line (spine)
-                   if active
-                     offset = (@animation_frame / 4) % 4
-                     ["─", "╌", "┄", "┈"][offset]
-                   else
-                     "─"
-                   end
-                 end
+          # Calculate distance from center (where flow splits)
+          x_distance_from_center = (x - from_x).abs
+          spine_distance = distance + x_distance_from_center
 
+          # Determine the proper box-drawing character type
+          char_type = if x == leftmost_x
+                        :corner_tl  # Left corner ┌
+                      elsif x == rightmost_x
+                        :corner_tr  # Right corner ┐
+                      elsif x == from_x
+                        # Source position: cross if target below, t_up if not
+                        has_center_target ? :cross : :t_up
+                      else
+                        :horizontal  # Regular horizontal line
+                      end
+
+          char, color = Theme.animated_flow_char(char_type, spine_distance, @animation_frame, active)
           terminal.write_at(x_offset + x, y_offset + split_y, char, color: color)
         end
 
         # Draw vertical lines down to each target
+        # Distance continues from spine position
         target_positions.each do |to_pos|
           to_x = to_pos[:x] + to_pos[:width] / 2
           to_y = to_pos[:y]
 
-          ((split_y + 1)...to_y).each do |y|
-            char = if active
-                     offset = (@animation_frame / 4) % Theme::FLOW_CHARS.length
-                     phase = (y - split_y + offset) % Theme::FLOW_CHARS.length
-                     Theme::FLOW_CHARS[phase]
-                   else
-                     "│"
-                   end
+          # Calculate distance at spine for this target
+          x_distance_from_center = (to_x - from_x).abs
+          spine_distance_at_target = distance + x_distance_from_center
 
+          ((split_y + 1)...to_y).each do |y|
+            # Distance increases as we go down
+            drop_distance = spine_distance_at_target + (y - split_y)
+            char, color = Theme.animated_flow_char(:vertical, drop_distance, @animation_frame, active)
             terminal.write_at(x_offset + to_x, y_offset + y, char, color: color)
           end
         end
@@ -436,7 +441,6 @@ module Minigun
 
         # Check if connection is active
         active = stage_data[:throughput] && stage_data[:throughput] > 0
-        color = active ? Theme.primary : Theme.muted
 
         # Calculate merge point (where horizontal lines converge)
         # Place it 1 line above the target
@@ -450,64 +454,66 @@ module Minigun
           }
         end.sort_by { |s| s[:x] }
 
-        # Draw vertical lines from each source down to merge level
-        # Then turn inward with corners
+        # Draw lines from each source down to merge level, then turn inward
         source_data.each do |source|
+          # Distance starts at 0 for each source
+          distance = 0
+
           # Vertical line from source to turn point
           (source[:y]...merge_y).each do |y|
-            char = if active
-                     offset = (@animation_frame / 4) % Theme::FLOW_CHARS.length
-                     phase = (y - source[:y] + offset) % Theme::FLOW_CHARS.length
-                     Theme::FLOW_CHARS[phase]
-                   else
-                     "│"
-                   end
-
+            char, color = Theme.animated_flow_char(:vertical, distance, @animation_frame, active)
             terminal.write_at(x_offset + source[:x], y_offset + y, char, color: color)
+            distance += 1
           end
 
-          # Corner at turn point
+          # Corner at turn point and horizontal line to center
           if source[:x] < to_x
             # Left source: turn right with └
-            terminal.write_at(x_offset + source[:x], y_offset + merge_y, "└", color: color)
+            char, color = Theme.animated_flow_char(:corner_bl, distance, @animation_frame, active)
+            terminal.write_at(x_offset + source[:x], y_offset + merge_y, char, color: color)
+            distance += 1
 
-            # Horizontal line from corner to center (or near target)
+            # Horizontal line from corner to center
             ((source[:x] + 1)...to_x).each do |x|
-              char = if active
-                       offset = (@animation_frame / 4) % 4
-                       ["─", "╌", "┄", "┈"][offset]
-                     else
-                       "─"
-                     end
-
+              char, color = Theme.animated_flow_char(:horizontal, distance, @animation_frame, active)
               terminal.write_at(x_offset + x, y_offset + merge_y, char, color: color)
+              distance += 1
             end
           elsif source[:x] > to_x
             # Right source: turn left with ┘
-            terminal.write_at(x_offset + source[:x], y_offset + merge_y, "┘", color: color)
+            char, color = Theme.animated_flow_char(:corner_br, distance, @animation_frame, active)
+            terminal.write_at(x_offset + source[:x], y_offset + merge_y, char, color: color)
+            distance += 1
 
-            # Horizontal line from corner to center (or near target)
-            ((to_x + 1)...source[:x]).each do |x|
-              char = if active
-                       offset = (@animation_frame / 4) % 4
-                       ["─", "╌", "┄", "┈"][offset]
-                     else
-                       "─"
-                     end
-
+            # Horizontal line from corner to center
+            ((to_x + 1)...source[:x]).reverse_each do |x|
+              char, color = Theme.animated_flow_char(:horizontal, distance, @animation_frame, active)
               terminal.write_at(x_offset + x, y_offset + merge_y, char, color: color)
+              distance += 1
             end
           else
-            # Source directly above target - just draw vertical line
+            # Source directly above target - vertical line continues
             # (already drawn above)
           end
         end
 
         # Draw junction at the converge point (center X position)
-        # Use ┼ if there's a source directly above, ┬ if not
+        # Use cross if there's a source directly above, t_down if not
         has_center_source = source_data.any? { |s| s[:x] == to_x }
-        junction_char = has_center_source ? "┼" : "┬"
-        terminal.write_at(x_offset + to_x, y_offset + merge_y, junction_char, color: color)
+
+        # Calculate distance for junction (use center source distance if exists)
+        center_source = source_data.find { |s| s[:x] == to_x }
+        junction_distance = if center_source
+                              merge_y - center_source[:y]
+                            else
+                              # Use distance from closest source
+                              closest = source_data.min_by { |s| (s[:x] - to_x).abs }
+                              (merge_y - closest[:y]) + (closest[:x] - to_x).abs
+                            end
+
+        junction_type = has_center_source ? :cross : :t_down
+        char, color = Theme.animated_flow_char(junction_type, junction_distance, @animation_frame, active)
+        terminal.write_at(x_offset + to_x, y_offset + merge_y, char, color: color)
       end
 
       # Draw animated connection line between two boxes
@@ -521,62 +527,76 @@ module Minigun
 
         # Check if connection is active (has throughput)
         active = stage_data[:throughput] && stage_data[:throughput] > 0
-        color = active ? Theme.primary : Theme.muted
+
+        # Distance counter starts at 0 from source
+        distance = 0
 
         if from_x == to_x
           # Straight vertical line
           (from_y...to_y).each do |y|
-            char = if active
-                     offset = (@animation_frame / 4) % Theme::FLOW_CHARS.length
-                     phase = (y - from_y + offset) % Theme::FLOW_CHARS.length
-                     Theme::FLOW_CHARS[phase]
-                   else
-                     "│"
-                   end
-
+            char, color = Theme.animated_flow_char(:vertical, distance, @animation_frame, active)
             terminal.write_at(x_offset + from_x, y_offset + y, char, color: color)
+            distance += 1
           end
         else
-          # L-shaped connection: vertical down, horizontal across, vertical down
+          # L-shaped connection: vertical down, corner, horizontal across, corner, vertical down
           mid_y = from_y + 1
 
           # First vertical segment (short drop from source)
-          terminal.write_at(x_offset + from_x, y_offset + from_y, "│", color: color)
+          char, color = Theme.animated_flow_char(:vertical, distance, @animation_frame, active)
+          terminal.write_at(x_offset + from_x, y_offset + from_y, char, color: color)
+          distance += 1
 
-          # Horizontal segment
-          x_start = [from_x, to_x].min
-          x_end = [from_x, to_x].max
-          (x_start..x_end).each do |x|
-            char = if active
-                     offset = (@animation_frame / 4) % 4
-                     ["─", "╌", "┄", "┈"][offset]
-                   else
-                     "─"
-                   end
+          # Determine corner and horizontal direction
+          if from_x < to_x
+            # Going right: use └ and ┐
+            corner1_type = :corner_bl
+            corner2_type = :corner_tr
 
-            terminal.write_at(x_offset + x, y_offset + mid_y, char, color: color)
+            # First corner
+            char, color = Theme.animated_flow_char(corner1_type, distance, @animation_frame, active)
+            terminal.write_at(x_offset + from_x, y_offset + mid_y, char, color: color)
+            distance += 1
+
+            # Horizontal segment (left to right)
+            ((from_x + 1)...to_x).each do |x|
+              char, color = Theme.animated_flow_char(:horizontal, distance, @animation_frame, active)
+              terminal.write_at(x_offset + x, y_offset + mid_y, char, color: color)
+              distance += 1
+            end
+
+            # Second corner
+            char, color = Theme.animated_flow_char(corner2_type, distance, @animation_frame, active)
+            terminal.write_at(x_offset + to_x, y_offset + mid_y, char, color: color)
+            distance += 1
+          else
+            # Going left: use ┘ and ┌
+            corner1_type = :corner_br
+            corner2_type = :corner_tl
+
+            # First corner
+            char, color = Theme.animated_flow_char(corner1_type, distance, @animation_frame, active)
+            terminal.write_at(x_offset + from_x, y_offset + mid_y, char, color: color)
+            distance += 1
+
+            # Horizontal segment (right to left)
+            ((to_x + 1)...from_x).reverse_each do |x|
+              char, color = Theme.animated_flow_char(:horizontal, distance, @animation_frame, active)
+              terminal.write_at(x_offset + x, y_offset + mid_y, char, color: color)
+              distance += 1
+            end
+
+            # Second corner
+            char, color = Theme.animated_flow_char(corner2_type, distance, @animation_frame, active)
+            terminal.write_at(x_offset + to_x, y_offset + mid_y, char, color: color)
+            distance += 1
           end
 
           # Second vertical segment (drop to target)
           ((mid_y + 1)...to_y).each do |y|
-            char = if active
-                     offset = (@animation_frame / 4) % Theme::FLOW_CHARS.length
-                     phase = (y - mid_y + offset) % Theme::FLOW_CHARS.length
-                     Theme::FLOW_CHARS[phase]
-                   else
-                     "│"
-                   end
-
+            char, color = Theme.animated_flow_char(:vertical, distance, @animation_frame, active)
             terminal.write_at(x_offset + to_x, y_offset + y, char, color: color)
-          end
-
-          # Corner characters
-          if from_x < to_x
-            terminal.write_at(x_offset + from_x, y_offset + mid_y, "└", color: color)
-            terminal.write_at(x_offset + to_x, y_offset + mid_y, "┐", color: color)
-          else
-            terminal.write_at(x_offset + from_x, y_offset + mid_y, "┘", color: color)
-            terminal.write_at(x_offset + to_x, y_offset + mid_y, "┌", color: color)
+            distance += 1
           end
         end
       end

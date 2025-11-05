@@ -88,10 +88,187 @@ module Minigun
         Terminal::COLORS[:cyan]
       end
 
-      # Animation chars for data flow
-      FLOW_CHARS = ['⠀', '⠁', '⠃', '⠇', '⠏', '⠟', '⠿', '⡿', '⣿'].freeze
-      SPARK_CHARS = ['⢀', '⢠', '⢰', '⢸', '⡀', '⣀', '⣠', '⣰', '⣸'].freeze
-      DOTS = ['⠁', '⠂', '⠄', '⡀', '⢀', '⠠', '⠐', '⠈'].freeze
+      # Subtle flow animation colors (dim → medium → dim)
+      def self.flow_dim
+        Terminal::COLORS[:cyan_dim]
+      end
+
+      def self.flow_medium
+        Terminal::COLORS[:cyan]
+      end
+
+      # Subtle flowing animation for each box drawing character type
+      # Each frame has: [character, color_method_symbol]
+      FLOW_ANIMATION = {
+        # Vertical line: │ → ┃ → │ → │
+        vertical: [
+          ['│', :flow_dim],
+          ['│', :flow_dim],
+          ['│', :flow_dim],
+          ['│', :flow_dim],
+          ['│', :flow_dim],
+          ['│', :flow_dim],
+          ['┃', :flow_medium],
+          ['│', :flow_medium]
+        ],
+
+        # Horizontal line: ─ → ─ → ━ → ─
+        horizontal: [
+          ['─', :flow_dim],
+          ['─', :flow_dim],
+          ['─', :flow_dim],
+          ['─', :flow_dim],
+          ['─', :flow_dim],
+          ['─', :flow_dim],
+          ['━', :flow_medium],
+          ['─', :flow_medium]
+        ],
+
+        # Top-left corner: ┌ → ┌ → ┏ → ┌
+        corner_tl: [
+          ['┌', :flow_dim],
+          ['┌', :flow_dim],
+          ['┌', :flow_dim],
+          ['┌', :flow_dim],
+          ['┌', :flow_dim],
+          ['┌', :flow_dim],
+          ['┏', :flow_medium],
+          ['┌', :flow_medium]
+        ],
+
+        # Top-right corner: ┐ → ┐ → ┓ → ┐
+        corner_tr: [
+          ['┐', :flow_dim],
+          ['┐', :flow_dim],
+          ['┐', :flow_dim],
+          ['┐', :flow_dim],
+          ['┐', :flow_dim],
+          ['┐', :flow_dim],
+          ['┓', :flow_medium],
+          ['┐', :flow_medium]
+        ],
+
+        # Bottom-left corner: └ → └ → ┗ → └
+        corner_bl: [
+          ['└', :flow_dim],
+          ['└', :flow_dim],
+          ['└', :flow_dim],
+          ['└', :flow_dim],
+          ['└', :flow_dim],
+          ['└', :flow_dim],
+          ['┗', :flow_medium],
+          ['└', :flow_medium]
+        ],
+
+        # Bottom-right corner: ┘ → ┘ → ┛ → ┘
+        corner_br: [
+          ['┘', :flow_dim],
+          ['┘', :flow_dim],
+          ['┘', :flow_dim],
+          ['┘', :flow_dim],
+          ['┘', :flow_dim],
+          ['┘', :flow_dim],
+          ['┛', :flow_medium],
+          ['┘', :flow_medium]
+        ],
+
+        # T-junction down: ┬ → ┬ → ┳ → ┬
+        t_down: [
+          ['┬', :flow_dim],
+          ['┬', :flow_dim],
+          ['┬', :flow_dim],
+          ['┬', :flow_dim],
+          ['┬', :flow_dim],
+          ['┬', :flow_dim],
+          ['┳', :flow_medium],
+          ['┬', :flow_medium]
+        ],
+
+        # T-junction up: ┴ → ┴ → ┻ → ┴
+        t_up: [
+          ['┴', :flow_dim],
+          ['┴', :flow_dim],
+          ['┴', :flow_dim],
+          ['┴', :flow_dim],
+          ['┴', :flow_dim],
+          ['┴', :flow_dim],
+          ['┻', :flow_medium],
+          ['┴', :flow_medium]
+        ],
+
+        # T-junction right: ├ → ├ → ┣ → ├
+        t_right: [
+          ['├', :flow_dim],
+          ['├', :flow_dim],
+          ['├', :flow_dim],
+          ['├', :flow_dim],
+          ['├', :flow_dim],
+          ['├', :flow_dim],
+          ['┣', :flow_medium],
+          ['├', :flow_medium]
+        ],
+
+        # T-junction left: ┤ → ┤ → ┫ → ┤
+        t_left: [
+          ['┤', :flow_dim],
+          ['┤', :flow_dim],
+          ['┤', :flow_dim],
+          ['┤', :flow_dim],
+          ['┤', :flow_dim],
+          ['┤', :flow_dim],
+          ['┫', :flow_medium],
+          ['┤', :flow_medium]
+        ],
+
+        # Cross junction: ┼ → ┼ → ╋ → ┼
+        cross: [
+          ['┼', :flow_dim],
+          ['┼', :flow_dim],
+          ['┼', :flow_dim],
+          ['┼', :flow_dim],
+          ['┼', :flow_dim],
+          ['┼', :flow_dim],
+          ['╋', :flow_medium],
+          ['┼', :flow_medium]
+        ]
+      }.freeze
+
+      # Get animated character and color for a given char type and distance
+      # @param char_type [Symbol] Type of character (:vertical, :horizontal, :corner_tl, etc.)
+      # @param distance [Integer] Distance from source (for phase calculation)
+      # @param animation_frame [Integer] Global animation frame counter
+      # @param active [Boolean] Whether the connection is active
+      # @return [Array<String, String>] [character, color_code]
+      def self.animated_flow_char(char_type, distance, animation_frame, active)
+        return [static_char_for_type(char_type), muted] unless active
+
+        frames = FLOW_ANIMATION[char_type]
+        return [static_char_for_type(char_type), muted] unless frames
+
+        # Calculate phase based on distance from source and global animation frame
+        # Subtracting distance makes the animation flow from source to target
+        phase = (animation_frame - distance) % frames.length
+        char, color_method = frames[phase]
+
+        [char, send(color_method)]
+      end
+
+      # Get static (non-animated) character for a given type
+      def self.static_char_for_type(char_type)
+        {
+          vertical: '│',
+          horizontal: '─',
+          corner_tl: '┌',
+          corner_tr: '┐',
+          corner_bl: '└',
+          corner_br: '┘',
+          t_down: '┬',
+          t_up: '┴',
+          t_right: '├',
+          t_left: '┤',
+          cross: '┼'
+        }[char_type] || '│'
+      end
 
       # Stage type icons
       def self.stage_icon(stage_type)
