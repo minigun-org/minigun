@@ -10,7 +10,7 @@ module Minigun
       FRAME_TIME = 1.0 / FPS
 
       attr_reader :terminal, :flow_diagram, :process_list, :stats_aggregator
-      attr_accessor :running, :paused
+      attr_accessor :running, :paused, :pipeline_finished
 
       def initialize(pipeline, on_quit: nil)
         @pipeline = pipeline
@@ -18,6 +18,7 @@ module Minigun
         @stats_aggregator = StatsAggregator.new(pipeline)
         @running = false
         @paused = false
+        @pipeline_finished = false
         @show_help = false
         @resize_requested = false
         @on_quit = on_quit  # Optional callback when user quits
@@ -53,8 +54,8 @@ module Minigun
           handle_input
           break unless @running
 
-          # Update and render if not paused
-          unless @paused
+          # Update and render if not paused (or if finished - always show final state)
+          unless @paused && !@pipeline_finished
             render_frame
           end
 
@@ -83,8 +84,12 @@ module Minigun
         @left_width = (width * 0.4).to_i
         @right_width = width - @left_width
 
-        # Components
-        @flow_diagram = FlowDiagram.new(@left_width - 2, height - 4)
+        # Components - resize existing or create new
+        if @flow_diagram
+          @flow_diagram.resize(@left_width - 2, height - 4)
+        else
+          @flow_diagram = FlowDiagramFrame.new(@left_width - 2, height - 4)
+        end
 
         # Preserve scroll offset if process_list exists
         old_scroll = @process_list&.scroll_offset || 0
@@ -115,7 +120,17 @@ module Minigun
                            title: "PROCESS STATISTICS", color: Theme.border)
 
         # Render flow diagram (left panel)
-        @flow_diagram.render(@terminal, stats_data, x_offset: 1, y_offset: 2)
+        # Clear panel if frame needs it (e.g., after panning)
+        if @flow_diagram.needs_clear?
+          panel_height = @terminal.height - 4
+          (0...panel_height).each do |y|
+            @terminal.write_at(2, 2 + y, " " * (@left_width - 2))
+          end
+          @flow_diagram.mark_cleared
+        end
+
+        # Render diagram - frame handles centering and panning
+        @flow_diagram.render(@terminal, stats_data, x_offset: 2, y_offset: 2)
 
         # Render process list (right panel)
         @process_list.render(@terminal, stats_data, x_offset: @left_width + 1, y_offset: 2)
@@ -132,7 +147,9 @@ module Minigun
 
       def render_status_bar
         y = @terminal.height - 1
-        status_text = if @paused
+        status_text = if @pipeline_finished
+                        "#{Theme.info}FINISHED#{Terminal::COLORS[:reset]}"
+                      elsif @paused
                         "#{Theme.warning}PAUSED#{Terminal::COLORS[:reset]}"
                       else
                         "#{Theme.success}RUNNING#{Terminal::COLORS[:reset]}"
@@ -143,7 +160,11 @@ module Minigun
         @terminal.write_at(2, y, left_text)
 
         # Right side: controls hint
-        right_text = "[h] Help [q] Quit [space] Pause"
+        right_text = if @pipeline_finished
+                       "Press [q] to exit..."
+                     else
+                       "[h] Help [q] Quit [space] Pause"
+                     end
         @terminal.write_at(@terminal.width - right_text.length - 2, y, right_text, color: Theme.muted)
       end
 
@@ -163,11 +184,12 @@ module Minigun
           "",
           "  Navigation:",
           "    ↑ / ↓     - Scroll process list",
+          "    w / s     - Pan diagram up/down",
+          "    a / d     - Pan diagram left/right",
           "",
           "  Controls:",
           "    SPACE     - Pause/Resume updates",
           "    r / R     - Force refresh/resize",
-          "    d / D     - Toggle details (future)",
           "    c / C     - Compact view (future)",
           "",
           "  Other:",
@@ -212,14 +234,23 @@ module Minigun
         when 'r', 'R' # Force refresh
           @resize_requested = true
 
-        when :up # Scroll up
+        when :up # Scroll up (process list)
           @process_list.scroll_offset = [@process_list.scroll_offset - 1, 0].max
 
-        when :down # Scroll down
+        when :down # Scroll down (process list)
           @process_list.scroll_offset += 1
 
-        when 'd', 'D' # Toggle details
-          # Future: implement detail view
+        when 'w', 'W' # Pan diagram up (move content up, see what's below)
+          @flow_diagram.pan(0, 2)
+
+        when 'a', 'A' # Pan diagram left (move content left, see what's right)
+          @flow_diagram.pan(2, 0)
+
+        when 's', 'S' # Pan diagram down (move content down, see what's above)
+          @flow_diagram.pan(0, -2)
+
+        when 'd', 'D' # Pan diagram right (move content right, see what's left)
+          @flow_diagram.pan(-2, 0)
 
         when 'c', 'C' # Compact view
           # Future: implement compact view
