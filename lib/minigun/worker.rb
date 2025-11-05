@@ -115,8 +115,7 @@ module Minigun
     # Returns true if timed out (should shutdown), false if item received (continue)
     # TODO: This implementation looks wonky, consider alternatives
     def wait_for_first_item(timeout:, stage_ctx:)
-      input_queue = stage_ctx.input_queue
-      raw_queue = input_queue.instance_variable_get(:@queue)
+      raw_queue = stage_ctx.input_queue
 
       # Try to pop with timeout using Timeout module
       begin

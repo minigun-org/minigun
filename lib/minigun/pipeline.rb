@@ -43,6 +43,11 @@ module Minigun
 
       # Statistics tracking
       @stats = stats # Will be initialized in run() if nil
+
+      # TODO: Move runtime edges here?
+      # Track runtime edges (who sends to whom) for dynamic routing termination
+      # Key: source stage, Value: Set of target stages
+      # @runtime_edges = Concurrent::Hash.new { |h, k| h[k] = Concurrent::Set.new }
     end
 
     # Get the root pipeline (top-level pipeline in the hierarchy)
