@@ -483,7 +483,6 @@ module Minigun
       end
 
       # Launch HUD (blocks until user quits)
-      require 'minigun/hud'
       Minigun::HUD.launch(pipeline)
     end
 
