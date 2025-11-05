@@ -3,48 +3,43 @@
 require 'spec_helper'
 
 RSpec.describe Minigun::Execution::Executor do
-  let(:mock_pipeline) { instance_double(Minigun::Pipeline, name: 'test_pipeline') }
-
-  # Helper to create a mock stage_ctx
-  let(:mock_stage_ctx) do
-    dag = double('dag', terminal?: false)
-    pipeline = double('pipeline', name: 'test_pipeline', dag: dag, send: nil)
-    stage_stats = double('stage_stats', start!: nil, start_time: nil, increment_consumed: nil, increment_produced: nil, record_latency: nil)
-
-    double('stage_ctx',
-           pipeline: pipeline,
-           root_pipeline: pipeline,
-           stage_name: :test,
-           stage_stats: stage_stats,
-           dag: dag)
+  # Create real objects instead of mocks
+  let(:task) { Minigun::Task.new }
+  let(:pipeline) { task.root_pipeline }
+  let(:test_stage) { Minigun::ConsumerStage.new(:test, pipeline, proc { |item, output| output << item }, {}) }
+  let(:stage_stats) { Minigun::Stats.new(test_stage) }
+  let(:stage_ctx) do
+    Struct.new(:stage_stats, :pipeline, :root_pipeline, :stage_name, :dag, :stage).new(
+      stage_stats, pipeline, pipeline, :test, pipeline.dag, test_stage
+    )
   end
 
   describe 'Factory method' do
     it 'creates correct executor type via factory' do
-      thread_executor = Minigun::Execution.create_executor(:thread, mock_stage_ctx, max_size: 5)
+      thread_executor = Minigun::Execution.create_executor(:thread, stage_ctx, max_size: 5)
       expect(thread_executor).to be_a(Minigun::Execution::ThreadPoolExecutor)
       expect(thread_executor.max_size).to eq(5)
 
-      inline_executor = Minigun::Execution.create_executor(:inline, mock_stage_ctx)
+      inline_executor = Minigun::Execution.create_executor(:inline, stage_ctx)
       expect(inline_executor).to be_a(Minigun::Execution::InlineExecutor)
 
-      cow_fork_executor = Minigun::Execution.create_executor(:cow_fork, mock_stage_ctx, max_size: 3)
+      cow_fork_executor = Minigun::Execution.create_executor(:cow_fork, stage_ctx, max_size: 3)
       expect(cow_fork_executor).to be_a(Minigun::Execution::CowForkPoolExecutor)
       expect(cow_fork_executor.max_size).to eq(3)
 
-      ipc_fork_executor = Minigun::Execution.create_executor(:ipc_fork, mock_stage_ctx, max_size: 4)
+      ipc_fork_executor = Minigun::Execution.create_executor(:ipc_fork, stage_ctx, max_size: 4)
       expect(ipc_fork_executor).to be_a(Minigun::Execution::IpcForkPoolExecutor)
       expect(ipc_fork_executor.max_size).to eq(4)
     end
 
     it 'all executors extend Executor base class' do
-      executor = Minigun::Execution.create_executor(:thread, mock_stage_ctx, max_size: 5)
+      executor = Minigun::Execution.create_executor(:thread, stage_ctx, max_size: 5)
       expect(executor).to be_a(described_class)
     end
 
     it 'raises error for unknown type' do
       expect do
-        Minigun::Execution.create_executor(:unknown, mock_stage_ctx, max_size: 5)
+        Minigun::Execution.create_executor(:unknown, stage_ctx, max_size: 5)
       end.to raise_error(ArgumentError, /Unknown executor type/)
     end
   end
@@ -316,11 +311,14 @@ RSpec.describe Minigun::Execution::ThreadPoolExecutor do
 end
 
 RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: !Minigun.fork? do
+  let(:task) { Minigun::Task.new }
+  let(:pipeline) { task.root_pipeline }
+  let(:test_stage_for_ctx) { Minigun::ConsumerStage.new(:test_ctx, pipeline, proc { |item, output| output << item }, {}) }
+  let(:stage_stats) { Minigun::Stats.new(test_stage_for_ctx) }
   let(:stage_ctx) do
-    dag = double('dag', terminal?: false)
-    pipeline = double('pipeline', name: 'test_pipeline', dag: dag, send: nil)
-    stage_stats = double('stage_stats', start!: nil, start_time: nil)
-    double('stage_ctx', pipeline: pipeline, root_pipeline: pipeline, stage_name: :test, stage_stats: stage_stats, dag: dag)
+    Struct.new(:pipeline, :root_pipeline, :stage_name, :stage_stats, :dag, :stage).new(
+      pipeline, pipeline, :test_ctx, stage_stats, pipeline.dag, test_stage_for_ctx
+    )
   end
   let(:executor) { described_class.new(stage_ctx, max_size: 2) }
 
@@ -399,11 +397,14 @@ RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: !Minigun.fork? do
 end
 
 RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: !Minigun.fork? do
+  let(:task) { Minigun::Task.new }
+  let(:pipeline) { task.root_pipeline }
+  let(:test_stage) { Minigun::ConsumerStage.new(:test, pipeline, proc { |item, output| output << item }, {}) }
+  let(:stage_stats) { Minigun::Stats.new(test_stage) }
   let(:stage_ctx) do
-    dag = double('dag', terminal?: false)
-    pipeline = double('pipeline', name: 'test_pipeline', dag: dag, send: nil)
-    stage_stats = double('stage_stats', start!: nil, start_time: nil, increment_consumed: nil, increment_produced: nil, record_latency: nil)
-    double('stage_ctx', pipeline: pipeline, root_pipeline: pipeline, stage_name: :test, stage_stats: stage_stats, dag: dag)
+    Struct.new(:pipeline, :root_pipeline, :stage_name, :stage_stats, :dag, :stage).new(
+      pipeline, pipeline, :test, stage_stats, pipeline.dag, test_stage
+    )
   end
   let(:executor) { described_class.new(stage_ctx, max_size: 2) }
 
@@ -414,15 +415,13 @@ RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: !Minigun.fork? do
   end
 
   describe '#execute_stage' do
-    let(:mock_pipeline) { instance_double(Minigun::Pipeline, name: 'test_pipeline') }
-    let(:stage_stats) { Minigun::Stats.new(:test) }
     let(:user_context) { {} }
 
     it 'executes stage with inherited memory (COW)' do
       # Use real ConsumerStage - RSpec mocks don't work across forks
       stage = Minigun::ConsumerStage.new(
         :test,
-        mock_pipeline,
+        pipeline,
         proc { |item, output| output << (item * 2) },
         {}
       )
@@ -442,7 +441,7 @@ RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: !Minigun.fork? do
       # Use real ConsumerStage that raises an error
       stage = Minigun::ConsumerStage.new(
         :test,
-        mock_pipeline,
+        pipeline,
         proc { |_item, _output| raise 'boom' },
         {}
       )
@@ -464,7 +463,7 @@ RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: !Minigun.fork? do
       # Real stage that tracks which items it processes
       stage = Minigun::ConsumerStage.new(
         :test,
-        mock_pipeline,
+        pipeline,
         proc { |item, output|
           processed_items << item
           sleep 0.01  # Slow processing
@@ -515,7 +514,7 @@ RSpec.describe Minigun::Execution::IpcForkPoolExecutor, skip: !Minigun.fork? do
   end
 
   describe '#execute_stage' do
-    let(:mock_pipeline) { instance_double(Minigun::Pipeline, name: 'test_pipeline', task: mock_task) }
+    let(:pipeline) { instance_double(Minigun::Pipeline, name: 'test_pipeline', task: mock_task) }
     let(:stage_stats) { Minigun::Stats.new(:test) }
     let(:user_context) { {} }
 
@@ -523,7 +522,7 @@ RSpec.describe Minigun::Execution::IpcForkPoolExecutor, skip: !Minigun.fork? do
       # Use real ConsumerStage - RSpec mocks don't work across forks
       stage = Minigun::ConsumerStage.new(
         :test,
-        mock_pipeline,
+        pipeline,
         proc { |item, output| output << (item * 2) },
         {}
       )
@@ -550,7 +549,7 @@ RSpec.describe Minigun::Execution::IpcForkPoolExecutor, skip: !Minigun.fork? do
       # Real stage that processes items
       stage = Minigun::ConsumerStage.new(
         :test,
-        mock_pipeline,
+        pipeline,
         proc { |item, output|
           sleep 0.01  # Slow processing
           output << item
@@ -577,7 +576,7 @@ RSpec.describe Minigun::Execution::IpcForkPoolExecutor, skip: !Minigun.fork? do
       # Test that IPC workers are persistent and process multiple items
       stage = Minigun::ConsumerStage.new(
         :test,
-        mock_pipeline,
+        pipeline,
         proc { |item, output| output << item },
         {}
       )
