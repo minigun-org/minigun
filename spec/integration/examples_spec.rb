@@ -2053,6 +2053,19 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
+  describe 'hud_complex_demo.rb' do
+    it 'defines HudComplexDemoTask for complex HUD demonstration' do
+      # HUD complex demo runs with background HUD
+      # Just verify the file defines the expected class and patterns
+      demo_code = File.read(File.expand_path('../../examples/hud_complex_demo.rb', __dir__))
+      expect(demo_code).to include('class HudComplexDemoTask')
+      expect(demo_code).to include('routing: :broadcast')
+      expect(demo_code).to include('fast_path')
+      expect(demo_code).to include('medium_path')
+      expect(demo_code).to include('slow_path')
+    end
+  end
+
   describe 'irb_with_hud.rb' do
     it 'defines DataProcessingTask for IRB usage' do
       # IRB example demonstrates background execution

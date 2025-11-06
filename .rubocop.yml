@@ -13,6 +13,14 @@ AllCops:
 Gemspec/RequiredRubyVersion:
   Enabled: false
 
+Layout/ClosingHeredocIndentation:
+  Exclude:
+    - 'spec/hud/**/*.rb'
+
+Layout/HeredocIndentation:
+  Exclude:
+    - 'spec/hud/**/*.rb'
+
 Layout/LineLength:
   Enabled: false
 
