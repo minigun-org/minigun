@@ -148,24 +148,69 @@ stage.run_stage(stage_ctx)
 
 The **routing graph** that defines how stages connect.
 
+**What is a DAG?**
+
+A **Directed Acyclic Graph** is a graph with two critical properties:
+1. **Directed**: Edges have direction (data flows one way: A → B, not B → A)
+2. **Acyclic**: No cycles/loops (can't route back to a previous stage)
+
+```
+Valid DAG:                    Invalid (has cycle):
+A → B → C                     A → B → C
+    ↓                             ↑_____|
+    D                         (cycle: B→C→B)
+```
+
+**Why DAG Structure?**
+
+Minigun uses a DAG because it enables:
+
+1. **Deterministic Execution Order**: Topological sort determines which stages start first
+   ```ruby
+   # Given: A → B → C, execution order is guaranteed: A, then B, then C
+   dag.topological_sort  # => [A, B, C]
+   ```
+
+2. **Cycle Detection**: Prevents deadlocks at definition time
+   ```ruby
+   dag.add_edge(A, B)
+   dag.add_edge(B, C)
+   dag.add_edge(C, A)  # ❌ Error: Creates cycle A→B→C→A
+   ```
+
+3. **Termination Protocol**: Knows when all upstream stages finish
+   ```ruby
+   # Stage C waits for EndOfStage from ALL upstreams
+   dag.upstream(C)  # => [A, B]  (must receive EOS from both)
+   ```
+
+4. **Parallel Execution**: Independent branches can run concurrently
+   ```ruby
+   # A → B and A → C can run in parallel (both only depend on A)
+   ```
+
 **Responsibilities:**
-- Stores stage connections as edges
-- Validates no cycles exist (using TSort)
+- Stores stage connections as directed edges
+- Validates no cycles exist (using Ruby's TSort module)
 - Provides upstream/downstream queries
-- Identifies sources and terminals
+- Identifies sources (no inputs) and terminals (no outputs)
+- Supports topological sort for execution order
 
 **Code Location:** `lib/minigun/dag.rb`
 
 **Key Methods:**
-- `add_edge(from_stage, to_stage)` - Connect stages
+- `add_edge(from_stage, to_stage)` - Connect stages (creates directed edge)
 - `upstream(stage)` - Get all sources feeding this stage
 - `downstream(stage)` - Get all destinations this stage feeds
-- `validate!` - Check for cycles
+- `terminal?(stage)` - Check if stage has no downstream
+- `sources` - Get all producer stages (no upstreams)
+- `validate!` - Check for cycles using topological sort
 
 **Example:**
 ```ruby
-# Pipeline: A → B → C
-#               ↘ D
+# Pipeline DAG: A → B → C
+#                   ↓
+#                   D
 
 dag.add_edge(stage_a, stage_b)
 dag.add_edge(stage_b, stage_c)
@@ -173,7 +218,30 @@ dag.add_edge(stage_b, stage_d)
 
 dag.downstream(stage_b)  # => [stage_c, stage_d]
 dag.upstream(stage_c)    # => [stage_b]
+dag.sources              # => [stage_a]
+dag.terminals            # => [stage_c, stage_d]
+dag.terminal?(stage_c)   # => true
+dag.terminal?(stage_b)   # => false
 ```
+
+**Cycle Detection:**
+```ruby
+dag.add_edge(A, B)
+dag.add_edge(B, C)
+dag.add_edge(C, A)  # Creates cycle!
+
+dag.validate!  # => Raises Minigun::CyclicGraphError
+               #    "Circular dependency: A → B → C → A"
+```
+
+**Dynamic Routing and the DAG:**
+
+When using `output.to(:stage)` for dynamic routing, edges aren't added to the static DAG at definition time. Instead:
+- Runtime edge tracking records these connections during execution
+- Termination protocol tracks which stages actually received data
+- Static DAG + runtime edges = complete routing graph
+
+→ See [**Fundamentals: DAG Structure**](../guides/16_fundamentals.md#dag-the-pipeline-structure) for user-facing explanation
 
 ### 6. Executor
 

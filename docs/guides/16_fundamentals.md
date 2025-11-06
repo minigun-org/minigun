@@ -4,6 +4,7 @@ This guide explores the core mechanisms that power Minigun: producer-consumer qu
 
 ## Table of Contents
 
+- [DAG: The Pipeline Structure](#dag-the-pipeline-structure)
 - [Producer-Consumer Queues](#producer-consumer-queues)
 - [Threading and the Ruby GVL](#threading-and-the-ruby-gvl)
 - [Copy-On-Write (COW) Forking](#copy-on-write-cow-forking)
@@ -12,6 +13,279 @@ This guide explores the core mechanisms that power Minigun: producer-consumer qu
 - [Fibers: Cooperative Concurrency](#fibers-cooperative-concurrency)
 - [Backpressure Mechanisms](#backpressure-mechanisms)
 - [Performance Implications](#performance-implications)
+
+---
+
+## DAG: The Pipeline Structure
+
+Before diving into execution details, let's understand how Minigun organizes your pipeline: as a **Directed Acyclic Graph (DAG)**.
+
+### What Is a DAG?
+
+A **DAG** is a graph structure with two key properties:
+
+1. **Directed**: Edges have a direction (data flows one way)
+2. **Acyclic**: No cycles (you can't loop back to a previous stage)
+
+```
+Simple Pipeline (Linear DAG):
+┌──────────┐    ┌───────────┐    ┌──────────┐
+│ Producer │───>│ Processor │───>│ Consumer │
+└──────────┘    └───────────┘    └──────────┘
+```
+
+Think of it as a **flowchart for data** - each box is a stage, each arrow shows where data flows.
+
+### Why "Acyclic" Matters
+
+**Acyclic** means **no loops**:
+
+```
+❌ INVALID (has cycle):
+┌──────────┐    ┌───────────┐
+│ Stage A  │───>│  Stage B  │
+└──────────┘<───└───────────┘
+     ↑________________↓
+           Cycle!
+```
+
+Why no cycles? Because Minigun needs to:
+- **Determine execution order**: Which stage runs first?
+- **Handle termination**: When to stop processing?
+- **Prevent deadlocks**: Cycles can cause stages to wait forever
+
+If you need loops, use a producer with loop logic:
+
+```ruby
+# GOOD: Loop inside a producer
+producer :generate do |output|
+  loop do
+    item = fetch_next
+    output << item
+    break if done?
+  end
+end
+```
+
+### DAG Patterns in Minigun
+
+#### 1. Sequential (Linear)
+
+The simplest DAG - a straight line:
+
+```
+producer → processor → consumer
+```
+
+```ruby
+pipeline do
+  producer :fetch do |output|
+    output << data
+  end
+
+  processor :transform do |item, output|
+    output << transform(item)
+  end
+
+  consumer :save do |item|
+    database.insert(item)
+  end
+end
+```
+
+**Data Flow:** Each item passes through every stage in order.
+
+#### 2. Fan-Out (Broadcast)
+
+One stage sends to multiple stages:
+
+```
+            ┌──> processor_a ──> consumer_a
+producer ───┤
+            └──> processor_b ──> consumer_b
+```
+
+```ruby
+pipeline do
+  producer :source, to: [:branch_a, :branch_b] do |output|
+    output << item
+  end
+
+  processor :branch_a do |item, output|
+    output << process_a(item)
+  end
+
+  processor :branch_b do |item, output|
+    output << process_b(item)
+  end
+end
+```
+
+**Data Flow:** Each item goes to **both** branch_a and branch_b (broadcast).
+
+#### 3. Fan-In (Merge)
+
+Multiple stages send to one stage:
+
+```
+producer_a ──┐
+             ├──> processor ──> consumer
+producer_b ──┘
+```
+
+```ruby
+pipeline do
+  producer :source_a do |output|
+    output << data_a
+  end
+
+  producer :source_b do |output|
+    output << data_b
+  end
+
+  # Receives from BOTH producers
+  processor :merge, from: [:source_a, :source_b] do |item, output|
+    output << item
+  end
+
+  consumer :save do |item|
+    database.insert(item)
+  end
+end
+```
+
+**Data Flow:** Consumer receives items from **both** sources (merged stream).
+
+#### 4. Diamond Pattern
+
+Combines fan-out and fan-in:
+
+```
+            ┌──> fast_path ──┐
+producer ───┤                ├──> merge ──> consumer
+            └──> slow_path ──┘
+```
+
+```ruby
+pipeline do
+  producer :source, to: [:fast, :slow] do |output|
+    output << item
+  end
+
+  processor :fast do |item, output|
+    output << quick_process(item)
+  end
+
+  processor :slow do |item, output|
+    sleep 1
+    output << thorough_process(item)
+  end
+
+  consumer :merge, from: [:fast, :slow] do |item|
+    puts "Received: #{item}"
+  end
+end
+```
+
+**Data Flow:** Each item goes through **both** paths, then merges at the end.
+
+### How Minigun Uses the DAG
+
+When you run a pipeline, Minigun:
+
+1. **Builds the DAG** from your stage definitions
+2. **Validates** there are no cycles
+3. **Topologically sorts** stages (determines execution order)
+4. **Creates queues** between connected stages
+5. **Starts stages** in the correct order
+
+**Example Validation:**
+
+```ruby
+# This will raise an error!
+producer :a, to: :b do |output|
+  output << 1
+end
+
+processor :b, to: :a do |item, output|  # ❌ Creates cycle: a→b→a
+  output << item
+end
+# => Minigun::Error: Circular dependency detected: a -> b -> a
+```
+
+Minigun prevents you from creating invalid pipelines at definition time.
+
+### Dynamic Routing and the DAG
+
+You can route data at runtime without defining edges in the DAG:
+
+```ruby
+producer :router do |output|
+  items.each do |item|
+    if item.urgent?
+      output.to(:high_priority) << item  # Dynamic routing
+    else
+      output.to(:normal) << item
+    end
+  end
+end
+
+consumer :high_priority, await: true do |item|
+  process_urgently(item)
+end
+
+consumer :normal, await: true do |item|
+  process_normally(item)
+end
+```
+
+**How it works:**
+- Static DAG: `router` has no explicit connections
+- Runtime: `output.to(:stage)` creates temporary edges
+- Termination: Minigun tracks which stages received data dynamically
+
+This is called **dynamic routing** - powerful for conditional logic!
+
+### Visualizing Your DAG
+
+Use the `to_mermaid` method to see your pipeline structure:
+
+```ruby
+pipeline = MyPipeline.new
+puts pipeline.to_mermaid
+```
+
+```mermaid
+graph TD
+    producer --> processor
+    processor --> consumer_a
+    processor --> consumer_b
+```
+
+Great for documentation and debugging!
+
+### Key Takeaways
+
+1. **DAG Structure:**
+   - Pipelines are directed graphs with no cycles
+   - Stages are nodes, data flow is edges
+   - Validates at definition time (no runtime surprises)
+
+2. **Common Patterns:**
+   - Sequential: Simple chains
+   - Fan-out: One stage → many stages (broadcast)
+   - Fan-in: Many stages → one stage (merge)
+   - Diamond: Combine fan-out and fan-in
+
+3. **Dynamic Routing:**
+   - Use `output.to(:stage)` for runtime decisions
+   - Doesn't need DAG edges at definition time
+   - Powerful for conditional workflows
+
+4. **Validation:**
+   - Minigun prevents cycles automatically
+   - Get clear errors if structure is invalid
+   - Safe by design
 
 ---
 

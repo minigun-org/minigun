@@ -76,6 +76,13 @@ A **pipeline** is a collection of connected stages that process data. Data flows
 Producer → Processor → Processor → Consumer
 ```
 
+Pipelines are structured as a **Directed Acyclic Graph (DAG)**:
+- **Directed**: Data flows in one direction
+- **Acyclic**: No loops or cycles
+- **Graph**: Stages are nodes, connections are edges
+
+This structure ensures your pipeline is valid and allows Minigun to determine the correct execution order.
+
 ### Stages
 
 **Stages** are the building blocks of pipelines. There are four types:

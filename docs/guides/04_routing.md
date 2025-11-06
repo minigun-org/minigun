@@ -2,6 +2,32 @@
 
 Routing determines how data flows between stages. Minigun supports multiple routing strategies, from simple sequential connections to complex dynamic routing.
 
+## Understanding Routing and the DAG
+
+When you define routing between stages, Minigun builds a **Directed Acyclic Graph (DAG)** that represents your pipeline structure.
+
+**What's a DAG?**
+- **Directed**: Data flows in one direction (from producers toward consumers)
+- **Acyclic**: No loops - you can't route back to a previous stage
+- **Graph**: Stages are nodes, routing connections are edges
+
+```
+Example DAG:
+    producer ──┬──> path_a ──┐
+               │             ├──> merge ──> consumer
+               └──> path_b ──┘
+
+Stages (nodes): producer, path_a, path_b, merge, consumer
+Edges (arrows): producer→path_a, producer→path_b, path_a→merge, path_b→merge, merge→consumer
+```
+
+**Why this matters:**
+1. **Validation**: Minigun ensures your routing has no cycles (which would cause deadlocks)
+2. **Execution Order**: The DAG determines which stages start first
+3. **Termination**: The DAG tracks when all upstream stages finish
+
+→ See [**Fundamentals: DAG Structure**](16_fundamentals.md#dag-the-pipeline-structure) for a deeper explanation
+
 ## Sequential Routing (Default)
 
 By default, stages connect **sequentially** in the order they're defined:
@@ -368,10 +394,33 @@ consumer :merge, from: [:transform_a, :transform_b] do ... end
 ```
 
 ### 3. Validate Your Routing
-Minigun validates your routing graph and will error on:
-- Cycles (infinite loops)
-- Disconnected stages
-- Missing stage references
+Minigun validates your routing DAG and will error on:
+
+**Cycles (infinite loops):**
+```ruby
+# ❌ This creates a cycle: a → b → a
+producer :a, to: :b do |output| ... end
+processor :b, to: :a do |item, output| ... end
+# => Error: Circular dependency detected
+```
+
+**Disconnected stages:**
+```ruby
+# ❌ stage_c has no inputs
+producer :a, to: :b do |output| ... end
+consumer :b do |item| ... end
+consumer :c do |item| ... end  # Never receives data!
+# => Warning: Stage :c is unreachable
+```
+
+**Missing stage references:**
+```ruby
+# ❌ References non-existent stage
+producer :a, to: :nonexistent do |output| ... end
+# => Error: Unknown stage :nonexistent
+```
+
+These validations happen **at pipeline definition time**, so you get immediate feedback.
 
 ### 4. Document Complex Routing
 Add comments for non-obvious routing:

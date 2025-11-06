@@ -85,6 +85,7 @@ Complete reference documentation for all classes, methods, and configuration opt
 
 **Start Here If:** You know what you're looking for and need detailed API information.
 
+→ [**Quick Reference**](quick_reference.md)
 → [**View API Reference**](guides/09_api_reference.md)
 
 ---
