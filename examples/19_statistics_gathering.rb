@@ -109,7 +109,7 @@ class StatisticsGatheringExample
       @stats[:consumer_duration] = @stats[:consumer_end] - @stats[:consumer_start]
     end
 
-    process_per_batch(max: 2) do
+    cow_fork(2) do
       before_fork :save_results do
         @stats[:forks_created] += 1
       end

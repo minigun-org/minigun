@@ -2,7 +2,7 @@
 # frozen_string_literal: true
 
 # Example 54: Process Per Batch + Named Context
-# Test process_per_batch with named contexts before and after
+# Test cow_fork with named contexts before and after
 
 require_relative '../lib/minigun'
 
@@ -31,7 +31,7 @@ class ProcessBatchNamedExample
 
     batch 5
 
-    process_per_batch(max: 2) do
+    cow_fork(2) do
       processor :process_batch do |batch, output|
         batch.each { |item| output << (item * 2) }
       end
@@ -47,7 +47,7 @@ class ProcessBatchNamedExample
   end
 end
 
-puts 'Testing: process_per_batch + named contexts'
+puts 'Testing: cow_fork + named contexts'
 pipeline = ProcessBatchNamedExample.new
 pipeline.run
 puts "Results: #{pipeline.results.size} items"

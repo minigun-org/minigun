@@ -24,7 +24,7 @@ class ThreadsPlusNamedExample
       20.times { |i| output << i }
     end
 
-    threads(5) do
+    thread_pool(5) do
       processor :work1 do |item, output|
         output << (item + 10)
       end

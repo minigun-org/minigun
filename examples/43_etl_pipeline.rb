@@ -53,7 +53,7 @@ class EtlPipelineExample
     end
 
     # TRANSFORM: Clean, enrich, and validate data
-    threads(3) do
+    thread_pool(3) do
       processor :transform_data do |record, output|
         puts "⚙️  Transforming: #{record[:id]} - #{record[:name]}"
 
@@ -113,7 +113,7 @@ class EtlPipelineExample
     end
 
     # LOAD: Write to destination with per-batch processing
-    process_per_batch(max: 2) do
+    cow_fork(2) do
       consumer :load_to_warehouse do |batch_by_category|
         puts "\n💾 Loading batch to data warehouse:"
 

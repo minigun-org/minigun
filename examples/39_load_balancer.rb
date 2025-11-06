@@ -46,7 +46,7 @@ class LoadBalancerExample
     end
 
     # Simulate three server processors with different speeds
-    threads(3) do
+    thread_pool(3) do
       processor :process_request do |request, output|
         server_id = request[:assigned_server]
         server_name = "Server-#{server_id}"

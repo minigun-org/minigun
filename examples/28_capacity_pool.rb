@@ -20,7 +20,7 @@ class CapacityExample
     end
 
     # Limited to 2 concurrent workers
-    threads(2) do
+    thread_pool(2) do
       processor :process do |item, output|
         sleep 0.01
         output << item

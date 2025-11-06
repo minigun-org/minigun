@@ -46,8 +46,8 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
 
           before_fork { @execution_order << '9_pipeline_before_fork' }
 
-          # Use process_per_batch so forking actually happens
-          process_per_batch(max: 1) do
+          # Use cow_fork so forking actually happens
+          cow_fork(1) do
             consumer :cons do |_item|
               # Write to temp file (fork-safe)
               File.open(@temp_order_file.path, 'a') do |f|

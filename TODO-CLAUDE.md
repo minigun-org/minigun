@@ -67,7 +67,6 @@ plan based on the current codebase state and TODOS.md.
   - [ ] Transmit logs across forks--look at Puma
   - [ ] Support MINIGUN_LOG_LEVEL var
 
-
 ### Phase 1.01: HUD
 
 - [X] Initial HUD work:

@@ -11,7 +11,7 @@ require 'tempfile'
 #
 # In this example:
 # - accumulator batches items and routes to :save (nested stage)
-# - :save is inside a process_per_batch nested pipeline
+# - :save is inside a cow_fork nested pipeline
 # - Parent DAG includes nested stages, enabling direct routing
 class RoutingToNestedStagesExample
   include Minigun::DSL
@@ -44,7 +44,7 @@ class RoutingToNestedStagesExample
     end
 
     # Nested pipeline with forked execution
-    process_per_batch(max: 2) do
+    cow_fork(2) do
       consumer :save do |batch|
         puts "[Consumer:save] (PID #{Process.pid}) Received batch: #{batch.inspect}"
 

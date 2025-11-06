@@ -23,7 +23,7 @@ class DataProcessor
     end
 
     # Parallel download with thread pool
-    threads(@thread_count) do
+    thread_pool(@thread_count) do
       processor :download do |item, output|
         # Simulate I/O-bound work
         output << { id: item, data: "data-#{item}" }
@@ -34,7 +34,7 @@ class DataProcessor
     batch @batch_size
 
     # CPU-intensive processing per batch with process isolation
-    process_per_batch(max: @process_count) do
+    cow_fork(@process_count) do
       processor :parse do |batch, output|
         # Simulate CPU-intensive work
         batch.map { |item| item[:data].upcase }.each { |result| output << result }

@@ -55,7 +55,7 @@ class ComprehensivePipeline
     end
 
     # Download phase: I/O-bound, use thread pool
-    threads(@download_threads) do
+    thread_pool(@download_threads) do
       processor :download do |item, output|
         @mutex.synchronize { @stats[:downloaded] += 1 }
 
@@ -74,7 +74,7 @@ class ComprehensivePipeline
     batch @batch_size
 
     # Parse phase: CPU-bound, use process per batch
-    process_per_batch(max: @parse_processes) do
+    cow_fork(@parse_processes) do
       processor :parse_batch do |batch, output|
         # NOTE: Stats incremented in parent process would not be visible here
         # since this runs in a forked process
@@ -103,7 +103,7 @@ class ComprehensivePipeline
     end
 
     # Upload phase: I/O-bound, use thread pool
-    threads(@upload_threads) do
+    thread_pool(@upload_threads) do
       consumer :upload_to_s3 do |results|
         @mutex.synchronize { @stats[:uploaded] += results.size }
       end
@@ -156,13 +156,15 @@ puts '=' * 60
 puts <<~SUMMARY
 
   ✓ Execution Blocks:
-    - threads(N) do ... end
-    - processes(N) do ... end
-    - ractors(N) do ... end
+    - fiber_pool(N) do ... end
+    - thread_pool(N) do ... end
+    - ractor_pool(N) do ... end
+    - cow_fork(N) do ... end
+    - ipc_fork(N) do ... end
 
   ✓ Per-Batch Spawning:
-    - thread_per_batch(max: N) do ... end
-    - process_per_batch(max: N) do ... end
+    - thread_pool(N) do ... end
+    - cow_fork(N) do ... end
     - ractor_per_batch(max: N) do ... end
 
   ✓ Batching:

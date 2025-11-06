@@ -20,7 +20,7 @@ class BasicPoolExample
     end
 
     # Thread pool with 3 workers
-    threads(3) do
+    thread_pool(3) do
       processor :process do |item, output|
         sleep 0.05
         output << (item * 2)

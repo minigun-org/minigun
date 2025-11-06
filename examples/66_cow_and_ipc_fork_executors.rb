@@ -19,7 +19,7 @@ class CowForkExample
   include Minigun::DSL
 
   # Use COW fork executor
-  execution :cow_fork, max: 2
+  execution :cow_fork, 2
 
   attr_accessor :results
 
@@ -66,7 +66,7 @@ class IpcForkExample
   include Minigun::DSL
 
   # Use IPC fork executor
-  execution :ipc_fork, max: 2
+  execution :ipc_fork, 2
 
   attr_accessor :results
 

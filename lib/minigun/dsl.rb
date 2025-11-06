@@ -23,7 +23,8 @@ module Minigun
       end
 
       # Set default execution context for all stages
-      def execution(type, max: nil)
+      # TODO: should this be the default?? or for the current scope
+      def execution(type, max)
         _minigun_task.set_config(:_default_execution_context, { type: type, pool_size: max })
       end
 
@@ -184,7 +185,6 @@ module Minigun
         @context = context
         @_execution_context_stack = []
         @_named_contexts = {}
-        @_batch_counter = 0
       end
 
       # Execution context stack management
@@ -197,56 +197,35 @@ module Minigun
       end
 
       # Execution block methods
-      def threads(pool_size, &)
-        context = { type: :threads, pool_size: pool_size, mode: :pool }
+      def fiber_pool(pool_size, &)
+        context = { type: :fiber_pool, pool_size: pool_size }
         _with_execution_context(context, &)
       end
 
-      # Alias for threads - more explicit naming
-      alias_method :thread_pool, :threads
-
-      def processes(pool_size, &)
-        context = { type: :cow_fork, pool_size: pool_size, mode: :pool }
+      def thread_pool(pool_size, &)
+        context = { type: :thread_pool, pool_size: pool_size }
         _with_execution_context(context, &)
       end
 
-      # COW fork pool - explicit naming for copy-on-write forking
+      def ractor_pool(pool_size, &)
+        context = { type: :ractor_pool, pool_size: pool_size }
+        _with_execution_context(context, &)
+      end
+
       def cow_fork(pool_size, &)
-        context = { type: :cow_fork, pool_size: pool_size, mode: :pool }
+        context = { type: :cow_fork, pool_size: pool_size }
         _with_execution_context(context, &)
       end
 
-      # IPC fork pool - explicit naming for IPC-based forking
       def ipc_fork(pool_size, &)
-        context = { type: :ipc_fork, pool_size: pool_size, mode: :pool }
-        _with_execution_context(context, &)
-      end
-
-      def ractors(pool_size, &)
-        context = { type: :ractors, pool_size: pool_size, mode: :pool }
-        _with_execution_context(context, &)
-      end
-
-      def thread_per_batch(max:, &)
-        context = { type: :threads, max: max, mode: :per_batch }
-        _with_execution_context(context, &)
-      end
-
-      def process_per_batch(max:, &)
-        context = { type: :cow_fork, max: max, mode: :per_batch }
-        _with_execution_context(context, &)
-      end
-
-      def ractor_per_batch(max:, &)
-        context = { type: :ractors, max: max, mode: :per_batch }
+        context = { type: :ipc_fork, pool_size: pool_size }
         _with_execution_context(context, &)
       end
 
       # Batching shorthand
+      # TODO: clean this up
       def batch(size)
-        batch_num = @_batch_counter
-        @_batch_counter += 1
-        accumulator(:"_batch_#{batch_num}", max_size: size)
+        accumulator(nil, max_size: size)
       end
 
       # Named execution context definition

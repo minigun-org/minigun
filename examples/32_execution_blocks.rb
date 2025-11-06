@@ -7,12 +7,12 @@
 # the old strategy-based system with clear, composable execution contexts.
 #
 # Key Features:
-# - threads(N) { ... } - Thread pool for stages within block
-# - processes(N) { ... } - Process pool for stages within block
-# - ractors(N) { ... } - Ractor pool for stages within block
-# - batch N - Accumulator stage
-# - process_per_batch(max: N) { ... } - Spawn process per batch
-# - thread_per_batch(max: N) { ... } - Spawn thread per batch
+# - fiber_pool(N)  # Delegate to N fibers (future)
+# - thread_pool(N) # Delegate to N threads
+# - ractor_pool(N) # Delegate to N ractors (future)
+# - batch(N)       # Accumulate items into batches of N items, useful for cow_fork
+# - cow_fork(N)    # Spawn a Copy-On-Write (COW) fork process to process a batch
+# - ipc_fork(N)    # Spawn a fork an process items via Inter-Process Communication (IPC)
 # - Composable nesting with proper context inheritance
 
 require_relative '../lib/minigun'
@@ -38,7 +38,7 @@ class ThreadPoolExample
     end
 
     # All stages within threads block use thread pool of 5
-    threads(5) do
+    thread_pool(5) do
       processor :double do |item, output|
         output << (item * 2)
       end
@@ -80,7 +80,7 @@ class BatchProcessExample
       100.times { |i| output << i }
     end
 
-    threads(10) do
+    thread_pool(10) do
       processor :download do |item, output|
         # Simulate I/O-bound work
         output << { id: item, data: "data-#{item}" }
@@ -91,7 +91,7 @@ class BatchProcessExample
     batch 20
 
     # Spawn a new process for each batch (max 4 concurrent)
-    process_per_batch(max: 4) do
+    cow_fork(4) do
       consumer :process_batch do |batch|
         @mutex.synchronize do
           @processed << { pid: Process.pid, size: batch.size }
@@ -129,7 +129,7 @@ class NestedContextExample
     end
 
     # Outer: thread pool for I/O work
-    threads(20) do
+    thread_pool(20) do
       processor :fetch do |item, output|
         # Simulate fetch
         output << (item * 2)
@@ -139,14 +139,14 @@ class NestedContextExample
       batch 10
 
       # Inner: process per batch for CPU work
-      process_per_batch(max: 3) do
+      cow_fork(3) do
         processor :compute do |batch, _output|
           # CPU-intensive work in isolated process
           batch.map { |x| x**2 }
         end
       end
 
-      # Back to thread context after process_per_batch
+      # Back to thread context after cow_fork
       consumer :save do |results|
         @mutex.synchronize { @results.concat(results) }
       end
@@ -229,7 +229,7 @@ class ComplexPipeline
     end
 
     # Download in parallel with threads (I/O-bound)
-    threads(50) do
+    thread_pool(50) do
       processor :download do |url, output|
         # Simulate HTTP request
         output << { url: url, html: '<html>content</html>', size: 1024 }
@@ -245,7 +245,7 @@ class ComplexPipeline
     batch 20
 
     # Parse in separate processes (CPU-bound)
-    process_per_batch(max: 4) do
+    cow_fork(4) do
       processor :parse_batch do |batch, _output|
         # CPU-intensive parsing
         batch.map do |page|
@@ -259,7 +259,7 @@ class ComplexPipeline
     end
 
     # Save results (back to threads)
-    threads(10) do
+    thread_pool(10) do
       consumer :save_to_db do |results|
         @mutex.synchronize { @saved_count += results.size }
       end
@@ -296,7 +296,7 @@ class ThreadPerBatchExample
     batch 10
 
     # Spawn a new thread for each batch
-    thread_per_batch(max: 5) do
+    thread_pool(5) do
       consumer :process do |_batch|
         @mutex.synchronize { @batch_count += 1 }
       end
@@ -318,7 +318,7 @@ puts <<~SUMMARY
   Execution Block Syntax:
 
   1. Thread Pools:
-     threads(N) do ... end
+     thread_pool(N) do ... end
      - Reuses N threads for all stages in block
      - Good for I/O-bound work
 
@@ -328,7 +328,7 @@ puts <<~SUMMARY
      - Good for CPU-bound work with isolation
 
   3. Ractor Pools:
-     ractors(N) do ... end
+     ractor_pool(N) do ... end
      - Reuses N ractors for all stages in block
      - True parallelism (Ruby 3.0+)
 
@@ -337,12 +337,12 @@ puts <<~SUMMARY
      - Accumulates N items before passing to next stage
 
   5. Per-Batch Spawning:
-     process_per_batch(max: N) do ... end
+     cow_fork(N) do ... end
      - Spawns new process for each batch
      - Max N concurrent processes
      - Copy-on-write optimization
 
-     thread_per_batch(max: N) do ... end
+     thread_pool(N) do ... end
      - Spawns new thread for each batch
      - Max N concurrent threads
 
