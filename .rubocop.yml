@@ -95,8 +95,7 @@ Style/ExplicitBlockArgument:
   Enabled: false
 
 Style/HashLikeCase:
-  Exclude:
-    - 'examples/**/*'
+  Enabled: false
 
 Style/ModuleFunction:
   EnforcedStyle: extend_self

@@ -233,13 +233,6 @@ Style/EvenOdd:
   Exclude:
     - 'lib/minigun/hud/flow_diagram.rb'
 
-# Offense count: 1
-# Configuration parameters: MinBranchesCount.
-Style/HashLikeCase:
-  Exclude:
-    - 'examples/**/*'
-    - 'lib/minigun/hud/keyboard.rb'
-
 # Offense count: 16
 # This cop supports safe autocorrection (--autocorrect).
 Style/IfUnlessModifier:
