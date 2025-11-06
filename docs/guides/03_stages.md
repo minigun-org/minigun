@@ -1,6 +1,12 @@
 # Understanding Stages
 
-Stages are the building blocks of Minigun pipelines. Each stage has a specific role in processing data. Let's explore the four main stage types.
+Stages are the building blocks of Minigun pipelines. Each stage has a specific role in processing data.
+
+**Think of stages as nodes in a graph:** Your pipeline forms a Directed Acyclic Graph (DAG) where stages are the nodes and data flow connections are the edges. This structure determines execution order and validates that your pipeline has no cycles.
+
+→ See [**Routing**](04_routing.md#understanding-routing-and-the-dag) to learn how stages connect together
+
+Let's explore the four main stage types:
 
 ## The Four Stage Types
 
