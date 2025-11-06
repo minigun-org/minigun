@@ -51,9 +51,8 @@ end
 
 if __FILE__ == $PROGRAM_NAME
   processor = DataProcessor.new(threads: 100, processes: 8, batch_size: 500)
-  puts "Processor configuration:"
+  puts 'Processor configuration:'
   puts "  Threads for I/O: #{processor.thread_count}"
   puts "  Max processes: #{processor.process_count}"
   puts "  Batch size: #{processor.batch_size}"
 end
-

@@ -58,9 +58,7 @@ module Minigun
       name_str = normalize_name(name)
 
       # Level 1: Local neighbors (stages in same pipeline)
-      if @pipeline_stages[from_pipeline]&.key?(name_str)
-        return @pipeline_stages[from_pipeline][name_str]
-      end
+      return @pipeline_stages[from_pipeline][name_str] if @pipeline_stages[from_pipeline]&.key?(name_str)
 
       # Level 2: Children (stages in nested pipelines)
       children_stages = find_in_children(from_pipeline, name_str)
@@ -92,9 +90,7 @@ module Minigun
     end
 
     # Get all stages (for debugging/inspection)
-    def all_stages
-      @all_stages
-    end
+    attr_reader :all_stages
 
     # Get all registered names (for debugging/inspection)
     def all_names
@@ -115,6 +111,7 @@ module Minigun
     # Normalize name to string (symbols and strings both work)
     def normalize_name(name)
       return nil if name.nil?
+
       name.to_s
     end
 
@@ -124,6 +121,7 @@ module Minigun
     def find_in_children(pipeline, name_str, visited = Set.new)
       # Prevent infinite recursion from circular pipeline references
       return [] if visited.include?(pipeline.object_id)
+
       visited.add(pipeline.object_id)
 
       results = []

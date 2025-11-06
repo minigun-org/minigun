@@ -39,4 +39,3 @@ if __FILE__ == $PROGRAM_NAME
   puts "Processed #{example.results.size} items concurrently"
   puts "Results (first 5): #{example.results.sort.first(5).inspect}"
 end
-

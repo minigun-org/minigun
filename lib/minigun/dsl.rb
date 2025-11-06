@@ -161,11 +161,11 @@ module Minigun
 
     # Delegate DSL method calls through the pipeline_dsl stack
     # Checks each level from top to bottom until method is found
-    def method_missing(method_name, *args, **kwargs, &block)
+    def method_missing(method_name, ...)
       stack = _pipeline_dsl_stack
       stack.reverse_each do |dsl|
         if dsl.respond_to?(method_name, true)
-          return dsl.send(method_name, *args, **kwargs, &block)
+          return dsl.send(method_name, ...)
         end
       end
       super
@@ -338,15 +338,15 @@ module Minigun
 
       private
 
-      def _with_execution_context(context, &block)
+      def _with_execution_context(context, &)
         _execution_context_stack.push(context)
         begin
           if @context
             # Evaluate in user's instance context to allow access to @config, @results, etc.
-            @context.instance_eval(&block)
+            @context.instance_eval(&)
           else
             # No context - evaluate in PipelineDSL context
-            instance_eval(&block)
+            instance_eval(&)
           end
         ensure
           _execution_context_stack.pop
@@ -401,20 +401,18 @@ module Minigun
       if background
         # Run in background thread for IRB/console usage
         @_background_thread = Thread.new do
-          begin
-            @_minigun_task.run(self)
-          rescue => e
-            warn "Background task error: #{e.message}"
-            warn e.backtrace.join("\n")
-          end
+          @_minigun_task.run(self)
+        rescue StandardError => e
+          warn "Background task error: #{e.message}"
+          warn e.backtrace.join("\n")
         end
 
         # Give it a moment to start
         sleep 0.1
 
         puts "Task running in background (Thread ##{@_background_thread.object_id})"
-        puts "Use task.hud to open the HUD monitor"
-        puts "Use task.stop to stop execution"
+        puts 'Use task.hud to open the HUD monitor'
+        puts 'Use task.stop to stop execution'
         self
       else
         @_minigun_task.run(self)
@@ -429,17 +427,15 @@ module Minigun
 
       if background
         @_background_thread = Thread.new do
-          begin
-            @_minigun_task.root_pipeline.run(self)
-          rescue => e
-            warn "Background task error: #{e.message}"
-            warn e.backtrace.join("\n")
-          end
+          @_minigun_task.root_pipeline.run(self)
+        rescue StandardError => e
+          warn "Background task error: #{e.message}"
+          warn e.backtrace.join("\n")
         end
 
         sleep 0.1
         puts "Task running in background (Thread ##{@_background_thread.object_id})"
-        puts "Use task.hud to open the HUD monitor"
+        puts 'Use task.hud to open the HUD monitor'
         self
       else
         @_minigun_task.root_pipeline.run(self)
@@ -470,9 +466,9 @@ module Minigun
       if @_background_thread&.alive?
         @_background_thread.kill
         @_background_thread.join(1)
-        puts "Background task stopped"
+        puts 'Background task stopped'
       else
-        puts "No background task running"
+        puts 'No background task running'
       end
     end
 
@@ -485,9 +481,9 @@ module Minigun
     def wait
       if @_background_thread
         @_background_thread.join
-        puts "Background task completed"
+        puts 'Background task completed'
       else
-        puts "No background task to wait for"
+        puts 'No background task to wait for'
       end
     end
 

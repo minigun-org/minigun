@@ -45,8 +45,8 @@ class AmbiguousChildrenDemo
     root_pipeline = task.root_pipeline
     stage_registry = task.stage_registry
 
-    puts "Attempting to look up :processor from root pipeline..."
-    puts "Multiple nested pipelines contain :processor"
+    puts 'Attempting to look up :processor from root pipeline...'
+    puts 'Multiple nested pipelines contain :processor'
 
     begin
       # This should raise AmbiguousRoutingError
@@ -96,7 +96,7 @@ class UniqueNamesDemo
     root_pipeline = task.root_pipeline
     stage_registry = task.stage_registry
 
-    puts "Looking up stages with unique names:"
+    puts 'Looking up stages with unique names:'
 
     # These lookups succeed because names are unique
     proc_a = stage_registry.find_by_name(:processor_a, from_pipeline: root_pipeline)
@@ -104,7 +104,7 @@ class UniqueNamesDemo
 
     puts "  ✓ Found :processor_a - #{proc_a.inspect}"
     puts "  ✓ Found :processor_b - #{proc_b.inspect}"
-    puts "  No ambiguity when names are unique!"
+    puts '  No ambiguity when names are unique!'
 
     [proc_a, proc_b]
   end
@@ -141,9 +141,9 @@ class LocalPriorityExample
 end
 
 if __FILE__ == $PROGRAM_NAME
-  puts "=" * 70
-  puts "Example: Ambiguous Routing Detection"
-  puts "=" * 70
+  puts '=' * 70
+  puts 'Example: Ambiguous Routing Detection'
+  puts '=' * 70
 
   puts "\n--- Scenario 1: Ambiguous lookup in children ---"
   example1 = AmbiguousChildrenDemo.new
@@ -151,25 +151,24 @@ if __FILE__ == $PROGRAM_NAME
 
   if error
     puts "\n✓ SUCCESS: AmbiguousRoutingError was properly detected"
-    puts "  The stage_registry prevents lookups with multiple matches"
+    puts '  The stage_registry prevents lookups with multiple matches'
   else
     puts "\n✗ FAILED: Expected AmbiguousRoutingError"
   end
 
-  puts "\n" + "=" * 70
-  puts "--- Scenario 2: Unique names (works correctly) ---"
+  puts "\n#{'=' * 70}"
+  puts '--- Scenario 2: Unique names (works correctly) ---'
   example2 = UniqueNamesDemo.new
   stages = example2.demonstrate_unique_names
 
   puts "\n✓ SUCCESS: Registry found #{stages.size} stages with unique names"
 
-  puts "\n" + "=" * 70
-  puts "--- Scenario 3: Local priority (works correctly) ---"
+  puts "\n#{'=' * 70}"
+  puts '--- Scenario 3: Local priority (works correctly) ---'
   example3 = LocalPriorityExample.new
   example3.run
 
   puts "\nResults: #{example3.results.inspect}"
-  puts "✓ SUCCESS: Local stage takes priority over nested stages"
-  puts "=" * 70
+  puts '✓ SUCCESS: Local stage takes priority over nested stages'
+  puts '=' * 70
 end
-

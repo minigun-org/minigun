@@ -36,4 +36,3 @@ if __FILE__ == $PROGRAM_NAME
   example.run
   puts "Processed #{example.results.size} items with 10-worker pool"
 end
-

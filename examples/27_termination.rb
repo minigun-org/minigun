@@ -36,4 +36,3 @@ if __FILE__ == $PROGRAM_NAME
   example.run
   puts "Processed #{example.count} items"
 end
-

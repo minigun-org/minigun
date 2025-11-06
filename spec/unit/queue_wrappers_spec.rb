@@ -6,6 +6,14 @@ require 'minigun/queue_wrappers'
 RSpec.describe Minigun::OutputQueue do
   # Create real Stage objects
   let(:config) { { max_threads: 1, max_processes: 1 } }
+  let(:output_queue) do
+    described_class.new(
+      test_stage,
+      downstream_queues,
+      runtime_edges,
+      stage_stats: stage_stats
+    )
+  end
   let(:task) { Minigun::Task.new(config: config) }
   let(:pipeline) { task.root_pipeline }
 
@@ -25,15 +33,6 @@ RSpec.describe Minigun::OutputQueue do
       task.stage_registry.register(stage, pipeline)
       task.register_stage_queue(stage, all_stage_queues[stage])
     end
-  end
-
-  let(:output_queue) do
-    described_class.new(
-      test_stage,
-      downstream_queues,
-      runtime_edges,
-      stage_stats: stage_stats
-    )
   end
 
   describe '#<<' do

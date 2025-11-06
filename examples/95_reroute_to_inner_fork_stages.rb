@@ -19,8 +19,8 @@ class RerouteToInnerIpcStagesExample
   end
 
   def cleanup
-    File.unlink(@results_a_file) if File.exist?(@results_a_file)
-    File.unlink(@results_b_file) if File.exist?(@results_b_file)
+    FileUtils.rm_f(@results_a_file)
+    FileUtils.rm_f(@results_b_file)
   end
 
   pipeline do
@@ -127,66 +127,66 @@ class RerouteIpcInnerComplexExample < RerouteToInnerIpcStagesExample
 end
 
 if __FILE__ == $PROGRAM_NAME
-  puts "=" * 80
-  puts "Reroute to Inner Fork Stages Examples"
-  puts "=" * 80
-  puts ""
+  puts '=' * 80
+  puts 'Reroute to Inner Fork Stages Examples'
+  puts '=' * 80
+  puts ''
 
   begin
-    puts "--- Base Pipeline ---"
-    puts "Flow: generate -> filter_even -> process_a (IPC inner) -> collect_b (IPC inner)"
-    puts "      [collect_a (COW) is disconnected]"
+    puts '--- Base Pipeline ---'
+    puts 'Flow: generate -> filter_even -> process_a (IPC inner) -> collect_b (IPC inner)'
+    puts '      [collect_a (COW) is disconnected]'
     base = RerouteToInnerIpcStagesExample.new
     base.run
     puts "Results B: #{base.results_b.map { |r| r[:value] }.inspect}"
-    puts "Expected: [20, 40, 60] (even IDs * 10)"
+    puts 'Expected: [20, 40, 60] (even IDs * 10)'
     success = base.results_b.map { |r| r[:value] }.sort == [20, 40, 60]
-    puts success ? "✓ PASS" : "✗ FAIL"
+    puts success ? '✓ PASS' : '✗ FAIL'
     base.cleanup
 
     puts "\n--- Reroute Directly to Inner IPC Stage ---"
-    puts "Flow: generate -> process_a (IPC inner) -> collect_b (IPC inner)"
-    puts "      [bypasses filter_even]"
+    puts 'Flow: generate -> process_a (IPC inner) -> collect_b (IPC inner)'
+    puts '      [bypasses filter_even]'
     direct = RerouteDirectlyToInnerIpcExample.new
     direct.run
     puts "Results B: #{direct.results_b.map { |r| r[:value] }.inspect}"
-    puts "Expected: [10, 20, 30, 40, 50, 60] (all IDs * 10)"
+    puts 'Expected: [10, 20, 30, 40, 50, 60] (all IDs * 10)'
     success = direct.results_b.map { |r| r[:value] }.sort == [10, 20, 30, 40, 50, 60]
-    puts success ? "✓ PASS" : "✗ FAIL"
+    puts success ? '✓ PASS' : '✗ FAIL'
     direct.cleanup
 
     puts "\n--- Reroute from Inner IPC to COW ---"
-    puts "Flow: generate -> filter_even -> process_a (IPC inner) -> collect_a (COW)"
-    puts "      [routes from IPC inner stage to COW outer stage]"
+    puts 'Flow: generate -> filter_even -> process_a (IPC inner) -> collect_a (COW)'
+    puts '      [routes from IPC inner stage to COW outer stage]'
     to_cow = RerouteFromInnerIpcToCowExample.new
     to_cow.run
     puts "Results A: #{to_cow.results_a.map { |r| r[:value] }.inspect}"
-    puts "Expected: [20, 40, 60]"
+    puts 'Expected: [20, 40, 60]'
     success = to_cow.results_a.map { |r| r[:value] }.sort == [20, 40, 60]
-    puts success ? "✓ PASS" : "✗ FAIL"
+    puts success ? '✓ PASS' : '✗ FAIL'
     to_cow.cleanup
 
     puts "\n--- Complex Inner Reroute ---"
-    puts "Flow: generate -> process_a (IPC) -> transform (thread) -> collect_b (IPC)"
-    puts "      [routes through IPC inner, out to thread, back to IPC inner]"
+    puts 'Flow: generate -> process_a (IPC) -> transform (thread) -> collect_b (IPC)'
+    puts '      [routes through IPC inner, out to thread, back to IPC inner]'
     complex = RerouteIpcInnerComplexExample.new
     complex.run
     puts "Results B: #{complex.results_b.map { |r| r[:value] }.inspect}"
-    puts "Expected: [110, 120, 130, 140, 150, 160] (x * 10 + 100)"
+    puts 'Expected: [110, 120, 130, 140, 150, 160] (x * 10 + 100)'
     success = complex.results_b.map { |r| r[:value] }.sort == [110, 120, 130, 140, 150, 160]
-    puts success ? "✓ PASS" : "✗ FAIL"
+    puts success ? '✓ PASS' : '✗ FAIL'
     complex.cleanup
 
-    puts "\n" + "=" * 80
-    puts "Key Points:"
-    puts "  - Can reroute directly to stages INSIDE ipc_fork/cow_fork blocks"
-    puts "  - Can reroute FROM inner fork stages to outer stages"
-    puts "  - Can create complex flows: inner IPC -> outer thread -> inner IPC"
-    puts "  - Stage names are globally accessible regardless of nesting"
-    puts "  - Rerouting respects executor boundaries and serialization"
-    puts "=" * 80
+    puts "\n#{'=' * 80}"
+    puts 'Key Points:'
+    puts '  - Can reroute directly to stages INSIDE ipc_fork/cow_fork blocks'
+    puts '  - Can reroute FROM inner fork stages to outer stages'
+    puts '  - Can create complex flows: inner IPC -> outer thread -> inner IPC'
+    puts '  - Stage names are globally accessible regardless of nesting'
+    puts '  - Rerouting respects executor boundaries and serialization'
+    puts '=' * 80
   rescue NotImplementedError => e
     puts "\nForking not available on this platform: #{e.message}"
-    puts "(This is expected on Windows)"
+    puts '(This is expected on Windows)'
   end
 end

@@ -40,4 +40,3 @@ if __FILE__ == $PROGRAM_NAME
   puts "Processed #{example.results.size} successful items"
   puts "Results: #{example.results.sort.inspect}"
 end
-

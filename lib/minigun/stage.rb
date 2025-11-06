@@ -302,7 +302,7 @@ module Minigun
 
     # Positional constructor: AccumulatorStage.new(name, pipeline, block, options)
     def initialize(name, pipeline, block, options = {})
-      super(name, pipeline, block, options)
+      super
 
       @max_size = options[:max_size] || 100
       @max_wait = options[:max_wait] || nil # Future: time-based batching
@@ -356,7 +356,7 @@ module Minigun
       buffer = nil
 
       @mutex.synchronize do
-        if !@buffer.empty?
+        unless @buffer.empty?
           buffer = @buffer.dup
           @buffer.clear
         end
@@ -441,7 +441,7 @@ module Minigun
   class RouterRoundRobinStage < RouterStage
     def run_stage(worker_ctx)
       task = worker_ctx.stage.task
-      target_queues = @targets.map { |target| task&.find_queue(target) }.compact
+      target_queues = @targets.filter_map { |target| task&.find_queue(target) }
       round_robin_index = 0
 
       loop do
@@ -482,7 +482,7 @@ module Minigun
   class ExitStage < ConsumerStage
     # Positional constructor: ExitStage.new(name, pipeline, block, options)
     def initialize(name, pipeline, block, options = {})
-      super(name, pipeline, block, options)
+      super
     end
   end
 
@@ -496,7 +496,6 @@ module Minigun
       @nested_pipeline = nested_pipeline
     end
 
-
     def run_mode
       :composite # Manages internal stages
     end
@@ -507,13 +506,16 @@ module Minigun
 
       # Set up input/output queues for the nested pipeline
       # Pass the PipelineStage's input queue to nested pipeline so entry stages can use it
-      if !stage_ctx.sources_expected.empty?
+      unless stage_ctx.sources_expected.empty?
         # Has upstream: pass input queue to nested pipeline
         # The nested pipeline will handle distributing to its entry stages
-        @nested_pipeline.instance_variable_set(:@input_queues, {
-          input: stage_ctx.input_queue,
-          sources_expected: stage_ctx.sources_expected
-        })
+        @nested_pipeline.instance_variable_set(
+          :@input_queues,
+          {
+            input: stage_ctx.input_queue,
+            sources_expected: stage_ctx.sources_expected
+          }
+        )
       end
 
       # Always set output queue so pipeline creates :_exit

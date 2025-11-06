@@ -7,14 +7,14 @@
 require_relative '../lib/minigun'
 require_relative '../lib/minigun/hud'
 
-# Define a demo pipeline with various stages
+# Simple pipeline to demonstrate HUD
 class HudDemoTask
   include Minigun::DSL
 
   pipeline do
     # Producer - generates numbers infinitely
     producer :generator do |output|
-      puts "Starting infinite data generation..."
+      puts 'Starting infinite data generation...'
       puts "Press Ctrl+C or 'q' in the HUD to stop"
 
       counter = 0
@@ -48,7 +48,7 @@ class HudDemoTask
     end
 
     # Consumer - process batches
-    consumer :processor, threads: 2 do |batch, _output|
+    consumer :processor, threads: 2 do |_batch, _output|
       # Simulate batch processing with varying latency
       sleep 0.05 + rand(0.1)
       # Uncomment to see batch processing messages
@@ -58,28 +58,28 @@ class HudDemoTask
 end
 
 # Run the demo
-puts "=" * 60
-puts "MINIGUN HUD DEMO - INFINITE MODE"
-puts "=" * 60
-puts ""
-puts "This demo shows the HUD monitoring a pipeline in real-time."
-puts "The pipeline continuously generates and processes data with"
-puts "varying latencies to demonstrate different performance patterns."
-puts ""
-puts "Features to observe:"
-puts "  - Real-time throughput metrics"
-puts "  - Animated flow diagram (left panel)"
-puts "  - Live performance statistics (right panel)"
-puts "  - Bottleneck detection"
-puts "  - Latency percentiles (P50, P99)"
-puts ""
-puts "Controls:"
-puts "  - Press SPACE to pause/resume"
+puts '=' * 60
+puts 'MINIGUN HUD DEMO - INFINITE MODE'
+puts '=' * 60
+puts ''
+puts 'This demo shows the HUD monitoring a pipeline in real-time.'
+puts 'The pipeline continuously generates and processes data with'
+puts 'varying latencies to demonstrate different performance patterns.'
+puts ''
+puts 'Features to observe:'
+puts '  - Real-time throughput metrics'
+puts '  - Animated flow diagram (left panel)'
+puts '  - Live performance statistics (right panel)'
+puts '  - Bottleneck detection'
+puts '  - Latency percentiles (P50, P99)'
+puts ''
+puts 'Controls:'
+puts '  - Press SPACE to pause/resume'
 puts "  - Press 'h' for help"
 puts "  - Press 'q' to quit (or Ctrl+C)"
-puts "  - Use ↑/↓ to scroll"
-puts ""
-puts "Starting in 3 seconds..."
+puts '  - Use ↑/↓ to scroll'
+puts ''
+puts 'Starting in 3 seconds...'
 sleep 3
 
 # Create and run task with HUD

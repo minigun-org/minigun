@@ -4,7 +4,7 @@ require 'spec_helper'
 
 RSpec.describe 'Await Stages' do
   describe 'await: true stages' do
-    it 'should not be auto-connected in DAG' do
+    it 'is not auto-connected in DAG' do
       results = []
 
       klass = Class.new do
@@ -30,11 +30,11 @@ RSpec.describe 'Await Stages' do
           end
 
           processor :target_b, await: true do |item, output|
-            output << item * 10
+            output << (item * 10)
           end
 
           # Explicitly connect collectors
-          consumer :collect, from: [:target_a, :target_b] do |item|
+          consumer :collect, from: %i[target_a target_b] do |item|
             results << item
           end
         end
@@ -71,7 +71,7 @@ RSpec.describe 'Await Stages' do
       expect(instance.results.sort).to eq([1, 20])
     end
 
-    it 'should receive items only via dynamic routing' do
+    it 'receives items only via dynamic routing' do
       results = []
 
       klass = Class.new do
@@ -79,7 +79,7 @@ RSpec.describe 'Await Stages' do
 
         pipeline do
           producer :gen do |output|
-            3.times { |i| output << i + 1 }
+            3.times { |i| output << (i + 1) }
           end
 
           processor :router do |item, output|
@@ -98,7 +98,7 @@ RSpec.describe 'Await Stages' do
             output << { item: item, type: :odd }
           end
 
-          consumer :collect, from: [:even_handler, :odd_handler] do |item|
+          consumer :collect, from: %i[even_handler odd_handler] do |item|
             results << item
           end
         end
@@ -114,7 +114,7 @@ RSpec.describe 'Await Stages' do
       expect(instance.results.select { |r| r[:type] == :odd }.map { |r| r[:item] }.sort).to eq([1, 3])
     end
 
-    it 'should work with IPC fork executors' do
+    it 'works with IPC fork executors' do
       skip 'Forking not supported' unless Minigun.fork?
 
       results = []
@@ -125,7 +125,7 @@ RSpec.describe 'Await Stages' do
 
         pipeline do
           producer :gen do |output|
-            4.times { |i| output << i + 1 }
+            4.times { |i| output << (i + 1) }
           end
 
           processor :router do |item, output|
@@ -134,7 +134,7 @@ RSpec.describe 'Await Stages' do
 
           ipc_fork(2) do
             processor :ipc_processor, await: true do |item, output|
-              output << item * 10
+              output << (item * 10)
             end
           end
 
@@ -158,11 +158,11 @@ RSpec.describe 'Await Stages' do
 
         expect(results).to eq([10, 20, 30, 40])
       ensure
-        File.unlink(results_file) if File.exist?(results_file)
+        FileUtils.rm_f(results_file)
       end
     end
 
-    it 'should work with COW fork executors' do
+    it 'works with COW fork executors' do
       skip 'Forking not supported' unless Minigun.fork?
 
       results = []
@@ -173,7 +173,7 @@ RSpec.describe 'Await Stages' do
 
         pipeline do
           producer :gen do |output|
-            4.times { |i| output << i + 1 }
+            4.times { |i| output << (i + 1) }
           end
 
           processor :router do |item, output|
@@ -182,7 +182,7 @@ RSpec.describe 'Await Stages' do
 
           cow_fork(2) do
             processor :cow_processor, await: true do |item, output|
-              output << item * 100
+              output << (item * 100)
             end
           end
 
@@ -206,11 +206,11 @@ RSpec.describe 'Await Stages' do
 
         expect(results).to eq([100, 200, 300, 400])
       ensure
-        File.unlink(results_file) if File.exist?(results_file)
+        FileUtils.rm_f(results_file)
       end
     end
 
-    it 'should support multiple await stages routing to each other' do
+    it 'supports multiple await stages routing to each other' do
       results = []
 
       klass = Class.new do
@@ -226,11 +226,11 @@ RSpec.describe 'Await Stages' do
           end
 
           processor :stage_a, await: true do |item, output|
-            output.to(:stage_b) << item * 2
+            output.to(:stage_b) << (item * 2)
           end
 
           processor :stage_b, await: true do |item, output|
-            output << item + 3
+            output << (item + 3)
           end
 
           consumer :collect, from: :stage_b do |item|
@@ -247,11 +247,10 @@ RSpec.describe 'Await Stages' do
       # 5 -> stage_a (5*2=10) -> stage_b (10+3=13)
       expect(instance.results).to eq([13])
     end
-
   end
 
   describe 'await: false stages' do
-    it 'should terminate immediately when disconnected' do
+    it 'terminates immediately when disconnected' do
       # await: false is the default for disconnected stages
       started = []
       completed = []
@@ -265,7 +264,7 @@ RSpec.describe 'Await Stages' do
             output << 1
           end
 
-          processor :router do |item, output|
+          processor :router do |_item, _output|
             started << :router
             # Don't route to disconnected stage
           end
@@ -296,7 +295,7 @@ RSpec.describe 'Await Stages' do
   end
 
   describe 'mixed await behavior' do
-    it 'should support mix of await: true and normal stages' do
+    it 'supports mix of await: true and normal stages' do
       results = { a: [], b: [], c: [] }
 
       klass = Class.new do
@@ -304,12 +303,12 @@ RSpec.describe 'Await Stages' do
 
         pipeline do
           producer :gen do |output|
-            6.times { |i| output << i + 1 }
+            6.times { |i| output << (i + 1) }
           end
 
           # Normal stage - auto-connected
           processor :process do |item, output|
-            output << item * 2
+            output << (item * 2)
           end
 
           # Router stage - connected to process, makes routing decisions

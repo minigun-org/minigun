@@ -54,7 +54,7 @@ module Minigun
       @executor&.shutdown
     end
 
-    def handle_disconnected_stage(stage_ctx) # rubocop:disable Naming/PredicateMethod
+    def handle_disconnected_stage(stage_ctx)
       # Only check streaming stages (autonomous and composite manage their own execution)
       return false unless @stage.run_mode == :streaming
 
@@ -82,10 +82,10 @@ module Minigun
           false
         else
           # Default: warn + 5 second timeout
-          log_warning "Stage has no DAG upstream connections, using default 5s await timeout. " \
+          log_warning 'Stage has no DAG upstream connections, using default 5s await timeout. ' \
                       "If this is intentional (dynamic routing via output.to(:#{@stage_name})), " \
                       "consider setting 'await: true'. " \
-                      "If unintentional, check your pipeline routing."
+                      'If unintentional, check your pipeline routing.'
           wait_for_first_item(timeout: 5, stage_ctx: stage_ctx)
         end
 
@@ -123,24 +123,23 @@ module Minigun
           # Use Queue's non-blocking pop with a loop and small sleep
           # to avoid spinning while still being responsive
           loop do
-            begin
-              # Try non-blocking pop
-              item = raw_queue.pop(true)
-              # Got an item! Push it back so run_stage can process it
-              raw_queue.push(item)
-              log_debug "Received item within #{timeout}s timeout, continuing normal operation"
-              return false
-            rescue ThreadError
-              # Queue is empty, sleep briefly and retry
-              sleep 0.1
-            end
+            # Try non-blocking pop
+            item = raw_queue.pop(true)
+
+            # Got an item! Push it back so run_stage can process it
+            raw_queue.push(item)
+            log_debug "Received item within #{timeout}s timeout, continuing normal operation"
+            return false
+          rescue ThreadError
+            # Queue is empty, sleep briefly and retry
+            sleep 0.1
           end
         end
       rescue Timeout::Error
         # Timeout expired with no items
         log_debug "Timeout after #{timeout}s with no items, shutting down gracefully"
         graceful_shutdown(stage_ctx)
-        return true
+        true
       end
     end
 

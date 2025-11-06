@@ -13,7 +13,6 @@ require_relative '../lib/minigun'
 # - Producer -> Splitter (threads) -> [IPC Fork A, COW Fork B, IPC Fork C]
 # - Splitter routes to different fork types based on content
 # - Demonstrates mixing persistent (IPC) and ephemeral (COW) workers
-
 class MixedIpcCowFanOutExample
   include Minigun::DSL
 
@@ -29,9 +28,9 @@ class MixedIpcCowFanOutExample
   end
 
   def cleanup
-    File.unlink(@results_ipc_a_file) if File.exist?(@results_ipc_a_file)
-    File.unlink(@results_ipc_c_file) if File.exist?(@results_ipc_c_file)
-    File.unlink(@results_cow_file) if File.exist?(@results_cow_file)
+    FileUtils.rm_f(@results_ipc_a_file)
+    FileUtils.rm_f(@results_ipc_c_file)
+    FileUtils.rm_f(@results_cow_file)
   end
 
   pipeline do
@@ -134,17 +133,17 @@ class MixedIpcCowFanOutExample
 end
 
 if __FILE__ == $PROGRAM_NAME
-  puts "=" * 80
-  puts "Example: Mixed IPC/COW Fork Fan-Out Pattern"
-  puts "=" * 80
-  puts ""
+  puts '=' * 80
+  puts 'Example: Mixed IPC/COW Fork Fan-Out Pattern'
+  puts '=' * 80
+  puts ''
 
   example = MixedIpcCowFanOutExample.new
   begin
     example.run
 
-    puts "\n" + "=" * 80
-    puts "Results:"
+    puts "\n#{'=' * 80}"
+    puts 'Results:'
     puts "  ProcessIpcA received: #{example.results_ipc_a.size} items (expected: 4)"
     puts "  ProcessCowB received: #{example.results_cow_b.size} items (expected: 4)"
     puts "  ProcessIpcC received: #{example.results_ipc_c.size} items (expected: 4)"
@@ -165,21 +164,21 @@ if __FILE__ == $PROGRAM_NAME
               ipc_c_ids == [2, 5, 8, 11]
 
     puts "  Status: #{success ? '✓ SUCCESS' : '✗ FAILED'}"
-    puts "=" * 80
-    puts ""
-    puts "Key Points:"
-    puts "  - Mixed fan-out: threads -> [IPC, COW, IPC]"
-    puts "  - Different execution models in same pipeline"
-    puts "  - IPC: Persistent workers, full serialization"
-    puts "  - COW: Ephemeral forks, COW-shared inputs"
-    puts "  - Choose executor based on workload characteristics:"
-    puts "    * IPC: Long-running connections, state"
-    puts "    * COW: CPU-intensive, large read-only data"
-    puts "  - Useful for: heterogeneous workloads, optimization"
-    puts "=" * 80
+    puts '=' * 80
+    puts ''
+    puts 'Key Points:'
+    puts '  - Mixed fan-out: threads -> [IPC, COW, IPC]'
+    puts '  - Different execution models in same pipeline'
+    puts '  - IPC: Persistent workers, full serialization'
+    puts '  - COW: Ephemeral forks, COW-shared inputs'
+    puts '  - Choose executor based on workload characteristics:'
+    puts '    * IPC: Long-running connections, state'
+    puts '    * COW: CPU-intensive, large read-only data'
+    puts '  - Useful for: heterogeneous workloads, optimization'
+    puts '=' * 80
   rescue NotImplementedError => e
     puts "\nForking not available on this platform: #{e.message}"
-    puts "(This is expected on Windows)"
+    puts '(This is expected on Windows)'
   ensure
     example.cleanup
   end

@@ -13,7 +13,6 @@ require_relative '../lib/minigun'
 # - Each IPC worker runs a nested pipeline with COW forks (ephemeral)
 # - Process tree: Master -> [IPC Worker 1, IPC Worker 2] -> [COW forks...]
 # - This creates a 3-level process hierarchy
-
 class IpcSpawnsNestedCowExample
   include Minigun::DSL
 
@@ -25,7 +24,7 @@ class IpcSpawnsNestedCowExample
   end
 
   def cleanup
-    File.unlink(@results_file) if File.exist?(@results_file)
+    FileUtils.rm_f(@results_file)
   end
 
   pipeline do
@@ -33,7 +32,7 @@ class IpcSpawnsNestedCowExample
     producer :generate do |output|
       puts "[Producer] Generating 4 batches in master (PID #{Process.pid})"
       4.times do |i|
-        batch = (1..3).map { |j| { id: i * 3 + j, value: (i * 3 + j) * 10 } }
+        batch = (1..3).map { |j| { id: (i * 3) + j, value: ((i * 3) + j) * 10 } }
         output << batch
       end
     end
@@ -100,17 +99,17 @@ class IpcSpawnsNestedCowExample
 end
 
 if __FILE__ == $PROGRAM_NAME
-  puts "=" * 80
-  puts "Example: IPC Worker Spawns Nested COW Forks"
-  puts "=" * 80
-  puts ""
+  puts '=' * 80
+  puts 'Example: IPC Worker Spawns Nested COW Forks'
+  puts '=' * 80
+  puts ''
 
   example = IpcSpawnsNestedCowExample.new
   begin
     example.run
 
-    puts "\n" + "=" * 80
-    puts "Results:"
+    puts "\n#{'=' * 80}"
+    puts 'Results:'
     puts "  Total items processed: #{example.results.size} (expected: 12)"
 
     ipc_pids = example.results.map { |r| r[:ipc_pid] }.uniq.sort
@@ -123,24 +122,24 @@ if __FILE__ == $PROGRAM_NAME
               example.results.map { |r| r[:id] }.sort == (1..12).to_a
 
     puts "  Status: #{success ? '✓ SUCCESS' : '✗ FAILED'}"
-    puts "=" * 80
-    puts ""
-    puts "Process Hierarchy:"
+    puts '=' * 80
+    puts ''
+    puts 'Process Hierarchy:'
     puts "  Master (#{Process.pid})"
     puts "    └─> IPC Workers (#{ipc_pids.join(', ')})"
     puts "         └─> COW Forks (#{cow_pids.size} ephemeral processes)"
-    puts ""
-    puts "Key Points:"
-    puts "  - 3-level process hierarchy created"
-    puts "  - IPC workers are persistent (parent)"
-    puts "  - COW forks are ephemeral (children of IPC workers)"
-    puts "  - Nested pipelines enable complex process topologies"
-    puts "  - Requires process supervision for proper cleanup"
-    puts "  - Orphaned processes if IPC worker dies unexpectedly"
-    puts "=" * 80
+    puts ''
+    puts 'Key Points:'
+    puts '  - 3-level process hierarchy created'
+    puts '  - IPC workers are persistent (parent)'
+    puts '  - COW forks are ephemeral (children of IPC workers)'
+    puts '  - Nested pipelines enable complex process topologies'
+    puts '  - Requires process supervision for proper cleanup'
+    puts '  - Orphaned processes if IPC worker dies unexpectedly'
+    puts '=' * 80
   rescue NotImplementedError => e
     puts "\nForking not available on this platform: #{e.message}"
-    puts "(This is expected on Windows)"
+    puts '(This is expected on Windows)'
   ensure
     example.cleanup
   end

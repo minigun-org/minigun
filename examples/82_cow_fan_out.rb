@@ -13,7 +13,6 @@ require_relative '../lib/minigun'
 # - Splitter routes items to different stages based on content
 # - All stages use ephemeral COW forks
 # - COW-shared inputs, IPC outputs at each stage
-
 class CowFanOutExample
   include Minigun::DSL
 
@@ -29,9 +28,9 @@ class CowFanOutExample
   end
 
   def cleanup
-    File.unlink(@results_a_file) if File.exist?(@results_a_file)
-    File.unlink(@results_b_file) if File.exist?(@results_b_file)
-    File.unlink(@results_c_file) if File.exist?(@results_c_file)
+    FileUtils.rm_f(@results_a_file)
+    FileUtils.rm_f(@results_b_file)
+    FileUtils.rm_f(@results_c_file)
   end
 
   pipeline do
@@ -131,17 +130,17 @@ class CowFanOutExample
 end
 
 if __FILE__ == $PROGRAM_NAME
-  puts "=" * 80
-  puts "Example: COW Fork Fan-Out Pattern"
-  puts "=" * 80
-  puts ""
+  puts '=' * 80
+  puts 'Example: COW Fork Fan-Out Pattern'
+  puts '=' * 80
+  puts ''
 
   example = CowFanOutExample.new
   begin
     example.run
 
-    puts "\n" + "=" * 80
-    puts "Results:"
+    puts "\n#{'=' * 80}"
+    puts 'Results:'
     puts "  ProcessA received: #{example.results_a.size} items (expected: 4)"
     puts "  ProcessB received: #{example.results_b.size} items (expected: 4)"
     puts "  ProcessC received: #{example.results_c.size} items (expected: 4)"
@@ -162,20 +161,20 @@ if __FILE__ == $PROGRAM_NAME
               c_ids == [2, 5, 8, 11]
 
     puts "  Status: #{success ? '✓ SUCCESS' : '✗ FAILED'}"
-    puts "=" * 80
-    puts ""
-    puts "Key Points:"
-    puts "  - Fan-out from COW splitter to 3 COW consumers"
-    puts "  - All stages use ephemeral forks (one per item)"
-    puts "  - Splitter makes routing decisions in COW fork"
-    puts "  - No input serialization (COW-shared)"
-    puts "  - Output serialization for routing back to parent"
-    puts "  - Many short-lived processes created"
-    puts "  - Useful for: CPU-intensive partitioning with large inputs"
-    puts "=" * 80
+    puts '=' * 80
+    puts ''
+    puts 'Key Points:'
+    puts '  - Fan-out from COW splitter to 3 COW consumers'
+    puts '  - All stages use ephemeral forks (one per item)'
+    puts '  - Splitter makes routing decisions in COW fork'
+    puts '  - No input serialization (COW-shared)'
+    puts '  - Output serialization for routing back to parent'
+    puts '  - Many short-lived processes created'
+    puts '  - Useful for: CPU-intensive partitioning with large inputs'
+    puts '=' * 80
   rescue NotImplementedError => e
     puts "\nForking not available on this platform: #{e.message}"
-    puts "(This is expected on Windows)"
+    puts '(This is expected on Windows)'
   ensure
     example.cleanup
   end

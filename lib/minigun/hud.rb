@@ -11,6 +11,7 @@ require_relative 'hud/stats_aggregator'
 require_relative 'hud/controller'
 
 module Minigun
+  # HUD (Heads-Up Display) provides real-time visualization of pipeline execution
   module HUD
     # Launch HUD for a pipeline
     # Can be run in a separate thread or process
@@ -56,10 +57,10 @@ module Minigun
                  elsif task_instance.respond_to?(:root_pipeline)
                    task_instance.root_pipeline
                  else
-                   raise ArgumentError, "Task must have a pipeline accessible via _minigun_task, pipelines, pipeline, or root_pipeline"
+                   raise ArgumentError, 'Task must have a pipeline accessible via _minigun_task, pipelines, pipeline, or root_pipeline'
                  end
 
-      raise ArgumentError, "No pipeline found in task" unless pipeline
+      raise ArgumentError, 'No pipeline found in task' unless pipeline
 
       # Flag to track if user quit via HUD
       user_quit = false
@@ -67,12 +68,10 @@ module Minigun
       # Start HUD in a separate thread
       hud = Controller.new(pipeline, on_quit: -> { user_quit = true })
       hud_thread = Thread.new do
-        begin
-          hud.start
-        rescue => e
-          warn "\nHUD error: #{e.message}"
-          warn e.backtrace.join("\n")
-        end
+        hud.start
+      rescue StandardError => e
+        warn "\nHUD error: #{e.message}"
+        warn e.backtrace.join("\n")
       end
 
       # Give HUD time to initialize
@@ -80,11 +79,9 @@ module Minigun
 
       # Run the task in a separate thread so we can monitor for HUD quit
       task_thread = Thread.new do
-        begin
-          task_instance.run
-        rescue Interrupt
-          # Gracefully handle Ctrl+C
-        end
+        task_instance.run
+      rescue Interrupt
+        # Gracefully handle Ctrl+C
       end
 
       # Monitor for user quit or task completion
@@ -103,6 +100,7 @@ module Minigun
           # Wait for user to quit via HUD
           loop do
             break if user_quit
+
             sleep 0.1
           end
           break

@@ -21,7 +21,6 @@ require_relative '../lib/minigun'
 # - Router uses output.to() for dynamic routing
 # - Target stages have no DAG upstream (disconnected)
 # - Different await modes demonstrate different behaviors
-
 class AwaitModesExample
   include Minigun::DSL
 
@@ -59,7 +58,7 @@ class AwaitModesExample
         sleep 0.1
       end
 
-      puts "[Router] Done routing"
+      puts '[Router] Done routing'
     end
 
     # Case 1: Default await (no await specified)
@@ -129,7 +128,7 @@ class ImmediateShutdownExample
     producer :source do |output|
       puts "\n[Source] Generating item"
       output.to(:connected_stage) << { id: 1 }
-      # Note: not routing to :disconnected_stage
+      # NOTE: not routing to :disconnected_stage
     end
 
     # This stage receives items and works normally
@@ -142,16 +141,16 @@ class ImmediateShutdownExample
     # It will shutdown immediately since nothing routes to it
     # This demonstrates intentional fast-fail for disconnected stages
     consumer :disconnected_stage, await: false do |item|
-      puts "  [Disconnected] Should never see this!"
+      puts '  [Disconnected] Should never see this!'
       @disconnected_results << item
     end
   end
 end
 
 # Run the examples
-puts "=" * 80
-puts "Example 1: Different Await Modes"
-puts "=" * 80
+puts '=' * 80
+puts 'Example 1: Different Await Modes'
+puts '=' * 80
 puts "\nNote: The :default_await stage will show a WARNING about using 5s default timeout."
 puts "This is expected behavior when a stage has no DAG upstream and no await: setting.\n"
 
@@ -164,9 +163,9 @@ puts "  Infinite await (no warning):     #{example1.infinite_results.size} items
 puts "  Custom await 30s (no warning):   #{example1.custom_results.size} items"
 puts "  Normal DAG (no warning):         #{example1.normal_results.size} items"
 
-puts "\n" + "=" * 80
-puts "Example 2: Immediate Shutdown (await: false)"
-puts "=" * 80
+puts "\n#{'=' * 80}"
+puts 'Example 2: Immediate Shutdown (await: false)'
+puts '=' * 80
 puts "\nThis stage will shutdown immediately because it has no DAG upstream"
 puts "and await: false is set. This is useful for detecting pipeline bugs.\n"
 
@@ -177,9 +176,9 @@ puts "\nResults:"
 puts "  Connected stage: #{example2.connected_results.size} items (should be 1)"
 puts "  Disconnected stage: #{example2.disconnected_results.size} items (should be 0)"
 
-puts "\n" + "=" * 80
-puts "Summary"
-puts "=" * 80
+puts "\n#{'=' * 80}"
+puts 'Summary'
+puts '=' * 80
 puts <<~SUMMARY
 
   Await Modes:

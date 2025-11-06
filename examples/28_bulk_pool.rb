@@ -40,4 +40,3 @@ if __FILE__ == $PROGRAM_NAME
   puts "Processed #{example.results.size} items in #{elapsed.round(3)}s"
   puts "Throughput: #{(example.results.size / elapsed).round(0)} items/sec"
 end
-

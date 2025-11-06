@@ -63,7 +63,12 @@ module Minigun
       @ipc_pipes_mutex.synchronize do
         @ipc_pipes.each do |pipe|
           next if keep_pipes.include?(pipe)
-          pipe.close rescue nil
+
+          begin
+            pipe.close
+          rescue StandardError
+            nil
+          end
         end
       end
     end

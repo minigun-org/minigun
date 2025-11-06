@@ -24,9 +24,9 @@ module Minigun
 
       # Update terminal dimensions
       def update_size
-        if IO.console
-          @width, @height = IO.console.winsize.reverse
-        end
+        return unless IO.console
+
+        @width, @height = IO.console.winsize.reverse
       end
 
       # Clear the terminal
@@ -36,7 +36,7 @@ module Minigun
 
       # Clear terminal including scrollback buffer
       def clear_all
-        print "\e[3J\e[2J\e[H"  # \e[3J clears scrollback, \e[2J clears screen, \e[H moves to home
+        print "\e[3J\e[2J\e[H" # \e[3J clears scrollback, \e[2J clears screen, \e[H moves to home
       end
 
       # Reset internal buffers (for resize/refresh)
@@ -87,23 +87,23 @@ module Minigun
 
         # Top border with optional title
         # Format: "┌─ TITLE ─────┐" where total width = w
-        if title && title.length + 5 <= w  # "┌─ " + title + " " + "─" + "┐" = 5 chars overhead
+        if title && title.length + 5 <= w # "┌─ " + title + " " + "─" + "┐" = 5 chars overhead
           title_section = "─ #{title} "
-          remaining_dashes = w - 2 - title_section.length  # -2 for corners
+          remaining_dashes = w - 2 - title_section.length # -2 for corners
           top_line = "┌#{title_section}#{'─' * remaining_dashes}┐"
         else
-          top_line = "┌" + ("─" * (w - 2)) + "┐"
+          top_line = "┌#{'─' * (w - 2)}┐"
         end
 
         write_at(x, y, top_line, color: color)
 
         # Sides
-        (1...h-1).each do |i|
-          write_at(x, y + i, "│" + (" " * (w - 2)) + "│", color: color)
+        (1...(h - 1)).each do |i|
+          write_at(x, y + i, "│#{' ' * (w - 2)}│", color: color)
         end
 
         # Bottom border
-        write_at(x, y + h - 1, "└" + ("─" * (w - 2)) + "┘", color: color)
+        write_at(x, y + h - 1, "└#{'─' * (w - 2)}┘", color: color)
       end
 
       # Render the buffer to screen (double-buffered)
@@ -113,13 +113,13 @@ module Minigun
 
         # Only redraw changed parts (or everything if force_redraw)
         @buffer.each_with_index do |item, index|
-          if force_redraw || @previous_buffer[index] != item
-            move_to(item[:x], item[:y])
-            if item[:color]
-              print item[:color] + item[:text] + COLORS[:reset]
-            else
-              print item[:text]
-            end
+          next unless force_redraw || @previous_buffer[index] != item
+
+          move_to(item[:x], item[:y])
+          if item[:color]
+            print item[:color] + item[:text] + COLORS[:reset]
+          else
+            print item[:text]
           end
         end
 
@@ -136,7 +136,7 @@ module Minigun
         print "\e[?1049h"
 
         hide_cursor
-        clear  # Clear the alternate screen
+        clear # Clear the alternate screen
 
         # Enable raw mode for immediate key input
         $stdin.raw!

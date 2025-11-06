@@ -45,10 +45,9 @@ if __FILE__ == $PROGRAM_NAME
   small_pipeline = ConfigurableDownloader.new(threads: 5, batch_size: 10)
   large_pipeline = ConfigurableDownloader.new(threads: 20, batch_size: 50)
 
-  puts "Small pipeline (5 threads, batch 10):"
+  puts 'Small pipeline (5 threads, batch 10):'
   puts "  Configuration: threads=#{small_pipeline.thread_count}, batch=#{small_pipeline.batch_size}"
 
   puts "\nLarge pipeline (20 threads, batch 50):"
   puts "  Configuration: threads=#{large_pipeline.thread_count}, batch=#{large_pipeline.batch_size}"
 end
-

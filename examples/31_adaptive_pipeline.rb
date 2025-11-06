@@ -71,4 +71,3 @@ if __FILE__ == $PROGRAM_NAME
     puts "  Batch size: #{pipeline.batch_size}"
   end
 end
-

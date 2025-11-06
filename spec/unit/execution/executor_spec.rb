@@ -74,7 +74,7 @@ RSpec.describe Minigun::Execution::Executor do
       track_test_stage = Minigun::ConsumerStage.new(
         :track_test,
         pipeline,
-        proc { |item, output|
+        proc { |_item, output|
           output << 42
           output << 84
         },
@@ -301,9 +301,9 @@ RSpec.describe Minigun::Execution::ThreadPoolExecutor do
 
       # ConsumerStage catches errors and logs them, so workers don't crash
       # This is correct production behavior
-      expect {
+      expect do
         executor.execute_stage(error_stage, user_context, input_queue, output_queue)
-      }.not_to raise_error
+      end.not_to raise_error
     end
   end
 
@@ -366,9 +366,9 @@ RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: !Minigun.fork? do
       input_queue << Minigun::EndOfStage.new(:test)
 
       # Executor processes items through the stage
-      expect {
+      expect do
         executor.execute_stage(test_stage_for_ctx, user_context, input_queue, output_queue)
-      }.not_to raise_error
+      end.not_to raise_error
     end
 
     it 'propagates errors from child process' do
@@ -386,9 +386,9 @@ RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: !Minigun.fork? do
       input_queue << Minigun::EndOfStage.new(:test)
 
       # COW fork propagates errors from child processes
-      expect {
+      expect do
         executor.execute_stage(error_stage, user_context, input_queue, output_queue)
-      }.to raise_error(/COW forked process failed.*boom/)
+      end.to raise_error(/COW forked process failed.*boom/)
     end
   end
 
@@ -469,7 +469,7 @@ RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: !Minigun.fork? do
         pipeline,
         proc { |item, output|
           processed_items << item
-          sleep 0.01  # Slow processing
+          sleep 0.01 # Slow processing
           output << item
         },
         {}
@@ -486,7 +486,11 @@ RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: !Minigun.fork? do
 
       # All items should be processed
       results = []
-      10.times { results << output_queue.pop(true) rescue nil }
+      10.times do
+        results << output_queue.pop(true)
+      rescue StandardError
+        nil
+      end
       expect(results.compact.size).to eq(10)
     end
   end
@@ -552,7 +556,7 @@ RSpec.describe Minigun::Execution::IpcForkPoolExecutor, skip: !Minigun.fork? do
         :ipc_concurrency_test,
         pipeline,
         proc { |item, output|
-          sleep 0.01  # Slow processing
+          sleep 0.01 # Slow processing
           output << item
         },
         {}
@@ -569,7 +573,11 @@ RSpec.describe Minigun::Execution::IpcForkPoolExecutor, skip: !Minigun.fork? do
 
       # All items should be processed
       results = []
-      10.times { results << output_queue.pop(true) rescue nil }
+      10.times do
+        results << output_queue.pop(true)
+      rescue StandardError
+        nil
+      end
       expect(results.compact.size).to eq(10)
     end
 
@@ -593,7 +601,11 @@ RSpec.describe Minigun::Execution::IpcForkPoolExecutor, skip: !Minigun.fork? do
 
       # All 20 items should be processed by max_size=2 workers
       results = []
-      20.times { results << output_queue.pop(true) rescue nil }
+      20.times do
+        results << output_queue.pop(true)
+      rescue StandardError
+        nil
+      end
       expect(results.compact.size).to eq(20)
     end
   end

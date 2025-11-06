@@ -30,6 +30,11 @@ stage_stats = stage_ctx.stage_stats
 stage_stats.start!
 log_info(stage_ctx, 'Starting')
 
+===================
+
+- name -- base62
+- check for name conflicts
+
 ====================
 
 batch / debatch / rebatch operators

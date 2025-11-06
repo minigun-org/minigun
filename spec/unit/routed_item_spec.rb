@@ -6,7 +6,7 @@ RSpec.describe Minigun::RoutedItem do
   describe '#initialize' do
     it 'stores target stage and item' do
       item = { id: 1, value: 'test' }
-      routed = Minigun::RoutedItem.new(:target_stage, item)
+      routed = described_class.new(:target_stage, item)
 
       expect(routed.target_stage).to eq(:target_stage)
       expect(routed.item).to eq(item)
@@ -19,14 +19,14 @@ RSpec.describe Minigun::RoutedItem do
       stage = Minigun::ProducerStage.new(:my_stage, pipeline, proc {}, {})
 
       item = 'test_data'
-      routed = Minigun::RoutedItem.new(stage, item)
+      routed = described_class.new(stage, item)
 
       expect(routed.target_stage).to eq(stage)
       expect(routed.item).to eq(item)
     end
 
     it 'accepts nil as item' do
-      routed = Minigun::RoutedItem.new(:target, nil)
+      routed = described_class.new(:target, nil)
 
       expect(routed.target_stage).to eq(:target)
       expect(routed.item).to be_nil
@@ -35,7 +35,7 @@ RSpec.describe Minigun::RoutedItem do
 
   describe '#to_s' do
     it 'returns human-readable representation' do
-      routed = Minigun::RoutedItem.new(:my_target, 'data')
+      routed = described_class.new(:my_target, 'data')
       str = routed.to_s
 
       expect(str).to include('RoutedItem')
@@ -44,7 +44,7 @@ RSpec.describe Minigun::RoutedItem do
     end
 
     it 'handles complex items' do
-      routed = Minigun::RoutedItem.new(:target, { complex: { nested: 'value' } })
+      routed = described_class.new(:target, { complex: { nested: 'value' } })
       str = routed.to_s
 
       expect(str).to be_a(String)
@@ -53,7 +53,7 @@ RSpec.describe Minigun::RoutedItem do
   end
 
   describe 'integration with router stages' do
-    it 'should be handled by RouterBroadcastStage' do
+    it 'is handled by RouterBroadcastStage' do
       skip 'Forking not supported' unless Minigun.fork?
 
       results = []
@@ -64,7 +64,7 @@ RSpec.describe Minigun::RoutedItem do
 
         pipeline do
           producer :gen do |output|
-            2.times { |i| output << i + 1 }
+            2.times { |i| output << (i + 1) }
           end
 
           # Router that targets specific nested stage
@@ -86,7 +86,7 @@ RSpec.describe Minigun::RoutedItem do
             end
           end
 
-          consumer :collect, from: [:nested_a, :nested_b] do |item|
+          consumer :collect, from: %i[nested_a nested_b] do |item|
             File.open(results_file, 'a') do |f|
               f.flock(File::LOCK_EX)
               f.puts item
@@ -100,17 +100,15 @@ RSpec.describe Minigun::RoutedItem do
         instance = klass.new
         instance.run
 
-        if File.exist?(results_file)
-          results = File.readlines(results_file).map(&:strip).sort
-        end
+        results = File.readlines(results_file).map(&:strip).sort if File.exist?(results_file)
 
         expect(results).to eq(['a:1', 'b:2'])
       ensure
-        File.unlink(results_file) if File.exist?(results_file)
+        FileUtils.rm_f(results_file)
       end
     end
 
-    it 'should be handled by RouterRoundRobinStage' do
+    it 'is handled by RouterRoundRobinStage' do
       results = []
 
       klass = Class.new do
@@ -118,23 +116,23 @@ RSpec.describe Minigun::RoutedItem do
 
         pipeline do
           producer :gen do |output|
-            3.times { |i| output << i + 1 }
+            3.times { |i| output << (i + 1) }
           end
 
           # Fan-out with round-robin routing - will broadcast to both targets
-          processor :fanout, routing: :round_robin, to: [:target_a, :target_b] do |item, output|
+          processor :fanout, routing: :round_robin, to: %i[target_a target_b] do |item, output|
             output << item
           end
 
           processor :target_a, await: false do |item, output|
-            output << item * 10
+            output << (item * 10)
           end
 
           processor :target_b, await: false do |item, output|
-            output << item * 20
+            output << (item * 20)
           end
 
-          consumer :collect, from: [:target_a, :target_b] do |item|
+          consumer :collect, from: %i[target_a target_b] do |item|
             results << item
           end
         end
@@ -152,12 +150,12 @@ RSpec.describe Minigun::RoutedItem do
 
   describe 'serialization for IPC' do
     it 'can be marshaled and unmarshaled' do
-      original = Minigun::RoutedItem.new(:my_stage, { data: 'test' })
+      original = described_class.new(:my_stage, { data: 'test' })
 
       serialized = Marshal.dump(original)
       deserialized = Marshal.load(serialized)
 
-      expect(deserialized).to be_a(Minigun::RoutedItem)
+      expect(deserialized).to be_a(described_class)
       expect(deserialized.target_stage).to eq(original.target_stage)
       expect(deserialized.item).to eq(original.item)
     end
@@ -169,7 +167,7 @@ RSpec.describe Minigun::RoutedItem do
       # Non-serializable items should be caught at the OutputQueue level
       pipe_r, pipe_w = IO.pipe
 
-      routed = Minigun::RoutedItem.new(:target, 'serializable_data')
+      routed = described_class.new(:target, 'serializable_data')
       message = { type: :routed_item, target_stage: routed.target_stage, item: routed.item }
 
       Marshal.dump(message, pipe_w)

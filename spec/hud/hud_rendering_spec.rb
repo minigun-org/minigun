@@ -15,9 +15,7 @@ RSpec.describe 'HUD Full Rendering' do
   # Helper to capture the full HUD ASCII output
   def render_hud(pipeline_instance, width: 120, height: 30)
     # Evaluate pipeline blocks if using DSL
-    if pipeline_instance.respond_to?(:_evaluate_pipeline_blocks!, true)
-      pipeline_instance.send(:_evaluate_pipeline_blocks!)
-    end
+    pipeline_instance.send(:_evaluate_pipeline_blocks!) if pipeline_instance.respond_to?(:_evaluate_pipeline_blocks!, true)
 
     # Get the actual pipeline object
     pipeline = if pipeline_instance.respond_to?(:_minigun_task, true)
@@ -26,7 +24,7 @@ RSpec.describe 'HUD Full Rendering' do
                  pipeline_instance
                end
 
-    raise "No pipeline found" unless pipeline
+    raise 'No pipeline found' unless pipeline
 
     # Stub all Stats instances BEFORE running pipeline
     allow_any_instance_of(Minigun::Stats).to receive(:throughput).and_return(10.5)
@@ -34,21 +32,21 @@ RSpec.describe 'HUD Full Rendering' do
     allow_any_instance_of(Minigun::Stats).to receive(:runtime).and_return(0.5)
 
     # Stub latency methods individually per stage type
-    allow_any_instance_of(Minigun::Stats).to receive(:p50).and_wrap_original do |method, *args|
+    allow_any_instance_of(Minigun::Stats).to receive(:p50).and_wrap_original do |method, *_args|
       stage = method.receiver.instance_variable_get(:@stage)
-      if stage && stage.instance_of?(Minigun::ProducerStage)
-        nil  # Producers have no latency
+      if stage.instance_of?(Minigun::ProducerStage)
+        nil # Producers have no latency
       else
-        0.0085  # 8.5ms for consumers
+        0.0085 # 8.5ms for consumers
       end
     end
 
-    allow_any_instance_of(Minigun::Stats).to receive(:p99).and_wrap_original do |method, *args|
+    allow_any_instance_of(Minigun::Stats).to receive(:p99).and_wrap_original do |method, *_args|
       stage = method.receiver.instance_variable_get(:@stage)
-      if stage && stage.instance_of?(Minigun::ProducerStage)
-        nil  # Producers have no latency
+      if stage.instance_of?(Minigun::ProducerStage)
+        nil # Producers have no latency
       else
-        0.012  # 12ms for consumers
+        0.012 # 12ms for consumers
       end
     end
 
@@ -100,6 +98,7 @@ RSpec.describe 'HUD Full Rendering' do
           col = x + i
           break if col >= width || col < 0
           next if y < 0 || y >= height
+
           captured_buffer[y][col] = char
         end
       end
@@ -160,7 +159,7 @@ ASCII
             5.times { |i| output << i }
           end
 
-          consumer :process do |item|
+          consumer :process do |_item|
             sleep 0.01
           end
         end
@@ -225,7 +224,7 @@ ASCII
       controller.flow_diagram.instance_variable_set(:@animation_frame, 0)
 
       controller.send(:render_frame)
-      status_bar = buffer[18].join  # height-2 in 0-indexed
+      status_bar = buffer[18].join # height-2 in 0-indexed
 
       expect(status_bar).to include('PAUSED')
     end
@@ -260,7 +259,7 @@ ASCII
       controller.flow_diagram.instance_variable_set(:@animation_frame, 0)
 
       controller.send(:render_frame)
-      status_bar = buffer[18].join  # height-2 in 0-indexed
+      status_bar = buffer[18].join # height-2 in 0-indexed
 
       expect(status_bar).to include('FINISHED')
       expect(status_bar).to include('Press [q] to exit')

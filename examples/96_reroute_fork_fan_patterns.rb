@@ -20,9 +20,9 @@ class RerouteForkFanOutExample
   end
 
   def cleanup
-    File.unlink(@results_a_file) if File.exist?(@results_a_file)
-    File.unlink(@results_b_file) if File.exist?(@results_b_file)
-    File.unlink(@results_c_file) if File.exist?(@results_c_file)
+    FileUtils.rm_f(@results_a_file)
+    FileUtils.rm_f(@results_b_file)
+    FileUtils.rm_f(@results_c_file)
   end
 
   pipeline do
@@ -135,7 +135,7 @@ class RerouteChangeFanOutExample < RerouteForkFanOutExample
 
     # Reroute splitter to fan out to different targets
     # Keep process_a and process_b, replace process_c with process_d
-    reroute_stage :splitter, to: [:process_a, :process_b, :process_d]
+    reroute_stage :splitter, to: %i[process_a process_b process_d]
   end
 end
 
@@ -151,7 +151,7 @@ class RerouteForkFanInExample
   end
 
   def cleanup
-    File.unlink(@results_file) if File.exist?(@results_file)
+    FileUtils.rm_f(@results_file)
   end
 
   pipeline do
@@ -219,20 +219,20 @@ class RerouteReduceFanInExample < RerouteForkFanInExample
 end
 
 if __FILE__ == $PROGRAM_NAME
-  puts "=" * 80
-  puts "Reroute with Fork Fan-Out/Fan-In Patterns"
-  puts "=" * 80
-  puts ""
+  puts '=' * 80
+  puts 'Reroute with Fork Fan-Out/Fan-In Patterns'
+  puts '=' * 80
+  puts ''
 
   begin
-    puts "--- Fan-Out Base (Thread Splitter -> 3 IPC Consumers) ---"
+    puts '--- Fan-Out Base (Thread Splitter -> 3 IPC Consumers) ---'
     base = RerouteForkFanOutExample.new
     base.run
     puts "Results A: #{base.results_a.size} items (IDs: #{base.results_a.map { |r| r[:id] }.sort})"
     puts "Results B: #{base.results_b.size} items (IDs: #{base.results_b.map { |r| r[:id] }.sort})"
     puts "Results C: #{base.results_c.size} items (IDs: #{base.results_c.map { |r| r[:id] }.sort})"
     success = base.results_a.size == 3 && base.results_b.size == 3 && base.results_c.size == 3
-    puts success ? "✓ PASS" : "✗ FAIL"
+    puts success ? '✓ PASS' : '✗ FAIL'
     base.cleanup
 
     puts "\n--- Collapse Fan-Out (All to One IPC Consumer) ---"
@@ -241,8 +241,8 @@ if __FILE__ == $PROGRAM_NAME
     puts "Results A: #{collapse.results_a.size} items (expected: 9)"
     puts "Results B: #{collapse.results_b.size} items (expected: 0)"
     puts "Results C: #{collapse.results_c.size} items (expected: 0)"
-    success = collapse.results_a.size == 9 && collapse.results_b.size == 0 && collapse.results_c.size == 0
-    puts success ? "✓ PASS" : "✗ FAIL"
+    success = collapse.results_a.size == 9 && collapse.results_b.empty? && collapse.results_c.empty?
+    puts success ? '✓ PASS' : '✗ FAIL'
     collapse.cleanup
 
     puts "\n--- Fan-In Base (3 Fork Producers -> Thread Aggregator) ---"
@@ -252,30 +252,30 @@ if __FILE__ == $PROGRAM_NAME
     by_source = fanin.results.group_by { |r| r[:source] }
     puts "From A: #{by_source['A']&.size || 0}, B: #{by_source['B']&.size || 0}, C: #{by_source['C']&.size || 0}"
     success = fanin.results.size == 9
-    puts success ? "✓ PASS" : "✗ FAIL"
+    puts success ? '✓ PASS' : '✗ FAIL'
     fanin.cleanup
 
     puts "\n--- Reduce Fan-In (Remove One Producer) ---"
     reduce = RerouteReduceFanInExample.new
     reduce.run
     puts "Total results: #{reduce.results.size} (expected: 9)"
-    by_source = reduce.results.group_by { |r| r[:source] }
+    reduce.results.group_by { |r| r[:source] }
     separate_count = reduce.results.count { |r| r[:source].include?('_separate') }
     puts "Separate path: #{separate_count}, Aggregator path: #{reduce.results.size - separate_count}"
     success = reduce.results.size == 9 && separate_count == 3
-    puts success ? "✓ PASS" : "✗ FAIL"
+    puts success ? '✓ PASS' : '✗ FAIL'
     reduce.cleanup
 
-    puts "\n" + "=" * 80
-    puts "Key Points:"
-    puts "  - reroute_stage works with fork-based fan-out patterns"
-    puts "  - Can collapse fan-out (all to one consumer)"
-    puts "  - Can change fan-out targets (redirect to different forks)"
-    puts "  - Works with fan-in (multiple fork producers to one consumer)"
-    puts "  - Can modify fan-in topology (remove/redirect producers)"
-    puts "=" * 80
+    puts "\n#{'=' * 80}"
+    puts 'Key Points:'
+    puts '  - reroute_stage works with fork-based fan-out patterns'
+    puts '  - Can collapse fan-out (all to one consumer)'
+    puts '  - Can change fan-out targets (redirect to different forks)'
+    puts '  - Works with fan-in (multiple fork producers to one consumer)'
+    puts '  - Can modify fan-in topology (remove/redirect producers)'
+    puts '=' * 80
   rescue NotImplementedError => e
     puts "\nForking not available on this platform: #{e.message}"
-    puts "(This is expected on Windows)"
+    puts '(This is expected on Windows)'
   end
 end

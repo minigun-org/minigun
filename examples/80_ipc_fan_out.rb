@@ -13,7 +13,6 @@ require_relative '../lib/minigun'
 # - Splitter routes items to different stages based on content
 # - All stages use persistent IPC workers
 # - Full serialization at all boundaries
-
 class IpcFanOutExample
   include Minigun::DSL
 
@@ -29,9 +28,9 @@ class IpcFanOutExample
   end
 
   def cleanup
-    File.unlink(@results_a_file) if File.exist?(@results_a_file)
-    File.unlink(@results_b_file) if File.exist?(@results_b_file)
-    File.unlink(@results_c_file) if File.exist?(@results_c_file)
+    FileUtils.rm_f(@results_a_file)
+    FileUtils.rm_f(@results_b_file)
+    FileUtils.rm_f(@results_c_file)
   end
 
   pipeline do
@@ -131,17 +130,17 @@ class IpcFanOutExample
 end
 
 if __FILE__ == $PROGRAM_NAME
-  puts "=" * 80
-  puts "Example: IPC Fork Fan-Out Pattern"
-  puts "=" * 80
-  puts ""
+  puts '=' * 80
+  puts 'Example: IPC Fork Fan-Out Pattern'
+  puts '=' * 80
+  puts ''
 
   example = IpcFanOutExample.new
   begin
     example.run
 
-    puts "\n" + "=" * 80
-    puts "Results:"
+    puts "\n#{'=' * 80}"
+    puts 'Results:'
     puts "  ProcessA received: #{example.results_a.size} items (expected: 4)"
     puts "  ProcessB received: #{example.results_b.size} items (expected: 4)"
     puts "  ProcessC received: #{example.results_c.size} items (expected: 4)"
@@ -162,22 +161,22 @@ if __FILE__ == $PROGRAM_NAME
               c_ids == [2, 5, 8, 11]
 
     puts "  Status: #{success ? '✓ SUCCESS' : '✗ FAILED'}"
-    puts "=" * 80
-    puts ""
-    puts "Key Points:"
-    puts "  - Fan-out from IPC splitter to 3 IPC consumers"
-    puts "  - Splitter makes routing decisions in IPC worker"
-    puts "  - Content-based routing (by ID modulo)"
-    puts "  - Serialization boundaries:"
-    puts "    1. Parent -> Splitter workers (IPC)"
-    puts "    2. Splitter workers -> Parent (IPC)"
-    puts "    3. Parent -> Consumer workers (IPC)"
+    puts '=' * 80
+    puts ''
+    puts 'Key Points:'
+    puts '  - Fan-out from IPC splitter to 3 IPC consumers'
+    puts '  - Splitter makes routing decisions in IPC worker'
+    puts '  - Content-based routing (by ID modulo)'
+    puts '  - Serialization boundaries:'
+    puts '    1. Parent -> Splitter workers (IPC)'
+    puts '    2. Splitter workers -> Parent (IPC)'
+    puts '    3. Parent -> Consumer workers (IPC)'
     puts "  - All routing happens through parent's Queues"
-    puts "  - Useful for: partitioning, sharding, load distribution"
-    puts "=" * 80
+    puts '  - Useful for: partitioning, sharding, load distribution'
+    puts '=' * 80
   rescue NotImplementedError => e
     puts "\nForking not available on this platform: #{e.message}"
-    puts "(This is expected on Windows)"
+    puts '(This is expected on Windows)'
   ensure
     example.cleanup
   end

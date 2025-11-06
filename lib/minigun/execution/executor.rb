@@ -141,7 +141,7 @@ module Minigun
             output_queue << result # Fallback if no routing context
           end
         when :error
-          error_msg = response[:error] || "Unknown error in forked process"
+          error_msg = response[:error] || 'Unknown error in forked process'
           backtrace = response[:backtrace]
           exception = RuntimeError.new("COW forked process failed: #{error_msg}")
           exception.set_backtrace(backtrace) if backtrace
@@ -156,7 +156,7 @@ module Minigun
           # Worker finished processing and sent EndOfStage
           # Create a new EndOfStage for this IPC stage and propagate it
           if stage_ctx
-            output_queue << Minigun::EndOfStage.new(stage_ctx.stage)
+            output_queue.push(Minigun::EndOfStage.new(stage_ctx.stage))
           end
         end
       rescue EOFError
@@ -169,11 +169,14 @@ module Minigun
 
       # Send error from child to parent via IPC pipe
       def write_error_to_pipe(error, writer)
-        Marshal.dump({
-          type: :error,
-          error: error.message,
-          backtrace: error.backtrace
-        }, writer)
+        Marshal.dump(
+          {
+            type: :error,
+            error: error.message,
+            backtrace: error.backtrace
+          },
+          writer
+        )
         writer.flush
       end
     end
@@ -185,7 +188,7 @@ module Minigun
     # Input item is COW-shared, but results are sent via IPC pipes.
     class CowForkPoolExecutor < AbstractForkExecutor
       def initialize(stage_ctx, max_size:)
-        super(stage_ctx, max_size: max_size)
+        super
         @active_forks = {} # pid => fork_info
       end
 
@@ -269,11 +272,11 @@ module Minigun
             elsif stage.respond_to?(:call)
               stage.call_with_arity(item, capture_output, &capture_output.to_proc)
             end
-            stage_stats&.record_latency(Time.now - start_time) if stage_stats
+            stage_stats&.record_latency(Time.now - start_time)
 
             # Results already sent via IpcOutputQueue during execution
             # Just close the pipe to signal completion
-          rescue => e
+          rescue StandardError => e
             # Send error back to parent via IPC
             write_error_to_pipe(e, writer)
             warn "[Minigun] Error in COW forked process: #{e.message}"
@@ -284,7 +287,7 @@ module Minigun
           end
         end
 
-        if !pid
+        unless pid
           reader.close
           writer.close
           warn '[Minigun] Failed to fork process, falling back to inline'
@@ -303,7 +306,7 @@ module Minigun
           end
           # Write captured results to output_queue
           loop do
-            result = capture_queue.pop(true)  # non_block = true
+            result = capture_queue.pop(true) # non_block = true
             output_queue << result
           rescue ThreadError
             break
@@ -318,7 +321,7 @@ module Minigun
 
       def reap_completed_forks
         @mutex.synchronize do
-          @active_forks.keys.each do |pid|
+          @active_forks.each_key do |pid|
             status = Process.wait2(pid, Process::WNOHANG)
             next unless status
 
@@ -339,7 +342,11 @@ module Minigun
             rescue EOFError, IOError
               # Normal - child closed pipe after sending results
             ensure
-              reader.close rescue nil
+              begin
+                reader.close
+              rescue StandardError
+                nil
+              end
             end
           end
         end
@@ -352,9 +359,9 @@ module Minigun
     # Data is serialized through pipes for both input and output, providing strong process isolation.
     class IpcForkPoolExecutor < AbstractForkExecutor
       def initialize(stage_ctx, max_size:)
-        super(stage_ctx, max_size: max_size)
+        super
         @workers = []
-        @my_pipes = []  # Track this executor's pipes for cleanup/unregister
+        @my_pipes = [] # Track this executor's pipes for cleanup/unregister
       end
 
       def execute_stage(stage, user_context, input_queue, output_queue)
@@ -381,33 +388,42 @@ module Minigun
       def shutdown
         @mutex.synchronize do
           @workers.each do |worker|
-            begin
-              # Send shutdown signal (as end_of_stage so IpcInputQueue handles it)
-              Marshal.dump({ type: :end_of_stage }, worker[:to_worker])
-              worker[:to_worker].flush
-            rescue IOError, EOFError, Errno::EPIPE
-              # Worker already closed or pipe broken, ignore
-            end
+            # Send shutdown signal (as end_of_stage so IpcInputQueue handles it)
+            Marshal.dump({ type: :end_of_stage }, worker[:to_worker])
+            worker[:to_worker].flush
+          rescue IOError, EOFError, Errno::EPIPE
+            # Worker already closed or pipe broken, ignore
           end
 
           # Give workers a moment to finish processing
           sleep 0.1
 
           @workers.each do |worker|
+            # Close pipes
             begin
-              # Close pipes
-              worker[:to_worker].close rescue nil
-              worker[:from_worker].close rescue nil
+              worker[:to_worker].close
+            rescue StandardError
+              nil
+            end
 
-              # Wait for worker to exit (non-blocking)
-              begin
-                Process.wait2(worker[:pid], Process::WNOHANG)
-              rescue Errno::ECHILD
-                # Already reaped
-              end
-            rescue => e
-              # Force kill if graceful shutdown fails
-              Process.kill('TERM', worker[:pid]) rescue nil
+            begin
+              worker[:from_worker].close
+            rescue StandardError
+              nil
+            end
+
+            # Wait for worker to exit (non-blocking)
+            begin
+              Process.wait2(worker[:pid], Process::WNOHANG)
+            rescue Errno::ECHILD
+              # Already reaped
+            end
+          rescue StandardError
+            # Force kill if graceful shutdown fails
+            begin
+              Process.kill('TERM', worker[:pid])
+            rescue StandardError
+              nil
             end
           end
           @workers.clear
@@ -449,7 +465,7 @@ module Minigun
             worker_loop(stage, user_context, stage_stats, child_read, child_write, pipeline)
           end
 
-          if !pid
+          unless pid
             warn '[Minigun] Failed to fork worker process'
             parent_read.close
             parent_write.close
@@ -485,7 +501,7 @@ module Minigun
           # Run the stage's execute method with IPC-backed queues
           # This runs the full streaming loop in the worker process
           stage.execute(user_context, ipc_input_queue, ipc_output_queue, stage_stats)
-        rescue => e
+        rescue StandardError => e
           # Send error back to parent via IPC pipe
           write_error_to_pipe(e, to_parent)
         end
@@ -493,29 +509,36 @@ module Minigun
         # Parent closed pipe, exit gracefully
       ensure
         # Close pipes - EOF will naturally signal parent that worker is done
-        from_parent.close rescue nil
-        to_parent.close rescue nil
+        begin
+          from_parent.close
+        rescue StandardError
+          nil
+        end
+
+        begin
+          to_parent.close
+        rescue StandardError
+          nil
+        end
+
         exit! 0
       end
 
       def distribute_work(input_queue, output_queue)
         worker_index = 0
-        result_threads = []
         received_end_of_stage = nil
 
         # Get nested stages' queues for dynamic routing support
         nested_queues = get_nested_stage_queues
 
         # Start result collection threads for each worker
-        @workers.each do |worker|
-          result_threads << Thread.new do
-            begin
-              loop do
-                read_result_from_pipe(worker[:from_worker], output_queue, @stage_ctx)
-              end
-            rescue EOFError, IOError
-              # Worker closed pipe, done
+        result_threads = @workers.map do |worker|
+          Thread.new do
+            loop do
+              read_result_from_pipe(worker[:from_worker], output_queue, @stage_ctx)
             end
+          rescue EOFError, IOError
+            # Worker closed pipe, done
           end
         end
 
@@ -531,12 +554,10 @@ module Minigun
               received_end_of_stage = item
               # Send EndOfStage to all workers
               @workers.each do |worker|
-                begin
-                  Marshal.dump({ type: :end_of_stage }, worker[:to_worker])
-                  worker[:to_worker].flush
-                rescue IOError, EOFError, Errno::EPIPE
-                  # Worker already closed, ignore
-                end
+                Marshal.dump({ type: :end_of_stage }, worker[:to_worker])
+                worker[:to_worker].flush
+              rescue IOError, EOFError, Errno::EPIPE
+                # Worker already closed, ignore
               end
               break
             end
@@ -559,7 +580,7 @@ module Minigun
           end
         ensure
           # Stop nested queue monitor threads
-          nested_queue_threads&.each { |t| t.kill }
+          nested_queue_threads&.each(&:kill)
           # Wait for all result collection threads to finish
           result_threads.each(&:join)
         end
@@ -579,11 +600,11 @@ module Minigun
         return [] unless task
 
         # Get all nested stages and their queues
-        nested_pipeline.instance_variable_get(:@stages).map do |nested_stage|
+        nested_pipeline.instance_variable_get(:@stages).filter_map do |nested_stage|
           queue = task.find_queue(nested_stage)
           { stage: nested_stage, queue: queue } if queue
-        end.compact
-      rescue => e
+        end
+      rescue StandardError => e
         # If anything goes wrong, just skip nested queue monitoring
         Minigun.logger.debug "[IPC] Could not get nested stage queues: #{e.message}"
         []
@@ -593,33 +614,34 @@ module Minigun
       def start_nested_queue_monitors(nested_queues)
         return [] if nested_queues.empty?
 
-        worker_index_ref = { value: 0 }  # Use ref to share across threads
+        worker_index_ref = { value: 0 } # Use ref to share across threads
         nested_queues.map do |nested_info|
           Thread.new do
             loop do
               # Non-blocking check for items in nested queue
-              begin
-                item = nested_info[:queue].pop(true)  # non_block = true
+              item = nested_info[:queue].pop(true) # non_block = true
 
-                # Send item to worker with routing metadata
-                worker_idx = worker_index_ref[:value]
-                worker_index_ref[:value] = (worker_idx + 1) % @workers.size
-                worker = @workers[worker_idx]
+              # Send item to worker with routing metadata
+              worker_idx = worker_index_ref[:value]
+              worker_index_ref[:value] = (worker_idx + 1) % @workers.size
+              worker = @workers[worker_idx]
 
-                Marshal.dump({
+              Marshal.dump(
+                {
                   type: :routed_item,
                   target_stage: nested_info[:stage].name,
                   item: item
-                }, worker[:to_worker])
-                worker[:to_worker].flush
-              rescue ThreadError
-                # Queue empty, sleep briefly
-                sleep 0.01
-              rescue => e
-                # Log but don't crash the monitor thread
-                Minigun.logger.debug "[IPC] Nested queue monitor error: #{e.message}"
-                sleep 0.1
-              end
+                },
+                worker[:to_worker]
+              )
+              worker[:to_worker].flush
+            rescue ThreadError
+              # Queue empty, sleep briefly
+              sleep 0.01
+            rescue StandardError => e
+              # Log but don't crash the monitor thread
+              Minigun.logger.debug "[IPC] Nested queue monitor error: #{e.message}"
+              sleep 0.1
             end
           end
         end

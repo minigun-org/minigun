@@ -61,9 +61,8 @@ if __FILE__ == $PROGRAM_NAME
   config.process_pool_size = 8
   config.batch_size = 500
 
-  puts "Using configuration object:"
+  puts 'Using configuration object:'
   puts "  Thread pool: #{config.thread_pool_size}"
   puts "  Process pool: #{config.process_pool_size}"
   puts "  Batch size: #{config.batch_size}"
 end
-

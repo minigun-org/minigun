@@ -21,7 +21,7 @@ module Minigun
         @pipeline_finished = false
         @show_help = false
         @resize_requested = false
-        @on_quit = on_quit  # Optional callback when user quits
+        @on_quit = on_quit # Optional callback when user quits
 
         # Calculate layout (2-column split)
         calculate_layout
@@ -55,9 +55,7 @@ module Minigun
           break unless @running
 
           # Update and render if not paused (or if finished - always show final state)
-          unless @paused && !@pipeline_finished
-            render_frame
-          end
+          render_frame unless @paused && !@pipeline_finished
 
           # Sleep to maintain consistent FPS
           elapsed = Time.now - frame_start
@@ -114,17 +112,17 @@ module Minigun
 
         # Draw boxes
         @terminal.draw_box(1, 1, @left_width, @terminal.height - 2,
-                           title: "FLOW DIAGRAM", color: Theme.border)
+                           title: 'FLOW DIAGRAM', color: Theme.border)
 
         @terminal.draw_box(@left_width + 1, 1, @right_width, @terminal.height - 2,
-                           title: "PROCESS STATISTICS", color: Theme.border)
+                           title: 'PROCESS STATISTICS', color: Theme.border)
 
         # Render flow diagram (left panel)
         # Clear panel if frame needs it (e.g., after panning)
         if @flow_diagram.needs_clear?
           panel_height = @terminal.height - 4
           (0...panel_height).each do |y|
-            @terminal.write_at(2, 2 + y, " " * (@left_width - 2))
+            @terminal.write_at(2, 2 + y, ' ' * (@left_width - 2))
           end
           @flow_diagram.mark_cleared
         end
@@ -161,9 +159,9 @@ module Minigun
 
         # Right side: controls hint
         right_text = if @pipeline_finished
-                       "Press [q] to exit..."
+                       'Press [q] to exit...'
                      else
-                       "[h] Help [q] Quit [space] Pause"
+                       '[h] Help [q] Quit [space] Pause'
                      end
         @terminal.write_at(@terminal.width - right_text.length - 2, y, right_text, color: Theme.muted)
       end
@@ -177,27 +175,27 @@ module Minigun
 
         # Draw help box
         @terminal.draw_box(x, y, overlay_width, overlay_height,
-                           title: "KEYBOARD CONTROLS", color: Theme.border_active)
+                           title: 'KEYBOARD CONTROLS', color: Theme.border_active)
 
         # Help content
         help_lines = [
-          "",
-          "  Navigation:",
-          "    ↑ / ↓     - Scroll process list",
-          "    w / s     - Pan diagram up/down",
-          "    a / d     - Pan diagram left/right",
-          "",
-          "  Controls:",
-          "    SPACE     - Pause/Resume updates",
-          "    r / R     - Force refresh/resize",
-          "    c / C     - Compact view (future)",
-          "",
-          "  Other:",
-          "    h / H / ? - Toggle this help",
-          "    q / Q     - Quit HUD",
-          "    Ctrl+C    - Quit HUD",
-          "",
-          "  Press any key to close this help..."
+          '',
+          '  Navigation:',
+          '    ↑ / ↓     - Scroll process list',
+          '    w / s     - Pan diagram up/down',
+          '    a / d     - Pan diagram left/right',
+          '',
+          '  Controls:',
+          '    SPACE     - Pause/Resume updates',
+          '    r / R     - Force refresh/resize',
+          '    c / C     - Compact view (future)',
+          '',
+          '  Other:',
+          '    h / H / ? - Toggle this help',
+          '    q / Q     - Quit HUD',
+          '    Ctrl+C    - Quit HUD',
+          '',
+          '  Press any key to close this help...'
         ]
 
         help_lines.each_with_index do |line, index|
@@ -213,7 +211,7 @@ module Minigun
         if @show_help && key != 'h' && key != 'H' && key != '?'
           @show_help = false
           # q still quits even when help is shown
-          if key == 'q' || key == 'Q' || key == "\u0003"
+          if ['q', 'Q', "\u0003"].include?(key)
             @running = false
             @on_quit&.call
           end
@@ -223,7 +221,7 @@ module Minigun
         case key
         when 'q', 'Q', "\u0003" # q, Q, or Ctrl+C
           @running = false
-          @on_quit&.call  # Notify that user requested quit
+          @on_quit&.call # Notify that user requested quit
 
         when ' ' # Space - pause/resume
           @paused = !@paused

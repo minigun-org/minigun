@@ -41,4 +41,3 @@ if __FILE__ == $PROGRAM_NAME
   puts "Processed #{example.results.size} items in #{elapsed.round(2)}s"
   puts "Results: #{example.results.sort.inspect}"
 end
-

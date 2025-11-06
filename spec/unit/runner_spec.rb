@@ -54,7 +54,11 @@ RSpec.describe Minigun::Runner do
   describe '#run' do
     before do
       # Add a simple producer to the pipeline so it has something to run
-      pipeline.add_stage(:producer, :test_producer) { |output| output << 1; output << 2; output << 3 }
+      pipeline.add_stage(:producer, :test_producer) do |output|
+        output << 1
+        output << 2
+        output << 3
+      end
     end
 
     it 'executes the pipeline' do
@@ -71,34 +75,30 @@ RSpec.describe Minigun::Runner do
 
     it 'logs job started' do
       allow(Minigun.logger).to receive(:debug).and_call_original
+      expect(Minigun.logger).to receive(:debug).with(/TestContext started/)
 
       runner.run
-
-      expect(Minigun.logger).to have_received(:debug).with(/TestContext started/)
     end
 
     it 'logs job finished' do
       allow(Minigun.logger).to receive(:debug).and_call_original
+      expect(Minigun.logger).to receive(:debug).with(/TestContext finished/)
 
       runner.run
-
-      expect(Minigun.logger).to have_received(:debug).with(/TestContext finished/)
     end
 
     it 'logs configuration' do
       allow(Minigun.logger).to receive(:debug).and_call_original
+      expect(Minigun.logger).to receive(:debug).with(/max_processes=2, max_threads=5/)
 
       runner.run
-
-      expect(Minigun.logger).to have_received(:debug).with(/max_processes=2, max_threads=5/)
     end
 
     it 'logs runtime' do
       allow(Minigun.logger).to receive(:debug).and_call_original
+      expect(Minigun.logger).to receive(:debug).with(/Runtime: \d+\.\d+s/)
 
       runner.run
-
-      expect(Minigun.logger).to have_received(:debug).with(/Runtime: \d+\.\d+s/)
     end
 
     it 'passes job_id to pipeline.run' do
@@ -123,29 +123,23 @@ RSpec.describe Minigun::Runner do
 
       it 'logs pipeline statistics' do
         allow(Minigun.logger).to receive(:debug).and_call_original
+        expect(Minigun.logger).to receive(:debug).with(/produced.*consumed/)
 
         stats_runner.run
-
-        # The pipeline should have processed items and generated stats
-        expect(Minigun.logger).to have_received(:debug).with(/produced.*consumed/)
       end
 
       it 'logs bottleneck information' do
         allow(Minigun.logger).to receive(:debug).and_call_original
+        expect(Minigun.logger).to receive(:debug).with(/Bottleneck/)
 
         stats_runner.run
-
-        # Should log bottleneck info if stages have different throughputs
-        expect(Minigun.logger).to have_received(:debug).with(/Bottleneck/)
       end
 
       it 'logs overall throughput' do
         allow(Minigun.logger).to receive(:debug).and_call_original
+        expect(Minigun.logger).to receive(:debug).with(/Total:.*items/)
 
         stats_runner.run
-
-        # Should log total items
-        expect(Minigun.logger).to have_received(:debug).with(/Total:.*items/)
       end
     end
 
@@ -182,7 +176,7 @@ RSpec.describe Minigun::Runner do
 
       before do
         # Add a stage that raises an error
-        error_pipeline.add_stage(:producer, :error_producer) do |output|
+        error_pipeline.add_stage(:producer, :error_producer) do |_output|
           raise StandardError, 'Pipeline error'
         end
       end

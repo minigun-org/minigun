@@ -13,7 +13,6 @@ require_relative '../lib/minigun'
 # - COW fork: Input via COW-shared memory (NO serialization)
 # - COW fork: Output via IPC pipes (serialization required)
 # - Parent routes results to downstream thread stage
-
 class ThreadCowThreadPassthroughExample
   include Minigun::DSL
 
@@ -55,7 +54,7 @@ class ThreadCowThreadPassthroughExample
 
         # IMPORTANT: This output goes back to parent via IPC pipe (serialized)
         computed = item.merge(
-          computed_value: item[:value] ** 2,
+          computed_value: item[:value]**2,
           worker_pid: pid
         )
         output << computed
@@ -76,19 +75,19 @@ class ThreadCowThreadPassthroughExample
 end
 
 if __FILE__ == $PROGRAM_NAME
-  puts "=" * 80
-  puts "Example: Thread -> COW Fork -> Thread (Pass-through)"
-  puts "=" * 80
-  puts ""
+  puts '=' * 80
+  puts 'Example: Thread -> COW Fork -> Thread (Pass-through)'
+  puts '=' * 80
+  puts ''
 
   example = ThreadCowThreadPassthroughExample.new
   begin
     example.run
 
-    puts "\n" + "=" * 80
-    puts "Results:"
+    puts "\n#{'=' * 80}"
+    puts 'Results:'
     puts "  Items processed: #{example.results.size}"
-    puts "  Expected: 8"
+    puts '  Expected: 8'
 
     worker_pids = example.results.map { |r| r[:worker_pid] }.uniq.sort
     puts "  Worker PIDs used: #{worker_pids.join(', ')}"
@@ -97,19 +96,19 @@ if __FILE__ == $PROGRAM_NAME
               example.results.map { |r| r[:id] }.sort == (1..8).to_a
 
     puts "  Status: #{success ? '✓ SUCCESS' : '✗ FAILED'}"
-    puts "=" * 80
-    puts ""
-    puts "Key Points:"
-    puts "  - COW fork is a MIDDLE stage (not terminal)"
-    puts "  - Input: COW-shared from parent (NO serialization)"
-    puts "  - Output: Serialized back to parent via IPC pipes"
-    puts "  - One serialization boundary: COW worker -> Parent (result out)"
-    puts "  - More efficient than IPC for input (no Marshal overhead)"
-    puts "  - COW optimal when: large input, small output"
-    puts "  - IPC optimal when: both input and output are small"
-    puts "=" * 80
+    puts '=' * 80
+    puts ''
+    puts 'Key Points:'
+    puts '  - COW fork is a MIDDLE stage (not terminal)'
+    puts '  - Input: COW-shared from parent (NO serialization)'
+    puts '  - Output: Serialized back to parent via IPC pipes'
+    puts '  - One serialization boundary: COW worker -> Parent (result out)'
+    puts '  - More efficient than IPC for input (no Marshal overhead)'
+    puts '  - COW optimal when: large input, small output'
+    puts '  - IPC optimal when: both input and output are small'
+    puts '=' * 80
   rescue NotImplementedError => e
     puts "\nForking not available on this platform: #{e.message}"
-    puts "(This is expected on Windows)"
+    puts '(This is expected on Windows)'
   end
 end

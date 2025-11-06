@@ -17,7 +17,6 @@ require_relative '../lib/minigun'
 #   -> Transform (COW fork)
 #   -> Aggregator (threads)
 #   -> Collector (inline)
-
 class ComplexMultiHopRoutingExample
   include Minigun::DSL
 
@@ -67,7 +66,7 @@ class ComplexMultiHopRoutingExample
         output << item.merge(
           stage: 'computed',
           compute_pid: pid,
-          computed_value: item[:value] ** 2
+          computed_value: item[:value]**2
         )
       end
     end
@@ -115,17 +114,17 @@ class ComplexMultiHopRoutingExample
 end
 
 if __FILE__ == $PROGRAM_NAME
-  puts "=" * 80
-  puts "Example: Complex Multi-Hop Cross-Boundary Routing"
-  puts "=" * 80
-  puts ""
+  puts '=' * 80
+  puts 'Example: Complex Multi-Hop Cross-Boundary Routing'
+  puts '=' * 80
+  puts ''
 
   example = ComplexMultiHopRoutingExample.new
   begin
     example.run
 
-    puts "\n" + "=" * 80
-    puts "Results:"
+    puts "\n#{'=' * 80}"
+    puts 'Results:'
     puts "  Items processed: #{example.results.size} (expected: 8)"
 
     validator_threads = example.results.map { |r| r[:validator_thread] }.uniq
@@ -142,30 +141,30 @@ if __FILE__ == $PROGRAM_NAME
               example.results.all? { |r| r[:stage] == 'aggregated' }
 
     puts "  Status: #{success ? '✓ SUCCESS' : '✗ FAILED'}"
-    puts "=" * 80
-    puts ""
-    puts "Cross-Boundary Hops:"
-    puts "  1. Master -> Threads (shared memory)"
-    puts "  2. Threads -> IPC fork (serialization in parent)"
-    puts "  3. IPC fork -> COW fork (IPC out -> Queue -> COW in)"
-    puts "  4. COW fork -> Threads (IPC out -> Queue -> shared memory)"
-    puts "  5. Threads -> Master (shared memory)"
-    puts ""
-    puts "Serialization Boundaries:"
-    puts "  - Master -> IPC workers (Marshal via pipes)"
-    puts "  - IPC workers -> Master (Marshal via pipes)"
-    puts "  - Master -> COW forks (COW-shared, no serialization)"
-    puts "  - COW forks -> Master (Marshal via pipes)"
-    puts ""
-    puts "Key Points:"
-    puts "  - 6 stages with 5 cross-boundary hops"
-    puts "  - All executor types: inline, threads, ipc_fork, cow_fork"
-    puts "  - Parent orchestrates all routing via Queues"
-    puts "  - Demonstrates complex dataflow topologies"
-    puts "  - Real-world pipelines often use this pattern"
-    puts "=" * 80
+    puts '=' * 80
+    puts ''
+    puts 'Cross-Boundary Hops:'
+    puts '  1. Master -> Threads (shared memory)'
+    puts '  2. Threads -> IPC fork (serialization in parent)'
+    puts '  3. IPC fork -> COW fork (IPC out -> Queue -> COW in)'
+    puts '  4. COW fork -> Threads (IPC out -> Queue -> shared memory)'
+    puts '  5. Threads -> Master (shared memory)'
+    puts ''
+    puts 'Serialization Boundaries:'
+    puts '  - Master -> IPC workers (Marshal via pipes)'
+    puts '  - IPC workers -> Master (Marshal via pipes)'
+    puts '  - Master -> COW forks (COW-shared, no serialization)'
+    puts '  - COW forks -> Master (Marshal via pipes)'
+    puts ''
+    puts 'Key Points:'
+    puts '  - 6 stages with 5 cross-boundary hops'
+    puts '  - All executor types: inline, threads, ipc_fork, cow_fork'
+    puts '  - Parent orchestrates all routing via Queues'
+    puts '  - Demonstrates complex dataflow topologies'
+    puts '  - Real-world pipelines often use this pattern'
+    puts '=' * 80
   rescue NotImplementedError => e
     puts "\nForking not available on this platform: #{e.message}"
-    puts "(This is expected on Windows)"
+    puts '(This is expected on Windows)'
   end
 end

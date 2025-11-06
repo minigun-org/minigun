@@ -35,4 +35,3 @@ if __FILE__ == $PROGRAM_NAME
   puts "Processed #{example.results.size} items synchronously"
   puts "Results: #{example.results.inspect}"
 end
-

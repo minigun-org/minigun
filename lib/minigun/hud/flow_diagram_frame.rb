@@ -22,7 +22,8 @@ module Minigun
           # Text starts before viewport - clip left portion
           chars_before = @viewport_x - x
           return if chars_before >= text.length
-          text = text[chars_before..-1]
+
+          text = text[chars_before..]
           x = @viewport_x
         end
 
@@ -93,14 +94,14 @@ module Minigun
         unless @user_panned
           # Auto-center if user hasn't manually panned
           center_x = diagram_width > 0 && diagram_width < @width ? (@width - diagram_width) / 2 : 0
-          @pan_x = -center_x  # Pan is negative of offset
+          @pan_x = -center_x # Pan is negative of offset
 
           # Vertical: If diagram fits with 1-line margin, use it. Otherwise start at zero.
-          if diagram_height + 1 <= @height
-            @pan_y = -1  # 1-line top margin
-          else
-            @pan_y = 0   # Start at top, no margin
-          end
+          @pan_y = if diagram_height + 1 <= @height
+                     -1 # 1-line top margin
+                   else
+                     0 # Start at top, no margin
+                   end
         end
 
         # Clamp pan offsets to valid range
@@ -142,13 +143,13 @@ module Minigun
         #   diagram_height - pan_y = @height
         #   pan_y = diagram_height - @height
 
-        if diagram_height + 1 <= @height
-          min_pan_y = -1  # Small diagram: allow 1-line top margin
-        else
-          min_pan_y = 0   # Large diagram: start at top, no negative panning
-        end
+        min_pan_y = if diagram_height + 1 <= @height
+                      -1 # Small diagram: allow 1-line top margin
+                    else
+                      0 # Large diagram: start at top, no negative panning
+                    end
 
-        max_pan_y = diagram_height - @height  # Pan down until bottom of diagram at bottom of viewport
+        max_pan_y = diagram_height - @height # Pan down until bottom of diagram at bottom of viewport
 
         # Ensure max is at least min (for small diagrams that fit entirely)
         max_pan_y = [max_pan_y, min_pan_y].max

@@ -2,7 +2,6 @@
 
 require 'spec_helper'
 require 'timeout'
-require 'set'
 
 # Jepsen-style tests for fork executors
 # These tests focus on:
@@ -52,7 +51,7 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun.fork? do
           output_queue << result
         end
       },
-      {}  # options parameter
+      {} # options parameter
     )
   end
 
@@ -62,8 +61,10 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun.fork? do
     expected = input_items.map(&transform).sort
     actual = output_items.sort
 
-    expect(actual).to eq(expected),
+    expect(actual).to(
+      eq(expected),
       "Expected items: #{expected.inspect}\nActual items: #{actual.inspect}\nMissing: #{(expected - actual).inspect}\nExtra: #{(actual - expected).inspect}"
+    )
   end
 
   shared_examples 'fork executor correctness' do |executor_type|
@@ -183,7 +184,7 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun.fork? do
         items = []
         10.times do |burst|
           burst_size = (10..50).to_a.sample
-          items.concat(Array.new(burst_size) { burst * 100 + rand(100) })
+          items.concat(Array.new(burst_size) { (burst * 100) + rand(100) })
         end
 
         input_queue = Queue.new
@@ -236,7 +237,8 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun.fork? do
         # Processor that fails on specific items
         error_items = [3, 7]
         stage = create_stage(processor: lambda { |item, _ctx|
-          raise "Intentional error" if error_items.include?(item)
+          raise 'Intentional error' if error_items.include?(item)
+
           item * 2
         })
 
@@ -305,7 +307,7 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun.fork? do
     describe 'Edge Cases' do
       it 'handles large items (serialization test for IPC)' do
         # Large data structures
-        items = 5.times.map { |i| { id: i, data: 'x' * 10_000, nested: { array: (1..100).to_a } } }
+        items = Array.new(5) { |i| { id: i, data: 'x' * 10_000, nested: { array: (1..100).to_a } } }
         input_queue = Queue.new
         output_queue = Queue.new
 
@@ -431,7 +433,7 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun.fork? do
 
         stage = create_stage(
           processor: lambda { |item, ctx|
-            item * ctx[:multiplier] + ctx[:offset]
+            (item * ctx[:multiplier]) + ctx[:offset]
           },
           expects_context: true
         )
@@ -441,12 +443,12 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun.fork? do
         results = []
         results << output_queue.pop until output_queue.empty?
 
-        expected = items.map { |x| x * 3 + 10 }.sort
+        expected = items.map { |x| (x * 3) + 10 }.sort
         expect(results.sort).to eq(expected)
       end
 
       it 'isolates mutations in user context (COW test)' do
-        skip "This test is specific to COW behavior" unless executor.is_a?(Minigun::Execution::CowForkPoolExecutor)
+        skip 'This test is specific to COW behavior' unless executor.is_a?(Minigun::Execution::CowForkPoolExecutor)
 
         items = (1..5).to_a
         input_queue = Queue.new
@@ -483,7 +485,7 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun.fork? do
   end
 
   describe 'COW Fork Pool Executor' do
-    include_examples 'fork executor correctness', :cow_fork
+    it_behaves_like 'fork executor correctness', :cow_fork
 
     describe 'COW-specific behavior' do
       let(:executor) { Minigun::Execution.create_executor(:cow_fork, stage_ctx, max_size: 4) }
@@ -515,7 +517,7 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun.fork? do
         results = []
         results << output_queue.pop until output_queue.empty?
 
-        # Note: This test demonstrates COW, but results may be empty if Queue doesn't work across processes
+        # NOTE: This test demonstrates COW, but results may be empty if Queue doesn't work across processes
         # The important part is that large_data is accessible in the forked process via COW
         expect(results.size).to eq(10)
       end
@@ -552,7 +554,7 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun.fork? do
   end
 
   describe 'IPC Fork Pool Executor' do
-    include_examples 'fork executor correctness', :ipc_fork
+    it_behaves_like 'fork executor correctness', :ipc_fork
 
     describe 'IPC-specific behavior' do
       let(:executor) { Minigun::Execution.create_executor(:ipc_fork, stage_ctx, max_size: 4) }
@@ -816,7 +818,7 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun.fork? do
 
         stage = create_stage(
           name: 'rapid_recycling_test',
-          processor: ->(item, output) {
+          processor: lambda { |item, output|
             # Simulate variable processing time
             sleep(rand * 0.001)
             output << (item * 2)
@@ -833,14 +835,14 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun.fork? do
 
       it 'handles concurrent pipeline execution without interference' do
         # Create multiple independent tasks/executors running in parallel
-        threads = 3.times.map do |thread_id|
+        threads = Array.new(3) do |thread_id|
           Thread.new do
             local_task = Minigun::Task.new
             local_pipeline = local_task.root_pipeline
 
             # Create the stage first
             local_stage = Minigun::ConsumerStage.new(
-              "concurrent_test_#{thread_id}".to_sym,
+              :"concurrent_test_#{thread_id}",
               local_pipeline,
               proc { |item, output| output << (item * 2) },
               {}
@@ -891,7 +893,7 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun.fork? do
 
         stage = create_stage(
           name: 'early_close_test',
-          processor: ->(item, output) {
+          processor: lambda { |item, output|
             # Only process first 5 items
             output << (item * 2) if item <= 5
           }
@@ -931,8 +933,8 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun.fork? do
 
         stage = create_stage(
           name: 'slow_process_test',
-          processor: ->(item, output) {
-            sleep 0.2  # Slow processing
+          processor: lambda { |item, output|
+            sleep 0.2 # Slow processing
             output << (item * 2)
           }
         )
@@ -953,23 +955,18 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun.fork? do
   # Helper method to count open file descriptors
   def count_open_fds
     # Count open file descriptors in /proc/self/fd
-    begin
-      Dir.glob('/proc/self/fd/*').count
-    rescue
-      # Fallback for systems without /proc
-      `lsof -p #{Process.pid} 2>/dev/null | wc -l`.to_i
-    end
+    Dir.glob('/proc/self/fd/*').count
+  rescue StandardError
+    # Fallback for systems without /proc
+    `lsof -p #{Process.pid} 2>/dev/null | wc -l`.to_i
   end
 
   # Helper method to count child processes
   def process_children_count
     # Get count of child processes for current process
-    begin
-      children = `ps -o pid= --ppid #{Process.pid}`.split.map(&:to_i)
-      children.size
-    rescue
-      0
-    end
+    children = `ps -o pid= --ppid #{Process.pid}`.split.map(&:to_i)
+    children.size
+  rescue StandardError
+    0
   end
 end
-
