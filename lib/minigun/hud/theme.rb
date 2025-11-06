@@ -59,7 +59,7 @@ module Minigun
       end
 
       def self.stage_done
-        Terminal::COLORS[:green_dim]
+        Terminal::COLORS[:gray]
       end
 
       # Performance indicators
@@ -88,10 +88,87 @@ module Minigun
         Terminal::COLORS[:cyan]
       end
 
-      # Animation chars for data flow
-      FLOW_CHARS = ['⠀', '⠁', '⠃', '⠇', '⠏', '⠟', '⠿', '⡿', '⣿'].freeze
-      SPARK_CHARS = ['⢀', '⢠', '⢰', '⢸', '⡀', '⣀', '⣠', '⣰', '⣸'].freeze
-      DOTS = ['⠁', '⠂', '⠄', '⡀', '⢀', '⠠', '⠐', '⠈'].freeze
+      # Subtle flow animation colors (dim → medium → dim)
+      def self.flow_dim
+        Terminal::COLORS[:cyan_dim]
+      end
+
+      def self.flow_medium
+        Terminal::COLORS[:cyan]
+      end
+
+      # Draining animation color (darker, showing flow winding down)
+      def self.drain_dim
+        Terminal::COLORS[:gray]
+      end
+
+      # Character mappings: thin → thick for animation
+      CHAR_PAIRS = {
+        vertical: ['│', '┃'],
+        horizontal: ['─', '━'],
+        corner_tl: ['┌', '┏'],
+        corner_tr: ['┐', '┓'],
+        corner_bl: ['└', '┗'],
+        corner_br: ['┘', '┛'],
+        t_down: ['┬', '┳'],
+        t_up: ['┴', '┻'],
+        t_right: ['├', '┣'],
+        t_left: ['┤', '┫'],
+        cross: ['┼', '╋']
+      }.freeze
+
+      # Generate flowing animation frames: 6 dim thin, 1 medium thick, 1 medium thin
+      FLOW_ANIMATION = CHAR_PAIRS.transform_values do |thin, thick|
+        [
+          *Array.new(6) { [thin, :flow_dim] },
+          [thick, :flow_medium],
+          [thin, :flow_medium]
+        ]
+      end.freeze
+
+      # Draining state (static, no animation - just gray thin chars)
+      DRAIN_ANIMATION = CHAR_PAIRS.transform_values { |thin, _| [[thin, :drain_dim]] }.freeze
+
+      # Get animated character and color for a given char type and distance
+      # @param char_type [Symbol] Type of character (:vertical, :horizontal, :corner_tl, etc.)
+      # @param distance [Integer] Distance from source (for phase calculation)
+      # @param animation_frame [Integer] Global animation frame counter
+      # @param active [Boolean] Whether the connection is active
+      # @param drain_distance [Integer, nil] How far the drain has progressed from source (nil if not draining)
+      # @return [Array<String, String>] [character, color_code]
+      def self.animated_flow_char(char_type, distance, animation_frame, active, drain_distance: nil)
+        # Check if this cell has been drained (wave reached it)
+        drained = !drain_distance.nil? && distance <= drain_distance
+
+        # Check if drain is in progress but wave hasn't reached this cell yet
+        draining = !drain_distance.nil? && distance > drain_distance
+
+        # Determine which animation to use:
+        # - If drained: gray static (drained)
+        # - If active OR draining: cyan animated (flowing/draining)
+        # - Otherwise: gray static (idle/not started)
+        frames = if drained
+                   DRAIN_ANIMATION[char_type]
+                 elsif active || draining
+                   FLOW_ANIMATION[char_type]
+                 else
+                   DRAIN_ANIMATION[char_type] # Gray for idle state
+                 end
+
+        return [static_char_for_type(char_type), muted] unless frames
+
+        # Calculate phase based on distance from source and global animation frame
+        # Subtracting distance makes the animation flow from source to target
+        phase = (animation_frame - distance) % frames.length
+        char, color_method = frames[phase]
+
+        [char, send(color_method)]
+      end
+
+      # Get static (non-animated) character for a given type
+      def self.static_char_for_type(char_type)
+        CHAR_PAIRS.dig(char_type, 0) || '│'
+      end
 
       # Stage type icons
       def self.stage_icon(stage_type)

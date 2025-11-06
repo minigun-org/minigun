@@ -9,8 +9,10 @@ module Minigun
 
       def initialize(_frame_width, _frame_height)
         @animation_frame = 0
+        @render_tick = 0  # Counter for slowing down animation
         @width = 0  # Actual width of diagram content
         @height = 0  # Actual height of diagram content
+        @finished_stages = {} # Track when each stage finished {stage_name => render_tick}
       end
 
       # Update dimensions (called on resize)
@@ -35,6 +37,26 @@ module Minigun
         @cached_visible_stages = visible_stages
         @cached_dag = dag
 
+        # Create DiagramStage instances and store animation indices for each stage
+        @cached_stages = {}
+        visible_stages.each_with_index do |stage_data, index|
+          stage_name = stage_data[:stage_name]
+          pos = @cached_layout[stage_name]
+          next unless pos
+
+          # Store animation index in layout for O(1) lookup during rendering
+          pos[:animation_index] = index
+
+          @cached_stages[stage_name] = DiagramStage.new(
+            name: stage_name,
+            type: stage_data[:type] || :processor,
+            x: pos[:x],
+            y: pos[:y],
+            width: pos[:width],
+            height: pos[:height]
+          )
+        end
+
         # Calculate actual diagram content height
         unless @cached_layout.empty?
           max_y = @cached_layout.values.map { |pos| pos[:y] + pos[:height] }.max
@@ -57,21 +79,25 @@ module Minigun
         # Render connections first (so they appear behind boxes)
         render_connections(terminal, @cached_layout, @cached_visible_stages, @cached_dag, x_offset, y_offset)
 
-        # Render stage boxes
-        @cached_layout.each do |stage_name, pos|
+        # Render stage boxes using DiagramStage instances
+        @cached_stages.each do |stage_name, diagram_stage|
           stage_data = @cached_visible_stages.find { |s| s[:stage_name] == stage_name }
           next unless stage_data
 
-          render_stage_box(terminal, stage_data, pos, x_offset, y_offset)
+          diagram_stage.render(terminal, stage_data, x_offset, y_offset)
         end
 
-        # Update animation
-        @animation_frame = (@animation_frame + 1) % 60
+        # Update animation (every 2 renders for half speed)
+        @render_tick += 1
+        if @render_tick % 2 == 0
+          @animation_frame = (@animation_frame + 1) % 24
+        end
 
-        # Clear cached layout for next frame
+        # Clear cached data for next frame
         @cached_layout = nil
         @cached_visible_stages = nil
         @cached_dag = nil
+        @cached_stages = nil
       end
 
       private
@@ -79,40 +105,59 @@ module Minigun
       # Calculate box positions using DAG-based layered layout
       def calculate_layout(stages, dag)
         layout = {}
-        box_width = 14
-        box_height = 3
+        min_box_width = 14
+        box_height = 3  # 3 lines: top border, content, bottom border (with optional throughput)
         layer_height = 5  # Vertical spacing between layers (room for connection spine)
         box_spacing = 2   # Horizontal spacing between boxes
+
+        # Calculate box widths based on stage names
+        # Allow 4 chars for icon + status indicator, 2 for borders, 2 for padding
+        box_widths = {}
+        stages.each do |stage|
+          name_length = stage[:stage_name].to_s.length
+          box_widths[stage[:stage_name]] = [name_length + 8, min_box_width].max
+        end
 
         # Calculate layers based on DAG topological depth
         layers = calculate_layers_from_dag(stages, dag)
 
         # Find maximum layer width to center layers relative to each other
         max_layer_width = layers.map do |layer_stages|
-          (layer_stages.size * box_width) + ((layer_stages.size - 1) * box_spacing)
+          layer_widths = layer_stages.map { |name| box_widths[name] }
+          layer_widths.sum + ((layer_stages.size - 1) * box_spacing)
         end.max || 0
 
-        # Position stages in each layer (centered relative to each other)
+        # Position stages in each layer (centered so all layer centers align)
+        # Calculate the center position of the widest layer
+        max_center = max_layer_width / 2
+
         layers.each_with_index do |layer_stages, layer_idx|
           y = 0 + (layer_idx * layer_height)
 
-          # Calculate total width needed for this layer
-          total_width = (layer_stages.size * box_width) + ((layer_stages.size - 1) * box_spacing)
+          # Calculate total width using actual box widths
+          layer_widths = layer_stages.map { |name| box_widths[name] }
+          total_width = layer_widths.sum + ((layer_stages.size - 1) * box_spacing)
 
-          # Center this layer relative to the widest layer
-          start_x = (max_layer_width - total_width) / 2
+          # Calculate the center of this layer if it started at x=0
+          layer_center = total_width / 2
 
-          # Position each stage in the layer horizontally
-          layer_stages.each_with_index do |stage_name, stage_idx|
-            x = start_x + (stage_idx * (box_width + box_spacing))
+          # Position layer so its center aligns with max_center
+          start_x = max_center - layer_center
+
+          # Position each stage using its specific width
+          current_x = start_x
+          layer_stages.each do |stage_name|
+            box_width_for_stage = box_widths[stage_name]
 
             layout[stage_name] = {
-              x: x,
+              x: current_x,
               y: y,
-              width: box_width,
+              width: box_width_for_stage,
               height: box_height,
               layer: layer_idx
             }
+
+            current_x += box_width_for_stage + box_spacing
           end
         end
 
@@ -322,21 +367,51 @@ module Minigun
         end
       end
 
+      # Get animation state for a stage (drain distance, flowing status, and offset)
+      # Returns [drain_distance, active, offset] tuple for rendering connections
+      def get_animation_state(stage_data)
+        # Default values if no stage data
+        return [nil, false, 0] unless stage_data
+
+        # Calculate drain distance if stage is finished
+        drain_distance = if stage_data[:status] == :finished
+                           stage_name = stage_data[:stage_name]
+                           @finished_stages[stage_name] ||= @render_tick
+                           @render_tick - @finished_stages[stage_name]
+                         end
+
+        # Check if connection is actively flowing (vs idle/drained)
+        active = stage_data[:status] == :running
+
+        # Get animation offset for staggering (O(1) hash lookup)
+        offset = if stage_data[:stage_name] && @cached_layout
+                   pos = @cached_layout[stage_data[:stage_name]]
+                   index = pos&.[](:animation_index) || 0
+                   -index
+                 else
+                   0
+                 end
+
+        [drain_distance, active, offset]
+      end
+
       # Draw a fan-out connection (one source to multiple targets)
       def render_fanout_connection(terminal, from_pos, target_positions, stage_data, x_offset, y_offset)
         from_x = from_pos[:x] + from_pos[:width] / 2
         from_y = from_pos[:y] + from_pos[:height]
 
-        # Check if connection is active
-        active = stage_data[:throughput] && stage_data[:throughput] > 0
-        color = active ? Theme.primary : Theme.muted
+        drain_distance, active, offset = get_animation_state(stage_data)
 
         # Calculate split point (horizontal spine where fan-out occurs)
-        first_target_y = target_positions.first[:y]
         split_y = from_y + 1
 
+        # Distance counter starts at 0 from source box exit
+        distance = 0
+
         # Draw vertical line from source to split point
-        terminal.write_at(x_offset + from_x, y_offset + from_y, "│", color: color)
+        char, color = Theme.animated_flow_char(:vertical, distance, @animation_frame + offset, active, drain_distance: drain_distance)
+        terminal.write_at(x_offset + from_x, y_offset + from_y, char, color: color)
+        distance += 1
 
         # Get X positions of all targets (sorted)
         target_xs = target_positions.map { |pos| pos[:x] + pos[:width] / 2 }.sort
@@ -346,47 +421,43 @@ module Minigun
         # Check if there's a target directly below the source
         has_center_target = target_xs.include?(from_x)
 
-        # Draw horizontal spine with junctions
-        # Pattern with center target:  ┌───────────────┼───────────────┐
-        # Pattern without center:      ┌───────────────┴───────────────┐
+        # Draw horizontal spine with distance radiating from center
+        # Distance flows outward from center (from_x)
         (leftmost_x..rightmost_x).each do |x|
-          # Determine the proper box-drawing character
-          char = if x == leftmost_x
-                   # Left corner
-                   "┌"
-                 elsif x == rightmost_x
-                   # Right corner
-                   "┐"
-                 elsif x == from_x
-                   # Source position: ┼ if target below, ┴ if not
-                   has_center_target ? "┼" : "┴"
-                 else
-                   # Regular horizontal line (spine)
-                   if active
-                     offset = (@animation_frame / 4) % 4
-                     ["─", "╌", "┄", "┈"][offset]
-                   else
-                     "─"
-                   end
-                 end
+          # Calculate distance from center (where flow splits)
+          x_distance_from_center = (x - from_x).abs
+          spine_distance = distance + x_distance_from_center
 
+          # Determine the proper box-drawing character type
+          char_type = if x == leftmost_x
+                        :corner_tl  # Left corner ┌
+                      elsif x == rightmost_x
+                        :corner_tr  # Right corner ┐
+                      elsif x == from_x
+                        # Source position: cross if target below, t_up if not
+                        has_center_target ? :cross : :t_up
+                      else
+                        :horizontal  # Regular horizontal line
+                      end
+
+          char, color = Theme.animated_flow_char(char_type, spine_distance, @animation_frame + offset, active, drain_distance: drain_distance)
           terminal.write_at(x_offset + x, y_offset + split_y, char, color: color)
         end
 
         # Draw vertical lines down to each target
+        # Distance continues from spine position
         target_positions.each do |to_pos|
           to_x = to_pos[:x] + to_pos[:width] / 2
           to_y = to_pos[:y]
 
-          ((split_y + 1)...to_y).each do |y|
-            char = if active
-                     offset = (@animation_frame / 4) % Theme::FLOW_CHARS.length
-                     phase = (y - split_y + offset) % Theme::FLOW_CHARS.length
-                     Theme::FLOW_CHARS[phase]
-                   else
-                     "│"
-                   end
+          # Calculate distance at spine for this target
+          x_distance_from_center = (to_x - from_x).abs
+          spine_distance_at_target = distance + x_distance_from_center
 
+          ((split_y + 1)...to_y).each do |y|
+            # Distance increases as we go down
+            drop_distance = spine_distance_at_target + (y - split_y)
+            char, color = Theme.animated_flow_char(:vertical, drop_distance, @animation_frame + offset, active, drain_distance: drain_distance)
             terminal.write_at(x_offset + to_x, y_offset + y, char, color: color)
           end
         end
@@ -397,9 +468,7 @@ module Minigun
         to_x = to_pos[:x] + to_pos[:width] / 2
         to_y = to_pos[:y]
 
-        # Check if connection is active
-        active = stage_data[:throughput] && stage_data[:throughput] > 0
-        color = active ? Theme.primary : Theme.muted
+        drain_distance, active, offset = get_animation_state(stage_data)
 
         # Calculate merge point (where horizontal lines converge)
         # Place it 1 line above the target
@@ -413,64 +482,66 @@ module Minigun
           }
         end.sort_by { |s| s[:x] }
 
-        # Draw vertical lines from each source down to merge level
-        # Then turn inward with corners
+        # Draw lines from each source down to merge level, then turn inward
         source_data.each do |source|
+          # Distance starts at 0 for each source
+          distance = 0
+
           # Vertical line from source to turn point
           (source[:y]...merge_y).each do |y|
-            char = if active
-                     offset = (@animation_frame / 4) % Theme::FLOW_CHARS.length
-                     phase = (y - source[:y] + offset) % Theme::FLOW_CHARS.length
-                     Theme::FLOW_CHARS[phase]
-                   else
-                     "│"
-                   end
-
+            char, color = Theme.animated_flow_char(:vertical, distance, @animation_frame + offset, active, drain_distance: drain_distance)
             terminal.write_at(x_offset + source[:x], y_offset + y, char, color: color)
+            distance += 1
           end
 
-          # Corner at turn point
+          # Corner at turn point and horizontal line to center
           if source[:x] < to_x
             # Left source: turn right with └
-            terminal.write_at(x_offset + source[:x], y_offset + merge_y, "└", color: color)
+            char, color = Theme.animated_flow_char(:corner_bl, distance, @animation_frame + offset, active, drain_distance: drain_distance)
+            terminal.write_at(x_offset + source[:x], y_offset + merge_y, char, color: color)
+            distance += 1
 
-            # Horizontal line from corner to center (or near target)
+            # Horizontal line from corner to center
             ((source[:x] + 1)...to_x).each do |x|
-              char = if active
-                       offset = (@animation_frame / 4) % 4
-                       ["─", "╌", "┄", "┈"][offset]
-                     else
-                       "─"
-                     end
-
+              char, color = Theme.animated_flow_char(:horizontal, distance, @animation_frame + offset, active, drain_distance: drain_distance)
               terminal.write_at(x_offset + x, y_offset + merge_y, char, color: color)
+              distance += 1
             end
           elsif source[:x] > to_x
             # Right source: turn left with ┘
-            terminal.write_at(x_offset + source[:x], y_offset + merge_y, "┘", color: color)
+            char, color = Theme.animated_flow_char(:corner_br, distance, @animation_frame + offset, active, drain_distance: drain_distance)
+            terminal.write_at(x_offset + source[:x], y_offset + merge_y, char, color: color)
+            distance += 1
 
-            # Horizontal line from corner to center (or near target)
-            ((to_x + 1)...source[:x]).each do |x|
-              char = if active
-                       offset = (@animation_frame / 4) % 4
-                       ["─", "╌", "┄", "┈"][offset]
-                     else
-                       "─"
-                     end
-
+            # Horizontal line from corner to center
+            ((to_x + 1)...source[:x]).reverse_each do |x|
+              char, color = Theme.animated_flow_char(:horizontal, distance, @animation_frame + offset, active, drain_distance: drain_distance)
               terminal.write_at(x_offset + x, y_offset + merge_y, char, color: color)
+              distance += 1
             end
           else
-            # Source directly above target - just draw vertical line
+            # Source directly above target - vertical line continues
             # (already drawn above)
           end
         end
 
         # Draw junction at the converge point (center X position)
-        # Use ┼ if there's a source directly above, ┬ if not
+        # Use cross if there's a source directly above, t_down if not
         has_center_source = source_data.any? { |s| s[:x] == to_x }
-        junction_char = has_center_source ? "┼" : "┬"
-        terminal.write_at(x_offset + to_x, y_offset + merge_y, junction_char, color: color)
+
+        # Calculate distance for junction (use center source distance if exists)
+        center_source = source_data.find { |s| s[:x] == to_x }
+        junction_distance = if center_source
+                              merge_y - center_source[:y]
+                            else
+                              # Use distance from closest source
+                              closest = source_data.min_by { |s| (s[:x] - to_x).abs }
+                              (merge_y - closest[:y]) + (closest[:x] - to_x).abs
+                            end
+
+        junction_type = has_center_source ? :cross : :t_down
+        char, color = Theme.animated_flow_char(junction_type, junction_distance, @animation_frame + offset, active, drain_distance: drain_distance)
+        terminal.write_at(x_offset + to_x, y_offset + merge_y, char, color: color)
       end
 
       # Draw animated connection line between two boxes
@@ -482,137 +553,82 @@ module Minigun
         to_x = to_pos[:x] + to_pos[:width] / 2
         to_y = to_pos[:y]
 
-        # Check if connection is active (has throughput)
-        active = stage_data[:throughput] && stage_data[:throughput] > 0
-        color = active ? Theme.primary : Theme.muted
+        drain_distance, active, offset = get_animation_state(stage_data)
+
+        # Distance counter starts at 0 from source
+        distance = 0
 
         if from_x == to_x
           # Straight vertical line
           (from_y...to_y).each do |y|
-            char = if active
-                     offset = (@animation_frame / 4) % Theme::FLOW_CHARS.length
-                     phase = (y - from_y + offset) % Theme::FLOW_CHARS.length
-                     Theme::FLOW_CHARS[phase]
-                   else
-                     "│"
-                   end
-
+            char, color = Theme.animated_flow_char(:vertical, distance, @animation_frame + offset, active, drain_distance: drain_distance)
             terminal.write_at(x_offset + from_x, y_offset + y, char, color: color)
+            distance += 1
           end
         else
-          # L-shaped connection: vertical down, horizontal across, vertical down
+          # L-shaped connection: vertical down, corner, horizontal across, corner, vertical down
           mid_y = from_y + 1
 
           # First vertical segment (short drop from source)
-          terminal.write_at(x_offset + from_x, y_offset + from_y, "│", color: color)
+          char, color = Theme.animated_flow_char(:vertical, distance, @animation_frame + offset, active, drain_distance: drain_distance)
+          terminal.write_at(x_offset + from_x, y_offset + from_y, char, color: color)
+          distance += 1
 
-          # Horizontal segment
-          x_start = [from_x, to_x].min
-          x_end = [from_x, to_x].max
-          (x_start..x_end).each do |x|
-            char = if active
-                     offset = (@animation_frame / 4) % 4
-                     ["─", "╌", "┄", "┈"][offset]
-                   else
-                     "─"
-                   end
+          # Determine corner and horizontal direction
+          if from_x < to_x
+            # Going right: use └ and ┐
+            corner1_type = :corner_bl
+            corner2_type = :corner_tr
 
-            terminal.write_at(x_offset + x, y_offset + mid_y, char, color: color)
+            # First corner
+            char, color = Theme.animated_flow_char(corner1_type, distance, @animation_frame + offset, active, drain_distance: drain_distance)
+            terminal.write_at(x_offset + from_x, y_offset + mid_y, char, color: color)
+            distance += 1
+
+            # Horizontal segment (left to right)
+            ((from_x + 1)...to_x).each do |x|
+              char, color = Theme.animated_flow_char(:horizontal, distance, @animation_frame + offset, active, drain_distance: drain_distance)
+              terminal.write_at(x_offset + x, y_offset + mid_y, char, color: color)
+              distance += 1
+            end
+
+            # Second corner
+            char, color = Theme.animated_flow_char(corner2_type, distance, @animation_frame + offset, active, drain_distance: drain_distance)
+            terminal.write_at(x_offset + to_x, y_offset + mid_y, char, color: color)
+            distance += 1
+          else
+            # Going left: use ┘ and ┌
+            corner1_type = :corner_br
+            corner2_type = :corner_tl
+
+            # First corner
+            char, color = Theme.animated_flow_char(corner1_type, distance, @animation_frame + offset, active, drain_distance: drain_distance)
+            terminal.write_at(x_offset + from_x, y_offset + mid_y, char, color: color)
+            distance += 1
+
+            # Horizontal segment (right to left)
+            ((to_x + 1)...from_x).reverse_each do |x|
+              char, color = Theme.animated_flow_char(:horizontal, distance, @animation_frame + offset, active, drain_distance: drain_distance)
+              terminal.write_at(x_offset + x, y_offset + mid_y, char, color: color)
+              distance += 1
+            end
+
+            # Second corner
+            char, color = Theme.animated_flow_char(corner2_type, distance, @animation_frame + offset, active, drain_distance: drain_distance)
+            terminal.write_at(x_offset + to_x, y_offset + mid_y, char, color: color)
+            distance += 1
           end
 
           # Second vertical segment (drop to target)
           ((mid_y + 1)...to_y).each do |y|
-            char = if active
-                     offset = (@animation_frame / 4) % Theme::FLOW_CHARS.length
-                     phase = (y - mid_y + offset) % Theme::FLOW_CHARS.length
-                     Theme::FLOW_CHARS[phase]
-                   else
-                     "│"
-                   end
-
+            char, color = Theme.animated_flow_char(:vertical, distance, @animation_frame + offset, active, drain_distance: drain_distance)
             terminal.write_at(x_offset + to_x, y_offset + y, char, color: color)
-          end
-
-          # Corner characters
-          if from_x < to_x
-            terminal.write_at(x_offset + from_x, y_offset + mid_y, "└", color: color)
-            terminal.write_at(x_offset + to_x, y_offset + mid_y, "┐", color: color)
-          else
-            terminal.write_at(x_offset + from_x, y_offset + mid_y, "┘", color: color)
-            terminal.write_at(x_offset + to_x, y_offset + mid_y, "┌", color: color)
+            distance += 1
           end
         end
       end
 
       # Render a stage as a box with icon, name, and status
-      def render_stage_box(terminal, stage_data, pos, x_offset, y_offset)
-        name = stage_data[:stage_name]
-        status = determine_status(stage_data)
-        type = stage_data[:type] || :processor
-
-        # Truncate name to fit in box
-        max_name_len = pos[:width] - 4  # Leave room for icon and padding
-        display_name = if name.to_s.length > max_name_len
-                         name.to_s[0...(max_name_len - 1)] + "…"
-                       else
-                         name.to_s
-                       end
-
-        # Icon only (no status indicator for clean layout)
-        icon = Theme.stage_icon(type)
-
-        # Color based on status
-        color = case status
-                when :active then Theme.stage_active
-                when :bottleneck then Theme.stage_bottleneck
-                when :error then Theme.stage_error
-                when :done then Theme.stage_done
-                else Theme.stage_idle
-                end
-
-        x = pos[:x]
-        y = pos[:y]
-        w = pos[:width]
-        h = pos[:height]
-
-        # Draw box borders
-        # Top border
-        terminal.write_at(x_offset + x, y_offset + y, "┌" + ("─" * (w - 2)) + "┐", color: Theme.border)
-
-        # Middle line with content (icon + name, no status indicator)
-        content = "#{icon} #{display_name}"
-        padding_left = [(w - content.length - 2) / 2, 1].max
-        padding_right = [w - content.length - padding_left - 2, 1].max
-
-        terminal.write_at(x_offset + x, y_offset + y + 1,
-                         "│" + (" " * padding_left) + content + (" " * padding_right) + "│",
-                         color: color)
-
-        # Bottom border (no throughput for clean layout)
-        bottom_line = "└" + ("─" * (w - 2)) + "┘"
-        terminal.write_at(x_offset + x, y_offset + y + 2, bottom_line, color: Theme.border)
-      end
-
-      def determine_status(stage_data)
-        return :error if stage_data[:items_failed] && stage_data[:items_failed] > 0
-        return :bottleneck if stage_data[:is_bottleneck]
-
-        if stage_data[:throughput]
-          if stage_data[:throughput] > 0
-            :active
-          else
-            :idle
-          end
-        elsif stage_data[:runtime] && stage_data[:runtime] > 0
-          if stage_data[:end_time]
-            :done
-          else
-            :active
-          end
-        else
-          :idle
-        end
-      end
 
       def format_throughput(value)
         if value >= 1_000_000
