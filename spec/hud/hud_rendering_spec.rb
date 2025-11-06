@@ -166,6 +166,9 @@ ASCII
         end
       end
 
+      # Stub animation offset to always return 0 for deterministic test output
+      allow_any_instance_of(Minigun::HUD::FlowDiagram).to receive(:animation_offset).and_return(0)
+
       buffer = render_hud(pipeline_class.new, width: 120, height: 30)
       actual = normalize_output(buffer)
 

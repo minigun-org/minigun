@@ -13,6 +13,7 @@ module Minigun
         @width = 0  # Actual width of diagram content
         @height = 0  # Actual height of diagram content
         @finished_stages = {} # Track when each stage finished {stage_name => render_tick}
+        @stage_positions = {} # Map stage name to position index for animation staggering
       end
 
       # Update dimensions (called on resize)
@@ -31,6 +32,12 @@ module Minigun
 
         # Filter out router stages (internal implementation details)
         visible_stages = stages.reject { |s| s[:type] == :router }
+
+        # Build stage position mapping for animation staggering (0, 1, 2, 3, ...)
+        @stage_positions = {}
+        visible_stages.each_with_index do |stage_data, index|
+          @stage_positions[stage_data[:stage_name]] = index
+        end
 
         # Calculate layout (boxes with positions) using DAG structure
         @cached_layout = calculate_layout(visible_stages, dag)
@@ -384,6 +391,13 @@ module Minigun
         stage_data[:status] == :running
       end
 
+      # Get animation offset for a stage to stagger animations
+      # Returns negative of stage position index (0, -1, -2, -3, ...)
+      def animation_offset(stage_data)
+        return 0 unless stage_data && stage_data[:stage_name]
+        -(@stage_positions[stage_data[:stage_name]] || 0)
+      end
+
       # Draw a fan-out connection (one source to multiple targets)
       def render_fanout_connection(terminal, from_pos, target_positions, stage_data, x_offset, y_offset)
         from_x = from_pos[:x] + from_pos[:width] / 2
@@ -391,6 +405,7 @@ module Minigun
 
         drain_distance = get_drain_distance(stage_data)
         active = connection_flowing?(stage_data)
+        offset = animation_offset(stage_data)
 
         # Calculate split point (horizontal spine where fan-out occurs)
         split_y = from_y + 1
@@ -399,7 +414,7 @@ module Minigun
         distance = 0
 
         # Draw vertical line from source to split point
-        char, color = Theme.animated_flow_char(:vertical, distance, @animation_frame, active, drain_distance: drain_distance)
+        char, color = Theme.animated_flow_char(:vertical, distance, @animation_frame + offset, active, drain_distance: drain_distance)
         terminal.write_at(x_offset + from_x, y_offset + from_y, char, color: color)
         distance += 1
 
@@ -430,7 +445,7 @@ module Minigun
                         :horizontal  # Regular horizontal line
                       end
 
-          char, color = Theme.animated_flow_char(char_type, spine_distance, @animation_frame, active, drain_distance: drain_distance)
+          char, color = Theme.animated_flow_char(char_type, spine_distance, @animation_frame + offset, active, drain_distance: drain_distance)
           terminal.write_at(x_offset + x, y_offset + split_y, char, color: color)
         end
 
@@ -447,7 +462,7 @@ module Minigun
           ((split_y + 1)...to_y).each do |y|
             # Distance increases as we go down
             drop_distance = spine_distance_at_target + (y - split_y)
-            char, color = Theme.animated_flow_char(:vertical, drop_distance, @animation_frame, active, drain_distance: drain_distance)
+            char, color = Theme.animated_flow_char(:vertical, drop_distance, @animation_frame + offset, active, drain_distance: drain_distance)
             terminal.write_at(x_offset + to_x, y_offset + y, char, color: color)
           end
         end
@@ -460,6 +475,7 @@ module Minigun
 
         drain_distance = get_drain_distance(stage_data)
         active = connection_flowing?(stage_data)
+        offset = animation_offset(stage_data)
 
         # Calculate merge point (where horizontal lines converge)
         # Place it 1 line above the target
@@ -480,7 +496,7 @@ module Minigun
 
           # Vertical line from source to turn point
           (source[:y]...merge_y).each do |y|
-            char, color = Theme.animated_flow_char(:vertical, distance, @animation_frame, active, drain_distance: drain_distance)
+            char, color = Theme.animated_flow_char(:vertical, distance, @animation_frame + offset, active, drain_distance: drain_distance)
             terminal.write_at(x_offset + source[:x], y_offset + y, char, color: color)
             distance += 1
           end
@@ -488,25 +504,25 @@ module Minigun
           # Corner at turn point and horizontal line to center
           if source[:x] < to_x
             # Left source: turn right with └
-            char, color = Theme.animated_flow_char(:corner_bl, distance, @animation_frame, active, drain_distance: drain_distance)
+            char, color = Theme.animated_flow_char(:corner_bl, distance, @animation_frame + offset, active, drain_distance: drain_distance)
             terminal.write_at(x_offset + source[:x], y_offset + merge_y, char, color: color)
             distance += 1
 
             # Horizontal line from corner to center
             ((source[:x] + 1)...to_x).each do |x|
-              char, color = Theme.animated_flow_char(:horizontal, distance, @animation_frame, active, drain_distance: drain_distance)
+              char, color = Theme.animated_flow_char(:horizontal, distance, @animation_frame + offset, active, drain_distance: drain_distance)
               terminal.write_at(x_offset + x, y_offset + merge_y, char, color: color)
               distance += 1
             end
           elsif source[:x] > to_x
             # Right source: turn left with ┘
-            char, color = Theme.animated_flow_char(:corner_br, distance, @animation_frame, active, drain_distance: drain_distance)
+            char, color = Theme.animated_flow_char(:corner_br, distance, @animation_frame + offset, active, drain_distance: drain_distance)
             terminal.write_at(x_offset + source[:x], y_offset + merge_y, char, color: color)
             distance += 1
 
             # Horizontal line from corner to center
             ((to_x + 1)...source[:x]).reverse_each do |x|
-              char, color = Theme.animated_flow_char(:horizontal, distance, @animation_frame, active, drain_distance: drain_distance)
+              char, color = Theme.animated_flow_char(:horizontal, distance, @animation_frame + offset, active, drain_distance: drain_distance)
               terminal.write_at(x_offset + x, y_offset + merge_y, char, color: color)
               distance += 1
             end
@@ -531,7 +547,7 @@ module Minigun
                             end
 
         junction_type = has_center_source ? :cross : :t_down
-        char, color = Theme.animated_flow_char(junction_type, junction_distance, @animation_frame, active, drain_distance: drain_distance)
+        char, color = Theme.animated_flow_char(junction_type, junction_distance, @animation_frame + offset, active, drain_distance: drain_distance)
         terminal.write_at(x_offset + to_x, y_offset + merge_y, char, color: color)
       end
 
@@ -546,6 +562,7 @@ module Minigun
 
         drain_distance = get_drain_distance(stage_data)
         active = connection_flowing?(stage_data)
+        offset = animation_offset(stage_data)
 
         # Distance counter starts at 0 from source
         distance = 0
@@ -553,7 +570,7 @@ module Minigun
         if from_x == to_x
           # Straight vertical line
           (from_y...to_y).each do |y|
-            char, color = Theme.animated_flow_char(:vertical, distance, @animation_frame, active, drain_distance: drain_distance)
+            char, color = Theme.animated_flow_char(:vertical, distance, @animation_frame + offset, active, drain_distance: drain_distance)
             terminal.write_at(x_offset + from_x, y_offset + y, char, color: color)
             distance += 1
           end
@@ -562,7 +579,7 @@ module Minigun
           mid_y = from_y + 1
 
           # First vertical segment (short drop from source)
-          char, color = Theme.animated_flow_char(:vertical, distance, @animation_frame, active, drain_distance: drain_distance)
+          char, color = Theme.animated_flow_char(:vertical, distance, @animation_frame + offset, active, drain_distance: drain_distance)
           terminal.write_at(x_offset + from_x, y_offset + from_y, char, color: color)
           distance += 1
 
@@ -573,19 +590,19 @@ module Minigun
             corner2_type = :corner_tr
 
             # First corner
-            char, color = Theme.animated_flow_char(corner1_type, distance, @animation_frame, active, drain_distance: drain_distance)
+            char, color = Theme.animated_flow_char(corner1_type, distance, @animation_frame + offset, active, drain_distance: drain_distance)
             terminal.write_at(x_offset + from_x, y_offset + mid_y, char, color: color)
             distance += 1
 
             # Horizontal segment (left to right)
             ((from_x + 1)...to_x).each do |x|
-              char, color = Theme.animated_flow_char(:horizontal, distance, @animation_frame, active, drain_distance: drain_distance)
+              char, color = Theme.animated_flow_char(:horizontal, distance, @animation_frame + offset, active, drain_distance: drain_distance)
               terminal.write_at(x_offset + x, y_offset + mid_y, char, color: color)
               distance += 1
             end
 
             # Second corner
-            char, color = Theme.animated_flow_char(corner2_type, distance, @animation_frame, active, drain_distance: drain_distance)
+            char, color = Theme.animated_flow_char(corner2_type, distance, @animation_frame + offset, active, drain_distance: drain_distance)
             terminal.write_at(x_offset + to_x, y_offset + mid_y, char, color: color)
             distance += 1
           else
@@ -594,26 +611,26 @@ module Minigun
             corner2_type = :corner_tl
 
             # First corner
-            char, color = Theme.animated_flow_char(corner1_type, distance, @animation_frame, active, drain_distance: drain_distance)
+            char, color = Theme.animated_flow_char(corner1_type, distance, @animation_frame + offset, active, drain_distance: drain_distance)
             terminal.write_at(x_offset + from_x, y_offset + mid_y, char, color: color)
             distance += 1
 
             # Horizontal segment (right to left)
             ((to_x + 1)...from_x).reverse_each do |x|
-              char, color = Theme.animated_flow_char(:horizontal, distance, @animation_frame, active, drain_distance: drain_distance)
+              char, color = Theme.animated_flow_char(:horizontal, distance, @animation_frame + offset, active, drain_distance: drain_distance)
               terminal.write_at(x_offset + x, y_offset + mid_y, char, color: color)
               distance += 1
             end
 
             # Second corner
-            char, color = Theme.animated_flow_char(corner2_type, distance, @animation_frame, active, drain_distance: drain_distance)
+            char, color = Theme.animated_flow_char(corner2_type, distance, @animation_frame + offset, active, drain_distance: drain_distance)
             terminal.write_at(x_offset + to_x, y_offset + mid_y, char, color: color)
             distance += 1
           end
 
           # Second vertical segment (drop to target)
           ((mid_y + 1)...to_y).each do |y|
-            char, color = Theme.animated_flow_char(:vertical, distance, @animation_frame, active, drain_distance: drain_distance)
+            char, color = Theme.animated_flow_char(:vertical, distance, @animation_frame + offset, active, drain_distance: drain_distance)
             terminal.write_at(x_offset + to_x, y_offset + y, char, color: color)
             distance += 1
           end

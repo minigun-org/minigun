@@ -61,6 +61,7 @@ Minigun is a high-performance data processing pipeline framework for Ruby with s
   - [X] Introduce Hud::DiagramStage
   - [X] Re-add throughput and bottleneck icons to stages
   - [X] Improve animations, use 24-frame counter (or just int counter which rolls over?)
+  - [X] Stagger each connections starting animation frame
   - [ ] Add DiagramPipeline/Executor
   - [ ] Stage color to gray when finished
   - [ ] Add IPC stages thick/yellow connections
@@ -80,6 +81,8 @@ Minigun is a high-performance data processing pipeline framework for Ruby with s
   - [ ] tab menu?
   - [ ] Error/log stream at bottom
 
+- [ ] HUD in examples
+  - [ ] Enable running hud in all examples with example wrapper
 
 ### Phase 1.1: QoL Improvements
 
@@ -88,7 +91,6 @@ Minigun is a high-performance data processing pipeline framework for Ruby with s
   - [ ] Kill child threads/forks/ractors
   - [ ] Ctrl+C once to start graceful shutdown (send end signals from all producers)
   - [ ] Press Ctrl+C again to force quit.
-
 
 - [ ] to_mermaid
 - [ ] child culling (look at puma)
