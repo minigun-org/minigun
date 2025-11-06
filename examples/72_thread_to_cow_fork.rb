@@ -17,7 +17,6 @@ require_relative '../lib/minigun'
 # Key Difference from IPC:
 # - COW: Item is COW-shared (no input serialization)
 # - IPC: Item is serialized to worker via pipes
-
 class ThreadToCowForkExample
   include Minigun::DSL
 

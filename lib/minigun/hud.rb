@@ -11,6 +11,7 @@ require_relative 'hud/stats_aggregator'
 require_relative 'hud/controller'
 
 module Minigun
+  # HUD (Heads-Up Display) provides real-time visualization of pipeline execution
   module HUD
     # Launch HUD for a pipeline
     # Can be run in a separate thread or process

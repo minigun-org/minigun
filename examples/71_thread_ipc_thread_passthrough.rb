@@ -13,7 +13,6 @@ require_relative '../lib/minigun'
 # - IPC fork stage MUST send results back to parent via IPC pipes
 # - Parent routes results to downstream thread stage
 # - Serialization happens twice: in -> IPC worker, out -> parent
-
 class ThreadIpcThreadPassthroughExample
   include Minigun::DSL
 

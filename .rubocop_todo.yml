@@ -219,40 +219,6 @@ Style/ComparableClamp:
   Exclude:
     - 'lib/minigun/hud/flow_diagram_frame.rb'
 
-# Offense count: 29
-# Configuration parameters: AllowedConstants.
-Style/Documentation:
-  Exclude:
-    - 'spec/**/*'
-    - 'examples/10_routing_to_nested_stages.rb'
-    - 'examples/66_cow_and_ipc_fork_executors.rb'
-    - 'examples/70_thread_to_ipc_fork.rb'
-    - 'examples/71_thread_ipc_thread_passthrough.rb'
-    - 'examples/72_thread_to_cow_fork.rb'
-    - 'examples/73_thread_cow_thread_passthrough.rb'
-    - 'examples/74_ipc_to_ipc_fork.rb'
-    - 'examples/75_ipc_to_cow_fork.rb'
-    - 'examples/76_cow_to_ipc_fork.rb'
-    - 'examples/77_cow_to_cow_fork.rb'
-    - 'examples/78_master_to_ipc_via_to.rb'
-    - 'examples/79_master_to_cow_via_to.rb'
-    - 'examples/80_ipc_fan_out.rb'
-    - 'examples/81_ipc_fan_in.rb'
-    - 'examples/82_cow_fan_out.rb'
-    - 'examples/83_cow_fan_in.rb'
-    - 'examples/84_mixed_ipc_cow_fan_out.rb'
-    - 'examples/85_mixed_ipc_cow_fan_in.rb'
-    - 'examples/86_ipc_spawns_nested_cow.rb'
-    - 'examples/87_cow_spawns_nested_ipc.rb'
-    - 'examples/88_complex_multi_hop_routing.rb'
-    - 'examples/90_await_modes.rb'
-    - 'examples/97_dynamic_routing_to_inner_fork_stages.rb'
-    - 'examples/98_await_stages_complex_routing.rb'
-    - 'examples/hud_complex_demo.rb'
-    - 'examples/irb_with_hud.rb'
-    - 'lib/minigun/hud.rb'
-    - 'lib/minigun/queue_wrappers.rb'
-
 # Offense count: 1
 # This cop supports safe autocorrection (--autocorrect).
 # Configuration parameters: EnforcedStyle, AllowComments.

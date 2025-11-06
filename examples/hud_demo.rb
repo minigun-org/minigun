@@ -7,7 +7,7 @@
 require_relative '../lib/minigun'
 require_relative '../lib/minigun/hud'
 
-# Define a demo pipeline with various stages
+# Simple pipeline to demonstrate HUD
 class HudDemoTask
   include Minigun::DSL
 

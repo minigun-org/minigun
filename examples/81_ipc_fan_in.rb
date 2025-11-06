@@ -13,7 +13,6 @@ require_relative '../lib/minigun'
 # - Multiple producers feed into single IPC fork stage
 # - Aggregator receives items from all producers
 # - All stages use IPC with full serialization
-
 class IpcFanInExample
   include Minigun::DSL
 

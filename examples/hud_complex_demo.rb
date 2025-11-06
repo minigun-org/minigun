@@ -1,6 +1,9 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+require_relative '../lib/minigun'
+require_relative '../lib/minigun/hud'
+
 # Complex demo showcasing advanced pipeline patterns:
 # - Broadcast fan-out (sending each item to multiple stages)
 # - Round-robin distribution (load balancing across workers)
@@ -9,10 +12,6 @@
 # - Multiple processing stages with varying latencies
 #
 # Run with: ruby examples/hud_complex_demo.rb
-
-require_relative '../lib/minigun'
-require_relative '../lib/minigun/hud'
-
 class HudComplexDemoTask
   include Minigun::DSL
 

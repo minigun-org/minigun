@@ -1,6 +1,9 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+require_relative '../lib/minigun'
+require 'tempfile'
+
 # Example: Routing to Nested Pipeline Stages
 #
 # Demonstrates how parent pipeline stages can route directly to stages
@@ -10,10 +13,6 @@
 # - accumulator batches items and routes to :save (nested stage)
 # - :save is inside a process_per_batch nested pipeline
 # - Parent DAG includes nested stages, enabling direct routing
-
-require_relative '../lib/minigun'
-require 'tempfile'
-
 class RoutingToNestedStagesExample
   include Minigun::DSL
 

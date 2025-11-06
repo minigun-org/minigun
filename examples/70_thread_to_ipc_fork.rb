@@ -12,7 +12,6 @@ require_relative '../lib/minigun'
 # - Producer (inline) -> Processor (threads) -> Consumer (IPC fork)
 # - Thread stage serializes data to IPC pipe
 # - IPC fork stage receives data via IPC pipe, processes in isolated process
-
 class ThreadToIpcForkExample
   include Minigun::DSL
 

@@ -12,7 +12,6 @@ require_relative '../lib/minigun'
 # - Producer (inline) routes explicitly to COW fork stages via output.to(:stage_name)
 # - COW fork stages receive items directly via COW-shared memory
 # - Useful for conditional routing to different processing paths
-
 class MasterToCowViaToExample
   include Minigun::DSL
 

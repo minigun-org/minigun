@@ -136,12 +136,10 @@ RSpec.describe Minigun::Worker do
 
       allow(Minigun.logger).to receive(:warn).and_call_original
       allow(Minigun.logger).to receive(:debug).and_call_original
+      expect(Minigun.logger).to receive(:warn).with(/Stage has no DAG upstream connections, using default 5s await timeout/)
 
       worker.start
       worker.join
-
-      # Should log warning about default 5s timeout
-      expect(Minigun.logger).to have_received(:warn).with(/Stage has no DAG upstream connections, using default 5s await timeout/)
     end
 
     it 'sends END signals to downstream after timeout if disconnected' do
@@ -183,13 +181,14 @@ RSpec.describe Minigun::Worker do
 
       # Should have sent END signal to downstream immediately
       downstream_queue = task.find_queue(downstream_stage)
+      expect(Minigun.logger).to receive(:debug).with(/Shutting down immediately/)
+
       msg = begin
         downstream_queue.pop(true)
       rescue StandardError
         nil
       end
       expect(msg).to be_a(Minigun::EndOfSource) if msg
-      expect(Minigun.logger).to have_received(:debug).with(/Shutting down immediately/)
     end
 
     it 'waits indefinitely with await: true' do
@@ -200,12 +199,12 @@ RSpec.describe Minigun::Worker do
 
       allow(Minigun.logger).to receive(:debug).and_call_original
 
+      # Should log that it's awaiting indefinitely
+      expect(Minigun.logger).to receive(:debug).with(/Awaiting items indefinitely/)
+
       # Start worker in background
       worker.start
       sleep 0.2 # Give it time to start
-
-      # Should log that it's awaiting indefinitely
-      expect(Minigun.logger).to have_received(:debug).with(/Awaiting items indefinitely/)
 
       # Clean up
       Thread.kill(worker.thread) if worker.thread&.alive?
@@ -298,11 +297,10 @@ RSpec.describe Minigun::Worker do
       input_queue << Minigun::EndOfSource.new(upstream_stage)
 
       allow(Minigun.logger).to receive(:debug).and_call_original
+      expect(Minigun.logger).to receive(:debug).with(/Starting/)
 
       worker.start
       worker.join
-
-      expect(Minigun.logger).to have_received(:debug).with(/Starting/)
     end
 
     it 'logs when done' do
@@ -314,11 +312,10 @@ RSpec.describe Minigun::Worker do
       input_queue << Minigun::EndOfSource.new(upstream_stage)
 
       allow(Minigun.logger).to receive(:debug).and_call_original
+      expect(Minigun.logger).to receive(:debug).with(/Done/)
 
       worker.start
       worker.join
-
-      expect(Minigun.logger).to have_received(:debug).with(/Done/)
     end
   end
 end

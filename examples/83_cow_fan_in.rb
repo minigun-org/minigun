@@ -13,7 +13,6 @@ require_relative '../lib/minigun'
 # - Multiple producers feed into single COW fork stage
 # - Aggregator receives items from all producers
 # - COW-shared inputs, no output (terminal consumer)
-
 class CowFanInExample
   include Minigun::DSL
 

@@ -17,7 +17,6 @@ require_relative '../lib/minigun'
 #   -> Transform (COW fork)
 #   -> Aggregator (threads)
 #   -> Collector (inline)
-
 class ComplexMultiHopRoutingExample
   include Minigun::DSL
 

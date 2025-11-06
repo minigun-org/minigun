@@ -13,7 +13,6 @@ require_relative '../lib/minigun'
 # - [IPC Producer A, COW Producer B, IPC Producer C] -> Thread Aggregator
 # - Different fork types feeding into single thread stage
 # - Demonstrates mixing persistent (IPC) and ephemeral (COW) producers
-
 class MixedIpcCowFanInExample
   include Minigun::DSL
 

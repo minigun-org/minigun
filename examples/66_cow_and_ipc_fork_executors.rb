@@ -15,11 +15,6 @@ require_relative '../lib/minigun'
 # - Data is serialized through pipes
 # - Strong process isolation
 # - Useful when you need explicit communication channels
-
-puts '=' * 80
-puts 'COW Fork Executor Example'
-puts '=' * 80
-
 class CowForkExample
   include Minigun::DSL
 
@@ -53,6 +48,10 @@ class CowForkExample
 end
 
 begin
+  puts '=' * 80
+  puts 'COW Fork Executor Example'
+  puts '=' * 80
+
   cow_task = CowForkExample.new
   cow_task.run
   puts "\nCOW Fork Results: #{cow_task.results.size} items processed"
@@ -62,11 +61,7 @@ rescue NotImplementedError => e
   puts '(This is expected on Windows)'
 end
 
-puts "\n"
-puts '=' * 80
-puts 'IPC Fork Executor Example'
-puts '=' * 80
-
+# Example demonstrating IPC (Inter-Process Communication) fork executor
 class IpcForkExample
   include Minigun::DSL
 
@@ -103,6 +98,11 @@ class IpcForkExample
 end
 
 begin
+  puts "\n"
+  puts '=' * 80
+  puts 'IPC Fork Executor Example'
+  puts '=' * 80
+
   ipc_task = IpcForkExample.new
   ipc_task.run
   puts "\nIPC Fork Results: #{ipc_task.results.size} items processed"

@@ -12,7 +12,6 @@ require_relative '../lib/minigun'
 # - Producer (inline) routes explicitly to IPC fork stages via output.to(:stage_name)
 # - IPC fork stages receive items directly (not via sequential flow)
 # - Useful for conditional routing, broadcasting, or non-linear DAGs
-
 class MasterToIpcViaToExample
   include Minigun::DSL
 

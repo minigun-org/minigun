@@ -13,7 +13,6 @@ require_relative '../lib/minigun'
 # - Each COW fork runs a nested pipeline with IPC workers (persistent)
 # - Process tree: Master -> [COW fork 1, COW fork 2...] -> [IPC workers...]
 # - This creates a 3-level process hierarchy
-
 class CowSpawnsNestedIpcExample
   include Minigun::DSL
 

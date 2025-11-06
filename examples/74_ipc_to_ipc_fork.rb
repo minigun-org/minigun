@@ -14,7 +14,6 @@ require_relative '../lib/minigun'
 # - Parent routes Stage1 results to Stage2 input Queue
 # - Stage2 IPC workers receive items via IPC, send results back via IPC
 # - Full serialization at every boundary
-
 class IpcToIpcForkExample
   include Minigun::DSL
 

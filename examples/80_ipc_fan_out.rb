@@ -13,7 +13,6 @@ require_relative '../lib/minigun'
 # - Splitter routes items to different stages based on content
 # - All stages use persistent IPC workers
 # - Full serialization at all boundaries
-
 class IpcFanOutExample
   include Minigun::DSL
 

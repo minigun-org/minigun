@@ -13,7 +13,6 @@ require_relative '../lib/minigun'
 # - Stage1: COW-shared input, IPC output to parent
 # - Stage2: COW-shared input (from parent), IPC output to parent
 # - Multiple ephemeral forks at each stage
-
 class CowToCowForkExample
   include Minigun::DSL
 

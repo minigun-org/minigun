@@ -186,6 +186,7 @@ module Minigun
     end
   end
 
+  # Output queue wrapper for IPC fork executors that sends items via pipe
   class IpcOutputQueue
     def initialize(pipe_writer, stage_stats)
       @pipe_writer = pipe_writer

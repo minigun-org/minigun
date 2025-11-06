@@ -6,7 +6,6 @@ require_relative '../lib/minigun'
 # Dynamic Routing to Inner Fork Stages
 # Demonstrates using output.to() to route to stages INSIDE ipc_fork/cow_fork blocks
 # This tests cross-boundary dynamic routing to nested fork contexts
-
 class DynamicRoutingToInnerIpcExample
   include Minigun::DSL
 

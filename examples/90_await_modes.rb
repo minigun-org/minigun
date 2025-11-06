@@ -21,7 +21,6 @@ require_relative '../lib/minigun'
 # - Router uses output.to() for dynamic routing
 # - Target stages have no DAG upstream (disconnected)
 # - Different await modes demonstrate different behaviors
-
 class AwaitModesExample
   include Minigun::DSL
 

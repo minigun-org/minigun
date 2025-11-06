@@ -13,7 +13,6 @@ require_relative '../lib/minigun'
 # - COW fork: Input via COW-shared memory (NO serialization)
 # - COW fork: Output via IPC pipes (serialization required)
 # - Parent routes results to downstream thread stage
-
 class ThreadCowThreadPassthroughExample
   include Minigun::DSL
 

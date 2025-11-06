@@ -13,7 +13,6 @@ require_relative '../lib/minigun'
 # - Producer -> Splitter (threads) -> [IPC Fork A, COW Fork B, IPC Fork C]
 # - Splitter routes to different fork types based on content
 # - Demonstrates mixing persistent (IPC) and ephemeral (COW) workers
-
 class MixedIpcCowFanOutExample
   include Minigun::DSL
 

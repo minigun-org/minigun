@@ -1,6 +1,8 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+require_relative '../lib/minigun'
+
 # Example: Using Minigun with HUD in IRB/console
 #
 # This demonstrates the interactive workflow:
@@ -23,9 +25,6 @@
 #   task.running?                # => true
 #   task.hud                     # Reopen HUD
 #   task.stop                    # Stop execution
-
-require_relative '../lib/minigun'
-
 class DataProcessingTask
   include Minigun::DSL
 

@@ -13,7 +13,6 @@ require_relative '../lib/minigun'
 # - Stage1: Persistent IPC workers, full serialization in/out
 # - Stage2: Ephemeral COW forks, COW-shared input, IPC output
 # - Different execution models in same pipeline
-
 class IpcToCowForkExample
   include Minigun::DSL
 

@@ -9,7 +9,6 @@ require_relative '../lib/minigun'
 # - Conditional routing based on item properties
 # - Mixing await stages with normal DAG-connected stages
 # - Multiple collectors from different sources
-
 class ComplexAwaitRoutingExample
   include Minigun::DSL
 

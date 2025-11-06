@@ -198,10 +198,9 @@ RSpec.describe Minigun::DSL, 'Background Execution' do
       sleep 0.2 # Give it time to start
 
       # Mock the HUD launch to prevent actual UI from opening
-      allow(Minigun::HUD).to receive(:launch)
+      expect(Minigun::HUD).to receive(:launch)
 
       expect { task.hud }.not_to raise_error
-      expect(Minigun::HUD).to have_received(:launch)
 
       task.stop
     end

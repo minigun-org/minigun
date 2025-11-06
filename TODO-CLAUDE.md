@@ -62,6 +62,8 @@ Minigun is a high-performance data processing pipeline framework for Ruby with s
   - [X] Re-add throughput and bottleneck icons to stages
   - [X] Improve animations, use 24-frame counter (or just int counter which rolls over?)
   - [X] Stagger each connections starting animation frame
+  - [ ] Terminal resize doesn't work on windows
+  - [ ] Mouse cursor events?
   - [ ] Stage box color to gray when finished
   - [ ] Round-robin vs. fanout animations
   - [ ] Extract DiagramConnection to its own class

@@ -13,7 +13,6 @@ require_relative '../lib/minigun'
 # - Splitter routes items to different stages based on content
 # - All stages use ephemeral COW forks
 # - COW-shared inputs, IPC outputs at each stage
-
 class CowFanOutExample
   include Minigun::DSL
 
