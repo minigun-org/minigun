@@ -62,14 +62,15 @@ RSpec.describe 'FlowDiagram Rendering' do
 
     stats_data = stats_aggregator.collect
 
-    # Stub dynamic elements for deterministic output:
-    # 1. Zero out throughput so connections render as static (not animated)
+    # Stub dynamic elements for deterministic output
     stats_data[:stages].each do |s|
+      # Zero out throughput so connections render as static (not animated)
       s[:throughput] = 0
-      # 2. Clear bottleneck flags (they're non-deterministic in tests)
+      # Clear bottleneck flags (they're non-deterministic in tests)
       s[:is_bottleneck] = false
     end
-    # 3. Reset animation frame to 0
+
+    # Reset animation frame to 0
     flow_diagram.instance_variable_set(:@animation_frame, 0)
 
     # Render at x_offset=0, y_offset=0 (first frame, no animation)
