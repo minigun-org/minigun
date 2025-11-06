@@ -150,7 +150,7 @@ Have a recipe to share? We'd love to add it!
 3. Follow the recipe template
 4. Submit a pull request
 
-See [Contributing](../contributing/development.md) for details.
+See [Contributing](13_contributing.md) for details.
 
 ---
 

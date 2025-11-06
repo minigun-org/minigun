@@ -564,6 +564,6 @@ end
 ## See Also
 
 - [ETL Pipeline Recipe](etl_pipeline.md) - Extract, transform, load patterns
-- [Performance Tuning](../advanced/performance_tuning.md) - Optimization strategies
+- [Performance Tuning](11_performance_tuning.md) - Optimization strategies
 - [Execution Strategies](../guides/06_execution_strategies.md) - Threads vs forks
 - [Example: Large Dataset](../../examples/14_large_dataset.rb) - Working example

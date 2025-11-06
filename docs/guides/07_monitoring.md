@@ -437,7 +437,7 @@ Jump to practical examples:
 Deep dive into specific topics:
 - [Custom Stages](../guides/stages/custom_stages.md)
 - [Advanced Routing](../guides/routing/dynamic.md)
-- [Performance Tuning](../advanced/performance_tuning.md)
+- [Performance Tuning](11_performance_tuning.md)
 
 ### Browse Examples
 

@@ -433,4 +433,4 @@ Now that you understand execution strategies, let's learn how to monitor your pi
 - [Execution Guide: Overview](../guides/execution/overview.md) - Detailed comparison
 - [COW Fork Guide](../guides/execution/cow_fork.md) - Copy-on-write internals
 - [IPC Fork Guide](../guides/execution/ipc_fork.md) - IPC optimization
-- [Performance Tuning](../advanced/performance_tuning.md) - Optimization strategies
+- [Performance Tuning](11_performance_tuning.md) - Optimization strategies

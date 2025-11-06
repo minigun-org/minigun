@@ -140,13 +140,17 @@ end
 8. [Deployment](docs/guides/08_deployment.md) - Production deployment
 9. [API Reference](docs/guides/09_api_reference.md) - Complete DSL documentation
 10. [HUD Monitor](docs/guides/10_hud.md) - Real-time pipeline monitoring
+11. [Performance Tuning](docs/guides/11_performance_tuning.md) - Optimization strategies
+12. [Testing](docs/guides/12_testing.md) - Testing your pipelines
+13. [Contributing](docs/guides/13_contributing.md) - How to contribute
 
 ### Reference
 
 - [Architecture](docs/architecture/system_architecture.md) - How Minigun works under the hood
+
 ## Contributing
 
-Contributions welcome! Please see the [Issue Tracker](https://github.com/user/minigun/issues).
+Contributions welcome! See the [Contributing Guide](docs/guides/13_contributing.md) or check the [Issue Tracker](https://github.com/user/minigun/issues).
 
 ## License
 

@@ -421,5 +421,5 @@ end
 
 - [Batch Processing Recipe](batch_processing.md) - Processing large datasets
 - [Error Handling Guide](../guides/error_handling.md) - Retry strategies
-- [Performance Tuning](../advanced/performance_tuning.md) - Optimization techniques
+- [Performance Tuning](11_performance_tuning.md) - Optimization techniques
 - [Example: Simple ETL](../../examples/15_simple_etl.rb) - Working example

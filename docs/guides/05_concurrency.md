@@ -412,5 +412,5 @@ Threads are great for I/O, but what about CPU-intensive work? Next, we'll learn 
 
 **See Also:**
 - [Configuration Guide](../guides/configuration.md) - All concurrency options
-- [Performance Tuning](../advanced/performance_tuning.md) - Optimization strategies
+- [Performance Tuning](11_performance_tuning.md) - Optimization strategies
 - [Example: Web Crawler](../../examples/10_web_crawler.rb) - Parallel scraping

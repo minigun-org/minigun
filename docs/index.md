@@ -114,6 +114,21 @@ Choose the right tool for your use case:
 
 ---
 
+## Advanced Topics
+
+- [**Performance Tuning**](guides/11_performance_tuning.md) - Optimization strategies
+- [**Testing Your Pipelines**](guides/12_testing.md) - Testing patterns and best practices
+
+---
+
+## Contributing
+
+Help make Minigun better:
+
+→ [**Contributing Guide**](guides/13_contributing.md) - How to contribute to Minigun
+
+---
+
 ## Quick Links
 
 - [Installation](#installation)
