@@ -16,6 +16,7 @@ plan based on the current codebase state and TODOS.md.
 - [ ] Hooks
 - [ ] Config
 - [ ] Sort-out pipeline inheritance (https://github.com/minigun-org/minigun/pull/4)
+- [ ] Remove processor alias?
 - [ ] Rubocop
 - [ ] Cleanup examples
 - [ ] Example runner context
