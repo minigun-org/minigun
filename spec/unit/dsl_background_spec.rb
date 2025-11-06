@@ -43,7 +43,7 @@ RSpec.describe Minigun::DSL, 'Background Execution' do
           loop do
             output << counter
             counter += 1
-            sleep 0.1  # Slow enough to test
+            sleep 0.1 # Slow enough to test
           end
         end
 
@@ -60,7 +60,7 @@ RSpec.describe Minigun::DSL, 'Background Execution' do
       task = infinite_task_class.new
       result = task.run(background: true)
 
-      sleep 0.2  # Give it time to start
+      sleep 0.2 # Give it time to start
 
       expect(result).to eq(task)
       expect(task.running?).to be true
@@ -195,7 +195,7 @@ RSpec.describe Minigun::DSL, 'Background Execution' do
       task = infinite_task_class.new
       task.run(background: true)
 
-      sleep 0.2  # Give it time to start
+      sleep 0.2 # Give it time to start
 
       # Mock the HUD launch to prevent actual UI from opening
       allow(Minigun::HUD).to receive(:launch)
@@ -215,7 +215,7 @@ RSpec.describe Minigun::DSL, 'Background Execution' do
         pipeline do
           producer :generate do |output|
             output << 1
-            raise "Test error"
+            raise 'Test error'
           end
 
           consumer :process do |_item, _output|

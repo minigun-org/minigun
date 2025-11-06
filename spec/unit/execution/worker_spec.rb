@@ -225,7 +225,7 @@ RSpec.describe Minigun::Worker do
       Minigun::RouterBroadcastStage.new(
         :router,
         pipeline,
-        [target_a_stage, target_b_stage],  # Use Stage objects
+        [target_a_stage, target_b_stage], # Use Stage objects
         {}
       )
     end

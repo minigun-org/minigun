@@ -31,20 +31,20 @@ RSpec.describe Minigun::HUD do
     end
 
     it 'provides stage icons' do
-      expect(Minigun::HUD::Theme.stage_icon(:producer)).to eq("▶")
-      expect(Minigun::HUD::Theme.stage_icon(:processor)).to eq("◆")
-      expect(Minigun::HUD::Theme.stage_icon(:consumer)).to eq("◀")
+      expect(Minigun::HUD::Theme.stage_icon(:producer)).to eq('▶')
+      expect(Minigun::HUD::Theme.stage_icon(:processor)).to eq('◆')
+      expect(Minigun::HUD::Theme.stage_icon(:consumer)).to eq('◀')
     end
 
     it 'provides status indicators' do
-      expect(Minigun::HUD::Theme.status_indicator(:active)).to eq("⚡")
-      expect(Minigun::HUD::Theme.status_indicator(:idle)).to eq("⏸")
-      expect(Minigun::HUD::Theme.status_indicator(:bottleneck)).to eq("⚠")
+      expect(Minigun::HUD::Theme.status_indicator(:active)).to eq('⚡')
+      expect(Minigun::HUD::Theme.status_indicator(:idle)).to eq('⏸')
+      expect(Minigun::HUD::Theme.status_indicator(:bottleneck)).to eq('⚠')
     end
 
     it 'formats throughput with color' do
       result = Minigun::HUD::Theme.format_throughput(100)
-      expect(result).to include("100")
+      expect(result).to include('100')
       expect(result).to include("\e[") # Has ANSI color code
     end
   end
@@ -189,7 +189,7 @@ RSpec.describe Minigun::HUD do
   describe '.run_with_hud' do
     it 'requires a task with pipeline' do
       expect do
-        Minigun::HUD.run_with_hud(Object.new)
+        described_class.run_with_hud(Object.new)
       end.to raise_error(ArgumentError, /pipeline/)
     end
   end

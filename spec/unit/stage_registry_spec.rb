@@ -88,7 +88,7 @@ RSpec.describe Minigun::StageRegistry do
 
     context 'duplicate names' do
       it 'raises StageNameConflict when registering duplicate name in same pipeline' do
-        stage1 = create_stage(:duplicate, pipeline)
+        create_stage(:duplicate, pipeline)
 
         # stage1 is already auto-registered, so creating stage2 with the same name will fail
         expect do

@@ -210,6 +210,7 @@ module Minigun
       Array(to).each do |target|
         target_obj = find_stage(target)
         raise Minigun::Error, "[Pipeline:#{@name}] Cannot find stage: #{target}" unless target_obj
+
         @dag.add_edge(from_obj, target_obj)
       end
 
@@ -346,7 +347,7 @@ module Minigun
       stages_to_add = []
       dag_updates = []
 
-      @stages.dup.each do |stage|  # dup to avoid modifying during iteration
+      @stages.dup.each do |stage| # dup to avoid modifying during iteration
         # After normalization, DAG uses Stage objects
         downstream = @dag.downstream(stage)
 
@@ -428,7 +429,7 @@ module Minigun
 
       # Check for unresolved forward references (edges)
       unless @deferred_edges.empty?
-        unresolved = @deferred_edges.map { |e| "#{e[:from].inspect} -> #{e[:to].inspect}" }.join(", ")
+        unresolved = @deferred_edges.map { |e| "#{e[:from].inspect} -> #{e[:to].inspect}" }.join(', ')
         raise Minigun::Error, "[Pipeline:#{@name}] Unresolved routing references: #{unresolved}"
       end
 
@@ -507,7 +508,7 @@ module Minigun
       # @stages contains Stage objects in definition order
       @stages.each_with_index do |stage, index|
         # Skip if already has downstream edges
-        next if !@dag.downstream(stage).empty?
+        next unless @dag.downstream(stage).empty?
         # Skip if this is the last stage
         next if index >= @stages.size - 1
 
@@ -558,6 +559,7 @@ module Minigun
       # Find stages that have no upstream (would be entry points)
       entry_stages = @stages.select do |stage|
         next false if stage.run_mode == :autonomous
+
         @dag.upstream(stage).empty?
       end
 
@@ -617,7 +619,7 @@ module Minigun
         @dag.add_edge(stage, exit_stage)
       end
 
-      # Note: input queue for :_exit will be created automatically by build_stage_input_queues
+      # NOTE: input queue for :_exit will be created automatically by build_stage_input_queues
 
       terminal_names = terminal_stages.map(&:name).join(', ')
       log_debug "[Pipeline:#{@name}] Added :_exit collector for terminal stages: #{terminal_names}"
@@ -645,4 +647,3 @@ module Minigun
     end
   end
 end
-

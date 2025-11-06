@@ -7,7 +7,7 @@ module Minigun
       # Read a single keypress without blocking
       # Returns nil if no key is pressed
       def self.read_nonblocking
-        return nil unless IO.select([$stdin], nil, nil, 0)
+        return nil unless $stdin.wait_readable(0)
 
         char = $stdin.getc
 
@@ -22,7 +22,6 @@ module Minigun
             when 'B' then :down
             when 'C' then :right
             when 'D' then :left
-            else nil
             end
           else
             :escape
@@ -37,12 +36,12 @@ module Minigun
       # Key mappings
       KEYS = {
         quit: ['q', 'Q', "\u0003"], # q, Q, or Ctrl+C
-        pause: [' '],                # Space
+        pause: [' '], # Space
         help: ['h', 'H', '?'],
-        refresh: ['r', 'R'],
-        detail: ['d', 'D'],
-        compact: ['c', 'C'],
-        expand: ['e', 'E'],
+        refresh: %w[r R],
+        detail: %w[d D],
+        compact: %w[c C],
+        expand: %w[e E],
         reset: ['0']
       }.freeze
 

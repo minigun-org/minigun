@@ -214,8 +214,8 @@ RSpec.describe Minigun::Pipeline do
 
       # Add to DAG with upstream from source
       source = pipeline.find_stage(:source)
-      pipeline.dag.add_node(pipeline_stage)  # Use object
-      pipeline.dag.add_edge(source, pipeline_stage)  # Use objects
+      pipeline.dag.add_node(pipeline_stage) # Use object
+      pipeline.dag.add_edge(source, pipeline_stage) # Use objects
 
       producers = pipeline.send(:find_all_producers)
 
@@ -339,7 +339,7 @@ RSpec.describe Minigun::Pipeline do
       nested_pipeline = described_class.new(:nested, nil, nil, config)
       pipeline_stage = Minigun::PipelineStage.new(:pipeline_source, pipeline, nested_pipeline, {})
       pipeline.stages << pipeline_stage
-      pipeline.dag.add_node(pipeline_stage)    # Use object
+      pipeline.dag.add_node(pipeline_stage) # Use object
 
       pipeline.add_stage(:consumer, :sink) { |item| item }
 
@@ -376,12 +376,12 @@ RSpec.describe Minigun::Pipeline do
       source_pipeline.add_stage(:producer, :gen) { |output| 3.times { |i| output << i } }
       source_pipeline.add_stage(:processor, :double) { |item, output| output << (item * 2) }
 
-      pipeline.stages.unshift(pipeline_stage)  # Use Stage object
-      pipeline.dag.add_node(pipeline_stage)  # Use Stage object
+      pipeline.stages.unshift(pipeline_stage) # Use Stage object
+      pipeline.dag.add_node(pipeline_stage) # Use Stage object
 
       # Add consumer to main pipeline
-      sink_stage = pipeline.add_stage(:consumer, :sink) { |item| results << item }
-      pipeline.dag.add_edge(pipeline_stage, pipeline.find_stage(:sink))  # Use Stage objects
+      pipeline.add_stage(:consumer, :sink) { |item| results << item }
+      pipeline.dag.add_edge(pipeline_stage, pipeline.find_stage(:sink)) # Use Stage objects
 
       pipeline.run(context)
 
@@ -407,15 +407,15 @@ RSpec.describe Minigun::Pipeline do
       proc_pipeline.add_stage(:processor, :multiply) { |item, output| output << (item * 10) }
       proc_pipeline.add_stage(:processor, :add_one) { |item, output| output << (item + 1) }
 
-      pipeline.stages << pipeline_stage  # Use Stage object
-      pipeline.dag.add_node(pipeline_stage)  # Use Stage object
+      pipeline.stages << pipeline_stage # Use Stage object
+      pipeline.dag.add_node(pipeline_stage) # Use Stage object
       source_stage = pipeline.find_stage(:source)
-      pipeline.dag.add_edge(source_stage, pipeline_stage)  # Use Stage objects
+      pipeline.dag.add_edge(source_stage, pipeline_stage) # Use Stage objects
 
       # Consumer
       pipeline.add_stage(:consumer, :sink) { |item| results << item }
       sink_stage = pipeline.find_stage(:sink)
-      pipeline.dag.add_edge(pipeline_stage, sink_stage)  # Use Stage objects
+      pipeline.dag.add_edge(pipeline_stage, sink_stage) # Use Stage objects
 
       pipeline.run(context)
 
@@ -438,8 +438,8 @@ RSpec.describe Minigun::Pipeline do
       p1.add_stage(:producer, :gen) { |output| output << 10 }
       p1.add_stage(:processor, :double) { |item, output| output << (item * 2) }
 
-      pipeline.stages << ps1  # Use Stage object
-      pipeline.dag.add_node(ps1)  # Use Stage object
+      pipeline.stages << ps1 # Use Stage object
+      pipeline.dag.add_node(ps1) # Use Stage object
 
       # Second PipelineStage producer
       p2 = described_class.new(:pb, task, pipeline, config)
@@ -447,8 +447,8 @@ RSpec.describe Minigun::Pipeline do
       p2.add_stage(:producer, :gen) { |output| output << 5 }
       p2.add_stage(:processor, :triple) { |item, output| output << (item * 3) }
 
-      pipeline.stages << ps2  # Use Stage object
-      pipeline.dag.add_node(ps2)  # Use Stage object
+      pipeline.stages << ps2 # Use Stage object
+      pipeline.dag.add_node(ps2) # Use Stage object
 
       # Consumer
       pipeline.add_stage(:consumer, :sink) { |item| results << item }

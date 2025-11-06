@@ -21,10 +21,12 @@ RSpec.describe 'FlowDiagram Rendering' do
     terminal = double('terminal')
     allow(terminal).to receive(:write_at) do |x, y, text, color: nil|
       next if y < 0 || y >= height || x < 0
+
       # Write text into buffer at position
       text.chars.each_with_index do |char, i|
         col = x + i
         break if col >= width
+
         buffer[y][col] = char
       end
     end
@@ -41,7 +43,7 @@ RSpec.describe 'FlowDiagram Rendering' do
                  pipeline_instance
                end
 
-    raise "No pipeline found" unless pipeline
+    raise 'No pipeline found' unless pipeline
 
     # Create flow diagram and stats
     flow_diagram = Minigun::HUD::FlowDiagram.new(width, height)
@@ -62,9 +64,11 @@ RSpec.describe 'FlowDiagram Rendering' do
 
     # Stub dynamic elements for deterministic output:
     # 1. Zero out throughput so connections render as static (not animated)
-    stats_data[:stages].each { |s| s[:throughput] = 0 }
-    # 2. Clear bottleneck flags (they're non-deterministic in tests)
-    stats_data[:stages].each { |s| s[:is_bottleneck] = false }
+    stats_data[:stages].each do |s|
+      s[:throughput] = 0
+      # 2. Clear bottleneck flags (they're non-deterministic in tests)
+      s[:is_bottleneck] = false
+    end
     # 3. Reset animation frame to 0
     flow_diagram.instance_variable_set(:@animation_frame, 0)
 
@@ -76,7 +80,7 @@ RSpec.describe 'FlowDiagram Rendering' do
 
   # Helper to create normalized output (remove trailing spaces)
   def normalize_output(buffer)
-    buffer.map { |line| line.rstrip }.join("\n")
+    buffer.map(&:rstrip).join("\n")
   end
 
   describe 'Linear Pipeline (Sequential)' do

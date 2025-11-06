@@ -30,7 +30,6 @@ RSpec.describe Minigun::PipelineStage do
     end
   end
 
-
   describe '#run_stage' do
     it 'returns early if no pipeline is set' do
       stage = described_class.new(:my_pipeline, pipeline, nil, {})

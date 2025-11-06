@@ -43,10 +43,10 @@ module Minigun
         end
 
         # Scroll indicator
-        if stages.length > visible_height
-          indicator = "↓ #{stages.length - visible_height - @scroll_offset} more"
-          terminal.write_at(x_offset + 2, y_offset + @height - 2, indicator, color: Theme.muted)
-        end
+        return unless stages.length > visible_height
+
+        indicator = "↓ #{stages.length - visible_height - @scroll_offset} more"
+        terminal.write_at(x_offset + 2, y_offset + @height - 2, indicator, color: Theme.muted)
       end
 
       private
@@ -59,19 +59,19 @@ module Minigun
 
         # Format with fixed widths for stable columns
         # Line 1: Runtime and overall throughput
-        runtime_str = format("%.2f", runtime).rjust(8)
+        runtime_str = format('%.2f', runtime).rjust(8)
         throughput_str = format_throughput_fixed(throughput).rjust(10)
 
         line1_parts = [
-          "Runtime: ",
+          'Runtime: ',
           Theme.info,
           runtime_str,
-          "s",
+          's',
           Terminal::COLORS[:reset],
-          " | Throughput: ",
+          ' | Throughput: ',
           throughput_color(throughput),
           throughput_str,
-          " i/s",
+          ' i/s',
           Terminal::COLORS[:reset]
         ]
         terminal.write_at(x + 2, y, line1_parts.join)
@@ -81,11 +81,11 @@ module Minigun
         consumed_str = format_number_fixed(total_consumed).rjust(8)
 
         line2_parts = [
-          "Produced: ",
+          'Produced: ',
           Theme.success,
           produced_str,
           Terminal::COLORS[:reset],
-          " | Consumed: ",
+          ' | Consumed: ',
           Theme.success,
           consumed_str,
           Terminal::COLORS[:reset]
@@ -96,12 +96,12 @@ module Minigun
       def render_table_header(terminal, x, y)
         # Headers with adjusted widths and alignment
         headers = [
-          { text: "STAGE", width: 20, align: :left },
-          { text: "", width: 2, align: :left },           # Status indicator (no label, just 1 char + spacing)
-          { text: "ITEMS", width: 8, align: :right },     # Right-align for numbers
-          { text: "THRU", width: 10, align: :right },     # Right-align for numbers
-          { text: "P50", width: 10, align: :right },      # Right-align for numbers
-          { text: "P99", width: 10, align: :right }       # Right-align for numbers
+          { text: 'STAGE', width: 20, align: :left },
+          { text: '', width: 2, align: :left },       # Status indicator (no label, just 1 char + spacing)
+          { text: 'ITEMS', width: 8, align: :right }, # Right-align for numbers
+          { text: 'THRU', width: 10, align: :right }, # Right-align for numbers
+          { text: 'P50', width: 10, align: :right },  # Right-align for numbers
+          { text: 'P99', width: 10, align: :right }   # Right-align for numbers
         ]
 
         x_pos = x + 2
@@ -116,7 +116,7 @@ module Minigun
         end
 
         # Separator line
-        separator = "─" * (@width - 4)
+        separator = '─' * (@width - 4)
         terminal.write_at(x + 2, y + 1, separator, color: Theme.border)
       end
 
@@ -155,7 +155,7 @@ module Minigun
           p50_text = "#{p50.round(1)}ms".rjust(10)
           terminal.write_at(x_pos, y, p50_text, color: latency_color(p50))
         else
-          terminal.write_at(x_pos, y, "-".rjust(10), color: Theme.muted)
+          terminal.write_at(x_pos, y, '-'.rjust(10), color: Theme.muted)
         end
         x_pos += 10
 
@@ -165,7 +165,7 @@ module Minigun
           p99_text = "#{p99.round(1)}ms".rjust(10)
           terminal.write_at(x_pos, y, p99_text, color: latency_color(p99))
         else
-          terminal.write_at(x_pos, y, "-".rjust(10), color: Theme.muted)
+          terminal.write_at(x_pos, y, '-'.rjust(10), color: Theme.muted)
         end
       end
 
@@ -225,7 +225,7 @@ module Minigun
       def truncate(text, max_length)
         return text if text.length <= max_length
 
-        text[0...(max_length - 2)] + ".."
+        "#{text[0...(max_length - 2)]}.."
       end
 
       def format_number(value)
@@ -239,7 +239,7 @@ module Minigun
       end
 
       def format_throughput_short(value)
-        return "0" if value == 0
+        return '0' if value == 0
 
         if value > 1000
           "#{(value / 1000.0).round(1)}K/s"
@@ -250,23 +250,23 @@ module Minigun
 
       # Format throughput with fixed width (always fits in 10 chars)
       def format_throughput_fixed(value)
-        return "0.00" if value == 0
+        return '0.00' if value == 0
 
         if value >= 1_000_000
-          format("%.2fM", value / 1_000_000.0)
+          format('%.2fM', value / 1_000_000.0)
         elsif value >= 1_000
-          format("%.2fK", value / 1_000.0)
+          format('%.2fK', value / 1_000.0)
         else
-          format("%.2f", value)
+          format('%.2f', value)
         end
       end
 
       # Format number with fixed width (always fits in 8 chars)
       def format_number_fixed(value)
         if value >= 1_000_000
-          format("%.2fM", value / 1_000_000.0)
+          format('%.2fM', value / 1_000_000.0)
         elsif value >= 1_000
-          format("%.2fK", value / 1_000.0)
+          format('%.2fK', value / 1_000.0)
         else
           value.to_s
         end

@@ -71,4 +71,3 @@ RSpec.describe Minigun::EndOfStage do
     end
   end
 end
-

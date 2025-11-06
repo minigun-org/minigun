@@ -54,7 +54,11 @@ RSpec.describe Minigun::Runner do
   describe '#run' do
     before do
       # Add a simple producer to the pipeline so it has something to run
-      pipeline.add_stage(:producer, :test_producer) { |output| output << 1; output << 2; output << 3 }
+      pipeline.add_stage(:producer, :test_producer) do |output|
+        output << 1
+        output << 2
+        output << 3
+      end
     end
 
     it 'executes the pipeline' do
@@ -182,7 +186,7 @@ RSpec.describe Minigun::Runner do
 
       before do
         # Add a stage that raises an error
-        error_pipeline.add_stage(:producer, :error_producer) do |output|
+        error_pipeline.add_stage(:producer, :error_producer) do |_output|
           raise StandardError, 'Pipeline error'
         end
       end
