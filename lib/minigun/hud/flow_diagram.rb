@@ -367,35 +367,32 @@ module Minigun
         end
       end
 
-      # Check if a stage is finished and return drain distance
-      # Returns nil if not draining, or an integer drain_distance if draining
-      def get_drain_distance(stage_data)
-        return nil unless stage_data && stage_data[:status] == :finished
+      # Get animation state for a stage (drain distance, flowing status, and offset)
+      # Returns [drain_distance, active, offset] tuple for rendering connections
+      def get_animation_state(stage_data)
+        # Default values if no stage data
+        return [nil, false, 0] unless stage_data
 
-        stage_name = stage_data[:stage_name]
+        # Calculate drain distance if stage is finished
+        drain_distance = if stage_data[:status] == :finished
+                           stage_name = stage_data[:stage_name]
+                           @finished_stages[stage_name] ||= @render_tick
+                           @render_tick - @finished_stages[stage_name]
+                         end
 
-        # Record when this stage finished (if not already recorded)
-        @finished_stages[stage_name] ||= @render_tick
+        # Check if connection is actively flowing (vs idle/drained)
+        active = stage_data[:status] == :running
 
-        # Calculate how far the drain has progressed (1 cell per render tick)
-        ticks_since_finished = @render_tick - @finished_stages[stage_name]
-        ticks_since_finished
-      end
+        # Get animation offset for staggering (O(1) hash lookup)
+        offset = if stage_data[:stage_name] && @cached_layout
+                   pos = @cached_layout[stage_data[:stage_name]]
+                   index = pos&.[](:animation_index) || 0
+                   -index
+                 else
+                   0
+                 end
 
-      # Check if connection has flowing animation (vs idle/drained state)
-      def connection_flowing?(stage_data)
-        stage_data[:status] == :running
-      end
-
-      # Get animation offset for a stage to stagger animations
-      # Returns negative of stage position index (0, -1, -2, -3, ...)
-      def animation_offset(stage_data)
-        return 0 unless stage_data && stage_data[:stage_name] && @cached_layout
-
-        # O(1) hash lookup of cached animation index
-        pos = @cached_layout[stage_data[:stage_name]]
-        index = pos&.[](:animation_index) || 0
-        -index
+        [drain_distance, active, offset]
       end
 
       # Draw a fan-out connection (one source to multiple targets)
@@ -403,9 +400,7 @@ module Minigun
         from_x = from_pos[:x] + from_pos[:width] / 2
         from_y = from_pos[:y] + from_pos[:height]
 
-        drain_distance = get_drain_distance(stage_data)
-        active = connection_flowing?(stage_data)
-        offset = animation_offset(stage_data)
+        drain_distance, active, offset = get_animation_state(stage_data)
 
         # Calculate split point (horizontal spine where fan-out occurs)
         split_y = from_y + 1
@@ -473,9 +468,7 @@ module Minigun
         to_x = to_pos[:x] + to_pos[:width] / 2
         to_y = to_pos[:y]
 
-        drain_distance = get_drain_distance(stage_data)
-        active = connection_flowing?(stage_data)
-        offset = animation_offset(stage_data)
+        drain_distance, active, offset = get_animation_state(stage_data)
 
         # Calculate merge point (where horizontal lines converge)
         # Place it 1 line above the target
@@ -560,9 +553,7 @@ module Minigun
         to_x = to_pos[:x] + to_pos[:width] / 2
         to_y = to_pos[:y]
 
-        drain_distance = get_drain_distance(stage_data)
-        active = connection_flowing?(stage_data)
-        offset = animation_offset(stage_data)
+        drain_distance, active, offset = get_animation_state(stage_data)
 
         # Distance counter starts at 0 from source
         distance = 0
