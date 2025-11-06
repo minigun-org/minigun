@@ -11,6 +11,7 @@ plan based on the current codebase state and TODOS.md.
 ### 0.1: Preview Readiness
 
 - [ ] Docs - mine the tmp/cursor-docs-cleanup folder for more ideas.
+- [ ] Docs - explain what a DAG is in fundamentals. then add DAG based explanations elsewhere
 - [ ] Cleanup accumulator vs. batch
 - [ ] thread/threads, fiber/fibers etc. as alias to pool methods if they don't exist on parent
 - [ ] Hooks
