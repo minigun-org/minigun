@@ -235,7 +235,7 @@ module Minigun
 
     # Total items across all stages
     def total_items
-      @stage_stats.values.sum(&:total_items)
+      @stage_stats.values.sum { |s| s.total_items }
     end
 
     # Total items produced (from source stages)
@@ -261,7 +261,7 @@ module Minigun
     def bottleneck
       return nil if @stage_stats.empty?
 
-      @stage_stats.values.min_by(&:throughput)
+      @stage_stats.values.min_by { |s| s.throughput }
     end
 
     # Get stats for stages in topological order

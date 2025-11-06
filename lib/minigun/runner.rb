@@ -125,7 +125,7 @@ module Minigun
       end
 
       # Log overall job statistics
-      total_items = @pipeline_stats.sum(&:total_produced)
+      total_items = @pipeline_stats.sum { |s| s.total_produced }
       overall_rate = total_items / [runtime / 60.0, 0.01].max # items/min
 
       log_debug "[Job:#{@job_id}] Total: #{total_items} items, #{overall_rate.round(2)} items/min"
