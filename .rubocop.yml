@@ -13,6 +13,14 @@ AllCops:
 Gemspec/RequiredRubyVersion:
   Enabled: false
 
+Layout/ClosingHeredocIndentation:
+  Exclude:
+    - 'spec/hud/**/*.rb'
+
+Layout/HeredocIndentation:
+  Exclude:
+    - 'spec/hud/**/*.rb'
+
 Layout/LineLength:
   Enabled: false
 
@@ -87,8 +95,7 @@ Style/ExplicitBlockArgument:
   Enabled: false
 
 Style/HashLikeCase:
-  Exclude:
-    - 'examples/**/*'
+  Enabled: false
 
 Style/ModuleFunction:
   EnforcedStyle: extend_self

@@ -1,6 +1,9 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+require_relative '../lib/minigun'
+require 'tempfile'
+
 # Example: Routing to Nested Pipeline Stages
 #
 # Demonstrates how parent pipeline stages can route directly to stages
@@ -10,10 +13,6 @@
 # - accumulator batches items and routes to :save (nested stage)
 # - :save is inside a process_per_batch nested pipeline
 # - Parent DAG includes nested stages, enabling direct routing
-
-require_relative '../lib/minigun'
-require 'tempfile'
-
 class RoutingToNestedStagesExample
   include Minigun::DSL
 
@@ -34,7 +33,7 @@ class RoutingToNestedStagesExample
     producer :gen do |output|
       5.times do |i|
         puts "[Producer] Generating item #{i + 1}"
-        output << i + 1
+        output << (i + 1)
       end
     end
 
@@ -48,42 +47,40 @@ class RoutingToNestedStagesExample
     process_per_batch(max: 2) do
       consumer :save do |batch|
         puts "[Consumer:save] (PID #{Process.pid}) Received batch: #{batch.inspect}"
-        
+
         # Write to temp file (fork-safe) - each item on its own line
         File.open(@temp_file.path, 'a') do |f|
           f.flock(File::LOCK_EX)
           batch.each { |item| f.puts(item) }
           f.flock(File::LOCK_UN)
         end
-        
+
         sleep 0.1 # Simulate work
       end
     end
 
     after_run do
       # Read fork results from temp file
-      if File.exist?(@temp_file.path)
-        @results = File.readlines(@temp_file.path).map(&:to_i)
-      end
+      @results = File.readlines(@temp_file.path).map(&:to_i) if File.exist?(@temp_file.path)
     end
   end
 end
 
 if __FILE__ == $PROGRAM_NAME
-  puts "=" * 60
-  puts "Example: Routing to Nested Pipeline Stages"
-  puts "=" * 60
+  puts '=' * 60
+  puts 'Example: Routing to Nested Pipeline Stages'
+  puts '=' * 60
 
   example = RoutingToNestedStagesExample.new
   begin
     example.run
 
-    puts "\n" + "=" * 60
-    puts "Results:"
+    puts "\n#{'=' * 60}"
+    puts 'Results:'
     puts "  Items processed: #{example.results.sort.inspect}"
-    puts "  Expected: [1, 2, 3, 4, 5]"
+    puts '  Expected: [1, 2, 3, 4, 5]'
     puts "  Status: #{example.results.sort == [1, 2, 3, 4, 5] ? '✓ SUCCESS' : '✗ FAILED'}"
-    puts "=" * 60
+    puts '=' * 60
   ensure
     example.cleanup
   end

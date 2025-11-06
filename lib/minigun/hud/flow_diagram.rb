@@ -1,17 +1,14 @@
 # frozen_string_literal: true
 
-require 'set'
-
 module Minigun
   module HUD
     # Renders pipeline DAG as animated ASCII flow diagram with boxes and connections
     class FlowDiagram
-
       def initialize(_frame_width, _frame_height)
         @animation_frame = 0
-        @render_tick = 0  # Counter for slowing down animation
-        @width = 0  # Actual width of diagram content
-        @height = 0  # Actual height of diagram content
+        @render_tick = 0 # Counter for slowing down animation
+        @width = 0 # Actual width of diagram content
+        @height = 0 # Actual height of diagram content
         @finished_stages = {} # Track when each stage finished {stage_name => render_tick}
       end
 
@@ -58,11 +55,11 @@ module Minigun
         end
 
         # Calculate actual diagram content height
-        unless @cached_layout.empty?
+        if @cached_layout.empty?
+          @height = 0
+        else
           max_y = @cached_layout.values.map { |pos| pos[:y] + pos[:height] }.max
           @height = max_y
-        else
-          @height = 0
         end
 
         # Return diagram dimensions
@@ -106,7 +103,7 @@ module Minigun
       def calculate_layout(stages, dag)
         layout = {}
         min_box_width = 14
-        box_height = 3  # 3 lines: top border, content, bottom border (with optional throughput)
+        box_height = 3 # 3 lines: top border, content, bottom border (with optional throughput)
         layer_height = 5  # Vertical spacing between layers (room for connection spine)
         box_spacing = 2   # Horizontal spacing between boxes
 
@@ -162,15 +159,15 @@ module Minigun
         end
 
         # Normalize: shift entire diagram left so leftmost item is at x=0
-        unless layout.empty?
+        if layout.empty?
+          @width = 0
+        else
           min_x = layout.values.map { |pos| pos[:x] }.min
-          layout.each { |name, pos| pos[:x] -= min_x }
+          layout.each_value { |pos| pos[:x] -= min_x }
 
           # Store actual diagram width
           max_x = layout.values.map { |pos| pos[:x] + pos[:width] }.max
           @width = max_x
-        else
-          @width = 0
         end
 
         layout
@@ -181,7 +178,7 @@ module Minigun
         stage_names = stages.map { |s| s[:stage_name] }
 
         # Return single vertical stack if no DAG info
-        return stage_names.map { |name| [name] } unless dag && dag[:edges]
+        return stage_names.zip unless dag && dag[:edges]
 
         # Build adjacency lists
         edges = dag[:edges] || []
@@ -237,17 +234,17 @@ module Minigun
         # BFS to assign depths
         queue = sources.select { |s| stage_names.include?(s) }.map { |s| [s, 0] }
 
-        while !queue.empty?
+        until queue.empty?
           stage, depth = queue.shift
 
           # Update depth if this path is longer
-          if !depths[stage] || depth > depths[stage]
-            depths[stage] = depth
+          next unless !depths[stage] || depth > depths[stage]
 
-            # Queue downstream stages
-            forward_edges[stage].each do |next_stage|
-              queue << [next_stage, depth + 1]
-            end
+          depths[stage] = depth
+
+          # Queue downstream stages
+          forward_edges[stage].each do |next_stage|
+            queue << [next_stage, depth + 1]
           end
         end
 
@@ -271,7 +268,7 @@ module Minigun
       def render_connections(terminal, layout, stages, dag, x_offset, y_offset)
         return unless dag && dag[:edges]
 
-        stage_map = stages.map { |s| [s[:stage_name], s] }.to_h
+        stage_map = stages.to_h { |s| [s[:stage_name], s] }
         stage_names = stages.map { |s| s[:stage_name] }
 
         # Bridge router stages to preserve connectivity
@@ -289,7 +286,7 @@ module Minigun
             router_outputs = all_edges.select { |e| e[:from] == edge[:to] }
             router_outputs.each do |router_edge|
               if stage_names.include?(router_edge[:to])
-                bridged_edges << { from: edge[:from], to: router_edge[:to] }
+                bridged_edges.push({ from: edge[:from], to: router_edge[:to] })
               end
             end
           elsif !from_visible && to_visible
@@ -297,7 +294,7 @@ module Minigun
             router_inputs = all_edges.select { |e| e[:to] == edge[:from] }
             router_inputs.each do |router_edge|
               if stage_names.include?(router_edge[:from])
-                bridged_edges << { from: router_edge[:from], to: edge[:to] }
+                bridged_edges.push({ from: router_edge[:from], to: edge[:to] })
               end
             end
           end
@@ -314,7 +311,7 @@ module Minigun
 
         # First pass: Render fan-out connections (one source to multiple targets)
         edges_by_source.each do |from_name, from_edges|
-          next if from_edges.size <= 1  # Skip single connections for now
+          next if from_edges.size <= 1 # Skip single connections for now
 
           from_pos = layout[from_name]
           next unless from_pos
@@ -323,7 +320,7 @@ module Minigun
           next unless stage_data
 
           target_names = from_edges.map { |e| e[:to] }
-          target_positions = target_names.map { |name| layout[name] }.compact
+          target_positions = target_names.filter_map { |name| layout[name] }
           next if target_positions.empty?
 
           render_fanout_connection(terminal, from_pos, target_positions, stage_data, x_offset, y_offset)
@@ -332,16 +329,17 @@ module Minigun
 
         # Second pass: Render fan-in connections (multiple sources to one target)
         edges_by_target.each do |to_name, to_edges|
-          next if to_edges.size <= 1  # Skip single connections for now
+          next if to_edges.size <= 1 # Skip single connections for now
 
           to_pos = layout[to_name]
           next unless to_pos
 
           source_names = to_edges.map { |e| e[:from] }
-          source_positions = source_names.zip(to_edges).map do |name, edge|
+          source_positions = source_names.zip(to_edges).filter_map do |name, edge|
             next if rendered_edges.include?(edge)
+
             layout[name]
-          end.compact
+          end
           next if source_positions.empty?
 
           # Get stage data from first source for color
@@ -397,7 +395,7 @@ module Minigun
 
       # Draw a fan-out connection (one source to multiple targets)
       def render_fanout_connection(terminal, from_pos, target_positions, stage_data, x_offset, y_offset)
-        from_x = from_pos[:x] + from_pos[:width] / 2
+        from_x = from_pos[:x] + (from_pos[:width] / 2)
         from_y = from_pos[:y] + from_pos[:height]
 
         drain_distance, active, offset = get_animation_state(stage_data)
@@ -414,7 +412,7 @@ module Minigun
         distance += 1
 
         # Get X positions of all targets (sorted)
-        target_xs = target_positions.map { |pos| pos[:x] + pos[:width] / 2 }.sort
+        target_xs = target_positions.map { |pos| pos[:x] + (pos[:width] / 2) }.sort
         leftmost_x = target_xs.first
         rightmost_x = target_xs.last
 
@@ -437,7 +435,7 @@ module Minigun
                         # Source position: cross if target below, t_up if not
                         has_center_target ? :cross : :t_up
                       else
-                        :horizontal  # Regular horizontal line
+                        :horizontal # Regular horizontal line
                       end
 
           char, color = Theme.animated_flow_char(char_type, spine_distance, @animation_frame + offset, active, drain_distance: drain_distance)
@@ -447,7 +445,7 @@ module Minigun
         # Draw vertical lines down to each target
         # Distance continues from spine position
         target_positions.each do |to_pos|
-          to_x = to_pos[:x] + to_pos[:width] / 2
+          to_x = to_pos[:x] + (to_pos[:width] / 2)
           to_y = to_pos[:y]
 
           # Calculate distance at spine for this target
@@ -465,7 +463,7 @@ module Minigun
 
       # Draw a fan-in connection (multiple sources to one target)
       def render_fanin_connection(terminal, source_positions, to_pos, stage_data, x_offset, y_offset)
-        to_x = to_pos[:x] + to_pos[:width] / 2
+        to_x = to_pos[:x] + (to_pos[:width] / 2)
         to_y = to_pos[:y]
 
         drain_distance, active, offset = get_animation_state(stage_data)
@@ -477,7 +475,7 @@ module Minigun
         # Get source X positions (sorted)
         source_data = source_positions.map do |pos|
           {
-            x: pos[:x] + pos[:width] / 2,
+            x: pos[:x] + (pos[:width] / 2),
             y: pos[:y] + pos[:height]
           }
         end.sort_by { |s| s[:x] }
@@ -547,10 +545,10 @@ module Minigun
       # Draw animated connection line between two boxes
       def render_connection_line(terminal, from_pos, to_pos, stage_data, x_offset, y_offset)
         # Connection from bottom center of from_box to top center of to_box
-        from_x = from_pos[:x] + from_pos[:width] / 2
+        from_x = from_pos[:x] + (from_pos[:width] / 2)
         from_y = from_pos[:y] + from_pos[:height]
 
-        to_x = to_pos[:x] + to_pos[:width] / 2
+        to_x = to_pos[:x] + (to_pos[:width] / 2)
         to_y = to_pos[:y]
 
         drain_distance, active, offset = get_animation_state(stage_data)
@@ -591,11 +589,6 @@ module Minigun
               terminal.write_at(x_offset + x, y_offset + mid_y, char, color: color)
               distance += 1
             end
-
-            # Second corner
-            char, color = Theme.animated_flow_char(corner2_type, distance, @animation_frame + offset, active, drain_distance: drain_distance)
-            terminal.write_at(x_offset + to_x, y_offset + mid_y, char, color: color)
-            distance += 1
           else
             # Going left: use ┘ and ┌
             corner1_type = :corner_br
@@ -612,12 +605,12 @@ module Minigun
               terminal.write_at(x_offset + x, y_offset + mid_y, char, color: color)
               distance += 1
             end
-
-            # Second corner
-            char, color = Theme.animated_flow_char(corner2_type, distance, @animation_frame + offset, active, drain_distance: drain_distance)
-            terminal.write_at(x_offset + to_x, y_offset + mid_y, char, color: color)
-            distance += 1
           end
+
+          # Second corner
+          char, color = Theme.animated_flow_char(corner2_type, distance, @animation_frame + offset, active, drain_distance: drain_distance)
+          terminal.write_at(x_offset + to_x, y_offset + mid_y, char, color: color)
+          distance += 1
 
           # Second vertical segment (drop to target)
           ((mid_y + 1)...to_y).each do |y|

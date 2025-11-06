@@ -139,7 +139,7 @@ module Minigun
       end
     rescue EOFError, IOError
       # Pipe closed, return EndOfStage
-      return EndOfStage.new(@stage)
+      EndOfStage.new(@stage)
     end
   end
 
@@ -156,23 +156,29 @@ module Minigun
     def <<(item)
       # Send result with routing target back to parent via IPC
       begin
-        Marshal.dump({
-          type: :routed_result,
-          target: @target_stage,
-          result: item
-        }, @pipe_writer)
+        Marshal.dump(
+          {
+            type: :routed_result,
+            target: @target_stage,
+            result: item
+          },
+          @pipe_writer
+        )
         @pipe_writer.flush
         @stage_stats&.increment_produced
       rescue TypeError, ArgumentError => e
         Minigun.logger.warn "[Minigun] Cannot serialize routed result for IPC: #{e.message}"
         begin
-          Marshal.dump({
-            type: :serialization_error,
-            error: "Cannot serialize result: #{e.message}",
-            item_type: item.class.to_s
-          }, @pipe_writer)
+          Marshal.dump(
+            {
+              type: :serialization_error,
+              error: "Cannot serialize result: #{e.message}",
+              item_type: item.class.to_s
+            },
+            @pipe_writer
+          )
           @pipe_writer.flush
-        rescue
+        rescue StandardError
           raise
         end
       end
@@ -180,6 +186,7 @@ module Minigun
     end
   end
 
+  # Output queue wrapper for IPC fork executors that sends items via pipe
   class IpcOutputQueue
     def initialize(pipe_writer, stage_stats)
       @pipe_writer = pipe_writer
@@ -206,13 +213,16 @@ module Minigun
         Minigun.logger.warn "[Minigun] Cannot serialize result for IPC: #{e.message}. Result type: #{item.class}"
         # Send an error notification instead
         begin
-          Marshal.dump({
-            type: :serialization_error,
-            error: "Cannot serialize result: #{e.message}",
-            item_type: item.class.to_s
-          }, @pipe_writer)
+          Marshal.dump(
+            {
+              type: :serialization_error,
+              error: "Cannot serialize result: #{e.message}",
+              item_type: item.class.to_s
+            },
+            @pipe_writer
+          )
           @pipe_writer.flush
-        rescue
+        rescue StandardError
           # If we can't even send the error, pipe is broken
           raise
         end

@@ -37,4 +37,3 @@ if __FILE__ == $PROGRAM_NAME
   example.run
   puts "Completed #{example.completed} tasks"
 end
-

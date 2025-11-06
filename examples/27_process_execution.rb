@@ -43,7 +43,6 @@ if __FILE__ == $PROGRAM_NAME
     pids = example.results.map { |r| r[:pid] }.uniq
     puts "Used #{pids.size} different processes"
   else
-    puts "Process isolation (skipped - fork not available)"
+    puts 'Process isolation (skipped - fork not available)'
   end
 end
-

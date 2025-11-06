@@ -13,7 +13,6 @@ require_relative '../lib/minigun'
 # - Multiple producers feed into single COW fork stage
 # - Aggregator receives items from all producers
 # - COW-shared inputs, no output (terminal consumer)
-
 class CowFanInExample
   include Minigun::DSL
 
@@ -25,27 +24,27 @@ class CowFanInExample
   end
 
   def cleanup
-    File.unlink(@results_file) if File.exist?(@results_file)
+    FileUtils.rm_f(@results_file)
   end
 
   pipeline do
     # Three producers generating data in parallel
     producer :producer_a do |output|
-      puts "[ProducerA] Generating items with prefix A"
+      puts '[ProducerA] Generating items with prefix A'
       4.times do |i|
         output << { id: "A#{i + 1}", value: i + 1, source: 'A' }
       end
     end
 
     producer :producer_b do |output|
-      puts "[ProducerB] Generating items with prefix B"
+      puts '[ProducerB] Generating items with prefix B'
       4.times do |i|
         output << { id: "B#{i + 1}", value: i + 1, source: 'B' }
       end
     end
 
     producer :producer_c do |output|
-      puts "[ProducerC] Generating items with prefix C"
+      puts '[ProducerC] Generating items with prefix C'
       4.times do |i|
         output << { id: "C#{i + 1}", value: i + 1, source: 'C' }
       end
@@ -81,17 +80,17 @@ class CowFanInExample
 end
 
 if __FILE__ == $PROGRAM_NAME
-  puts "=" * 80
-  puts "Example: COW Fork Fan-In Pattern"
-  puts "=" * 80
-  puts ""
+  puts '=' * 80
+  puts 'Example: COW Fork Fan-In Pattern'
+  puts '=' * 80
+  puts ''
 
   example = CowFanInExample.new
   begin
     example.run
 
-    puts "\n" + "=" * 80
-    puts "Results:"
+    puts "\n#{'=' * 80}"
+    puts 'Results:'
     puts "  Total items processed: #{example.results.size} (expected: 12)"
 
     by_source = example.results.group_by { |r| r[:source] }
@@ -108,21 +107,21 @@ if __FILE__ == $PROGRAM_NAME
               by_source['C']&.size == 4
 
     puts "  Status: #{success ? '✓ SUCCESS' : '✗ FAILED'}"
-    puts "=" * 80
-    puts ""
-    puts "Key Points:"
-    puts "  - Fan-in from 3 producers to 1 COW aggregator"
-    puts "  - All producers run in master process (inline)"
-    puts "  - Aggregator receives merged stream via single input queue"
-    puts "  - COW forks handle items (one fork per item)"
-    puts "  - No input serialization (COW-shared)"
-    puts "  - Terminal consumer (no output serialization)"
-    puts "  - Useful for: CPU-intensive aggregation with large inputs"
-    puts "  - Processing order is non-deterministic (interleaved)"
-    puts "=" * 80
+    puts '=' * 80
+    puts ''
+    puts 'Key Points:'
+    puts '  - Fan-in from 3 producers to 1 COW aggregator'
+    puts '  - All producers run in master process (inline)'
+    puts '  - Aggregator receives merged stream via single input queue'
+    puts '  - COW forks handle items (one fork per item)'
+    puts '  - No input serialization (COW-shared)'
+    puts '  - Terminal consumer (no output serialization)'
+    puts '  - Useful for: CPU-intensive aggregation with large inputs'
+    puts '  - Processing order is non-deterministic (interleaved)'
+    puts '=' * 80
   rescue NotImplementedError => e
     puts "\nForking not available on this platform: #{e.message}"
-    puts "(This is expected on Windows)"
+    puts '(This is expected on Windows)'
   ensure
     example.cleanup
   end

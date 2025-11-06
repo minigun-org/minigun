@@ -20,7 +20,7 @@ class TimedBatchStage < Minigun::Stage
     require_relative '../lib/minigun/queue_wrappers'
 
     # Get stage stats for tracking
-    stage_stats = stage_ctx.stage_stats
+    stage_ctx.stage_stats
 
     # Create wrapped output queue using consolidated method
     wrapped_output = create_output_queue(stage_ctx)

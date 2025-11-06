@@ -262,8 +262,8 @@ RSpec.describe 'Yield Syntax Support' do
       end
 
       example_class.new.run
-      expect(even_results.sort).to eq([0, 4, 8])  # 0*2, 2*2, 4*2
-      expect(odd_results.sort).to eq([3, 9])  # 1*3, 3*3
+      expect(even_results.sort).to eq([0, 4, 8]) # 0*2, 2*2, 4*2
+      expect(odd_results.sort).to eq([3, 9]) # 1*3, 3*3
     end
   end
 

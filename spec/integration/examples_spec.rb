@@ -1430,7 +1430,7 @@ RSpec.describe 'Examples Integration' do
       ipc_example.results.each_with_index do |result, idx|
         expect(result[:id]).to eq(idx)
         expect(result[:value]).to eq(idx * 10)
-        expect(result[:computed]).to eq((idx * 10) ** 2)
+        expect(result[:computed]).to eq((idx * 10)**2)
         expect(result).to have_key(:pid)
       end
     end
@@ -1506,9 +1506,7 @@ RSpec.describe 'Examples Integration' do
       expect(example.results.map { |r| r[:id] }.sort).to eq((1..8).to_a)
 
       # All results should have worker_pid from IPC fork
-      example.results.each do |result|
-        expect(result).to have_key(:worker_pid)
-      end
+      expect(example.results).to all(have_key(:worker_pid))
     end
   end
 
@@ -1543,9 +1541,7 @@ RSpec.describe 'Examples Integration' do
       expect(example.results.map { |r| r[:id] }.sort).to eq((1..8).to_a)
 
       # All results should have worker_pid from COW fork
-      example.results.each do |result|
-        expect(result).to have_key(:worker_pid)
-      end
+      expect(example.results).to all(have_key(:worker_pid))
     end
   end
 
@@ -1557,7 +1553,10 @@ RSpec.describe 'Examples Integration' do
 
       # Use a timeout to prevent hanging
       result = nil
-      thread = Thread.new { example.run; result = example.results }
+      thread = Thread.new do
+        example.run
+        result = example.results
+      end
 
       unless thread.join(10)
         thread.kill
@@ -1910,7 +1909,7 @@ RSpec.describe 'Examples Integration' do
 
       insert_example = RerouteCowInsertExample.new
       insert_example.run
-      expect(insert_example.results.map { |r| r[:value] }.sort).to eq([1, 64, 729, 4096, 15625])
+      expect(insert_example.results.map { |r| r[:value] }.sort).to eq([1, 64, 729, 4096, 15_625])
       insert_example.cleanup
     end
   end
@@ -2051,6 +2050,19 @@ RSpec.describe 'Examples Integration' do
       hud_demo_code = File.read(File.expand_path('../../examples/hud_demo.rb', __dir__))
       expect(hud_demo_code).to include('class HudDemoTask')
       expect(hud_demo_code).to include('Minigun::HUD.run_with_hud')
+    end
+  end
+
+  describe 'hud_complex_demo.rb' do
+    it 'defines HudComplexDemoTask for complex HUD demonstration' do
+      # HUD complex demo runs with background HUD
+      # Just verify the file defines the expected class and patterns
+      demo_code = File.read(File.expand_path('../../examples/hud_complex_demo.rb', __dir__))
+      expect(demo_code).to include('class HudComplexDemoTask')
+      expect(demo_code).to include('routing: :broadcast')
+      expect(demo_code).to include('fast_path')
+      expect(demo_code).to include('medium_path')
+      expect(demo_code).to include('slow_path')
     end
   end
 

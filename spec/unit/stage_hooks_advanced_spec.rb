@@ -434,7 +434,7 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
       pipeline.run
 
       expect(pipeline.results.size).to eq(10)
-      expect(pipeline.setup_called).to eq(true) # Stage setup was called
+      expect(pipeline.setup_called).to be(true) # Stage setup was called
     end
   end
 end

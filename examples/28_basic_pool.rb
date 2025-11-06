@@ -39,4 +39,3 @@ if __FILE__ == $PROGRAM_NAME
   puts "Processed #{example.results.size} items with 3-worker pool"
   puts "Results: #{example.results.sort.first(5).inspect}..."
 end
-

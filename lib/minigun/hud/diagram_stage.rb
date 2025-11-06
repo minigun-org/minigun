@@ -21,9 +21,9 @@ module Minigun
         status = determine_status(stage_data)
 
         # Truncate name to fit in box
-        max_name_len = @width - 4  # Leave room for icon and padding
+        max_name_len = @width - 4 # Leave room for icon and padding
         display_name = if @name.to_s.length > max_name_len
-                         @name.to_s[0...(max_name_len - 1)] + "…"
+                         "#{@name.to_s[0...(max_name_len - 1)]}…"
                        else
                          @name.to_s
                        end
@@ -42,18 +42,22 @@ module Minigun
                 end
 
         # Draw top border (use consistent color)
-        terminal.write_at(x_offset + @x, y_offset + @y,
-                         "┌" + ("─" * (@width - 2)) + "┐",
-                         color: color)
+        terminal.write_at(
+          x_offset + @x, y_offset + @y,
+          "┌#{'─' * (@width - 2)}┐",
+          color: color
+        )
 
         # Middle line with content
         content = "#{icon} #{display_name}#{status_indicator}".strip
         padding_left = [(@width - content.length - 2) / 2, 1].max
         padding_right = [@width - content.length - padding_left - 2, 1].max
 
-        terminal.write_at(x_offset + @x, y_offset + @y + 1,
-                         "│" + (" " * padding_left) + content + (" " * padding_right) + "│",
-                         color: color)
+        terminal.write_at(
+          x_offset + @x, y_offset + @y + 1,
+          "│#{' ' * padding_left}#{content}#{' ' * padding_right}│",
+          color: color
+        )
 
         # Bottom border with optional throughput
         bottom_border = format_bottom_border(stage_data)
@@ -67,14 +71,15 @@ module Minigun
         return :bottleneck if stage_data[:is_bottleneck]
         return :active if stage_data[:throughput] && stage_data[:throughput] > 0
         return :done if stage_data[:status] == :finished
+
         :idle
       end
 
       def status_icon(status)
         case status
-        when :bottleneck then "⚠"
-        when :error then "✗"
-        else ""
+        when :bottleneck then '⚠'
+        when :error then '✗'
+        else ''
         end
       end
 
@@ -96,10 +101,10 @@ module Minigun
           left_dashes = total_dashes / 2
           right_dashes = total_dashes - left_dashes
 
-          "└" + ("─" * left_dashes) + content + ("─" * right_dashes) + "┘"
+          "└#{'─' * left_dashes}#{content}#{'─' * right_dashes}┘"
         else
           # Plain bottom border
-          "└" + ("─" * (@width - 2)) + "┘"
+          "└#{'─' * (@width - 2)}┘"
         end
       end
     end

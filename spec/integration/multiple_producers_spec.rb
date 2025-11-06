@@ -132,7 +132,7 @@ RSpec.describe 'Multiple Producers' do
       # Should have stats for both producers (look up by stage object)
       fast_producer = pipeline.find_stage(:fast_producer)
       slow_producer = pipeline.find_stage(:slow_producer)
-      
+
       fast_stats = stats.stage_stats[fast_producer]
       slow_stats = stats.stage_stats[slow_producer]
 

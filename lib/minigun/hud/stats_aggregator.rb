@@ -39,13 +39,16 @@ module Minigun
             start_time: stage_stats.start_time,
             end_time: stage_stats.end_time,
             status: is_finished ? :finished : :running,
-            latency: stage_stats.latency_data? ? {
-              p50: stage_stats.p50 * 1000, # Convert to ms
-              p90: stage_stats.p90 * 1000,
-              p95: stage_stats.p95 * 1000,
-              p99: stage_stats.p99 * 1000,
-              samples: stage_stats.latency_samples.size
-            } : nil
+            # Convert to ms
+            latency: if stage_stats.latency_data?
+                       {
+                         p50: stage_stats.p50 * 1000, # Convert to ms
+                         p90: stage_stats.p90 * 1000,
+                         p95: stage_stats.p95 * 1000,
+                         p99: stage_stats.p99 * 1000,
+                         samples: stage_stats.latency_samples.size
+                       }
+                     end
           }
         end
 
@@ -61,10 +64,12 @@ module Minigun
           throughput: stats.throughput,
           stages: stages_data,
           dag: dag_info,
-          bottleneck: bottleneck_stage ? {
-            stage: bottleneck_stage.stage_name,
-            throughput: bottleneck_stage.throughput
-          } : nil,
+          bottleneck: if bottleneck_stage
+                        {
+                          stage: bottleneck_stage.stage_name,
+                          throughput: bottleneck_stage.throughput
+                        }
+                      end,
           last_update: @last_update = Time.now
         }
       end

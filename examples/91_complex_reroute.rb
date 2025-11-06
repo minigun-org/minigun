@@ -28,7 +28,7 @@ class ComplexRerouteExample
 
     # Merger stage receives from BOTH producers
     # This demonstrates a stage with multiple upstreams
-    processor :merger, from: [:producer_a, :producer_b] do |item, output|
+    processor :merger, from: %i[producer_a producer_b] do |item, output|
       merged = item.merge(merged_at: Time.now.to_f)
       puts "[Merger] Merged item from #{item[:source]}: #{item[:value]}"
       output << merged
@@ -42,7 +42,7 @@ class ComplexRerouteExample
     end
 
     # Collector receives from both merger and a_only
-    consumer :collect, from: [:merger, :a_only] do |item|
+    consumer :collect, from: %i[merger a_only] do |item|
       puts "[Collect] Received: source=#{item[:source]}, value=#{item[:value]}, " \
            "processed_by=#{item[:processed_by] || 'merger'}"
       @results << item
@@ -86,9 +86,9 @@ class RerouteBothUpstreamsExample < ComplexRerouteExample
 end
 
 if __FILE__ == $PROGRAM_NAME
-  puts "=" * 80
-  puts "Complex Reroute Example: Multiple Upstreams"
-  puts "=" * 80
+  puts '=' * 80
+  puts 'Complex Reroute Example: Multiple Upstreams'
+  puts '=' * 80
 
   puts "\n--- Base Pipeline ---"
   puts 'Flow:'
@@ -100,34 +100,34 @@ if __FILE__ == $PROGRAM_NAME
   puts "\nResults: #{base.results.size} items"
   puts "  From merger: #{base.results.count { |r| !r[:processed_by] }}"
   puts "  From a_only: #{base.results.count { |r| r[:processed_by] == 'a_only' }}"
-  puts "Expected: 9 total (6 from merger, 3 from a_only)"
+  puts 'Expected: 9 total (6 from merger, 3 from a_only)'
 
-  puts "\n" + "=" * 80
-  puts "--- Reroute One Upstream (merger keeps running) ---"
-  puts "Rerouting: producer_a away from merger"
-  puts "Result: merger still receives from producer_b!"
+  puts "\n#{'=' * 80}"
+  puts '--- Reroute One Upstream (merger keeps running) ---'
+  puts 'Rerouting: producer_a away from merger'
+  puts 'Result: merger still receives from producer_b!'
   reroute_one = RerouteOneUpstreamExample.new
   reroute_one.run
   puts "\nResults: #{reroute_one.results.size} items"
   puts "  From merger: #{reroute_one.results.count { |r| !r[:processed_by] }}"
   puts "  From a_only: #{reroute_one.results.count { |r| r[:processed_by] == 'a_only' }}"
-  puts "Expected: 6 total (3 from merger via producer_b, 3 from a_only)"
+  puts 'Expected: 6 total (3 from merger via producer_b, 3 from a_only)'
 
-  puts "\n" + "=" * 80
-  puts "--- Reroute Both Upstreams (merger shuts down) ---"
-  puts "Rerouting: both producers away from merger"
-  puts "Result: merger has NO upstreams, shuts down immediately!"
+  puts "\n#{'=' * 80}"
+  puts '--- Reroute Both Upstreams (merger shuts down) ---'
+  puts 'Rerouting: both producers away from merger'
+  puts 'Result: merger has NO upstreams, shuts down immediately!'
   reroute_both = RerouteBothUpstreamsExample.new
   reroute_both.run
   puts "\nResults: #{reroute_both.results.size} items"
   puts "  Direct from producers: #{reroute_both.results.count { |r| !r[:merged_at] && !r[:processed_by] }}"
-  puts "Expected: 6 total (all direct from producers, merger never ran)"
+  puts 'Expected: 6 total (all direct from producers, merger never ran)'
 
-  puts "\n" + "=" * 80
-  puts "Key Insights"
-  puts "=" * 80
-  puts "✓ Stages with multiple upstreams: only shut down when ALL upstreams are gone"
-  puts "✓ Rerouting automatically applies await: false to fully disconnected stages"
-  puts "✓ No manual await: false needed in base class - handled automatically!"
-  puts "✓ This enables flexible routing patterns without worrying about orphaned stages"
+  puts "\n#{'=' * 80}"
+  puts 'Key Insights'
+  puts '=' * 80
+  puts '✓ Stages with multiple upstreams: only shut down when ALL upstreams are gone'
+  puts '✓ Rerouting automatically applies await: false to fully disconnected stages'
+  puts '✓ No manual await: false needed in base class - handled automatically!'
+  puts '✓ This enables flexible routing patterns without worrying about orphaned stages'
 end

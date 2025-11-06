@@ -40,4 +40,3 @@ if __FILE__ == $PROGRAM_NAME
   puts "Processed: #{processor.processed_count} items"
   puts "Results: #{processor.results.map { |r| r[:result] }.join(', ')}"
 end
-

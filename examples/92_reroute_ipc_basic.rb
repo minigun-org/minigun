@@ -16,7 +16,7 @@ class RerouteIpcBasicExample
   end
 
   def cleanup
-    File.unlink(@results_file) if File.exist?(@results_file)
+    FileUtils.rm_f(@results_file)
   end
 
   pipeline do
@@ -84,51 +84,51 @@ class RerouteIpcInsertExample < RerouteIpcBasicExample
 end
 
 if __FILE__ == $PROGRAM_NAME
-  puts "=" * 80
-  puts "Basic Reroute with IPC Fork Examples"
-  puts "=" * 80
-  puts ""
+  puts '=' * 80
+  puts 'Basic Reroute with IPC Fork Examples'
+  puts '=' * 80
+  puts ''
 
   begin
-    puts "--- Base Pipeline (IPC fork) ---"
-    puts "Flow: generate -> double (IPC) -> collect (IPC)"
+    puts '--- Base Pipeline (IPC fork) ---'
+    puts 'Flow: generate -> double (IPC) -> collect (IPC)'
     base = RerouteIpcBasicExample.new
     base.run
     puts "Results: #{base.results.map { |r| r[:value] }.inspect}"
-    puts "Expected: [2, 4, 6, 8, 10]"
+    puts 'Expected: [2, 4, 6, 8, 10]'
     success = base.results.map { |r| r[:value] }.sort == [2, 4, 6, 8, 10]
-    puts success ? "✓ PASS" : "✗ FAIL"
+    puts success ? '✓ PASS' : '✗ FAIL'
     base.cleanup
 
     puts "\n--- Skip IPC Stage (Reroute) ---"
-    puts "Flow: generate -> collect (IPC) [skips double]"
+    puts 'Flow: generate -> collect (IPC) [skips double]'
     skip = RerouteIpcSkipExample.new
     skip.run
     puts "Results: #{skip.results.map { |r| r[:value] }.inspect}"
-    puts "Expected: [1, 2, 3, 4, 5]"
+    puts 'Expected: [1, 2, 3, 4, 5]'
     success = skip.results.map { |r| r[:value] }.sort == [1, 2, 3, 4, 5]
-    puts success ? "✓ PASS" : "✗ FAIL"
+    puts success ? '✓ PASS' : '✗ FAIL'
     skip.cleanup
 
     puts "\n--- Insert IPC Stage (Reroute) ---"
-    puts "Flow: generate -> double (IPC) -> triple (IPC) -> collect (IPC)"
+    puts 'Flow: generate -> double (IPC) -> triple (IPC) -> collect (IPC)'
     insert = RerouteIpcInsertExample.new
     insert.run
     puts "Results: #{insert.results.map { |r| r[:value] }.inspect}"
-    puts "Expected: [6, 12, 18, 24, 30] (double then triple)"
+    puts 'Expected: [6, 12, 18, 24, 30] (double then triple)'
     success = insert.results.map { |r| r[:value] }.sort == [6, 12, 18, 24, 30]
-    puts success ? "✓ PASS" : "✗ FAIL"
+    puts success ? '✓ PASS' : '✗ FAIL'
     insert.cleanup
 
-    puts "\n" + "=" * 80
-    puts "Key Points:"
-    puts "  - reroute_stage works with IPC fork executors"
-    puts "  - Can skip IPC fork stages"
-    puts "  - Can insert new IPC fork stages in the flow"
-    puts "  - Rerouting preserves fork isolation and serialization"
-    puts "=" * 80
+    puts "\n#{'=' * 80}"
+    puts 'Key Points:'
+    puts '  - reroute_stage works with IPC fork executors'
+    puts '  - Can skip IPC fork stages'
+    puts '  - Can insert new IPC fork stages in the flow'
+    puts '  - Rerouting preserves fork isolation and serialization'
+    puts '=' * 80
   rescue NotImplementedError => e
     puts "\nForking not available on this platform: #{e.message}"
-    puts "(This is expected on Windows)"
+    puts '(This is expected on Windows)'
   end
 end

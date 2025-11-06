@@ -16,7 +16,7 @@ class RerouteMixedExecutorsExample
   end
 
   def cleanup
-    File.unlink(@results_file) if File.exist?(@results_file)
+    FileUtils.rm_f(@results_file)
   end
 
   pipeline do
@@ -102,61 +102,61 @@ class RerouteReverseOrderExample < RerouteMixedExecutorsExample
 end
 
 if __FILE__ == $PROGRAM_NAME
-  puts "=" * 80
-  puts "Mixed Executor Rerouting Examples"
-  puts "=" * 80
-  puts ""
+  puts '=' * 80
+  puts 'Mixed Executor Rerouting Examples'
+  puts '=' * 80
+  puts ''
 
   begin
-    puts "--- Base Pipeline (Mixed Executors) ---"
-    puts "Flow: generate (inline) -> add_ten (threads) -> multiply_two (IPC) -> collect (COW)"
+    puts '--- Base Pipeline (Mixed Executors) ---'
+    puts 'Flow: generate (inline) -> add_ten (threads) -> multiply_two (IPC) -> collect (COW)'
     base = RerouteMixedExecutorsExample.new
     base.run
     puts "Results: #{base.results.map { |r| r[:value] }.inspect}"
-    puts "Expected: [22, 24, 26, 28, 30, 32] ((x + 10) * 2)"
+    puts 'Expected: [22, 24, 26, 28, 30, 32] ((x + 10) * 2)'
     success = base.results.map { |r| r[:value] }.sort == [22, 24, 26, 28, 30, 32]
-    puts success ? "✓ PASS" : "✗ FAIL"
+    puts success ? '✓ PASS' : '✗ FAIL'
     base.cleanup
 
     puts "\n--- Skip Thread Stage (Reroute) ---"
-    puts "Flow: generate (inline) -> multiply_two (IPC) -> collect (COW)"
+    puts 'Flow: generate (inline) -> multiply_two (IPC) -> collect (COW)'
     skip_thread = RerouteSkipThreadExample.new
     skip_thread.run
     puts "Results: #{skip_thread.results.map { |r| r[:value] }.inspect}"
-    puts "Expected: [2, 4, 6, 8, 10, 12] (x * 2)"
+    puts 'Expected: [2, 4, 6, 8, 10, 12] (x * 2)'
     success = skip_thread.results.map { |r| r[:value] }.sort == [2, 4, 6, 8, 10, 12]
-    puts success ? "✓ PASS" : "✗ FAIL"
+    puts success ? '✓ PASS' : '✗ FAIL'
     skip_thread.cleanup
 
     puts "\n--- Skip IPC Stage (Reroute) ---"
-    puts "Flow: generate (inline) -> add_ten (threads) -> collect (COW)"
+    puts 'Flow: generate (inline) -> add_ten (threads) -> collect (COW)'
     skip_ipc = RerouteSkipIpcExample.new
     skip_ipc.run
     puts "Results: #{skip_ipc.results.map { |r| r[:value] }.inspect}"
-    puts "Expected: [11, 12, 13, 14, 15, 16] (x + 10)"
+    puts 'Expected: [11, 12, 13, 14, 15, 16] (x + 10)'
     success = skip_ipc.results.map { |r| r[:value] }.sort == [11, 12, 13, 14, 15, 16]
-    puts success ? "✓ PASS" : "✗ FAIL"
+    puts success ? '✓ PASS' : '✗ FAIL'
     skip_ipc.cleanup
 
     puts "\n--- Reverse Order (Reroute) ---"
-    puts "Flow: generate -> subtract_five (COW) -> multiply_two (IPC) -> add_ten (threads) -> collect (COW)"
+    puts 'Flow: generate -> subtract_five (COW) -> multiply_two (IPC) -> add_ten (threads) -> collect (COW)'
     reverse = RerouteReverseOrderExample.new
     reverse.run
     puts "Results: #{reverse.results.map { |r| r[:value] }.inspect}"
-    puts "Expected: [2, 4, 6, 8, 10, 12] ((x - 5) * 2 + 10)"
+    puts 'Expected: [2, 4, 6, 8, 10, 12] ((x - 5) * 2 + 10)'
     success = reverse.results.map { |r| r[:value] }.sort == [2, 4, 6, 8, 10, 12]
-    puts success ? "✓ PASS" : "✗ FAIL"
+    puts success ? '✓ PASS' : '✗ FAIL'
     reverse.cleanup
 
-    puts "\n" + "=" * 80
-    puts "Key Points:"
-    puts "  - reroute_stage works across different executor types"
-    puts "  - Can route inline -> IPC, threads -> COW, etc."
-    puts "  - Rerouting preserves executor semantics (isolation, serialization)"
-    puts "  - Enables flexible pipeline composition with mixed executors"
-    puts "=" * 80
+    puts "\n#{'=' * 80}"
+    puts 'Key Points:'
+    puts '  - reroute_stage works across different executor types'
+    puts '  - Can route inline -> IPC, threads -> COW, etc.'
+    puts '  - Rerouting preserves executor semantics (isolation, serialization)'
+    puts '  - Enables flexible pipeline composition with mixed executors'
+    puts '=' * 80
   rescue NotImplementedError => e
     puts "\nForking not available on this platform: #{e.message}"
-    puts "(This is expected on Windows)"
+    puts '(This is expected on Windows)'
   end
 end
