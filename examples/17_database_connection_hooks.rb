@@ -74,7 +74,7 @@ class DatabaseConnectionExample
     # Accumulator batches items
     accumulator :batch, max_size: 5
 
-    # Use process_per_batch to process batches
+    # Use cow_fork to process batches
     cow_fork(2) do
       consumer :process_users do |batch|
         batch.each do |user_id|

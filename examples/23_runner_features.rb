@@ -33,7 +33,7 @@ class RunnerFeaturesExample
       output << result
     end
 
-    # Use accumulator + process_per_batch to see process title in action
+    # Use accumulator + cow_fork to see process title in action
     accumulator :batch, max_size: 5
 
     cow_fork(2) do

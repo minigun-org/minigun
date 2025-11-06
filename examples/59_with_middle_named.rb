@@ -50,7 +50,7 @@ class WithMiddleNamedExample
   end
 end
 
-puts 'Testing: threads + batch + process_per_batch + named + threads(consumer)'
+puts 'Testing: thread_pool + batch + cow_fork + named + thread_pool(consumer)'
 pipeline = WithMiddleNamedExample.new
 pipeline.run
 puts "Results: #{pipeline.results.size} items"

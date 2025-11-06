@@ -8,7 +8,7 @@
 #
 # In this example:
 # - accumulator batches items and routes to :save (nested stage)
-# - :save is inside a process_per_batch nested pipeline
+# - :save is inside a cow_fork nested pipeline
 # - Parent DAG includes nested stages, enabling direct routing
 
 require_relative '../lib/minigun'

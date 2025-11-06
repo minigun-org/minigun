@@ -2,7 +2,7 @@
 # frozen_string_literal: true
 
 # Example 58: Add final threads block
-# Test if threads block after process_per_batch causes issues
+# Test if threads block after cow_fork causes issues
 
 require_relative '../lib/minigun'
 
@@ -44,7 +44,7 @@ class WithFinalThreadsExample
   end
 end
 
-puts 'Testing: threads + batch + process_per_batch + threads(consumer)'
+puts 'Testing: threads + batch + cow_fork + threads(consumer)'
 pipeline = WithFinalThreadsExample.new
 pipeline.run
 puts "Results: #{pipeline.results.size} items"

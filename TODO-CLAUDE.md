@@ -114,16 +114,6 @@ Minigun is a high-performance data processing pipeline framework for Ruby with s
   - Handle pipe failures gracefully
   - Stats reporting back to parent process via IPC
 
-- [ ] **Execution Context Improvements**
-  - Implement proposed DSL:
-    ```ruby
-    threads(10) do ... end
-    processes(10) do ... end
-    ractors(10) do ... end
-    thread_per_batch(max: 10) do ... end
-    process_per_batch(max: 10) do ... end
-    ractor_per_batch(max: 10) do ... end
-    ```
 #### 1.2 Error Handling & Reliability
 **Priority: HIGH**
 

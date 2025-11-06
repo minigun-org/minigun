@@ -2,7 +2,7 @@
 # frozen_string_literal: true
 
 # Example 57: Threads + Batch + Process Per Batch
-# Add process_per_batch to see if this breaks it
+# Add cow_fork to see if this breaks it
 
 require_relative '../lib/minigun'
 
@@ -42,7 +42,7 @@ class ThreadsBatchProcessBatchExample
   end
 end
 
-puts 'Testing: threads + batch + process_per_batch + consumer'
+puts 'Testing: threads + batch + cow_fork + consumer'
 pipeline = ThreadsBatchProcessBatchExample.new
 pipeline.run
 puts "Results: #{pipeline.results.size} items"

@@ -7,12 +7,12 @@
 # the old strategy-based system with clear, composable execution contexts.
 #
 # Key Features:
-# - threads(N) { ... } - Thread pool for stages within block
-# - processes(N) { ... } - Process pool for stages within block
-# - ractors(N) { ... } - Ractor pool for stages within block
-# - batch N - Accumulator stage
-# - cow_fork(N) { ... } - Spawn process per batch
-# - thread_pool(N) { ... } - Spawn thread per batch
+# - fiber_pool(N)  # Delegate to N fibers (future)
+# - thread_pool(N) # Delegate to N threads
+# - ractor_pool(N) # Delegate to N ractors (future)
+# - batch(N)       # Accumulate items into batches of N items, useful for cow_fork
+# - cow_fork(N)    # Spawn a Copy-On-Write (COW) fork process to process a batch
+# - ipc_fork(N)    # Spawn a fork an process items via Inter-Process Communication (IPC)
 # - Composable nesting with proper context inheritance
 
 require_relative '../lib/minigun'
@@ -146,7 +146,7 @@ class NestedContextExample
         end
       end
 
-      # Back to thread context after process_per_batch
+      # Back to thread context after cow_fork
       consumer :save do |results|
         @mutex.synchronize { @results.concat(results) }
       end
@@ -328,7 +328,7 @@ puts <<~SUMMARY
      - Good for CPU-bound work with isolation
 
   3. Ractor Pools:
-     ractors(N) do ... end
+     ractor_pool(N) do ... end
      - Reuses N ractors for all stages in block
      - True parallelism (Ruby 3.0+)
 

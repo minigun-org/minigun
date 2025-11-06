@@ -43,7 +43,7 @@ class StrategyPerStageExample
     # Heavy consumer spawns forks per batch (COW fork pattern)
     cow_fork(2) do
       consumer :heavy_save do |batch|
-        puts "[HeavySave:process_per_batch:#{Process.pid}] Processing batch of #{batch.size}"
+        puts "[HeavySave:cow_fork:#{Process.pid}] Processing batch of #{batch.size}"
         sleep 0.01 # Simulate heavy work
 
         # Write results to temp file (fork-safe)
@@ -72,7 +72,7 @@ end
 
 if __FILE__ == $PROGRAM_NAME
   puts "=== Strategy Per Stage Example ===\n\n"
-  puts "Producer → Validator → Batch (accumulator) → [HeavySave (process_per_batch), LightLog (threads)]\n\n"
+  puts "Producer → Validator → Batch (accumulator) → [HeavySave (cow_fork), LightLog (threads)]\n\n"
 
   example = StrategyPerStageExample.new
   begin

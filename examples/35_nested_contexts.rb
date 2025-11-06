@@ -76,7 +76,7 @@ class NestedPipeline
       end
 
       # NOTE: stages here would be back in thread context
-      # But we end after process_per_batch in this example
+      # But we end after cow_fork in this example
     end
 
     after_run do
