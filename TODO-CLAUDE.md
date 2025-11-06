@@ -6,6 +6,31 @@ Minigun is a high-performance data processing pipeline framework for Ruby with s
 
 ## Enhancement Roadmap
 
+### 0.1: Preview Readiness
+
+- [ ] Docs
+- [ ] Cleanup accumulator vs. batch
+- [ ] thread/threads, fiber/fibers etc. as alias to pool methods if they don't exist on parent
+- [ ] Hooks
+- [ ] Config
+- [ ] Rubocop
+- [ ] Fix JRuby/Mac/etc.
+
+### 0.2 Error Handling & Reliability
+
+- [ ] **Comprehensive Error Handling**
+  - Define error handling strategy for each executor type
+  - Implement retry mechanisms with backoff
+  - Add circuit breaker patterns for failing stages
+  - Handle errors in hooks properly
+
+- [ ] **Process Management**
+  - Signal trapping for graceful shutdown
+  - Child process state management
+  - Child process culling (reference Puma's implementation)
+  - Supervision tree for processes
+  - Wait for last forked process to finish properly
+
 ### Phase 1.0: Cross-Boundary Routing
 
 - [x] **Cross-Boundary Routing** ✓ (Completed 2025-01-04)
@@ -37,7 +62,6 @@ Minigun is a high-performance data processing pipeline framework for Ruby with s
   - [ ] Transmit stats across forks
   - [ ] Transmit logs across forks--look at Puma
   - [ ] Support MINIGUN_LOG_LEVEL var
-
 
 ### Phase 1.01: HUD
 
@@ -113,22 +137,6 @@ Minigun is a high-performance data processing pipeline framework for Ruby with s
   - Add timeout handling
   - Handle pipe failures gracefully
   - Stats reporting back to parent process via IPC
-
-#### 1.2 Error Handling & Reliability
-**Priority: HIGH**
-
-- [ ] **Comprehensive Error Handling**
-  - Define error handling strategy for each executor type
-  - Implement retry mechanisms with backoff
-  - Add circuit breaker patterns for failing stages
-  - Handle errors in hooks properly
-
-- [ ] **Process Management**
-  - Signal trapping for graceful shutdown
-  - Child process state management
-  - Child process culling (reference Puma's implementation)
-  - Supervision tree for processes
-  - Wait for last forked process to finish properly
 
 ### Phase 2: Features & Functionality (Medium Priority)
 
