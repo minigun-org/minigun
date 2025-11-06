@@ -10,20 +10,22 @@ plan based on the current codebase state and TODOS.md.
 
 ### 0.1: Preview Readiness
 
-- [ ] Docs
+- [ ] Docs - mine the tmp/cursor-docs-cleanup folder for more ideas.
 - [ ] Cleanup accumulator vs. batch
 - [ ] thread/threads, fiber/fibers etc. as alias to pool methods if they don't exist on parent
 - [ ] Hooks
 - [ ] Config
+- [ ] Ractors on Ruby 3.5
+- [ ] Minigun global configs
 - [ ] Auto-config: # forks should match # of cores
 - [ ] Sort-out pipeline inheritance (https://github.com/minigun-org/minigun/pull/4)
 - [ ] Remove processor alias?
-- [ ] Rubocop
-- [ ] Cleanup examples
 - [ ] Example runner context
 - [ ] Fix JRuby/Mac/etc.
 - [ ] Consider what concurrent-ruby abstractions we can use.
-- 
+- [ ] Docs - Cleanup examples
+- [ ] Docs - Review and fix all docs
+- [ ] Rubocop final pass
 
 ### 0.2 Error Handling & Reliability
 
