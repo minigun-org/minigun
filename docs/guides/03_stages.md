@@ -387,6 +387,6 @@ Now that you understand stages, let's learn how to connect them in different way
 ---
 
 **See Also:**
-- [Stages Guide](../guides/stages/overview.md) - Comprehensive stage documentation
-- [Custom Stages](../guides/stages/custom_stages.md) - Building your own stage types
-- [Examples: Basic Pipelines](../examples/basic_pipelines.md) - More examples
+- [Routing Guide](04_routing.md) - How stages connect together
+- [Execution Strategies](06_execution_strategies.md) - Parallel execution options
+- [API Reference](09_api_reference.md) - Complete DSL reference

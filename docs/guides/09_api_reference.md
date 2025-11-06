@@ -599,7 +599,7 @@ CompleteExample.new.run
 
 ## See Also
 
-- [Stage API](stage.md) - Stage class methods
-- [Pipeline API](pipeline.md) - Pipeline class methods
-- [Guide: Hello World](../guides/02_hello_world.md) - Basic usage
-- [Guides: Stages](../guides/stages/overview.md) - Stage types in depth
+- [Hello World Guide](02_hello_world.md) - Basic usage
+- [Stages Guide](03_stages.md) - Stage types in depth
+- [Routing Guide](04_routing.md) - How stages connect
+- [Execution Strategies](06_execution_strategies.md) - Parallel execution

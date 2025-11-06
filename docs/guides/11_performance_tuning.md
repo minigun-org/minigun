@@ -2,6 +2,8 @@
 
 Optimize your Minigun pipelines for maximum throughput and efficiency.
 
+Before starting with tuning, please read the [Fundamentals Guide](16_fundamentals.md) to ensure you have a solid grasp of the key concepts.
+
 ## Quick Wins
 
 Before diving deep, try these:

@@ -681,6 +681,6 @@ end
 
 ## See Also
 
-- [Execution Strategies](execution/overview.md) - Choosing the right strategy
+- [Execution Strategies](06_execution_strategies.md) - Choosing the right strategy
 - [Performance Tuning](11_performance_tuning.md) - Optimization
 - [Comparison: When to Use](../comparison.md) - vs Sidekiq

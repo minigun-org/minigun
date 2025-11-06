@@ -414,6 +414,6 @@ Now that you understand routing, let's add parallelism with concurrency.
 ---
 
 **See Also:**
-- [Routing Guide](../guides/routing/overview.md) - Comprehensive routing documentation
+- [Execution Strategies](06_execution_strategies.md) - Combine routing with parallel execution
 - [Example: Diamond Pattern](../../examples/02_diamond_pattern.rb) - Working example
 - [Example: Complex Routing](../../examples/04_complex_routing.rb) - Advanced patterns

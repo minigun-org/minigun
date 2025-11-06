@@ -118,6 +118,9 @@ Choose the right tool for your use case:
 
 - [**Performance Tuning**](guides/11_performance_tuning.md) - Optimization strategies
 - [**Testing Your Pipelines**](guides/12_testing.md) - Testing patterns and best practices
+- [**Error Handling**](guides/14_error_handling.md) - Strategies for handling failures in pipelines
+- [**Configuration**](guides/15_configuration.md) - Global and stage-level configuration
+- [**Fundamentals**](guides/16_fundamentals.md) - Deep dive into queues, COW/IPC forking, threads, ractors, and fibers
 
 ---
 

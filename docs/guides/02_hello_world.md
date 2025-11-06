@@ -36,6 +36,115 @@ HelloPipeline.new.run
 4. **Consumer stage**: Receives and prints the data
 5. **Run it**: Call `.run` to execute the pipeline
 
+## How Pipelines Work: Producer-Consumer Queues
+
+Before we continue, let's understand the fundamental pattern behind Minigun pipelines.
+
+### The Producer-Consumer Pattern
+
+Minigun uses **producer-consumer queues** to connect stages. Each stage communicates through thread-safe queues:
+
+```
+┌──────────┐          ┌──────────┐          ┌──────────┐
+│ Producer │  Queue   │Processor │  Queue   │ Consumer │
+│          ├─────────>│          ├─────────>│          │
+│ Generates│          │Transforms│          │ Consumes │
+└──────────┘          └──────────┘          └──────────┘
+```
+
+**Key Concepts:**
+
+**1. Producers generate data:**
+```ruby
+producer :generate do |output|
+  output << "Hello"  # Puts item into queue
+end
+```
+
+**2. Queues buffer data between stages:**
+- Thread-safe (multiple threads can access safely)
+- Bounded size (prevents memory explosion)
+- Blocks when full (automatic backpressure)
+
+**3. Consumers pull from queues:**
+```ruby
+consumer :print do |message|
+  puts message  # Pulled from queue automatically
+end
+```
+
+### Why Queues?
+
+**Decoupling:** Stages run independently. A fast producer can generate while a slow consumer processes.
+
+**Buffering:** Queues absorb bursts. If data arrives in spikes, the queue smooths it out.
+
+**Backpressure:** When queues fill up, producers automatically slow down. This prevents memory exhaustion.
+
+### How Data Flows
+
+Here's what happens when you call `pipeline.run`:
+
+```ruby
+pipeline do
+  producer :generate do |output|
+    output << "Hello"
+    output << "World"
+  end
+
+  processor :uppercase do |text, output|
+    output << text.upcase
+  end
+
+  consumer :print do |text|
+    puts text
+  end
+end
+```
+
+**Execution:**
+1. Producer thread starts, generates "Hello" → Queue 1
+2. Processor thread reads "Hello" from Queue 1 → processes → "HELLO" → Queue 2
+3. Consumer thread reads "HELLO" from Queue 2 → prints
+4. Producer generates "World" → Queue 1
+5. Processor reads "World" → "WORLD" → Queue 2
+6. Consumer reads "WORLD" → prints
+7. Producer signals completion (EndOfStage marker)
+8. Processor finishes remaining items, signals completion
+9. Consumer finishes, pipeline ends
+
+**Concurrent Execution:** All three stages run simultaneously in different threads!
+
+### Queue Sizes and Backpressure
+
+By default, queues have a size limit (500 items):
+
+```ruby
+processor :transform, queue_size: 1000 do |item, output|
+  output << transform(item)
+end
+```
+
+**What happens when a queue fills up?**
+1. Producer tries to put item in queue
+2. Queue is full (1000 items waiting)
+3. Producer **blocks** (waits)
+4. Consumer processes items, queue has space
+5. Producer **unblocks** and continues
+
+This is **automatic backpressure** - it prevents memory issues without any code from you!
+
+### Real-World Analogy
+
+Think of a restaurant:
+- **Chef (Producer)** - Makes dishes
+- **Service window (Queue)** - Holds completed dishes
+- **Waiter (Consumer)** - Delivers dishes to tables
+
+If the window fills up with dishes (queue full), the chef stops cooking (backpressure) until the waiter takes some dishes. This prevents dishes from piling up everywhere!
+
+→ **Want to dive deeper?** See [Fundamentals Guide](16_fundamentals.md) for in-depth explanations of queues, threading, and forking.
+
 ## Adding Transformation
 
 Let's add a processor stage to transform the data:
@@ -312,5 +421,5 @@ Now that you understand basic pipelines, let's explore the different stage types
 
 **See Also:**
 - [Example: Quick Start](../../examples/00_quick_start.rb) - Working example
-- [Stage Guide](../guides/stages/overview.md) - Detailed stage documentation
-- [API Reference: DSL](../guides/09_api_reference.md) - Complete DSL reference
+- [Stages Guide](03_stages.md) - Detailed stage documentation
+- [API Reference: DSL](09_api_reference.md) - Complete DSL reference

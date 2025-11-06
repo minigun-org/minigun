@@ -454,7 +454,7 @@ end
 
 ## See Also
 
-- [Routing Guide: Explicit](../guides/routing/explicit.md) - Using from/to options
-- [Guide: Routing](../guides/04_routing.md) - Routing basics
+- [Routing Guide](../guides/04_routing.md) - Sequential, explicit, queue-based, and dynamic routing
+- [Stages Guide](../guides/03_stages.md) - All stage types explained
 - [Example: Diamond Pattern](../../examples/02_diamond_pattern.rb) - Working example
 - [Example: Fan-Out Pattern](../../examples/03_fan_out_pattern.rb) - More examples

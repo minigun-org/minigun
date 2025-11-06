@@ -143,6 +143,9 @@ end
 11. [Performance Tuning](docs/guides/11_performance_tuning.md) - Optimization strategies
 12. [Testing](docs/guides/12_testing.md) - Testing your pipelines
 13. [Contributing](docs/guides/13_contributing.md) - How to contribute
+14. [Error Handling](docs/guides/14_error_handling.md) - Strategies for handling failures
+15. [Configuration](docs/guides/15_configuration.md) - Global and stage-level configuration
+16. [Fundamentals](docs/guides/16_fundamentals.md) - Deep dive into queues, forking, threads, ractors, and fibers
 
 ### Reference
 

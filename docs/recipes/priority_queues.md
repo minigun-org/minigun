@@ -504,7 +504,6 @@ end
 
 ## See Also
 
-- [Routing Guide: Queue-Based](../guides/routing/queue_based.md) - Queue routing details
-- [Routing Guide: Dynamic](../guides/routing/dynamic.md) - Runtime routing
+- [Routing Guide](../guides/04_routing.md) - Sequential, explicit, queue-based, and dynamic routing
+- [Stages Guide](../guides/03_stages.md) - All stage types explained
 - [Example: Priority Routing](../../examples/40_priority_routing.rb) - Working example
-- [Example: Message Router](../../examples/41_message_router.md) - Multi-level routing

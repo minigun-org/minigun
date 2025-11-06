@@ -22,6 +22,8 @@ plan based on the current codebase state and TODOS.md.
 - [ ] Cleanup examples
 - [ ] Example runner context
 - [ ] Fix JRuby/Mac/etc.
+- [ ] Consider what concurrent-ruby abstractions we can use.
+- 
 
 ### 0.2 Error Handling & Reliability
 

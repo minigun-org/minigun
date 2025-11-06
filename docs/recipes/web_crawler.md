@@ -495,6 +495,6 @@ end
 ## See Also
 
 - [Guide: Concurrency](../guides/05_concurrency.md) - Thread safety
-- [Routing Guide](../guides/routing/dynamic.md) - Dynamic routing
+- [Routing Guide](../guides/04_routing.md) - Sequential, explicit, queue-based, and dynamic routing
 - [Example: Web Crawler](../../examples/10_web_crawler.rb) - Working example
-- [Performance Tuning](11_performance_tuning.md) - Optimization
+- [Performance Tuning](../guides/11_performance_tuning.md) - Optimization

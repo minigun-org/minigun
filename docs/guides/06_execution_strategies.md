@@ -430,7 +430,6 @@ Now that you understand execution strategies, let's learn how to monitor your pi
 ---
 
 **See Also:**
-- [Execution Guide: Overview](../guides/execution/overview.md) - Detailed comparison
-- [COW Fork Guide](../guides/execution/cow_fork.md) - Copy-on-write internals
-- [IPC Fork Guide](../guides/execution/ipc_fork.md) - IPC optimization
+- [Fundamentals Guide](16_fundamentals.md) - Deep dive into COW, IPC, threads, and ractors
 - [Performance Tuning](11_performance_tuning.md) - Optimization strategies
+- [Configuration Guide](15_configuration.md) - Configure execution strategies

@@ -435,9 +435,9 @@ Jump to practical examples:
 ### Read the Guides
 
 Deep dive into specific topics:
-- [Custom Stages](../guides/stages/custom_stages.md)
-- [Advanced Routing](../guides/routing/dynamic.md)
-- [Performance Tuning](11_performance_tuning.md)
+- [Stages Guide](03_stages.md) - All stage types explained
+- [Routing Guide](04_routing.md) - Sequential, explicit, queue-based, and dynamic routing
+- [Performance Tuning](11_performance_tuning.md) - Optimization strategies
 
 ### Browse Examples
 
