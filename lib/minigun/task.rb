@@ -147,7 +147,9 @@ module Minigun
 
     # Define a named pipeline with routing
     # Pipelines are just PipelineStage objects in root_pipeline
-    def define_pipeline(name, options = {})
+    def define_pipeline(name = nil, options = {}, &block)
+      # Generate name if not provided
+      name ||= :"_pipeline_#{@root_pipeline.stages.size}"
       # Check if already exists
       pipeline_stage = @root_pipeline.find_stage(name)
 

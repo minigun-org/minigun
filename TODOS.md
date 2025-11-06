@@ -15,6 +15,50 @@ add to architecture
 
 ========================================================================================
 
+WIP on pipeline inheritance
+
+we are trying to do this should do this:
+- on a non-inherited pipeline, unnamed pipelines are NOT combined (or should they be? I think no)
+- on a non-inherited pipeline, named pipelines ARE combined
+- for inheritance, the first unnamed pipeline is combined. (subsequent unnamed pipelines are not combined). -- too complicated??? need to decide.
+- you can also append to named pipelines by declaring a pipeline of the same name on the child. -- this is the same as non-inherited
+- if the final result is that there is a single pipeline, it is hoisted to become the root pipeline. this can be either done with a setter, a private setter (probably best), or a redefinition of the task (probably not)
+- update readme accordingly (there is a WIP section)
+
+
+      # Evaluate stored pipeline blocks on instance task with instance context
+      blocks = self.class._pipeline_definition_blocks
+      single_unnamed = (blocks.size == 1 && blocks.first[:name].nil?)
+
+      blocks.each do |entry|
+        name = entry[:name]
+        opts = entry[:options]
+
+        if single_unnamed
+          # Single unnamed pipeline: add stages directly to root_pipeline
+          pipeline_dsl = PipelineDSL.new(@_minigun_task.root_pipeline, self)
+          pipeline_dsl.instance_eval(&entry[:block])
+        else
+          # Multiple pipelines OR named pipeline: create a PipelineStage
+          # Generate name if not provided (for unnamed blocks)
+          name ||= :"_pipeline_#{SecureRandom.uuid}"
+          @_minigun_task.define_pipeline(name, opts) do |pipeline|
+            pipeline_dsl = PipelineDSL.new(pipeline, self)
+            pipeline_dsl.instance_eval(&entry[:block])
+          end
+        end
+      end
+
+instead of this, hoist the pipleine
+
+
+Support Cross-Pipeline Routing?
+- use stage identifiers instead of names?
+- Yes! We'd need to:
+- Build a global queue registry in Task or Runner that includes ALL stages from ALL pipelines
+- Pass this global registry to OutputQueue instead of just local stage_input_queues
+- Handle END signals across pipelines (more complex - need to track which pipelines are done)
+- Something like:
 TODO: Refactor so more things are moved from Stage to Worker, e.g.
 - queue creation
 - start/end stats tracking (need tests for all stage types) -- make some stages silent?
@@ -22,7 +66,6 @@ TODO: Refactor so more things are moved from Stage to Worker, e.g.
 - sending of end signals?
 - rename #run_worker_loop as its not a loop. Maybe #run_in_worker? other ideas? --> DONE: renamed to #run_stage
 
-================================
 
 This needs to be in all stage:
 
@@ -30,33 +73,27 @@ stage_stats = stage_ctx.stage_stats
 stage_stats.start!
 log_info(stage_ctx, 'Starting')
 
-===================
 
 - name -- base62
 - check for name conflicts
 
-====================
 
 batch / debatch / rebatch operators
 
-=======================
 
 cleanup signal
 + break if item.is_a?(AllUpstreamsDone)
 + break if item.is_a?(Message) && item.end_of_stream?
 
-====================
 
 make pipeline and dag accessible
 
-=============
 
 names:
 - nordstream
 - permian
 - ???
 
-======================
 
 fiber
 fibers(10) do <-- all childs within fiber scope. should threads be joined within fiber scope?
@@ -74,7 +111,6 @@ ipc_forks(10) do # creates a pipeline
 ractors
 =
 
-=====================================================
 
 think about potential for conflicts with the base context
 
@@ -82,18 +118,15 @@ thread_pool
 cow_fork_pool
 
 
-=================
 
 +        # Get pipeline name - pipeline might be a Pipeline or Task
 +        pipeline_name = @pipeline.is_a?(Pipeline) ? @pipeline.name : nil
 +        task.registry.register(self, pipeline_name: pipeline_name)
        else
 
-======================
 
 lock DAG /pipelines/task when running (no modification possible)
 
-=======================
 
 named_stage_keepalive_seconds = nil, 0, 5, infinity
 keepalive_seconds
@@ -101,28 +134,22 @@ keepalive_seconds
 - mark & sweep GC? mark them for overall pipeline ermination
 
 
-===============================
 
 dynamic scaling
 
-==============================
 
 parallel and sequential/sequence/series keywords --> influences DAG building
 
-==============================
 
 Pipeline names should be consolidated with stage names
 
-==============================
 
 better unique ID generation
 _jf02ASj3 ??
 
-==============================
 
 make per item latency tracking optional (and stats?)
 
-============================
 
 allow this, and resolve names locally, and then up the chain. we may need a name resolution tree.
 

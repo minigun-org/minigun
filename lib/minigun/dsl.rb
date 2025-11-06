@@ -33,7 +33,11 @@ module Minigun
       # This allows blocks to access instance variables correctly
       def pipeline(name = nil, options = {}, &block)
         @_pipeline_definition_blocks ||= []
-        @_pipeline_definition_blocks << { name: name, options: options, block: block }
+        @_pipeline_definition_blocks << {
+          name: name,
+          options: options,
+          block: block
+        }
       end
 
       def _pipeline_definition_blocks
@@ -115,13 +119,19 @@ module Minigun
       )
 
       # Evaluate stored pipeline blocks on instance task with instance context
-      self.class._pipeline_definition_blocks.each do |entry|
+      blocks = self.class._pipeline_definition_blocks
+
+      # Track which named pipelines we've seen (for extension logic)
+      seen_named = {}
+
+      blocks.each do |entry|
         name = entry[:name]
         opts = entry[:options]
 
-        if name
-          # Named pipeline - define on instance task, then evaluate block with instance context
-          @_minigun_task.define_pipeline(name, opts) do |pipeline|
+        if name.nil?
+          # Unnamed pipeline: wrap in PipelineStage
+          isolated_name = :"_pipeline_#{SecureRandom.uuid}"
+          @_minigun_task.define_pipeline(isolated_name, opts) do |pipeline|
             pipeline_dsl = PipelineDSL.new(pipeline, self)
             _pipeline_dsl_stack.push(pipeline_dsl)
             begin
@@ -132,17 +142,31 @@ module Minigun
             end
           end
         else
-          # Unnamed pipeline - evaluate with instance context on root pipeline
-          pipeline_dsl = PipelineDSL.new(@_minigun_task.root_pipeline, self)
-          _pipeline_dsl_stack.push(pipeline_dsl)
-          begin
-            # Evaluate in instance context so @config, @results etc. are accessible
-            instance_eval(&entry[:block])
-          ensure
-            _pipeline_dsl_stack.pop
+          # Named pipeline
+          if seen_named[name]
+            # Extension: add stages to existing named pipeline
+            pipeline_stage = @_minigun_task.root_pipeline.stages[name]
+            pipeline_dsl = PipelineDSL.new(pipeline_stage.pipeline, self)
+            pipeline_dsl.instance_eval(&entry[:block])
+          else
+            # First occurrence: create new named pipeline
+            seen_named[name] = true
+            @_minigun_task.define_pipeline(name, opts) do |pipeline|
+              pipeline_dsl = PipelineDSL.new(pipeline, self)
+              pipeline_dsl.instance_eval(&entry[:block])
+            end
           end
         end
       end
+
+      # Hoist: if there's only one pipeline, make it the root
+      # root_stages = @_minigun_task.root_pipeline.stages
+      # if root_stages.size == 1
+      #   single_stage = root_stages.values.first
+      #   if single_stage.is_a?(Minigun::PipelineStage)
+      #     @_minigun_task.root_pipeline = single_stage.pipeline
+      #   end
+      # end
     end
 
     # Pipeline DSL delegation stack - allows nested pipelines to delegate correctly
@@ -245,13 +269,15 @@ module Minigun
       end
 
       # Nested pipeline support
-      def pipeline(name, options = {}, &)
+      def pipeline(name = nil, options = {}, &block)
         # This handles nested pipeline stages within a pipeline block
-        raise 'Nested pipelines require instance context' unless @context
-
-        # Get the task from context (instance or class)
-        task = @context._minigun_task
-        task.add_nested_pipeline(name, options, &)
+        if @context
+          # Get the task from context (instance or class)
+          task = @context._minigun_task
+          task.add_nested_pipeline(name, options, @context, &block)
+        else
+          raise "Nested pipelines require instance context"
+        end
       end
 
       # Main unified stage method
