@@ -32,7 +32,7 @@ class ThreadPerBatchExample
     batch 20
 
     # Spawn a new thread for each batch
-    thread_per_batch(max: 5) do
+    thread_pool(5) do
       consumer :process_batch do |batch|
         thread_id = Thread.current.object_id
 
@@ -81,7 +81,7 @@ class MixedThreading
     end
 
     # Thread pool for individual items
-    threads(10) do
+    thread_pool(10) do
       processor :fetch do |item, output|
         output << (item * 2)
       end
@@ -95,7 +95,7 @@ class MixedThreading
     batch 10
 
     # Spawn thread per batch for batch-level work
-    thread_per_batch(max: 3) do
+    thread_pool(3) do
       consumer :process_batch do |batch|
         # Each batch processed in isolation
         result = batch.sum

@@ -2,12 +2,12 @@
 # frozen_string_literal: true
 
 # Example 57: Threads + Batch + Process Per Batch
-# Add process_per_batch to see if this breaks it
+# Add cow_fork to see if this breaks it
 
 require_relative '../lib/minigun'
 
 # Demonstrates threads, batching, and process-per-batch together
-class ThreadsBatchProcessBatch
+class ThreadsBatchProcessBatchExample
   include Minigun::DSL
 
   attr_reader :results
@@ -22,7 +22,7 @@ class ThreadsBatchProcessBatch
       20.times { |i| output << i }
     end
 
-    threads(3) do
+    thread_pool(3) do
       processor :work do |item, output|
         output << (item * 2)
       end
@@ -30,7 +30,7 @@ class ThreadsBatchProcessBatch
 
     batch 5
 
-    process_per_batch(max: 2) do
+    cow_fork(2) do
       processor :process_batch do |batch, output|
         batch.each { |item| output << (item + 100) }
       end
@@ -42,8 +42,8 @@ class ThreadsBatchProcessBatch
   end
 end
 
-puts 'Testing: threads + batch + process_per_batch + consumer'
-pipeline = ThreadsBatchProcessBatch.new
+puts 'Testing: threads + batch + cow_fork + consumer'
+pipeline = ThreadsBatchProcessBatchExample.new
 pipeline.run
 puts "Results: #{pipeline.results.size} items"
 puts pipeline.results.size == 20 ? '✓ Works!' : '✗ Failed'

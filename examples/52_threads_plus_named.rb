@@ -7,7 +7,7 @@
 require_relative '../lib/minigun'
 
 # Demonstrates combining thread blocks with named contexts
-class ThreadsPlusNamed
+class ThreadsPlusNamedExample
   include Minigun::DSL
 
   attr_reader :results
@@ -24,13 +24,13 @@ class ThreadsPlusNamed
       20.times { |i| output << i }
     end
 
-    threads(5) do
+    thread_pool(5) do
       processor :work1 do |item, output|
         output << (item + 10)
       end
     end
 
-    processor :work2, execution_context: :named_pool do |item|
+    processor :work2, execution_context: :named_pool do |item, output|
       output << (item * 2)
     end
 
@@ -41,7 +41,7 @@ class ThreadsPlusNamed
 end
 
 puts 'Testing: threads block + named context'
-pipeline = ThreadsPlusNamed.new
+pipeline = ThreadsPlusNamedExample.new
 pipeline.run
 puts "Results: #{pipeline.results.size} items"
 puts '✓ Threads + named works' if pipeline.results.size == 20

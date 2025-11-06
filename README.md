@@ -136,9 +136,9 @@ class CustomStage < Minigun::Stage
     output_queue << result if output_queue
   end
 
-  # Optional: Customize the worker loop
-  def run_worker_loop(stage_ctx)
-    # Custom loop implementation
+  # Optional: Customize the stage execution
+  def run_stage(stage_ctx)
+    # Custom execution implementation
     # See ProducerStage or ConsumerStage for examples
   end
 
@@ -167,7 +167,7 @@ class TimedBatchStage < Minigun::Stage
     :streaming  # Processes items from input queue
   end
 
-  def run_worker_loop(stage_ctx)
+  def run_stage(stage_ctx)
     require 'minigun/queue_wrappers'
 
     wrapped_input = Minigun::InputQueue.new(
@@ -687,6 +687,326 @@ pipeline do
 end
 ```
 
+## Execution Strategies
+
+Minigun provides multiple execution strategies for running pipeline stages, each optimized for different use cases. You can configure execution at the task level or per-stage.
+
+### Available Executors
+
+#### 1. Inline Executor (`:inline`)
+
+The simplest executor - runs everything sequentially in the main process.
+
+```ruby
+class SimpleTask
+  include Minigun::Task
+
+  execution :inline  # Run everything in the main process
+
+  pipeline do
+    producer :generate { 10.times { |i| emit(i) } }
+    processor :transform { |n| emit(n * 2) }
+    consumer :output { |n| puts n }
+  end
+end
+```
+
+**Characteristics:**
+- No concurrency
+- Minimal overhead
+- Easy to debug
+- Best for simple, fast operations
+
+**Use when:**
+- Operations are very fast
+- You need to debug the pipeline
+- Data volume is small
+
+---
+
+#### 2. Thread Pool Executor (`:thread`)
+
+Runs stages concurrently using a thread pool. This is the most common executor.
+
+```ruby
+class ThreadedTask
+  include Minigun::Task
+
+  execution :thread, max: 10  # Use up to 10 threads
+
+  pipeline do
+    producer :fetch_urls { urls.each { |url| emit(url) } }
+
+    processor :download, threads: 5 do |url|
+      # 5 threads concurrently downloading
+      emit(HTTP.get(url))
+    end
+
+    consumer :save { |content| File.write(..., content) }
+  end
+end
+```
+
+**Characteristics:**
+- Concurrent execution within a single process
+- Shared memory (no serialization overhead)
+- Subject to Ruby GVL (Global VM Lock)
+- Low overhead for creating workers
+
+**Use when:**
+- Operations are I/O bound (network, disk, database)
+- You need shared memory access
+- Operations are thread-safe
+- You want lightweight concurrency
+
+---
+
+#### 3. COW Fork Pool Executor (`:cow_fork`)
+
+Forks a **new process for EACH item** using Copy-On-Write memory sharing.
+
+```ruby
+class CowForkTask
+  include Minigun::Task
+
+  execution :cow_fork, max: 4  # Up to 4 concurrent forks
+
+  pipeline do
+    producer :generate { 100.times { |i| emit(i) } }
+
+    # Each item gets its own forked process
+    processor :heavy_compute, execution: :cow_fork do |item|
+      # This runs in a fresh forked process with COW memory
+      result = expensive_computation(item)
+      emit(result)
+    end
+
+    consumer :save { |result| save_result(result) }
+  end
+end
+```
+
+**How It Works:**
+1. Parent process pulls item from input queue
+2. Forks a new child process (memory shared via COW)
+3. Child processes **one item** and writes to output queue
+4. Child exits immediately
+5. Parent reaps completed children and continues
+6. Maintains up to `max` concurrent child processes
+
+**Characteristics:**
+- **Fork per item** - ephemeral processes
+- Copy-On-Write memory sharing (no serialization)
+- Child inherits parent's memory state
+- Memory pages shared until modified
+- Automatic memory cleanup when process exits
+- Each item processed in complete isolation
+
+**Use when:**
+- You have large read-only data structures
+- Operations are CPU-intensive
+- You want to avoid GVL limitations
+- Operations might leak memory (cleaned up automatically)
+- Each item needs fresh process state
+
+**Example with Large Shared Data:**
+
+```ruby
+class DataProcessor
+  include Minigun::Task
+
+  def initialize
+    # Large lookup table (50MB)
+    @lookup_table = load_huge_dataset
+  end
+
+  execution :cow_fork, max: 8
+
+  pipeline do
+    producer :generate { ids.each { |id| emit(id) } }
+
+    # Each fork gets COW access to @lookup_table
+    # No serialization - memory is shared until written to
+    processor :process do |id|
+      # Can access @lookup_table directly - no copy!
+      result = complex_calculation(id, @lookup_table)
+      emit(result)
+    end
+
+    consumer :save { |result| save(result) }
+  end
+end
+```
+
+---
+
+#### 4. IPC Fork Pool Executor (`:ipc_fork`)
+
+Creates **persistent worker processes** that communicate via Inter-Process Communication (IPC).
+
+```ruby
+class IpcForkTask
+  include Minigun::Task
+
+  execution :ipc_fork, max: 4  # Create 4 persistent workers
+
+  pipeline do
+    producer :generate { 1000.times { |i| emit(i) } }
+
+    # Workers stay alive and process multiple items
+    processor :compute, execution: :ipc_fork do |item|
+      result = expensive_operation(item)
+      emit(result)
+    end
+
+    consumer :save { |result| save_result(result) }
+  end
+end
+```
+
+**How It Works:**
+1. Parent spawns `max` persistent worker processes on startup
+2. Workers communicate with parent via bidirectional pipes
+3. Parent distributes items from input queue to workers (round-robin)
+4. Workers pull items via IPC, process them, and send results back
+5. Results are pushed to output queue (routed based on DAG)
+6. Workers stay alive until stage completes
+7. Parent coordinates shutdown when input queue is exhausted
+
+**Characteristics:**
+- **Persistent workers** - like ThreadPoolExecutor but with processes
+- Explicit IPC via pipes (data is serialized)
+- Strong process isolation
+- Workers handle multiple items throughout their lifetime
+- Overhead of process creation amortized across many items
+- Data serialization overhead (uses Marshal or MessagePack)
+
+**Use when:**
+- Operations are CPU-intensive and long-running
+- You need true parallelism (no GVL)
+- Setup cost per item is high (e.g., loading models, establishing connections)
+- You want persistent worker pools like Puma or Unicorn
+- You're processing many items and want to amortize fork cost
+
+**IPC Optimizations:**
+
+Minigun provides several optimizations for IPC communication:
+
+```ruby
+class OptimizedIpcTask
+  include Minigun::Task
+
+  # Optional: Install msgpack gem for faster serialization
+  # gem 'msgpack'
+
+  execution :ipc_fork, max: 4,
+            pipe_timeout: 60,        # Timeout for pipe operations
+            use_compression: true    # Compress large transfers
+
+  pipeline do
+    producer :generate { large_items.each { |item| emit(item) } }
+
+    processor :process do |item|
+      # Item is deserialized from IPC
+      # Process and emit result
+      emit(transform(item))
+    end
+
+    consumer :save { |result| save(result) }
+  end
+end
+```
+
+**Optimizations:**
+- **MessagePack**: Automatically used if `msgpack` gem is installed (faster than Marshal)
+- **Compression**: Large data (>1KB) automatically compressed with Zlib
+- **Garbage Collection**: Optimized GC before forking and during processing
+
+---
+
+### Comparison Table
+
+| Executor | Concurrency | Process Model | Memory Sharing | Serialization | Best For |
+|----------|-------------|---------------|----------------|---------------|----------|
+| `:inline` | None | Single process | N/A | None | Simple, fast operations |
+| `:thread` | Threads | Single process | Shared memory | None | I/O-bound operations |
+| `:cow_fork` | Processes | Fork per item | COW (shared) | None | CPU-bound with large read-only data |
+| `:ipc_fork` | Processes | Persistent workers | Isolated | Marshal/MessagePack | CPU-bound long-running operations |
+
+---
+
+### Choosing an Executor
+
+**Use `:inline` when:**
+- Debugging or testing
+- Operations are trivial (< 1ms)
+- Single-threaded is sufficient
+
+**Use `:thread` when:**
+- Operations are I/O-bound (databases, networks, files)
+- You need shared memory
+- Operations are thread-safe
+- You want lightweight concurrency
+
+**Use `:cow_fork` when:**
+- Operations are CPU-intensive
+- You have large read-only data structures
+- You want true parallelism without GVL
+- Each item needs complete process isolation
+- Memory leaks are a concern (auto-cleanup)
+
+**Use `:ipc_fork` when:**
+- Operations are CPU-intensive AND long-running
+- Setup cost per item is significant
+- You want persistent worker pools
+- You need strong process isolation
+- You're processing many items
+
+---
+
+### Per-Stage Execution
+
+You can mix execution strategies within a single pipeline:
+
+```ruby
+class HybridTask
+  include Minigun::Task
+
+  execution :thread, max: 10  # Default: thread pool
+
+  pipeline do
+    # Runs in thread pool
+    producer :fetch_urls, threads: 5 do
+      urls.each { |url| emit(url) }
+    end
+
+    # Runs in thread pool
+    processor :download, threads: 10 do |url|
+      emit(HTTP.get(url))
+    end
+
+    # Override: use COW fork for CPU-intensive work
+    processor :process_images, execution: :cow_fork, max: 4 do |html|
+      images = extract_images(html)
+      emit(process_with_opencv(images))
+    end
+
+    # Override: use persistent IPC workers for ML inference
+    processor :classify, execution: :ipc_fork, max: 2 do |images|
+      # Workers load ML model once, reuse for all items
+      emit(@model.predict(images))
+    end
+
+    # Back to thread pool
+    consumer :save do |results|
+      database.insert(results)
+    end
+  end
+end
+```
+
+---
+
 ## Configuration Options
 
 ```ruby
@@ -887,89 +1207,3 @@ end
 ## License
 
 The gem is available as open source under the terms of the [MIT License](LICENSE).
-
-## Fork Implementation Options
-
-Minigun provides two different fork implementations for processing data in separate processes:
-
-### COW Fork (Copy-On-Write)
-
-```ruby
-cow_fork :process_batch do |batch|
-  # Process items in a child process with copy-on-write memory sharing
-  process_items(batch)
-end
-```
-
-The COW fork implementation leverages Ruby's copy-on-write memory sharing between parent and child processes. With COW fork:
-
-- Memory pages are shared between parent and child until modified
-- No serialization overhead for passing data between processes
-- Ideal for read-only operations on large data structures
-- Best performance when memory footprint is important
-
-### IPC Fork
-
-```ruby
-ipc_fork :process_batch do |batch|
-  # Process items in a child process with explicit IPC communication
-  process_items(batch)
-end
-```
-
-The IPC fork implementation uses explicit interprocess communication:
-
-- Data is serialized and passed through pipes between parent and child
-- Provides process isolation with explicit memory boundaries
-- Supports optimizations like MessagePack and compression
-- Better when child processes significantly modify data
-
-#### IPC Fork Optimizations
-
-##### MessagePack Serialization
-
-For better performance, install the MessagePack gem to automatically improve serialization speed:
-
-```ruby
-# Add to your Gemfile
-gem 'msgpack'
-```
-
-When MessagePack is available, Minigun automatically uses it for IPC communication instead of Ruby's Marshal, providing:
-- Faster serialization/deserialization
-- Smaller data size
-- Better cross-language compatibility
-
-##### Compression
-
-By default, Minigun will compress large data transfers between processes:
-
-```ruby
-# Configure compression settings
-ipc_fork :process_batch, use_compression: true do |batch|
-  process_items(batch)
-end
-```
-
-- Automatically compresses data when beneficial (>1KB and compression reduces size)
-- Uses Zlib for compression
-- Can be disabled with `use_compression: false`
-
-##### Garbage Collection Optimization
-
-Minigun optimizes garbage collection in forked processes:
-
-- Performs GC before forking to minimize unnecessary memory duplication
-- Periodic GC during batch processing to prevent memory bloat
-- Configurable GC probability with `gc_probability` option
-
-##### Additional IPC Options
-
-```ruby
-ipc_fork :process_batch,
-         pipe_timeout: 60,         # Timeout for pipe operations (seconds)
-         max_chunk_size: 2_000_000 # Max size for chunked data (bytes)
-         do |batch|
-  process_items(batch)
-end
-```

@@ -7,7 +7,7 @@
 require_relative '../lib/minigun'
 
 # Demonstrates exact structure matching for testing
-class ExactStructure
+class ExactStructureExample
   include Minigun::DSL
 
   attr_reader :stats
@@ -34,7 +34,7 @@ class ExactStructure
       output << item
     end
 
-    threads(5) do
+    thread_pool(5) do
       processor :download do |item, output|
         @mutex.synchronize { @stats[:downloaded] += 1 }
         item[:data] = "data-#{item[:id]}"
@@ -49,7 +49,7 @@ class ExactStructure
 
     batch 5
 
-    process_per_batch(max: 2) do
+    cow_fork(2) do
       processor :parse_batch do |batch, output|
         @mutex.synchronize { @stats[:parsed] += batch.size }
         batch.each do |item|
@@ -58,11 +58,11 @@ class ExactStructure
       end
     end
 
-    processor :save_db, execution_context: :db_pool do |item|
+    processor :save_db, execution_context: :db_pool do |item, output|
       output << item
     end
 
-    threads(2) do
+    thread_pool(2) do
       consumer :upload do |_item|
         @mutex.synchronize { @stats[:uploaded] += 1 }
       end
@@ -71,7 +71,7 @@ class ExactStructure
 end
 
 puts 'Testing: exact structure of example 55'
-pipeline = ExactStructure.new
+pipeline = ExactStructureExample.new
 pipeline.run
 
 puts "\nResults:"

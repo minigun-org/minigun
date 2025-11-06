@@ -1,11 +1,10 @@
 # frozen_string_literal: true
 
 require_relative '../lib/minigun'
-require 'set'
 
 # Custom stage that filters duplicate items based on accumulated state
 class DeduplicatorStage < Minigun::Stage
-  def initialize(name:, options: {})
+  def initialize(pipeline, name, block, options = {})
     super
     @seen = Set.new
     @mutex = Mutex.new
@@ -16,34 +15,22 @@ class DeduplicatorStage < Minigun::Stage
     :streaming
   end
 
-  def run_worker_loop(stage_ctx)
+  def run_stage(stage_ctx)
     require_relative '../lib/minigun/queue_wrappers'
 
     # Get stage stats for tracking
-    stage_stats = stage_ctx.stats.for_stage(stage_ctx.stage_name, is_terminal: stage_ctx.dag.terminal?(stage_ctx.stage_name))
+    stage_ctx.stage_stats
 
-    # Create wrapped queues
-    wrapped_input = Minigun::InputQueue.new(
-      stage_ctx.input_queue,
-      stage_ctx.stage_name,
-      stage_ctx.sources_expected
-    )
-    wrapped_output = Minigun::OutputQueue.new(
-      stage_ctx.stage_name,
-      stage_ctx.dag.downstream(stage_ctx.stage_name).map do |ds|
-        stage_ctx.stage_input_queues[ds]
-      end,
-      stage_ctx.stage_input_queues,
-      stage_ctx.runtime_edges,
-      stage_stats: stage_stats
-    )
+    # Create wrapped queues using consolidated methods
+    wrapped_input = create_input_queue(stage_ctx)
+    wrapped_output = create_output_queue(stage_ctx)
 
     # Process items one-by-one
     loop do
       item = wrapped_input.pop
 
       # Handle end of stream
-      break if item.is_a?(Minigun::AllUpstreamsDone)
+      break if item.is_a?(Minigun::EndOfStage)
 
       # Check for duplicates
       key = extract_key(item)

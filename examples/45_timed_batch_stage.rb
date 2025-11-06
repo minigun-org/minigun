@@ -6,7 +6,7 @@ require_relative '../lib/minigun'
 class TimedBatchStage < Minigun::Stage
   attr_reader :batch_size, :timeout
 
-  def initialize(name:, options: {})
+  def initialize(pipeline, name, block, options = {})
     super
     @batch_size = options[:batch_size] || 100
     @timeout = options[:timeout] || 5.0
@@ -16,22 +16,14 @@ class TimedBatchStage < Minigun::Stage
     :streaming # Processes items from input queue
   end
 
-  def run_worker_loop(stage_ctx)
+  def run_stage(stage_ctx)
     require_relative '../lib/minigun/queue_wrappers'
 
     # Get stage stats for tracking
-    stage_stats = stage_ctx.stats.for_stage(stage_ctx.stage_name, is_terminal: stage_ctx.dag.terminal?(stage_ctx.stage_name))
+    stage_ctx.stage_stats
 
-    # Create wrapped output queue
-    wrapped_output = Minigun::OutputQueue.new(
-      stage_ctx.stage_name,
-      stage_ctx.dag.downstream(stage_ctx.stage_name).map do |ds|
-        stage_ctx.stage_input_queues[ds]
-      end,
-      stage_ctx.stage_input_queues,
-      stage_ctx.runtime_edges,
-      stage_stats: stage_stats
-    )
+    # Create wrapped output queue using consolidated method
+    wrapped_output = create_output_queue(stage_ctx)
 
     batch = []
     last_flush = Time.now
@@ -47,15 +39,14 @@ class TimedBatchStage < Minigun::Stage
 
       # Try to get item with timeout (use underlying queue directly)
       begin
-        msg = stage_ctx.input_queue.pop(timeout: 0.1)
+        item = stage_ctx.input_queue.pop(timeout: 0.1)
 
         # nil means timeout - continue to check timeout condition
-        next if msg.nil?
+        next if item.nil?
 
-        # Handle END signal
-        if msg.is_a?(Minigun::Message) && msg.end_of_stream?
-          stage_ctx.sources_expected << msg.source # Discover dynamic sources
-          sources_done << msg.source
+        if item.is_a?(Minigun::EndOfSource)
+          stage_ctx.sources_expected << item.stage # Discover dynamic sources
+          sources_done << item.stage
 
           # All sources done?
           if sources_done == stage_ctx.sources_expected
@@ -67,7 +58,7 @@ class TimedBatchStage < Minigun::Stage
         end
 
         # Add item to batch
-        batch << msg
+        batch << item
 
         # Flush if batch is full
         if batch.size >= @batch_size

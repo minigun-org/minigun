@@ -7,7 +7,7 @@
 require_relative '../lib/minigun'
 
 # Demonstrates threads with batching and consumer stages
-class ThreadsBatchConsumer
+class ThreadsBatchConsumerExample
   include Minigun::DSL
 
   attr_reader :results
@@ -22,7 +22,7 @@ class ThreadsBatchConsumer
       20.times { |i| output << i }
     end
 
-    threads(3) do
+    thread_pool(3) do
       processor :work do |item, output|
         output << (item * 2)
       end
@@ -37,7 +37,7 @@ class ThreadsBatchConsumer
 end
 
 puts 'Testing: threads block + batch + consumer'
-pipeline = ThreadsBatchConsumer.new
+pipeline = ThreadsBatchConsumerExample.new
 pipeline.run
 puts "Results: #{pipeline.results.size} batches, total items: #{pipeline.results.sum}"
 puts pipeline.results.sum == 20 ? '✓ Works!' : '✗ Failed'

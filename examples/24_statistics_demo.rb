@@ -36,8 +36,8 @@ if __FILE__ == $PROGRAM_NAME
   demo = StatisticsDemo.new
   demo.run
 
-  # Access the stats
-  task = demo.class._minigun_task
+  # Access the stats from instance task (not class task)
+  task = demo._minigun_task
   pipeline = task.root_pipeline
   stats = pipeline.stats
 

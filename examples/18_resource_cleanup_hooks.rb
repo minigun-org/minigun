@@ -69,7 +69,7 @@ class ResourceCleanupExample
     # Accumulator batches records
     accumulator :batch, max_size: 5
 
-    process_per_batch(max: 2) do
+    cow_fork(2) do
       # Close connections before forking
       before_fork :save_to_db do
         @resource_events << 'Closing connections before fork'

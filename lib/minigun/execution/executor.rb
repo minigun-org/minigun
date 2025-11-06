@@ -4,69 +4,35 @@ module Minigun
   # Execution strategies for running pipeline stages
   module Execution
     # Base executor class - all execution strategies inherit from this
-    # Executors handle stage execution including hooks, stats, and error handling
+    # NOTE: Stages now manage their own execution loops internally via execute(context, input_queue, output_queue).
+    # Executors define HOW that execution happens (inline, threaded, etc).
     class Executor
-      # Execute a stage item with queue-based routing
+      attr_reader :stage_ctx
+
+      def initialize(stage_ctx)
+        @stage_ctx = stage_ctx
+      end
+
+      # Execute the actual stage logic using this executor's strategy
+      # Subclasses implement this to control HOW execution happens
       # @param stage [Stage] The stage to execute
-      # @param item [Object] The item to process
-      # @param user_context [Object] The user's pipeline context
-      # @param input_queue [InputQueue] Wrapped input queue for the stage
-      # @param output_queue [OutputQueue] Wrapped output queue for the stage
-      # @param stats [Stats] The stats object for tracking
-      # @param pipeline [Pipeline] The pipeline instance (for hooks)
-      def execute_stage_item(stage:, item:, user_context:, stats:, pipeline:, input_queue: nil, output_queue: nil)
-        # Check if stage is terminal
-        dag = pipeline.dag
-        is_terminal = dag.terminal?(stage.name)
-        stage_stats = stats.for_stage(stage.name, is_terminal: is_terminal)
-        stage_stats.start! unless stage_stats.start_time
-        start_time = Time.now
-
-        # Execute before hooks for this stage
-        pipeline.send(:execute_stage_hooks, :before, stage.name)
-
-        # Track consumption of input item
-        stage_stats.increment_consumed if item
-
-        # Execute the stage using this executor's strategy
-        execute_with_strategy(stage, item, user_context, pipeline, input_queue, output_queue)
-
-        # Record latency
-        duration = Time.now - start_time
-        stage_stats.record_latency(duration)
-
-        # Execute after hooks for this stage
-        pipeline.send(:execute_stage_hooks, :after, stage.name)
-      rescue StandardError => e
-        Minigun.logger.error "[Pipeline:#{pipeline.name}][Stage:#{stage.name}] Error: #{e.message}"
-        Minigun.logger.error e.backtrace.join("\n")
+      # @param user_context [Object] User context for instance_exec
+      # @param input_queue [Queue] Input queue for items
+      # @param output_queue [Queue] Output queue for results
+      def execute_stage(stage, user_context, input_queue, output_queue)
+        raise NotImplementedError, "#{self.class}#execute_stage must be implemented"
       end
 
       # Shutdown and cleanup resources
       def shutdown
         # Default: no-op
       end
-
-      protected
-
-      # Execute the actual stage logic using this executor's strategy
-      # Subclasses implement this to control HOW execution happens
-      def execute_with_strategy(stage, item, user_context, pipeline, input_queue, output_queue)
-        raise NotImplementedError, "#{self.class}#execute_with_strategy must be implemented"
-      end
-
-      # Run the stage's actual processing logic with queues
-      def run_stage_logic(stage, item, user_context, input_queue, output_queue)
-        stage.execute(user_context, item: item, input_queue: input_queue, output_queue: output_queue)
-      end
     end
 
     # Inline execution - no concurrency, executes immediately in current thread
     class InlineExecutor < Executor
-      protected
-
-      def execute_with_strategy(stage, item, user_context, _pipeline, input_queue, output_queue)
-        run_stage_logic(stage, item, user_context, input_queue, output_queue)
+      def execute_stage(stage, user_context, input_queue, output_queue)
+        stage.execute(user_context, input_queue, output_queue, @stage_ctx.stage_stats)
       end
     end
 
@@ -74,10 +40,24 @@ module Minigun
     class ThreadPoolExecutor < Executor
       attr_reader :max_size
 
-      def initialize(max_size:)
-        @max_size = max_size
+      def initialize(stage_ctx, max_size: nil)
+        super(stage_ctx)
+        @max_size = max_size || 5
         @active_threads = []
         @mutex = Mutex.new
+      end
+
+      def execute_stage(stage, user_context, input_queue, output_queue)
+        wait_for_slot
+
+        thread = Thread.new do
+          stage.execute(user_context, input_queue, output_queue, @stage_ctx.stage_stats)
+        ensure
+          @mutex.synchronize { @active_threads.delete(Thread.current) }
+        end
+
+        @mutex.synchronize { @active_threads << thread }
+        thread.value # Wait for completion
       end
 
       def shutdown
@@ -85,21 +65,6 @@ module Minigun
           thread.kill if thread.alive?
         end
         @active_threads.clear
-      end
-
-      protected
-
-      def execute_with_strategy(stage, item, user_context, _pipeline, input_queue, output_queue)
-        wait_for_slot
-
-        thread = Thread.new do
-          run_stage_logic(stage, item, user_context, input_queue, output_queue)
-        ensure
-          @mutex.synchronize { @active_threads.delete(Thread.current) }
-        end
-
-        @mutex.synchronize { @active_threads << thread }
-        thread.value # Wait for completion
       end
 
       private
@@ -113,134 +78,611 @@ module Minigun
       end
     end
 
-    # Process pool executor - manages forked process execution
-    class ProcessPoolExecutor < Executor
+    # Abstract base class for fork-based executors
+    # Handles common IPC result communication logic
+    class AbstractForkExecutor < Executor
       attr_reader :max_size
 
-      def initialize(max_size:)
-        @max_size = max_size
-        @active_pids = []
+      def initialize(stage_ctx, max_size: nil)
+        super(stage_ctx)
+        @max_size = max_size || 5
         @mutex = Mutex.new
-      end
-
-      def shutdown
-        @mutex.synchronize { @active_pids.dup }.each do |pid|
-          Process.kill('TERM', pid)
-        rescue StandardError
-          nil
-        end
-        @active_pids.clear
       end
 
       protected
 
-      def execute_with_strategy(stage, item, user_context, _pipeline, input_queue, output_queue)
-        unless Process.respond_to?(:fork)
+      # Write result from child to parent via IPC pipe
+      def write_result_to_pipe(result, writer)
+        if result.nil?
+          Marshal.dump({ type: :no_result }, writer)
+        else
+          Marshal.dump({ type: :result, result: result }, writer)
+        end
+        writer.flush
+      end
+
+      # Read result from child via IPC pipe
+      def read_result_from_pipe(reader, output_queue, stage_ctx = nil)
+        response = Marshal.load(reader)
+        case response[:type]
+        when :result
+          result = response[:result]
+          # Handle arrays of results (multiple items written to output_queue)
+          if result.is_a?(Array)
+            result.each { |item| output_queue << item }
+          elsif !result.nil?
+            output_queue << result
+          end
+        when :routed_result
+          # Handle explicitly routed result from IPC worker
+          target = response[:target]
+          result = response[:result]
+          if stage_ctx && target
+            # Route to specific target stage
+            task = stage_ctx.stage.task
+            target_stage = task.stage_registry.find(target, from_pipeline: stage_ctx.stage.pipeline)
+            if target_stage
+              target_queue = task.find_queue(target_stage)
+              if target_queue
+                target_queue << result
+                # Track runtime edge for END signal handling
+                runtime_edges = stage_ctx.runtime_edges
+                runtime_edges[stage_ctx.stage] ||= Set.new
+                runtime_edges[stage_ctx.stage].add(target_stage)
+              else
+                warn "[Minigun] Target queue not found for routed result: #{target}"
+                output_queue << result # Fallback to default output
+              end
+            else
+              warn "[Minigun] Target stage not found for routed result: #{target}"
+              output_queue << result # Fallback to default output
+            end
+          else
+            output_queue << result # Fallback if no routing context
+          end
+        when :error
+          error_msg = response[:error] || 'Unknown error in forked process'
+          backtrace = response[:backtrace]
+          exception = RuntimeError.new("COW forked process failed: #{error_msg}")
+          exception.set_backtrace(backtrace) if backtrace
+          raise exception
+        when :serialization_error
+          # Result couldn't be serialized (contains IO, Proc, etc.)
+          # Log warning but continue - item is skipped
+          warn "[Minigun] Skipped non-serializable result: #{response[:error]} (type: #{response[:item_type]})"
+        when :no_result
+          # Child processed but produced no output
+        when :end_of_stage
+          # Worker finished processing and sent EndOfStage
+          # Create a new EndOfStage for this IPC stage and propagate it
+          if stage_ctx
+            output_queue.push(Minigun::EndOfStage.new(stage_ctx.stage))
+          end
+        end
+      rescue EOFError
+        # Normal EOF - worker finished processing, re-raise to exit collection loop
+        raise
+      rescue IOError => e
+        warn "[Minigun] Error reading from pipe: #{e.message}"
+        raise
+      end
+
+      # Send error from child to parent via IPC pipe
+      def write_error_to_pipe(error, writer)
+        Marshal.dump(
+          {
+            type: :error,
+            error: error.message,
+            backtrace: error.backtrace
+          },
+          writer
+        )
+        writer.flush
+      end
+    end
+
+    # COW Fork Pool Executor - Copy-On-Write fork pattern
+    # Maintains a pool of up to max_size concurrent forked processes.
+    # Each forked process handles ONE item then exits.
+    # Memory pages are shared between parent and child until modified (COW).
+    # Input item is COW-shared, but results are sent via IPC pipes.
+    class CowForkPoolExecutor < AbstractForkExecutor
+      def initialize(stage_ctx, max_size:)
+        super
+        @active_forks = {} # pid => fork_info
+      end
+
+      def execute_stage(stage, user_context, input_queue, output_queue)
+        unless Minigun.fork?
           warn '[Minigun] Process forking not available, falling back to inline'
-          return run_stage_logic(stage, item, user_context, input_queue, output_queue)
+          return stage.execute(user_context, input_queue, output_queue, @stage_ctx.stage_stats)
         end
 
-        # NOTE: Queue-based DSL doesn't work with process pools since queues can't cross process boundaries
-        # This would require implementing IPC for queue operations
-        # For now, process pools execute stages but can't properly route via queues
-        raise NotImplementedError, 'Process pools are not yet compatible with queue-based DSL. Use threads or inline execution.'
+        # Execute before_fork hooks in parent process (once, before any forks)
+        # This executes both pipeline-level and stage-specific hooks
+        @stage_ctx.root_pipeline&.send(:execute_fork_hooks, :before_fork, stage.name)
 
-        # Keeping old implementation commented for reference
-        # wait_for_slot
-        #
-        # # Execute before_fork hooks
-        # execute_fork_hooks(:before_fork, stage, pipeline)
-        #
-        # reader, writer = IO.pipe
-        # pid = fork do
-        #   reader.close
-        #
-        #   # Execute after_fork hooks in child
-        #   execute_fork_hooks(:after_fork, stage, pipeline)
-        #
-        #   begin
-        #     run_stage_logic(stage, item, user_context, input_queue, output_queue)
-        #     Marshal.dump(:success, writer)
-        #   rescue => e
-        #     Marshal.dump({ error: e }, writer)
-        #   ensure
-        #     writer.close
-        #   end
-        # end
-        #
-        # writer.close
-        # @mutex.synchronize { @active_pids << pid }
-        #
-        # # Wait for child
-        # Process.wait(pid)
-        # result = Marshal.load(reader) rescue nil
-        # reader.close
-        #
-        # @mutex.synchronize { @active_pids.delete(pid) }
-        #
-        # if result.is_a?(Hash) && result[:error]
-        #   raise result[:error]
-        # end
+        all_items_queued = false
+
+        # Main loop: fork a process for each item as it arrives
+        loop do
+          # Reap any completed child processes (non-blocking)
+          reap_completed_forks
+
+          # If we have capacity and items remaining, fork for next item
+          if !all_items_queued && current_active_count < @max_size
+            item = input_queue.pop
+
+            if item.is_a?(Minigun::EndOfStage)
+              all_items_queued = true
+            else
+              # Fork a process for this single item (COW-shared)
+              fork_for_item(item, stage, user_context, output_queue)
+            end
+          end
+
+          # Break when all items processed and no active forks
+          break if all_items_queued && current_active_count == 0
+
+          # Small sleep to avoid busy waiting
+          sleep 0.001 if current_active_count > 0
+        end
+      end
+
+      def shutdown
+        @mutex.synchronize { @active_forks.keys.dup }.each do |pid|
+          Process.kill('TERM', pid)
+        rescue StandardError
+          nil
+        end
+        @active_forks.clear
       end
 
       private
 
-      def wait_for_slot
-        loop do
-          return if @mutex.synchronize { @active_pids.size } < @max_size
+      def current_active_count
+        @mutex.synchronize { @active_forks.size }
+      end
 
-          sleep 0.01
+      def fork_for_item(item, stage, user_context, output_queue)
+        # Create pipe for IPC communication (results only - item is COW-shared)
+        reader, writer = IO.pipe
+
+        stage_stats = @stage_ctx.stage_stats
+        pipeline = @stage_ctx.root_pipeline
+
+        # Fork child process - item is COW-shared (read-only, no copy until modified)
+        pid = fork do
+          reader.close # Close read end in child
+
+          begin
+            # Execute after_fork hooks in child process
+            # This executes both pipeline-level and stage-specific hooks
+            pipeline&.send(:execute_fork_hooks, :after_fork, stage.name)
+
+            # Child process has inherited item via COW
+            # Execute the stage's block on this single item
+            # Use IPC-backed output queue for routing support
+            capture_output = Minigun::IpcOutputQueue.new(writer, stage_stats)
+
+            # Execute stage block with item and capture output queue
+            start_time = Time.now if stage_stats
+            if stage.respond_to?(:block) && stage.block
+              user_context.instance_exec(item, capture_output, &stage.block)
+            elsif stage.respond_to?(:call)
+              stage.call_with_arity(item, capture_output, &capture_output.to_proc)
+            end
+            stage_stats&.record_latency(Time.now - start_time)
+
+            # Results already sent via IpcOutputQueue during execution
+            # Just close the pipe to signal completion
+          rescue StandardError => e
+            # Send error back to parent via IPC
+            write_error_to_pipe(e, writer)
+            warn "[Minigun] Error in COW forked process: #{e.message}"
+            warn e.backtrace.join("\n")
+          ensure
+            writer.close
+            exit! 0
+          end
+        end
+
+        unless pid
+          reader.close
+          writer.close
+          warn '[Minigun] Failed to fork process, falling back to inline'
+          # Fall back to processing inline for this item
+          capture_queue = Queue.new
+          capture_output = Minigun::OutputQueue.new(
+            stage,
+            [capture_queue],
+            {},
+            stage_stats: stage_stats
+          )
+          if stage.respond_to?(:block) && stage.block
+            user_context.instance_exec(item, capture_output, &stage.block)
+          elsif stage.respond_to?(:call)
+            stage.call_with_arity(item, capture_output, &capture_output.to_proc)
+          end
+          # Write captured results to output_queue
+          loop do
+            result = capture_queue.pop(true) # non_block = true
+            output_queue << result
+          rescue ThreadError
+            break
+          end
+          return
+        end
+
+        writer.close # Close write end in parent
+
+        @mutex.synchronize { @active_forks[pid] = { reader: reader, output_queue: output_queue } }
+      end
+
+      def reap_completed_forks
+        @mutex.synchronize do
+          @active_forks.each_key do |pid|
+            status = Process.wait2(pid, Process::WNOHANG)
+            next unless status
+
+            _pid, process_status = status
+            fork_info = @active_forks.delete(pid)
+            reader = fork_info[:reader]
+            output_queue = fork_info[:output_queue]
+
+            begin
+              if process_status.success?
+                # Read all results from child via IPC pipe (may be multiple with routing)
+                loop do
+                  read_result_from_pipe(reader, output_queue, @stage_ctx)
+                end
+              else
+                warn "[Minigun] COW forked process #{pid} failed with status: #{process_status.exitstatus}"
+              end
+            rescue EOFError, IOError
+              # Normal - child closed pipe after sending results
+            ensure
+              begin
+                reader.close
+              rescue StandardError
+                nil
+              end
+            end
+          end
+        end
+      end
+    end
+
+    # IPC Fork Pool Executor - Inter-Process Communication fork pattern
+    # Creates persistent worker processes that communicate via IPC pipes.
+    # Workers continuously pull items, process them, and send results back.
+    # Data is serialized through pipes for both input and output, providing strong process isolation.
+    class IpcForkPoolExecutor < AbstractForkExecutor
+      def initialize(stage_ctx, max_size:)
+        super
+        @workers = []
+        @my_pipes = [] # Track this executor's pipes for cleanup/unregister
+      end
+
+      def execute_stage(stage, user_context, input_queue, output_queue)
+        unless Minigun.fork?
+          warn '[Minigun] Process forking not available, falling back to inline'
+          return stage.execute(user_context, input_queue, output_queue, @stage_ctx.stage_stats)
+        end
+
+        # Execute before_fork hooks in parent process (before spawning workers)
+        # This executes both pipeline-level and stage-specific hooks
+        @stage_ctx.root_pipeline&.send(:execute_fork_hooks, :before_fork, stage.name)
+
+        # Spawn persistent worker processes
+        spawn_workers(stage, user_context)
+
+        # Distribute items to workers
+        begin
+          distribute_work(input_queue, output_queue)
+        ensure
+          shutdown
         end
       end
 
-      def execute_fork_hooks(hook_type, stage, pipeline)
-        user_context = pipeline.context
-        stage_hooks = pipeline.stage_hooks
+      def shutdown
+        @mutex.synchronize do
+          @workers.each do |worker|
+            # Send shutdown signal (as end_of_stage so IpcInputQueue handles it)
+            Marshal.dump({ type: :end_of_stage }, worker[:to_worker])
+            worker[:to_worker].flush
+          rescue IOError, EOFError, Errno::EPIPE
+            # Worker already closed or pipe broken, ignore
+          end
 
-        # Pipeline-level fork hooks
-        hooks = pipeline.hooks[hook_type] || []
-        hooks.each { |h| user_context.instance_eval(&h) }
+          # Give workers a moment to finish processing
+          sleep 0.1
 
-        # Stage-specific fork hooks
-        stage_hooks_list = stage_hooks.dig(hook_type, stage.name) || []
-        stage_hooks_list.each { |h| user_context.instance_exec(&h) }
+          @workers.each do |worker|
+            # Close pipes
+            begin
+              worker[:to_worker].close
+            rescue StandardError
+              nil
+            end
+
+            begin
+              worker[:from_worker].close
+            rescue StandardError
+              nil
+            end
+
+            # Wait for worker to exit (non-blocking)
+            begin
+              Process.wait2(worker[:pid], Process::WNOHANG)
+            rescue Errno::ECHILD
+              # Already reaped
+            end
+          rescue StandardError
+            # Force kill if graceful shutdown fails
+            begin
+              Process.kill('TERM', worker[:pid])
+            rescue StandardError
+              nil
+            end
+          end
+          @workers.clear
+
+          # Unregister pipes from task tracking
+          task = @stage_ctx.stage.task
+          task.unregister_ipc_pipes(@my_pipes)
+          @my_pipes.clear
+        end
+      end
+
+      private
+
+      def spawn_workers(stage, user_context)
+        stage_stats = @stage_ctx.stage_stats
+        pipeline = @stage_ctx.root_pipeline
+
+        @max_size.times do
+          # Create bidirectional pipes for IPC
+          parent_read, child_write = IO.pipe
+          child_read, parent_write = IO.pipe
+
+          # Register pipes with task to track across all IPC stages
+          # This prevents FD leaks when multiple IPC stages run concurrently
+          task = stage.task
+          pipes = [parent_read, child_write, child_read, parent_write]
+          task.register_ipc_pipes(pipes)
+          @my_pipes.concat(pipes)
+
+          pid = fork do
+            # Worker process - close parent ends
+            parent_read.close
+            parent_write.close
+
+            # Close ALL IPC pipes from ALL stages EXCEPT our own pipes
+            # This prevents FD leaks when multiple IPC stages run concurrently
+            task.close_all_ipc_pipes_except([child_read, child_write])
+
+            worker_loop(stage, user_context, stage_stats, child_read, child_write, pipeline)
+          end
+
+          unless pid
+            warn '[Minigun] Failed to fork worker process'
+            parent_read.close
+            parent_write.close
+            child_read.close
+            child_write.close
+            next
+          end
+
+          # Parent process - close child ends
+          child_read.close
+          child_write.close
+
+          @workers << {
+            pid: pid,
+            to_worker: parent_write,
+            from_worker: parent_read
+          }
+        end
+      end
+
+      def worker_loop(stage, user_context, stage_stats, from_parent, to_parent, pipeline)
+        # Execute after_fork hooks in child process
+        # This executes both pipeline-level and stage-specific hooks
+        pipeline&.send(:execute_fork_hooks, :after_fork, stage.name)
+
+        # Create IPC-backed input queue that reads from parent via IPC
+        ipc_input_queue = Minigun::IpcInputQueue.new(from_parent, stage)
+
+        # Create IPC-backed output queue that writes results back to parent via IPC
+        ipc_output_queue = Minigun::IpcOutputQueue.new(to_parent, stage_stats)
+
+        begin
+          # Run the stage's execute method with IPC-backed queues
+          # This runs the full streaming loop in the worker process
+          stage.execute(user_context, ipc_input_queue, ipc_output_queue, stage_stats)
+        rescue StandardError => e
+          # Send error back to parent via IPC pipe
+          write_error_to_pipe(e, to_parent)
+        end
+      rescue EOFError, IOError
+        # Parent closed pipe, exit gracefully
+      ensure
+        # Close pipes - EOF will naturally signal parent that worker is done
+        begin
+          from_parent.close
+        rescue StandardError
+          nil
+        end
+
+        begin
+          to_parent.close
+        rescue StandardError
+          nil
+        end
+
+        exit! 0
+      end
+
+      def distribute_work(input_queue, output_queue)
+        worker_index = 0
+        received_end_of_stage = nil
+
+        # Get nested stages' queues for dynamic routing support
+        nested_queues = get_nested_stage_queues
+
+        # Start result collection threads for each worker
+        result_threads = @workers.map do |worker|
+          Thread.new do
+            loop do
+              read_result_from_pipe(worker[:from_worker], output_queue, @stage_ctx)
+            end
+          rescue EOFError, IOError
+            # Worker closed pipe, done
+          end
+        end
+
+        # Start threads to monitor nested stages' queues and forward to workers
+        nested_queue_threads = start_nested_queue_monitors(nested_queues)
+
+        # Distribute items to workers round-robin
+        begin
+          loop do
+            item = input_queue.pop
+
+            if item.is_a?(Minigun::EndOfStage)
+              received_end_of_stage = item
+              # Send EndOfStage to all workers
+              @workers.each do |worker|
+                Marshal.dump({ type: :end_of_stage }, worker[:to_worker])
+                worker[:to_worker].flush
+              rescue IOError, EOFError, Errno::EPIPE
+                # Worker already closed, ignore
+              end
+              break
+            end
+
+            # Round-robin distribution to workers
+            worker = @workers[worker_index % @workers.size]
+            worker_index += 1
+
+            # Send item to worker via IPC
+            begin
+              Marshal.dump({ type: :item, item: item }, worker[:to_worker])
+              worker[:to_worker].flush
+            rescue TypeError, ArgumentError => e
+              # Item contains non-serializable objects - skip it
+              warn "[Minigun] Cannot serialize item for IPC worker: #{e.message}. Item type: #{item.class}. Skipping."
+            rescue IOError, EOFError => e
+              warn "[Minigun] Lost connection to worker #{worker[:pid]}: #{e.message}"
+              raise
+            end
+          end
+        ensure
+          # Stop nested queue monitor threads
+          nested_queue_threads&.each(&:kill)
+          # Wait for all result collection threads to finish
+          result_threads.each(&:join)
+        end
+      end
+
+      # Get queues for nested stages (for dynamic routing support)
+      def get_nested_stage_queues
+        return [] unless @stage_ctx.respond_to?(:stage)
+
+        stage = @stage_ctx.stage
+        return [] unless stage.is_a?(Minigun::PipelineStage)
+
+        nested_pipeline = stage.nested_pipeline
+        return [] unless nested_pipeline
+
+        task = stage.respond_to?(:task) ? stage.task : nil
+        return [] unless task
+
+        # Get all nested stages and their queues
+        nested_pipeline.instance_variable_get(:@stages).filter_map do |nested_stage|
+          queue = task.find_queue(nested_stage)
+          { stage: nested_stage, queue: queue } if queue
+        end
+      rescue StandardError => e
+        # If anything goes wrong, just skip nested queue monitoring
+        Minigun.logger.debug "[IPC] Could not get nested stage queues: #{e.message}"
+        []
+      end
+
+      # Start threads to monitor nested stages' queues
+      def start_nested_queue_monitors(nested_queues)
+        return [] if nested_queues.empty?
+
+        worker_index_ref = { value: 0 } # Use ref to share across threads
+        nested_queues.map do |nested_info|
+          Thread.new do
+            loop do
+              # Non-blocking check for items in nested queue
+              item = nested_info[:queue].pop(true) # non_block = true
+
+              # Send item to worker with routing metadata
+              worker_idx = worker_index_ref[:value]
+              worker_index_ref[:value] = (worker_idx + 1) % @workers.size
+              worker = @workers[worker_idx]
+
+              Marshal.dump(
+                {
+                  type: :routed_item,
+                  target_stage: nested_info[:stage].name,
+                  item: item
+                },
+                worker[:to_worker]
+              )
+              worker[:to_worker].flush
+            rescue ThreadError
+              # Queue empty, sleep briefly
+              sleep 0.01
+            rescue StandardError => e
+              # Log but don't crash the monitor thread
+              Minigun.logger.debug "[IPC] Nested queue monitor error: #{e.message}"
+              sleep 0.1
+            end
+          end
+        end
       end
     end
 
     # Ractor pool executor - manages ractor execution
     class RactorPoolExecutor < Executor
-      def initialize(max_size:)
-        @max_size = max_size
-        @fallback = ThreadPoolExecutor.new(max_size: max_size)
+      def initialize(stage_ctx, max_size: nil)
+        super(stage_ctx)
+        @max_size = max_size || 5
+        @fallback = ThreadPoolExecutor.new(stage_ctx, max_size: max_size)
       end
 
-      protected
-
-      def execute_with_strategy(stage, item, user_context, pipeline, input_queue, output_queue)
+      def execute_stage(stage, user_context, input_queue, output_queue)
         unless defined?(::Ractor)
           warn '[Minigun] Ractors not available, falling back to thread pool'
-          return @fallback.send(:execute_with_strategy, stage, item, user_context, pipeline, input_queue, output_queue)
+          return @fallback.execute_stage(stage, user_context, input_queue, output_queue)
         end
 
         # NOTE: Ractors have similar IPC challenges as process pools
         # Fall back to threads for now
-        @fallback.send(:execute_with_strategy, stage, item, user_context, pipeline, input_queue, output_queue)
+        @fallback.execute_stage(stage, user_context, input_queue, output_queue)
       end
     end
 
     # Factory for creating executors
-    def self.create_executor(type:, max_size:)
+    def self.create_executor(type, ...)
       case type
       when :inline
-        InlineExecutor.new
+        InlineExecutor.new(...)
       when :thread
-        ThreadPoolExecutor.new(max_size: max_size)
-      when :fork
-        ProcessPoolExecutor.new(max_size: max_size)
+        ThreadPoolExecutor.new(...)
+      when :cow_fork
+        CowForkPoolExecutor.new(...)
+      when :ipc_fork
+        IpcForkPoolExecutor.new(...)
       when :ractor
-        RactorPoolExecutor.new(max_size: max_size)
+        RactorPoolExecutor.new(...)
       else
-        raise ArgumentError, "Unknown executor type: #{type}"
+        raise ArgumentError, "Unknown executor type: #{type}. Valid types: :inline, :thread, :cow_fork, :ipc_fork, :ractor"
       end
     end
   end

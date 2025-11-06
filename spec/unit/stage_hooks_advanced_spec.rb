@@ -46,8 +46,8 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
 
           before_fork { @execution_order << '9_pipeline_before_fork' }
 
-          # Use process_per_batch so forking actually happens
-          process_per_batch(max: 1) do
+          # Use cow_fork so forking actually happens
+          cow_fork(1) do
             consumer :cons do |_item|
               # Write to temp file (fork-safe)
               File.open(@temp_order_file.path, 'a') do |f|
@@ -118,7 +118,7 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
         expect(proc_block_idx).to be < proc_after_idx
 
         # Fork hooks happen in order (only if forking is supported)
-        if Process.respond_to?(:fork)
+        if Minigun.fork?
           expect(order).to include('9_pipeline_before_fork')
           expect(order).to include('10_consumer_before_fork')
           expect(order).to include('11_consumer_after_fork')
@@ -387,9 +387,9 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
       pipeline = routing_pipeline.new
       pipeline.run
 
-      # Each processor should have hooks executed for each item
-      expect(pipeline.proc1_count).to eq(2) # 2 items
-      expect(pipeline.proc2_count).to eq(2) # 2 items
+      # Each processor should have hooks executed once per stage (not per item with internal looping)
+      expect(pipeline.proc1_count).to eq(1) # Called once per stage execution
+      expect(pipeline.proc2_count).to eq(1) # Called once per stage execution
 
       # Results from both processors
       expect(pipeline.results).to include(10, 20, 100, 200)
@@ -401,12 +401,11 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
       Class.new do
         include Minigun::DSL
 
-        attr_accessor :results, :gc_runs
+        attr_accessor :results, :setup_called
 
         def initialize
           @results = []
-          @gc_runs = 0
-          @item_count = 0
+          @setup_called = false
         end
 
         pipeline do
@@ -415,12 +414,8 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
           end
 
           before :transform do
-            @item_count += 1
-            # Run GC every 5 items
-            if @item_count % 5 == 0
-              GC.start
-              @gc_runs += 1
-            end
+            # Stage-level setup - called once before processing items
+            @setup_called = true
           end
 
           processor :transform do |item, output|
@@ -439,7 +434,7 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
       pipeline.run
 
       expect(pipeline.results.size).to eq(10)
-      expect(pipeline.gc_runs).to eq(2) # At items 5 and 10
+      expect(pipeline.setup_called).to be(true) # Stage setup was called
     end
   end
 end

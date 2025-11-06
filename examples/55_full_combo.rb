@@ -7,7 +7,7 @@
 require_relative '../lib/minigun'
 
 # Demonstrates all execution features combined
-class FullCombo
+class FullComboExample
   include Minigun::DSL
 
   attr_reader :stats
@@ -38,7 +38,7 @@ class FullCombo
       output << item
     end
 
-    threads(@threads) do
+    thread_pool(@threads) do
       processor :download do |item, output|
         @mutex.synchronize { @stats[:downloaded] += 1 }
         item[:data] = "data-#{item[:id]}"
@@ -53,7 +53,7 @@ class FullCombo
 
     batch @batch_size
 
-    process_per_batch(max: @processes) do
+    cow_fork(@processes) do
       processor :parse_batch do |batch, output|
         @mutex.synchronize { @stats[:parsed] += batch.size }
         batch.each do |item|
@@ -62,11 +62,11 @@ class FullCombo
       end
     end
 
-    processor :save_db, execution_context: :db_pool do |item|
+    processor :save_db, execution_context: :db_pool do |item, output|
       output << item
     end
 
-    threads(5) do
+    thread_pool(5) do
       consumer :upload do |_item|
         @mutex.synchronize { @stats[:uploaded] += 1 }
       end
@@ -75,7 +75,7 @@ class FullCombo
 end
 
 puts 'Testing: full combination (mini example 38)'
-pipeline = FullCombo.new
+pipeline = FullComboExample.new
 pipeline.run
 
 puts "\nResults:"

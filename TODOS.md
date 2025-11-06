@@ -1,12 +1,14 @@
 
 ADD to README / DOCS:
 - stages route to each other sequentially, unless you add :to or :from keywords
-- execute in paralle, and do NOT route to each other, unless unless you add :to or :from keywords.
+- execute in parallel, and do NOT route to each other, unless you add :to or :from keywords.
 
 - every consumer has an input queue
 - if there is fan-out (multiple consumers for any 1 producer), add producer output queues and an intermediate router (load balancer) object. the router has an input queue and round-robin allocates to the consumers.
 - fan-in without fan-out (i.e. a producer connects to 1 consumer, even if MULTIPLE producers connect to that consumer) is done by directly having the producer insert to the consumer's queue
 - emit_to_stage emits DIRECTLY to the consumer input queue
+
+add to readme: Classes use yield instead of |output|
 
 add to architecture
 - multi-parents --> how do we know end of queues?
@@ -23,7 +25,6 @@ we are trying to do this should do this:
 - if the final result is that there is a single pipeline, it is hoisted to become the root pipeline. this can be either done with a setter, a private setter (probably best), or a redefinition of the task (probably not)
 - update readme accordingly (there is a WIP section)
 
-==================================
 
       # Evaluate stored pipeline blocks on instance task with instance context
       blocks = self.class._pipeline_definition_blocks
@@ -50,7 +51,6 @@ we are trying to do this should do this:
 
 instead of this, hoist the pipleine
 
-===============================
 
 Support Cross-Pipeline Routing?
 - use stage identifiers instead of names?
@@ -59,23 +59,138 @@ Support Cross-Pipeline Routing?
 - Pass this global registry to OutputQueue instead of just local stage_input_queues
 - Handle END signals across pipelines (more complex - need to track which pipelines are done)
 - Something like:
+TODO: Refactor so more things are moved from Stage to Worker, e.g.
+- queue creation
+- start/end stats tracking (need tests for all stage types) -- make some stages silent?
+- error catching
+- sending of end signals?
+- rename #run_worker_loop as its not a loop. Maybe #run_in_worker? other ideas? --> DONE: renamed to #run_stage
 
-  task.pipeline(:foo)
-  task.stages(:bar)
 
-  task.minigun.dag
+This needs to be in all stage:
+
+stage_stats = stage_ctx.stage_stats
+stage_stats.start!
+log_info(stage_ctx, 'Starting')
 
 
-  task.pipeline(:foo).stage(:bar)
-  task.pipelines
-  task.stages
+- name -- base62
+- check for name conflicts
 
-===============================================
+
+batch / debatch / rebatch operators
+
+
+cleanup signal
++ break if item.is_a?(AllUpstreamsDone)
++ break if item.is_a?(Message) && item.end_of_stream?
+
+
+make pipeline and dag accessible
+
+
+names:
+- nordstream
+- permian
+- ???
+
+
+fiber
+fibers(10) do <-- all childs within fiber scope. should threads be joined within fiber scope?
+
+thread
+threads(10) do
+
+cow_fork
+cow_forks(10) do # creates a pipeline
+end
+
+ipc_fork
+ipc_forks(10) do # creates a pipeline
+
+ractors
+=
+
+
+think about potential for conflicts with the base context
+
+thread_pool
+cow_fork_pool
+
+
+
++        # Get pipeline name - pipeline might be a Pipeline or Task
++        pipeline_name = @pipeline.is_a?(Pipeline) ? @pipeline.name : nil
++        task.registry.register(self, pipeline_name: pipeline_name)
+       else
+
+
+lock DAG /pipelines/task when running (no modification possible)
+
+
+named_stage_keepalive_seconds = nil, 0, 5, infinity
+keepalive_seconds
+- needs to send keepalives to downstreams (solve in DAG?)
+- mark & sweep GC? mark them for overall pipeline ermination
+
+
+
+dynamic scaling
+
+
+parallel and sequential/sequence/series keywords --> influences DAG building
+
+
+Pipeline names should be consolidated with stage names
+
+
+better unique ID generation
+_jf02ASj3 ??
+
+
+make per item latency tracking optional (and stats?)
+
+
+allow this, and resolve names locally, and then up the chain. we may need a name resolution tree.
+
+routing to an ambiguous stage should raise an error, unless its an immediate neighbor
+
+do what's sensible here
+
+        pipeline :pipe_a do
+          processor :transform do |item, output|
+            output << (item + 100)
+          end
+
+          consumer :collect do |item, _output|
+            @mutex.synchronize { @results_a << item }
+          end
+        end
+
+        pipeline :pipe_b do
+          processor :transform do |item, output|
+            output << (item + 200)
+          end
+
+          consumer :collect do |item, _output|
+            @mutex.synchronize { @results_b << item }
+          end
+        end
+
+names string/symbol -- always convert to string for referencing
+
+=============================================
 
 fix DataProcessingPipeline spec
 I see the issue now - when you're inside a pipeline block, the stages within it are part of a PipelineStage which doesn't support output.to(). The output parameter is just an Array for collecting items, not an OutputQueue.
 
 ====================================
+
+===================================
+
+- harden --> add inputoutputstream
+
+==================================
 
 This method looks suss:
 
@@ -91,25 +206,13 @@ This method looks suss:
 - consolidate accumulator and batch
 
 =========================
-
-- signal trapping, child state management/killing
-- child culling (look at puma)
-
 ============================
 
 - mermaid diagrams
 
-===========================
-
-- IPC Fork
-
 ==========================
 
 - fibers
-
-=======================
-
-ProcessPoolExecutor --> cow_fork
 
 ================================
 

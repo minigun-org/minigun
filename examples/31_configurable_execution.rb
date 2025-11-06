@@ -38,7 +38,7 @@ class ConfigurableDownloader
     end
 
     # Use instance variable for thread count
-    threads(@threads) do
+    thread_pool(@threads) do
       processor :download do |url, output|
         # Simulate download
         sleep 0.01
@@ -93,7 +93,7 @@ class DataProcessor
     end
 
     # Parallel download with thread pool
-    threads(@threads) do
+    thread_pool(@threads) do
       processor :download do |item, output|
         # Simulate I/O-bound work
         output << { id: item, data: "data-#{item}" }
@@ -104,7 +104,7 @@ class DataProcessor
     batch @batch_size
 
     # CPU-intensive processing per batch with process isolation
-    process_per_batch(max: @processes) do
+    cow_fork(@processes) do
       processor :parse do |batch, _output|
         # Simulate CPU-intensive work
         batch.map { |item| item[:data].upcase }
@@ -166,7 +166,7 @@ class SmartPipeline
       100.times { |i| output << i }
     end
 
-    threads(@threads) do
+    thread_pool(@threads) do
       processor :work do |item, output|
         output << (item * 2)
       end
@@ -174,7 +174,7 @@ class SmartPipeline
 
     batch @batch_size
 
-    process_per_batch(max: @processes) do
+    cow_fork(@processes) do
       processor :heavy_work do |batch, _output|
         batch.map { |x| x**2 }
       end
@@ -212,27 +212,24 @@ class AdaptivePipeline
   def thread_count
     case @concurrency_level
     when :low then 10
-    when :medium then 50
     when :high then 200
-    else 50
+    else 50 # medium
     end
   end
 
   def process_count
     case @concurrency_level
     when :low then 2
-    when :medium then 4
     when :high then 16
-    else 4
+    else 4 # medium
     end
   end
 
   def batch_size
     case @concurrency_level
     when :low then 100
-    when :medium then 1000
     when :high then 10_000
-    else 1000
+    else 1000 # medium
     end
   end
 
@@ -241,7 +238,7 @@ class AdaptivePipeline
       1000.times { |i| output << i }
     end
 
-    threads(thread_count) do
+    thread_pool(thread_count) do
       processor :fetch do |item, output|
         output << { id: item, data: 'fetched' }
       end
@@ -249,7 +246,7 @@ class AdaptivePipeline
 
     batch batch_size
 
-    process_per_batch(max: process_count) do
+    cow_fork(process_count) do
       processor :process do |batch, _output|
         batch.map { |x| x[:data].upcase }
       end
@@ -304,7 +301,7 @@ class ConfigurablePipeline
       10.times { |i| output << i }
     end
 
-    threads(@config.thread_pool_size) do
+    thread_pool(@config.thread_pool_size) do
       processor :download do |item, output|
         output << (item * 2)
       end
@@ -312,7 +309,7 @@ class ConfigurablePipeline
 
     batch @config.batch_size
 
-    process_per_batch(max: @config.process_pool_size) do
+    cow_fork(@config.process_pool_size) do
       processor :parse do |batch, _output|
         batch.map { |x| x + 100 }
       end
@@ -360,13 +357,11 @@ puts <<~SUMMARY
      - Access configuration objects (@config.setting)
 
   4. Patterns Supported:
-     - threads(N) { ... }           # Thread pool
-     - processes(N) { ... }          # Process pool (future)
-     - ractors(N) { ... }            # Ractor pool (future)
-     - batch N                       # Batching
-     - process_per_batch(max: N)    # Spawn process per batch
-     - thread_per_batch(max: N)     # Spawn thread per batch (future)
-     - ractor_per_batch(max: N)     # Spawn ractor per batch (future)
+     - fiber_pool(N)  # Delegate to N fibers (future)
+     - thread_pool(N) # Delegate to N threads     - ractor_pool(N) # Delegate to N ractors (future)
+     - batch(N)       # Accumulate items into batches of N items, useful for cow_fork
+     - cow_fork(N)    # Spawn a Copy-On-Write (COW) fork process to process a batch
+     - ipc_fork(N)    # Spawn a fork an process items via Inter-Process Communication (IPC)
 
   5. Use Cases:
      - Web scraping with configurable parallelism

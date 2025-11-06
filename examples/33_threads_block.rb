@@ -28,7 +28,7 @@ class WebScraper
     end
 
     # All stages in this block use a pool of 10 threads
-    threads(10) do
+    thread_pool(10) do
       processor :download do |url, output|
         # Simulate HTTP request
         sleep 0.01

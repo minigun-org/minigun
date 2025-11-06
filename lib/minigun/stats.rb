@@ -5,13 +5,13 @@ require 'concurrent'
 module Minigun
   # Tracks execution statistics for a single stage
   class Stats
-    attr_reader :stage_name, :start_time, :end_time, :latency_samples, :latency_count
+    attr_reader :stage, :start_time, :end_time, :latency_samples, :latency_count
 
     # Latency tracking - reservoir sampling for uniform distribution
     RESERVOIR_SIZE = 1000
 
-    def initialize(stage_name, is_terminal: false)
-      @stage_name = stage_name
+    def initialize(stage, is_terminal: false)
+      @stage = stage
       @is_terminal = is_terminal
       @start_time = nil
       @end_time = nil
@@ -23,6 +23,11 @@ module Minigun
       @latency_samples = []
       @latency_count = 0 # Total number of latency observations
       @mutex = Mutex.new
+    end
+
+    # Get stage name
+    def stage_name
+      @stage.name
     end
 
     # Public accessors that return integer values from AtomicFixnum
@@ -143,13 +148,13 @@ module Minigun
 
     # Check if we have latency data
     def latency_data?
-      @latency_samples.any?
+      !@latency_samples.empty?
     end
 
     # Generate a summary hash
     def to_h
       {
-        stage_name: @stage_name,
+        stage_name: stage_name,
         runtime: runtime.round(2),
         items_produced: items_produced,
         items_consumed: items_consumed,
@@ -175,7 +180,7 @@ module Minigun
     # Pretty print
     def to_s
       parts = [
-        "Stage: #{@stage_name}",
+        "Stage: #{stage_name}",
         "Runtime: #{runtime.round(2)}s",
         "Items: #{total_items}",
         "Throughput: #{throughput.round(2)} items/s"
@@ -191,19 +196,24 @@ module Minigun
 
   # Aggregates statistics from multiple stages using DAG
   class AggregatedStats
-    attr_reader :pipeline_name, :stage_stats
+    attr_reader :pipeline, :dag, :stage_stats
 
-    def initialize(pipeline_name, dag)
-      @pipeline_name = pipeline_name
+    def initialize(pipeline, dag)
+      @pipeline = pipeline # Direct pipeline reference
       @dag = dag
       @stage_stats = {}
       @start_time = nil
       @end_time = nil
     end
 
+    # Backward compatibility method
+    def pipeline_name
+      @pipeline.name
+    end
+
     # Get or create stats for a stage
-    def for_stage(stage_name, is_terminal: false)
-      @stage_stats[stage_name] ||= Stats.new(stage_name, is_terminal: is_terminal)
+    def for_stage(stage, is_terminal: false)
+      @stage_stats[stage] ||= Stats.new(stage, is_terminal: is_terminal)
     end
 
     # Mark pipeline as started
@@ -225,7 +235,7 @@ module Minigun
 
     # Total items across all stages
     def total_items
-      @stage_stats.values.sum(&:total_items)
+      @stage_stats.values.sum { |s| s.total_items }
     end
 
     # Total items produced (from source stages)
@@ -251,7 +261,7 @@ module Minigun
     def bottleneck
       return nil if @stage_stats.empty?
 
-      @stage_stats.values.min_by(&:throughput)
+      @stage_stats.values.min_by { |s| s.throughput }
     end
 
     # Get stats for stages in topological order
@@ -262,7 +272,7 @@ module Minigun
     # Generate summary hash
     def to_h
       {
-        pipeline: @pipeline_name,
+        pipeline: @pipeline.name,
         runtime: runtime.round(2),
         total_produced: total_produced,
         total_consumed: total_consumed,
@@ -281,7 +291,7 @@ module Minigun
     # Pretty print summary
     def summary
       lines = []
-      lines << "Pipeline: #{@pipeline_name}"
+      lines << "Pipeline: #{@pipeline.name}"
       lines << "Runtime: #{runtime.round(2)}s"
       lines << "Items: #{total_produced} produced, #{total_consumed} consumed"
       lines << "Throughput: #{throughput.round(2)} items/s"

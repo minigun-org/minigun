@@ -12,7 +12,7 @@ class ConfigurationExample
   # Higher = more parallelism, but also more memory/CPU
   max_threads 10
 
-  # Maximum number of forked processes (for process_per_batch execution)
+  # Maximum number of forked processes (for cow_fork execution)
   # Higher = more parallel batch processing
   max_processes 4
 
@@ -62,7 +62,7 @@ if __FILE__ == $PROGRAM_NAME
 
   puts 'Available Configuration Options:'
   puts '  max_threads(n)    - Thread pool size for concurrent processing'
-  puts '  max_processes(n)  - Max forked processes (process_per_batch execution)'
+  puts '  max_processes(n)  - Max forked processes (cow_fork execution)'
   puts '  max_retries(n)    - Max retry attempts for failed operations'
   puts "\n"
 
@@ -83,7 +83,7 @@ if __FILE__ == $PROGRAM_NAME
 
   puts "\n=== Results ===\n"
   puts 'Total items emitted by producer: 20'
-  puts "Items filtered out (multiples of 7): #{[7, 14].size}"
+  puts 'Items filtered out (multiples of 7): 2'
   puts "Items successfully processed: #{example.results.size}"
   puts "Expected: #{20 - 2} items (20 minus 2 filtered)"
   puts "Actual: #{example.results.size} items"
@@ -92,7 +92,7 @@ if __FILE__ == $PROGRAM_NAME
   puts "\n=== Configuration Tips ===\n"
   puts '• max_threads: Set higher for I/O-bound work (network, database)'
   puts '• max_threads: Set lower for CPU-bound work to avoid context switching'
-  puts '• max_processes: Useful with process_per_batch for memory-intensive batches'
+  puts '• max_processes: Useful with cow_fork for memory-intensive batches'
   puts '• max_processes: Each process is a separate OS process (more isolation)'
   puts '• Balance threads vs processes based on your workload characteristics'
   puts "\n✓ Configuration example complete!"

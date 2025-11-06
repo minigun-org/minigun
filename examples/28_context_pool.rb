@@ -29,7 +29,7 @@ class BasicPoolExample
     end
 
     # Thread pool with 3 workers
-    threads(3) do
+    thread_pool(3) do
       processor :process do |item, output|
         sleep 0.05
         output << (item * 2)
@@ -69,7 +69,7 @@ class CapacityExample
     end
 
     # Limited to 2 concurrent workers
-    threads(2) do
+    thread_pool(2) do
       processor :process do |item, output|
         sleep 0.01
         output << item
@@ -110,7 +110,7 @@ class ParallelExample
       50.times { |i| output << i }
     end
 
-    threads(10) do
+    thread_pool(10) do
       processor :process do |item, output|
         output << (item * 2)
       end
@@ -147,7 +147,7 @@ class ReuseExample
       20.times { |i| output << i }
     end
 
-    threads(3) do
+    thread_pool(3) do
       processor :track do |item, output|
         @mutex.synchronize { @thread_ids << Thread.current.object_id }
         output << item
@@ -186,7 +186,7 @@ class BulkExample
       100.times { |i| output << i }
     end
 
-    threads(20) do
+    thread_pool(20) do
       processor :process do |item, output|
         output << (item**2)
       end
@@ -227,7 +227,7 @@ class TerminationExample
       5.times { |i| output << i }
     end
 
-    threads(5) do
+    thread_pool(5) do
       processor :process do |item, output|
         sleep 0.01 # Simulate work
         output << item

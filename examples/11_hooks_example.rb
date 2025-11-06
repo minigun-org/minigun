@@ -89,7 +89,7 @@ if __FILE__ == $PROGRAM_NAME
   puts "Results: #{example.results.inspect}"
 
   puts "\n=== Notes ===\n"
-  puts '• before_fork/after_fork hooks are only triggered with process_per_batch execution'
+  puts '• before_fork/after_fork hooks are only triggered with cow_fork execution'
   puts '• Hooks are useful for resource management (connections, files, etc.)'
   puts '• after_fork runs in the child process, before_fork in the parent'
   puts "\n✓ Hooks demonstration complete!"

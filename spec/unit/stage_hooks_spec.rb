@@ -125,7 +125,7 @@ RSpec.describe 'Stage-Specific Hooks' do
 
           accumulator :batch
 
-          process_per_batch(max: 1) do
+          cow_fork(1) do
             consumer :process do |_num|
               @mutex.synchronize { @events << :process_run }
             end
@@ -147,7 +147,7 @@ RSpec.describe 'Stage-Specific Hooks' do
       task.run
 
       # Fork hooks should be present if forking occurred
-      if Process.respond_to?(:fork)
+      if Minigun.fork?
         expect(task.events).to include(:before_fork_process)
         # after_fork happens in child process, won't be in @events
       end

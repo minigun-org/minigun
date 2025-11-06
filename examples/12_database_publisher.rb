@@ -29,7 +29,7 @@ class Customer
       id: @id,
       name: @name,
       email: @email,
-      updated_at: @updated_at.iso8601
+      updated_at: @updated_at.strftime('%Y-%m-%dT%H:%M:%S%z')
     }
   end
 end
@@ -40,7 +40,7 @@ class DatabasePublisher
   include Minigun::DSL
 
   max_threads 5       # 5 concurrent processor threads
-  max_processes 2     # 2 forked consumer processes (if using process_per_batch)
+  max_processes 2     # 2 forked consumer processes (if using cow_fork)
 
   attr_accessor :published_ids, :enriched_count
 
@@ -56,7 +56,7 @@ class DatabasePublisher
   def enrich_customer_data(customer_data)
     # Simulate enrichment: add derived fields, lookup related data, etc.
     customer_data.merge(
-      published_at: Time.now.iso8601,
+      published_at: Time.now.strftime('%Y-%m-%dT%H:%M:%S%z'),
       source: 'database_publisher',
       version: 1
     )
@@ -114,7 +114,7 @@ class DatabasePublisher
     end
 
     # Stage 3: Publish to external service
-    # Using threaded consumer for simplicity (could use accumulator + process_per_batch for COW optimization)
+    # Using threaded consumer for simplicity (could use accumulator + cow_fork for COW optimization)
     consumer :publish do |enriched_data|
       publish_to_service(enriched_data)
 

@@ -7,10 +7,10 @@
 require_relative '../lib/minigun'
 
 # Demonstrates scalability testing with configurable parameters
-class ScaleTest
+class ScaleTestExample
   include Minigun::DSL
 
-  attr_reader :stats
+  attr_reader :stats, :results
 
   def initialize(items: 50, batch_size: 10, threads: 10)
     @items = items
@@ -22,6 +22,7 @@ class ScaleTest
       parsed: 0,
       uploaded: 0
     }
+    @results = []
     @mutex = Mutex.new
   end
 
@@ -38,7 +39,7 @@ class ScaleTest
       output << item
     end
 
-    threads(@threads) do
+    thread_pool(@threads) do
       processor :download do |item, output|
         @mutex.synchronize { @stats[:downloaded] += 1 }
         item[:data] = "data-#{item[:id]}"
@@ -53,7 +54,7 @@ class ScaleTest
 
     batch @batch_size
 
-    process_per_batch(max: 2) do
+    cow_fork(2) do
       processor :parse_batch do |batch, output|
         @mutex.synchronize { @stats[:parsed] += batch.size }
         batch.each do |item|
@@ -62,20 +63,23 @@ class ScaleTest
       end
     end
 
-    processor :save_db, execution_context: :db_pool do |item|
+    processor :save_db, execution_context: :db_pool do |item, output|
       output << item
     end
 
-    threads(2) do
-      consumer :upload do |_item|
-        @mutex.synchronize { @stats[:uploaded] += 1 }
+    thread_pool(2) do
+      consumer :upload do |item|
+        @mutex.synchronize do
+          @stats[:uploaded] += 1
+          @results << item
+        end
       end
     end
   end
 end
 
 puts 'Testing: scale with 200 items (like example 38)'
-pipeline = ScaleTest.new(items: 200, batch_size: 100, threads: 50)
+pipeline = ScaleTestExample.new(items: 200, batch_size: 100, threads: 50)
 pipeline.run
 
 puts "\nResults:"

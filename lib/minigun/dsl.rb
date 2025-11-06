@@ -22,6 +22,12 @@ module Minigun
         _minigun_task.set_config(:max_retries, value)
       end
 
+      # Set default execution context for all stages
+      # TODO: should this be the default?? or for the current scope
+      def execution(type, max)
+        _minigun_task.set_config(:_default_execution_context, { type: type, pool_size: max })
+      end
+
       # Pipeline block - stores block for lazy instance-level evaluation
       # All pipeline definitions (both unnamed and named) are stored and evaluated at instance time
       # This allows blocks to access instance variables correctly
@@ -105,12 +111,11 @@ module Minigun
 
       @_pipeline_blocks_evaluated = true
 
-      # Deep copy class-level task for this instance
-      # This prevents shared state across multiple runs/instances
+      # Create a fresh task for this instance with config from class task
+      # Don't duplicate the pipeline since we'll re-evaluate blocks to create stages
       class_task = self.class._minigun_task
       @_minigun_task = Minigun::Task.new(
-        config: class_task.config.dup,
-        root_pipeline: class_task.root_pipeline.dup
+        config: class_task.config.dup
       )
 
       # Evaluate stored pipeline blocks on instance task with instance context
@@ -128,7 +133,13 @@ module Minigun
           isolated_name = :"_pipeline_#{SecureRandom.uuid}"
           @_minigun_task.define_pipeline(isolated_name, opts) do |pipeline|
             pipeline_dsl = PipelineDSL.new(pipeline, self)
-            pipeline_dsl.instance_eval(&entry[:block])
+            _pipeline_dsl_stack.push(pipeline_dsl)
+            begin
+              # Evaluate in instance context so @config, @results etc. are accessible
+              instance_eval(&entry[:block])
+            ensure
+              _pipeline_dsl_stack.pop
+            end
           end
         else
           # Named pipeline
@@ -158,6 +169,11 @@ module Minigun
       # end
     end
 
+    # Pipeline DSL delegation stack - allows nested pipelines to delegate correctly
+    def _pipeline_dsl_stack
+      @_pipeline_dsl_stack ||= []
+    end
+
     # Context management for PipelineDSL when @context is set
     def _execution_context_stack
       @_execution_context_stack ||= []
@@ -167,6 +183,25 @@ module Minigun
       @_named_contexts ||= {}
     end
 
+    # Delegate DSL method calls through the pipeline_dsl stack
+    # Checks each level from top to bottom until method is found
+    def method_missing(method_name, ...)
+      stack = _pipeline_dsl_stack
+      stack.reverse_each do |dsl|
+        if dsl.respond_to?(method_name, true)
+          return dsl.send(method_name, ...)
+        end
+      end
+      super
+    end
+
+    def respond_to_missing?(method_name, include_private = false)
+      _pipeline_dsl_stack.reverse_each do |dsl|
+        return true if dsl.respond_to?(method_name, include_private)
+      end
+      super
+    end
+
     # DSL context for defining stages within a named pipeline
     class PipelineDSL
       def initialize(pipeline, context = nil)
@@ -174,7 +209,6 @@ module Minigun
         @context = context
         @_execution_context_stack = []
         @_named_contexts = {}
-        @_batch_counter = 0
       end
 
       # Execution context stack management
@@ -187,41 +221,35 @@ module Minigun
       end
 
       # Execution block methods
-      def threads(pool_size, &block)
-        context = { type: :threads, pool_size: pool_size, mode: :pool }
-        _with_execution_context(context, &block)
+      def fiber_pool(pool_size, &)
+        context = { type: :fiber_pool, pool_size: pool_size }
+        _with_execution_context(context, &)
       end
 
-      def processes(pool_size, &block)
-        context = { type: :processes, pool_size: pool_size, mode: :pool }
-        _with_execution_context(context, &block)
+      def thread_pool(pool_size, &)
+        context = { type: :thread_pool, pool_size: pool_size }
+        _with_execution_context(context, &)
       end
 
-      def ractors(pool_size, &block)
-        context = { type: :ractors, pool_size: pool_size, mode: :pool }
-        _with_execution_context(context, &block)
+      def ractor_pool(pool_size, &)
+        context = { type: :ractor_pool, pool_size: pool_size }
+        _with_execution_context(context, &)
       end
 
-      def thread_per_batch(max:, &block)
-        context = { type: :threads, max: max, mode: :per_batch }
-        _with_execution_context(context, &block)
+      def cow_fork(pool_size, &)
+        context = { type: :cow_fork, pool_size: pool_size }
+        _with_execution_context(context, &)
       end
 
-      def process_per_batch(max:, &block)
-        context = { type: :processes, max: max, mode: :per_batch }
-        _with_execution_context(context, &block)
-      end
-
-      def ractor_per_batch(max:, &block)
-        context = { type: :ractors, max: max, mode: :per_batch }
-        _with_execution_context(context, &block)
+      def ipc_fork(pool_size, &)
+        context = { type: :ipc_fork, pool_size: pool_size }
+        _with_execution_context(context, &)
       end
 
       # Batching shorthand
+      # TODO: clean this up
       def batch(size)
-        batch_num = @_batch_counter
-        @_batch_counter += 1
-        accumulator(:"_batch_#{batch_num}", max_size: size)
+        accumulator(nil, max_size: size)
       end
 
       # Named execution context definition
@@ -255,28 +283,28 @@ module Minigun
       # Main unified stage method
       # Stage determines its own type based on block arity
       # Producer - generates items, receives output queue
-      def producer(name, options = {}, &block)
+      def producer(name, options = {}, &)
         options = _apply_execution_context(options)
         options[:stage_type] = :producer
-        @pipeline.add_stage(:stage, name, options, &block)
+        @pipeline.add_stage(:stage, name, options, &)
       end
 
       # Consumer - processes items, receives item and output queue
       # Whether it uses output or not is up to the stage implementation
-      def consumer(name, options = {}, &block)
+      def consumer(name, options = {}, &)
         options = _apply_execution_context(options)
         options[:stage_type] = :consumer
-        @pipeline.add_stage(:stage, name, options, &block)
+        @pipeline.add_stage(:stage, name, options, &)
       end
 
       # Processor - alias for consumer (both receive item and output)
       alias_method :processor, :consumer
 
       # Generic stage - for advanced use (input loop), receives input and output queues
-      def stage(name, options = {}, &block)
+      def stage(name, options = {}, &)
         options = _apply_execution_context(options)
         options[:stage_type] = :stage
-        @pipeline.add_stage(:stage, name, options, &block)
+        @pipeline.add_stage(:stage, name, options, &)
       end
 
       # Custom stage - for using custom Stage subclasses
@@ -287,46 +315,46 @@ module Minigun
       end
 
       # Accumulator is special - kept explicit
-      def accumulator(name = :accumulator, options = {}, &block)
+      def accumulator(name = :accumulator, options = {}, &)
         options = _apply_execution_context(options)
-        @pipeline.add_stage(:accumulator, name, options, &block)
+        @pipeline.add_stage(:accumulator, name, options, &)
       end
 
-      def before_run(&block)
-        @pipeline.add_hook(:before_run, &block)
+      def before_run(&)
+        @pipeline.add_hook(:before_run, &)
       end
 
-      def after_run(&block)
-        @pipeline.add_hook(:after_run, &block)
+      def after_run(&)
+        @pipeline.add_hook(:after_run, &)
       end
 
-      def after_producer(&block)
-        @pipeline.add_hook(:after_producer, &block)
+      def after_producer(&)
+        @pipeline.add_hook(:after_producer, &)
       end
 
-      def before_fork(stage_name = nil, &block)
+      def before_fork(stage_name = nil, &)
         if stage_name
-          @pipeline.add_stage_hook(:before_fork, stage_name, &block)
+          @pipeline.add_stage_hook(:before_fork, stage_name, &)
         else
-          @pipeline.add_hook(:before_fork, &block)
+          @pipeline.add_hook(:before_fork, &)
         end
       end
 
-      def after_fork(stage_name = nil, &block)
+      def after_fork(stage_name = nil, &)
         if stage_name
-          @pipeline.add_stage_hook(:after_fork, stage_name, &block)
+          @pipeline.add_stage_hook(:after_fork, stage_name, &)
         else
-          @pipeline.add_hook(:after_fork, &block)
+          @pipeline.add_hook(:after_fork, &)
         end
       end
 
       # Stage-specific hooks (Option 2)
-      def before(stage_name, &block)
-        @pipeline.add_stage_hook(:before, stage_name, &block)
+      def before(stage_name, &)
+        @pipeline.add_stage_hook(:before, stage_name, &)
       end
 
-      def after(stage_name, &block)
-        @pipeline.add_stage_hook(:after, stage_name, &block)
+      def after(stage_name, &)
+        @pipeline.add_stage_hook(:after, stage_name, &)
       end
 
       # Routing
@@ -336,10 +364,16 @@ module Minigun
 
       private
 
-      def _with_execution_context(context, &block)
+      def _with_execution_context(context, &)
         _execution_context_stack.push(context)
         begin
-          instance_eval(&block)
+          if @context
+            # Evaluate in user's instance context to allow access to @config, @results, etc.
+            @context.instance_eval(&)
+          else
+            # No context - evaluate in PipelineDSL context
+            instance_eval(&)
+          end
         ensure
           _execution_context_stack.pop
         end
@@ -361,21 +395,122 @@ module Minigun
         elsif _current_execution_context
           # Use current context from stack
           options[:_execution_context] = _current_execution_context
+        elsif @pipeline && @pipeline.config[:_default_execution_context]
+          # Use default execution context from config
+          default_ctx = @pipeline.config[:_default_execution_context]
+          options[:_execution_context] = {
+            type: default_ctx[:type],
+            pool_size: default_ctx[:pool_size],
+            mode: :pool
+          }
         end
+
+        # Normalize the type if an execution context was set
+        if options[:_execution_context] && options[:_execution_context][:type]
+          options[:_execution_context][:type] = normalize_execution_type(options[:_execution_context][:type])
+        end
+
         options
+      end
+
+      def normalize_execution_type(type)
+        type.to_s.delete_suffix('s').delete_suffix('_pool').to_sym
       end
     end
 
     # Full production execution with Runner (signal handling, job ID, stats)
-    def run
+    # Options:
+    #   background: true - Run in background thread (returns immediately)
+    def run(background: false)
       _evaluate_pipeline_blocks!
-      @_minigun_task.run(self)
+
+      if background
+        # Run in background thread for IRB/console usage
+        @_background_thread = Thread.new do
+          @_minigun_task.run(self)
+        rescue StandardError => e
+          warn "Background task error: #{e.message}"
+          warn e.backtrace.join("\n")
+        end
+
+        # Give it a moment to start
+        sleep 0.1
+
+        puts "Task running in background (Thread ##{@_background_thread.object_id})"
+        puts 'Use task.hud to open the HUD monitor'
+        puts 'Use task.stop to stop execution'
+        self
+      else
+        @_minigun_task.run(self)
+      end
     end
 
     # Direct pipeline execution (lightweight, no Runner overhead)
-    def perform
+    # Options:
+    #   background: true - Run in background thread (returns immediately)
+    def perform(background: false)
       _evaluate_pipeline_blocks!
-      @_minigun_task.root_pipeline.run(self)
+
+      if background
+        @_background_thread = Thread.new do
+          @_minigun_task.root_pipeline.run(self)
+        rescue StandardError => e
+          warn "Background task error: #{e.message}"
+          warn e.backtrace.join("\n")
+        end
+
+        sleep 0.1
+        puts "Task running in background (Thread ##{@_background_thread.object_id})"
+        puts 'Use task.hud to open the HUD monitor'
+        self
+      else
+        @_minigun_task.root_pipeline.run(self)
+      end
+    end
+
+    # Open HUD monitor for running pipeline
+    # Only works if task is running in background
+    def hud
+      _evaluate_pipeline_blocks! unless @_pipeline_blocks_evaluated
+
+      unless @_minigun_task
+        raise "Task not initialized. Run task.run(background: true) first."
+      end
+
+      pipeline = @_minigun_task.root_pipeline
+
+      unless pipeline.instance_variable_get(:@stats)
+        raise "Pipeline stats not initialized. Make sure task is running with task.run(background: true)"
+      end
+
+      # Launch HUD (blocks until user quits)
+      Minigun::HUD.launch(pipeline)
+    end
+
+    # Stop background execution
+    def stop
+      if @_background_thread&.alive?
+        @_background_thread.kill
+        @_background_thread.join(1)
+        puts 'Background task stopped'
+      else
+        puts 'No background task running'
+      end
+    end
+
+    # Check if task is running in background
+    def running?
+      @_background_thread&.alive? || false
+    end
+
+    # Wait for background task to complete
+    def wait
+      if @_background_thread
+        @_background_thread.join
+        puts 'Background task completed'
+      else
+        puts 'No background task to wait for'
+      end
     end
 
     # Convenience aliases
