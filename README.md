@@ -64,20 +64,10 @@ gem install minigun
 
 ### Learning
 
-- **[Guide](docs/guides/01_introduction.md)** - Learn Minigun step-by-step (7 lessons)
+- **[Comparison](docs/comparison.md)** - When to use Minigun vs SolidQueue, Sidekiq, etc.
+- **[Guides](docs/guides/01_introduction.md)** - Learn Minigun in step-by-step lessons
 - **[Recipes](docs/recipes/)** - Practical examples for common use cases
-- **[Examples](examples/)** - 100+ working examples
-
-### Reference
-
-- **[API Documentation](docs/api/)** - Complete API reference
-- **[Architecture](docs/architecture/system_architecture.md)** - How Minigun works under the hood
-- **[Guides](docs/guides/)** - Deep dives into specific features
-
-### Tools
-
-- **[HUD Monitor](docs/hud/overview.md)** - Real-time pipeline monitoring
-- **[Performance Tuning](docs/advanced/performance_tuning.md)** - Optimization strategies
+- **[Examples](examples/)** - Tons of working examples
 
 ## Features
 
@@ -98,7 +88,7 @@ Minigun excels at:
 - **Stream processing** - Real-time data transformation
 - **Data pipelines** - Complex multi-stage workflows
 
-[When should I use Minigun?](docs/comparison/when_to_use.md)
+[When should I use Minigun?](docs/comparison.md)
 
 ## Quick Example: Web Scraper
 
@@ -126,9 +116,17 @@ class WebScraper
 end
 ```
 
-[More examples →](examples/)
+### Recipes
+
+- [ETL Pipeline](docs/recipes/etl_pipeline.md) - Extract, transform, load
+- [Web Crawler](docs/recipes/web_crawler.md) - Parallel web scraping
+- [Batch Processing](docs/recipes/batch_processing.md) - Process large datasets
+- [Priority Queues](docs/recipes/priority_queues.md) - Route by priority
+- [More recipes →](docs/recipes/)
 
 ## Documentation
+
+**[→ Browse Full Documentation](docs/index.md)**
 
 ### Getting Started
 
@@ -139,24 +137,16 @@ end
 5. [Concurrency](docs/guides/05_concurrency.md) - Adding parallelism
 6. [Execution Strategies](docs/guides/06_execution_strategies.md) - Threads vs forks
 7. [Monitoring](docs/guides/07_monitoring.md) - Using the HUD
+8. [Deployment](docs/guides/08_deployment.md) - Production deployment
+9. [API Reference](docs/guides/09_api_reference.md) - Complete DSL documentation
+10. [HUD Monitor](docs/guides/10_hud.md) - Real-time pipeline monitoring
 
-### Recipes
+### Reference
 
-- [ETL Pipeline](docs/recipes/etl_pipeline.md) - Extract, transform, load
-- [Web Crawler](docs/recipes/web_crawler.md) - Parallel web scraping
-- [More recipes →](docs/recipes/)
-
-### Complete Documentation
-
-**[→ Browse Full Documentation](docs/index.md)**
-
+- [Architecture](docs/architecture/system_architecture.md) - How Minigun works under the hood
 ## Contributing
 
-Contributions welcome! Please see:
-
-- [Development Setup](docs/contributing/development.md)
-- [Running Tests](docs/contributing/testing.md)
-- [Issue Tracker](https://github.com/user/minigun/issues)
+Contributions welcome! Please see the [Issue Tracker](https://github.com/user/minigun/issues).
 
 ## License
 
@@ -164,4 +154,4 @@ Minigun is available as open source under the terms of the [MIT License](LICENSE
 
 ---
 
-**Ready to get started?** [Begin the Tutorial →](docs/guides/01_introduction.md)
+**Ready to get started?** [Read the Guides →](docs/guides/01_introduction.md)

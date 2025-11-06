@@ -149,4 +149,4 @@ gem install minigun
 
 ---
 
-Ready to get started? [Begin the Guide →](guides/01_introduction.md)
+Ready to get started? [Read the Guides →](guides/01_introduction.md)
