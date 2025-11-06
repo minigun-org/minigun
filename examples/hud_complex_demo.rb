@@ -20,7 +20,7 @@ class HudComplexDemoTask
     # Stage 1: Producer - generates work items
     # FAN-OUT to three parallel paths using broadcast routing
     producer :generator, to: %i[fast_path medium_path slow_path], routing: :broadcast do |output|
-      puts "Starting data generation..."
+      puts 'Starting data generation...'
       puts "Press Ctrl+C or 'q' in the HUD to stop"
 
       counter = 0
@@ -155,7 +155,7 @@ class HudComplexDemoTask
     end
 
     # Stage 17: Consumer - final processing
-    consumer :finalizer, threads: 2 do |batch, _output|
+    consumer :finalizer, threads: 2 do |_batch, _output|
       # Simulate batch processing with varying latency
       sleep 0.05 + rand(0.1)
 
@@ -168,59 +168,59 @@ class HudComplexDemoTask
 end
 
 # Display information banner
-puts "=" * 80
-puts "MINIGUN COMPLEX HUD DEMO - ADVANCED PIPELINE PATTERNS"
-puts "=" * 80
-puts ""
-puts "This demo showcases a complex pipeline with 17 stages demonstrating:"
-puts ""
-puts "Pipeline Architecture:"
-puts ""
-puts "  Stage 1: Generator"
-puts "    └─> BROADCAST FAN-OUT to 3 parallel paths (each item goes to ALL paths)"
-puts ""
-puts "  ┌─── FAST PATH ───────────────────────────────────────┐"
-puts "  │ 2. fast_path      → Quick preprocessing             │"
-puts "  │ 3. fast_transform → Lightweight transformation      │"
-puts "  │ 4. fast_enrich    → ROUND-ROBIN FAN-OUT to workers │"
-puts "  │    ├─> 5. rr_worker_a (load balanced)              │"
-puts "  │    ├─> 6. rr_worker_b (load balanced)              │"
-puts "  │    └─> 7. rr_worker_c (load balanced)              │"
-puts "  └─────────────────────────────────────────────────────┘"
-puts ""
-puts "  ┌─── MEDIUM PATH ─────────────────────────────────────┐"
-puts "  │ 8.  medium_path     → Moderate preprocessing        │"
-puts "  │ 9.  medium_analyze  → Analysis computation          │"
-puts "  │ 10. medium_validate → Validation logic              │"
-puts "  └─────────────────────────────────────────────────────┘"
-puts ""
-puts "  ┌─── SLOW PATH ───────────────────────────────────────┐"
-puts "  │ 11. slow_path     → Heavy preprocessing             │"
-puts "  │ 12. slow_compute  → Intensive computation (slowest) │"
-puts "  │ 13. slow_optimize → Optimization step               │"
-puts "  └─────────────────────────────────────────────────────┘"
-puts ""
-puts "  All paths FAN-IN to:"
-puts "    14. merger        → Convergence point (receives from 5 sources)"
-puts "    15. postprocessor → Final transformations"
-puts "    16. batcher       → Accumulates into batches"
-puts "    17. finalizer     → Consumes batches"
-puts ""
-puts "Key Features:"
-puts "  • BROADCAST fan-out: Each item processed by ALL 3 paths simultaneously"
-puts "  • ROUND-ROBIN: Fast path items load-balanced across 3 workers"
-puts "  • FAN-IN: Merger receives from 5 sources (3 workers + 2 paths)"
-puts "  • Each input item generates 3 outputs (one per path)"
-puts "  • Different latencies create interesting bottlenecks"
-puts "  • Real-time visualization shows queue depths and throughput"
-puts ""
-puts "Controls:"
-puts "  • Press SPACE to pause/resume"
+puts '=' * 80
+puts 'MINIGUN COMPLEX HUD DEMO - ADVANCED PIPELINE PATTERNS'
+puts '=' * 80
+puts ''
+puts 'This demo showcases a complex pipeline with 17 stages demonstrating:'
+puts ''
+puts 'Pipeline Architecture:'
+puts ''
+puts '  Stage 1: Generator'
+puts '    └─> BROADCAST FAN-OUT to 3 parallel paths (each item goes to ALL paths)'
+puts ''
+puts '  ┌─── FAST PATH ───────────────────────────────────────┐'
+puts '  │ 2. fast_path      → Quick preprocessing             │'
+puts '  │ 3. fast_transform → Lightweight transformation      │'
+puts '  │ 4. fast_enrich    → ROUND-ROBIN FAN-OUT to workers │'
+puts '  │    ├─> 5. rr_worker_a (load balanced)              │'
+puts '  │    ├─> 6. rr_worker_b (load balanced)              │'
+puts '  │    └─> 7. rr_worker_c (load balanced)              │'
+puts '  └─────────────────────────────────────────────────────┘'
+puts ''
+puts '  ┌─── MEDIUM PATH ─────────────────────────────────────┐'
+puts '  │ 8.  medium_path     → Moderate preprocessing        │'
+puts '  │ 9.  medium_analyze  → Analysis computation          │'
+puts '  │ 10. medium_validate → Validation logic              │'
+puts '  └─────────────────────────────────────────────────────┘'
+puts ''
+puts '  ┌─── SLOW PATH ───────────────────────────────────────┐'
+puts '  │ 11. slow_path     → Heavy preprocessing             │'
+puts '  │ 12. slow_compute  → Intensive computation (slowest) │'
+puts '  │ 13. slow_optimize → Optimization step               │'
+puts '  └─────────────────────────────────────────────────────┘'
+puts ''
+puts '  All paths FAN-IN to:'
+puts '    14. merger        → Convergence point (receives from 5 sources)'
+puts '    15. postprocessor → Final transformations'
+puts '    16. batcher       → Accumulates into batches'
+puts '    17. finalizer     → Consumes batches'
+puts ''
+puts 'Key Features:'
+puts '  • BROADCAST fan-out: Each item processed by ALL 3 paths simultaneously'
+puts '  • ROUND-ROBIN: Fast path items load-balanced across 3 workers'
+puts '  • FAN-IN: Merger receives from 5 sources (3 workers + 2 paths)'
+puts '  • Each input item generates 3 outputs (one per path)'
+puts '  • Different latencies create interesting bottlenecks'
+puts '  • Real-time visualization shows queue depths and throughput'
+puts ''
+puts 'Controls:'
+puts '  • Press SPACE to pause/resume'
 puts "  • Press 'h' for help"
 puts "  • Press 'q' to quit (or Ctrl+C)"
-puts "  • Use ↑/↓ to scroll through stages"
-puts ""
-puts "Starting in 3 seconds..."
+puts '  • Use ↑/↓ to scroll through stages'
+puts ''
+puts 'Starting in 3 seconds...'
 sleep 3
 
 # Run the complex demo with HUD

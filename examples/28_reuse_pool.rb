@@ -38,4 +38,3 @@ if __FILE__ == $PROGRAM_NAME
   unique_threads = example.thread_ids.uniq.size
   puts "Executed 20 tasks using #{unique_threads} unique threads"
 end
-

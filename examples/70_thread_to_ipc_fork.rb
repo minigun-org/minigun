@@ -24,7 +24,7 @@ class ThreadToIpcForkExample
   end
 
   def cleanup
-    File.unlink(@results_file) if File.exist?(@results_file)
+    FileUtils.rm_f(@results_file)
   end
 
   pipeline do
@@ -79,37 +79,37 @@ class ThreadToIpcForkExample
 end
 
 if __FILE__ == $PROGRAM_NAME
-  puts "=" * 80
-  puts "Example: Thread to IPC Fork Routing"
-  puts "=" * 80
-  puts ""
+  puts '=' * 80
+  puts 'Example: Thread to IPC Fork Routing'
+  puts '=' * 80
+  puts ''
 
   example = ThreadToIpcForkExample.new
   begin
     example.run
 
-    puts "\n" + "=" * 80
-    puts "Results:"
+    puts "\n#{'=' * 80}"
+    puts 'Results:'
     puts "  Items processed: #{example.results.size}"
-    puts "  Expected: 10"
+    puts '  Expected: 10'
     puts "  PIDs used: #{example.results.map { |r| r[:pid] }.uniq.sort.join(', ')}"
 
     success = example.results.size == 10 &&
               example.results.map { |r| r[:id] }.sort == (1..10).to_a
 
     puts "  Status: #{success ? '✓ SUCCESS' : '✗ FAILED'}"
-    puts "=" * 80
-    puts ""
-    puts "Key Points:"
-    puts "  - Producer runs inline in master process"
-    puts "  - Processor runs in thread pool (shared memory)"
-    puts "  - Consumer runs in IPC fork pool (isolated processes)"
-    puts "  - Data flows: master -> threads -> IPC pipes -> forks"
-    puts "  - IPC ensures process isolation with serialization overhead"
-    puts "=" * 80
+    puts '=' * 80
+    puts ''
+    puts 'Key Points:'
+    puts '  - Producer runs inline in master process'
+    puts '  - Processor runs in thread pool (shared memory)'
+    puts '  - Consumer runs in IPC fork pool (isolated processes)'
+    puts '  - Data flows: master -> threads -> IPC pipes -> forks'
+    puts '  - IPC ensures process isolation with serialization overhead'
+    puts '=' * 80
   rescue NotImplementedError => e
     puts "\nForking not available on this platform: #{e.message}"
-    puts "(This is expected on Windows)"
+    puts '(This is expected on Windows)'
   ensure
     example.cleanup
   end

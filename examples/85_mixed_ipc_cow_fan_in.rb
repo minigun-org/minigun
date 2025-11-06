@@ -74,17 +74,17 @@ class MixedIpcCowFanInExample
 end
 
 if __FILE__ == $PROGRAM_NAME
-  puts "=" * 80
-  puts "Example: Mixed IPC/COW Fork Fan-In Pattern"
-  puts "=" * 80
-  puts ""
+  puts '=' * 80
+  puts 'Example: Mixed IPC/COW Fork Fan-In Pattern'
+  puts '=' * 80
+  puts ''
 
   example = MixedIpcCowFanInExample.new
   begin
     example.run
 
-    puts "\n" + "=" * 80
-    puts "Results:"
+    puts "\n#{'=' * 80}"
+    puts 'Results:'
     puts "  Total items processed: #{example.results.size} (expected: 12)"
 
     by_source = example.results.group_by { |r| r[:source] }
@@ -106,21 +106,21 @@ if __FILE__ == $PROGRAM_NAME
               by_source['IPC_C']&.size == 4
 
     puts "  Status: #{success ? '✓ SUCCESS' : '✗ FAILED'}"
-    puts "=" * 80
-    puts ""
-    puts "Key Points:"
-    puts "  - Mixed fan-in: [IPC, COW, IPC] -> threads"
-    puts "  - IPC producers: Persistent workers generate items"
-    puts "  - COW producer: Ephemeral fork generates items"
-    puts "  - All outputs merge at thread aggregator"
-    puts "  - Serialization boundaries:"
-    puts "    * IPC producers -> Parent (IPC serialization)"
-    puts "    * COW producer -> Parent (IPC serialization)"
-    puts "    * Parent -> Thread aggregator (shared memory)"
-    puts "  - Demonstrates heterogeneous producer topologies"
-    puts "=" * 80
+    puts '=' * 80
+    puts ''
+    puts 'Key Points:'
+    puts '  - Mixed fan-in: [IPC, COW, IPC] -> threads'
+    puts '  - IPC producers: Persistent workers generate items'
+    puts '  - COW producer: Ephemeral fork generates items'
+    puts '  - All outputs merge at thread aggregator'
+    puts '  - Serialization boundaries:'
+    puts '    * IPC producers -> Parent (IPC serialization)'
+    puts '    * COW producer -> Parent (IPC serialization)'
+    puts '    * Parent -> Thread aggregator (shared memory)'
+    puts '  - Demonstrates heterogeneous producer topologies'
+    puts '=' * 80
   rescue NotImplementedError => e
     puts "\nForking not available on this platform: #{e.message}"
-    puts "(This is expected on Windows)"
+    puts '(This is expected on Windows)'
   end
 end

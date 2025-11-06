@@ -84,7 +84,7 @@ if __FILE__ == $PROGRAM_NAME
   example.run
 
   puts "=== Results ===\n"
-  puts "Input numbers: 0-9"
+  puts 'Input numbers: 0-9'
   puts "Even numbers (doubled): #{example.even_results.sort.join(', ')}"
   puts "Odd numbers (tripled): #{example.odd_results.sort.join(', ')}"
 
@@ -102,4 +102,3 @@ if __FILE__ == $PROGRAM_NAME
   puts '  • Clear intent in routing decisions'
   puts '  • Stages with only dynamic inputs work correctly'
 end
-

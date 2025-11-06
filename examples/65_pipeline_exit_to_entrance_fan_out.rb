@@ -84,11 +84,11 @@ end
 
 if __FILE__ == $PROGRAM_NAME
   puts "=== Pipeline Exit-to-Entrance Fan-Out Example ===\n\n"
-  puts "Topology:"
-  puts "  source_a (evens: 2,4,6) ──┐"
-  puts "                            ├──> processor_x (add 10)"
-  puts "                            ├──> processor_y (multiply 2)"
-  puts "  source_b (odds: 1,3,5) ───┴──> processor_z (square)"
+  puts 'Topology:'
+  puts '  source_a (evens: 2,4,6) ──┐'
+  puts '                            ├──> processor_x (add 10)'
+  puts '                            ├──> processor_y (multiply 2)'
+  puts '  source_b (odds: 1,3,5) ───┴──> processor_z (square)'
   puts "\nEach source pipeline's :_exit fans out to all 3 processor :_entrance nodes\n\n"
 
   example = PipelineExitToEntranceFanOutExample.new
@@ -133,6 +133,6 @@ if __FILE__ == $PROGRAM_NAME
             z_from_b == expected_z_from_b
 
   puts "\n#{success ? '✓ Success!' : '✗ Failed'}"
-  puts "Expected: 2 sources × 3 processors = 6 items per processor, 18 total"
+  puts 'Expected: 2 sources × 3 processors = 6 items per processor, 18 total'
   puts "Got: #{example.results_x.size + example.results_y.size + example.results_z.size} total items"
 end

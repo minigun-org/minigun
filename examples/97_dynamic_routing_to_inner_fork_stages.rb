@@ -22,9 +22,9 @@ class DynamicRoutingToInnerIpcExample
   end
 
   def cleanup
-    File.unlink(@results_a_file) if File.exist?(@results_a_file)
-    File.unlink(@results_b_file) if File.exist?(@results_b_file)
-    File.unlink(@results_c_file) if File.exist?(@results_c_file)
+    FileUtils.rm_f(@results_a_file)
+    FileUtils.rm_f(@results_b_file)
+    FileUtils.rm_f(@results_c_file)
   end
 
   pipeline do
@@ -142,7 +142,7 @@ class DynamicRoutingFromInnerToInnerExample
   end
 
   def cleanup
-    File.unlink(@results_file) if File.exist?(@results_file)
+    FileUtils.rm_f(@results_file)
   end
 
   pipeline do
@@ -186,7 +186,7 @@ class DynamicRoutingFromInnerToInnerExample
       end
     end
 
-    consumer :collect, from: [:cow_process_x, :cow_process_y] do |item|
+    consumer :collect, from: %i[cow_process_x cow_process_y] do |item|
       puts "[Collect] Received: #{item[:id]} = #{item[:value]} via path #{item[:path]}"
       File.open(@results_file, 'a') do |f|
         f.flock(File::LOCK_EX)
@@ -207,26 +207,26 @@ class DynamicRoutingFromInnerToInnerExample
 end
 
 if __FILE__ == $PROGRAM_NAME
-  puts "=" * 80
-  puts "Dynamic Routing to Inner Fork Stages"
-  puts "=" * 80
-  puts ""
+  puts '=' * 80
+  puts 'Dynamic Routing to Inner Fork Stages'
+  puts '=' * 80
+  puts ''
 
   begin
-    puts "--- Dynamic Routing from Thread to Inner IPC/COW Stages ---"
-    puts "Flow: generate -> router (thread) -> output.to(:inner_stage) where inner_stage is INSIDE fork"
+    puts '--- Dynamic Routing from Thread to Inner IPC/COW Stages ---'
+    puts 'Flow: generate -> router (thread) -> output.to(:inner_stage) where inner_stage is INSIDE fork'
     example1 = DynamicRoutingToInnerIpcExample.new
     example1.run
     puts "Results A (via inner_process_a): #{example1.results_a.size} items (IDs: #{example1.results_a.map { |r| r[:id] }.sort})"
     puts "Results B (via inner_process_b): #{example1.results_b.size} items (IDs: #{example1.results_b.map { |r| r[:id] }.sort})"
     puts "Results C (via inner_collect_c): #{example1.results_c.size} items (IDs: #{example1.results_c.map { |r| r[:id] }.sort})"
-    puts "Expected: 3 items in each path (IDs divisible by 3 in A, remainder 1 in B, remainder 2 in C)"
+    puts 'Expected: 3 items in each path (IDs divisible by 3 in A, remainder 1 in B, remainder 2 in C)'
     success = example1.results_a.size == 3 && example1.results_b.size == 3 && example1.results_c.size == 3
-    puts success ? "✓ PASS" : "✗ FAIL"
+    puts success ? '✓ PASS' : '✗ FAIL'
     example1.cleanup
 
     puts "\n--- Dynamic Routing from Inner IPC to Inner COW Stages ---"
-    puts "Flow: generate -> inner_router (inside IPC) -> output.to(:cow_inner) where cow_inner is INSIDE COW fork"
+    puts 'Flow: generate -> inner_router (inside IPC) -> output.to(:cow_inner) where cow_inner is INSIDE COW fork'
     example2 = DynamicRoutingFromInnerToInnerExample.new
     example2.run
     puts "Total results: #{example2.results.size} (expected: 6)"
@@ -237,21 +237,21 @@ if __FILE__ == $PROGRAM_NAME
     actual_x = by_path['X']&.map { |r| r[:value] }&.sort || []
     actual_y = by_path['Y']&.map { |r| r[:value] }&.sort || []
     success = actual_x == expected_x && actual_y == expected_y
-    puts success ? "✓ PASS" : "✗ FAIL"
+    puts success ? '✓ PASS' : '✗ FAIL'
     example2.cleanup
 
-    puts "\n" + "=" * 80
-    puts "Key Points:"
-    puts "  - output.to() can target stages INSIDE ipc_fork/cow_fork blocks"
-    puts "  - Stage names are globally accessible regardless of nesting"
-    puts "  - Can route from thread to inner IPC stage"
-    puts "  - Can route from thread to inner COW stage"
-    puts "  - Can route from inner IPC stage to inner COW stage"
-    puts "  - Routing respects executor boundaries and serialization"
-    puts "  - IMPORTANT: Inner stages with no DAG upstream need await: true"
-    puts "=" * 80
+    puts "\n#{'=' * 80}"
+    puts 'Key Points:'
+    puts '  - output.to() can target stages INSIDE ipc_fork/cow_fork blocks'
+    puts '  - Stage names are globally accessible regardless of nesting'
+    puts '  - Can route from thread to inner IPC stage'
+    puts '  - Can route from thread to inner COW stage'
+    puts '  - Can route from inner IPC stage to inner COW stage'
+    puts '  - Routing respects executor boundaries and serialization'
+    puts '  - IMPORTANT: Inner stages with no DAG upstream need await: true'
+    puts '=' * 80
   rescue NotImplementedError => e
     puts "\nForking not available on this platform: #{e.message}"
-    puts "(This is expected on Windows)"
+    puts '(This is expected on Windows)'
   end
 end

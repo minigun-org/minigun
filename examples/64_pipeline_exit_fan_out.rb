@@ -61,9 +61,9 @@ end
 
 if __FILE__ == $PROGRAM_NAME
   puts "=== Pipeline Exit Fan-Out Example ===\n\n"
-  puts "Nested pipeline topology:"
-  puts "  generate -> [even_filter, odd_filter, all_logger]"
-  puts "  All 3 consumers are terminal, so they drain to :_exit"
+  puts 'Nested pipeline topology:'
+  puts '  generate -> [even_filter, odd_filter, all_logger]'
+  puts '  All 3 consumers are terminal, so they drain to :_exit'
   puts "  :_exit forwards to parent pipeline's collector\n\n"
 
   example = PipelineExitFanOutExample.new
@@ -90,7 +90,6 @@ if __FILE__ == $PROGRAM_NAME
             all_items.map { |r| r[:value] }.sort == expected_all
 
   puts "\n#{success ? '✓ Success!' : '✗ Failed'}"
-  puts "Expected: 2 even + 3 odd + 5 all = 10 total items"
+  puts 'Expected: 2 even + 3 odd + 5 all = 10 total items'
   puts "Got: #{even_items.size} even + #{odd_items.size} odd + #{all_items.size} all = #{example.results.size} total items"
 end
-

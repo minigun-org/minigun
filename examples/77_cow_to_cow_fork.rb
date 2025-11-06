@@ -78,19 +78,19 @@ class CowToCowForkExample
 end
 
 if __FILE__ == $PROGRAM_NAME
-  puts "=" * 80
-  puts "Example: COW Fork -> COW Fork Routing"
-  puts "=" * 80
-  puts ""
+  puts '=' * 80
+  puts 'Example: COW Fork -> COW Fork Routing'
+  puts '=' * 80
+  puts ''
 
   example = CowToCowForkExample.new
   begin
     example.run
 
-    puts "\n" + "=" * 80
-    puts "Results:"
+    puts "\n#{'=' * 80}"
+    puts 'Results:'
     puts "  Items processed: #{example.results.size}"
-    puts "  Expected: 8"
+    puts '  Expected: 8'
 
     stage1_pids = example.results.map { |r| r[:stage1_pid] }.uniq.sort
     stage2_pids = example.results.map { |r| r[:stage2_pid] }.uniq.sort
@@ -102,22 +102,22 @@ if __FILE__ == $PROGRAM_NAME
               example.results.all? { |r| r[:stage1_processed] && r[:stage2_processed] }
 
     puts "  Status: #{success ? '✓ SUCCESS' : '✗ FAILED'}"
-    puts "=" * 80
-    puts ""
-    puts "Key Points:"
-    puts "  - Two sequential COW fork stages"
-    puts "  - Each stage: one ephemeral fork per item"
-    puts "  - Serialization boundaries:"
-    puts "    1. Parent -> Stage1 forks (COW-shared, no serialization)"
-    puts "    2. Stage1 forks -> Parent (IPC serialization)"
-    puts "    3. Parent -> Stage2 forks (COW-shared, no serialization)"
-    puts "    4. Stage2 forks -> Parent (IPC serialization)"
-    puts "  - Efficient for large inputs (COW optimization)"
-    puts "  - Many ephemeral processes created and reaped"
-    puts "  - Good for: CPU-intensive work with large data structures"
-    puts "=" * 80
+    puts '=' * 80
+    puts ''
+    puts 'Key Points:'
+    puts '  - Two sequential COW fork stages'
+    puts '  - Each stage: one ephemeral fork per item'
+    puts '  - Serialization boundaries:'
+    puts '    1. Parent -> Stage1 forks (COW-shared, no serialization)'
+    puts '    2. Stage1 forks -> Parent (IPC serialization)'
+    puts '    3. Parent -> Stage2 forks (COW-shared, no serialization)'
+    puts '    4. Stage2 forks -> Parent (IPC serialization)'
+    puts '  - Efficient for large inputs (COW optimization)'
+    puts '  - Many ephemeral processes created and reaped'
+    puts '  - Good for: CPU-intensive work with large data structures'
+    puts '=' * 80
   rescue NotImplementedError => e
     puts "\nForking not available on this platform: #{e.message}"
-    puts "(This is expected on Windows)"
+    puts '(This is expected on Windows)'
   end
 end

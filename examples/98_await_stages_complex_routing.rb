@@ -25,9 +25,9 @@ class ComplexAwaitRoutingExample
   end
 
   def cleanup
-    File.unlink(@high_file) if File.exist?(@high_file)
-    File.unlink(@low_file) if File.exist?(@low_file)
-    File.unlink(@error_file) if File.exist?(@error_file)
+    FileUtils.rm_f(@high_file)
+    FileUtils.rm_f(@low_file)
+    FileUtils.rm_f(@error_file)
   end
 
   pipeline do
@@ -154,7 +154,7 @@ class AwaitWithIpcExample
   end
 
   def cleanup
-    File.unlink(@results_file) if File.exist?(@results_file)
+    FileUtils.rm_f(@results_file)
   end
 
   pipeline do
@@ -190,7 +190,7 @@ class AwaitWithIpcExample
     end
 
     # Collector from both IPC workers
-    consumer :collect, from: [:ipc_worker_a, :ipc_worker_b] do |item|
+    consumer :collect, from: %i[ipc_worker_a ipc_worker_b] do |item|
       puts "[Collect] Received #{item[:id]} from worker #{item[:worker]}"
       File.open(@results_file, 'a') do |f|
         f.flock(File::LOCK_EX)
@@ -211,15 +211,15 @@ class AwaitWithIpcExample
 end
 
 if __FILE__ == $PROGRAM_NAME
-  puts "=" * 80
-  puts "Complex Await Stages Routing Examples"
-  puts "=" * 80
-  puts ""
+  puts '=' * 80
+  puts 'Complex Await Stages Routing Examples'
+  puts '=' * 80
+  puts ''
 
   begin
     # Test 1: Complex multi-level routing
-    puts "--- Test 1: Multi-level routing with await stages ---"
-    puts "Flow: generate -> primary_router -> [high/low/error]_handler -> enricher -> collectors"
+    puts '--- Test 1: Multi-level routing with await stages ---'
+    puts 'Flow: generate -> primary_router -> [high/low/error]_handler -> enricher -> collectors'
     example1 = ComplexAwaitRoutingExample.new
     example1.run
 
@@ -245,14 +245,14 @@ if __FILE__ == $PROGRAM_NAME
 
     # Verify enrichment chain for high priority
     all_enriched = example1.high_priority.all? { |item| item[:validated] && item[:enriched] }
-    success1 = success1 && all_enriched
+    success1 &&= all_enriched
 
-    puts success1 ? "✓ PASS" : "✗ FAIL"
+    puts success1 ? '✓ PASS' : '✗ FAIL'
     example1.cleanup
 
     # Test 2: IPC fork with await stages
     puts "\n--- Test 2: IPC fork with await stages ---"
-    puts "Flow: generate -> router -> [ipc_worker_a, ipc_worker_b] -> collect"
+    puts 'Flow: generate -> router -> [ipc_worker_a, ipc_worker_b] -> collect'
 
     example2 = AwaitWithIpcExample.new
     example2.run
@@ -269,21 +269,21 @@ if __FILE__ == $PROGRAM_NAME
 
     # Verify workers ran in different PIDs
     pids = example2.results.map { |r| r[:pid] }.uniq
-    success2 = success2 && pids.size > 1
+    success2 &&= pids.size > 1
 
-    puts success2 ? "✓ PASS" : "✗ FAIL"
+    puts success2 ? '✓ PASS' : '✗ FAIL'
     example2.cleanup
 
-    puts "\n" + "=" * 80
-    puts "Key Points:"
-    puts "  - await: true stages can form multi-level routing chains"
-    puts "  - Conditional routing works with await stages"
-    puts "  - await stages integrate with IPC/COW fork executors"
-    puts "  - Multiple collectors can receive from different await sources"
-    puts "  - Dynamic routing to await stages is fully isolated from DAG"
-    puts "=" * 80
+    puts "\n#{'=' * 80}"
+    puts 'Key Points:'
+    puts '  - await: true stages can form multi-level routing chains'
+    puts '  - Conditional routing works with await stages'
+    puts '  - await stages integrate with IPC/COW fork executors'
+    puts '  - Multiple collectors can receive from different await sources'
+    puts '  - Dynamic routing to await stages is fully isolated from DAG'
+    puts '=' * 80
   rescue NotImplementedError => e
     puts "\nForking not available on this platform: #{e.message}"
-    puts "(This is expected on Windows)"
+    puts '(This is expected on Windows)'
   end
 end

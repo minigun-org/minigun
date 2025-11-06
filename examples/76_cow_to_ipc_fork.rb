@@ -76,19 +76,19 @@ class CowToIpcForkExample
 end
 
 if __FILE__ == $PROGRAM_NAME
-  puts "=" * 80
-  puts "Example: COW Fork -> IPC Fork Routing"
-  puts "=" * 80
-  puts ""
+  puts '=' * 80
+  puts 'Example: COW Fork -> IPC Fork Routing'
+  puts '=' * 80
+  puts ''
 
   example = CowToIpcForkExample.new
   begin
     example.run
 
-    puts "\n" + "=" * 80
-    puts "Results:"
+    puts "\n#{'=' * 80}"
+    puts 'Results:'
     puts "  Items processed: #{example.results.size}"
-    puts "  Expected: 8"
+    puts '  Expected: 8'
 
     cow_pids = example.results.map { |r| r[:cow_pid] }.uniq.sort
     ipc_pids = example.results.map { |r| r[:ipc_pid] }.uniq.sort
@@ -100,21 +100,21 @@ if __FILE__ == $PROGRAM_NAME
               example.results.all? { |r| r[:cow_processed] && r[:ipc_processed] }
 
     puts "  Status: #{success ? '✓ SUCCESS' : '✗ FAILED'}"
-    puts "=" * 80
-    puts ""
-    puts "Key Points:"
-    puts "  - COW stage: Ephemeral forks (one per item, exits after)"
-    puts "  - IPC stage: Persistent workers (handle multiple items)"
-    puts "  - Serialization boundaries:"
-    puts "    1. Parent -> COW forks (COW-shared, no serialization)"
-    puts "    2. COW forks -> Parent (IPC serialization)"
-    puts "    3. Parent -> IPC workers (full serialization)"
-    puts "    4. IPC workers -> Parent (full serialization)"
-    puts "  - COW useful for: heavy computation with large inputs"
-    puts "  - IPC useful for: persistent connections, resource pooling"
-    puts "=" * 80
+    puts '=' * 80
+    puts ''
+    puts 'Key Points:'
+    puts '  - COW stage: Ephemeral forks (one per item, exits after)'
+    puts '  - IPC stage: Persistent workers (handle multiple items)'
+    puts '  - Serialization boundaries:'
+    puts '    1. Parent -> COW forks (COW-shared, no serialization)'
+    puts '    2. COW forks -> Parent (IPC serialization)'
+    puts '    3. Parent -> IPC workers (full serialization)'
+    puts '    4. IPC workers -> Parent (full serialization)'
+    puts '  - COW useful for: heavy computation with large inputs'
+    puts '  - IPC useful for: persistent connections, resource pooling'
+    puts '=' * 80
   rescue NotImplementedError => e
     puts "\nForking not available on this platform: #{e.message}"
-    puts "(This is expected on Windows)"
+    puts '(This is expected on Windows)'
   end
 end

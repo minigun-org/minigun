@@ -77,19 +77,19 @@ class IpcToIpcForkExample
 end
 
 if __FILE__ == $PROGRAM_NAME
-  puts "=" * 80
-  puts "Example: IPC Fork -> IPC Fork Routing"
-  puts "=" * 80
-  puts ""
+  puts '=' * 80
+  puts 'Example: IPC Fork -> IPC Fork Routing'
+  puts '=' * 80
+  puts ''
 
   example = IpcToIpcForkExample.new
   begin
     example.run
 
-    puts "\n" + "=" * 80
-    puts "Results:"
+    puts "\n#{'=' * 80}"
+    puts 'Results:'
     puts "  Items processed: #{example.results.size}"
-    puts "  Expected: 8"
+    puts '  Expected: 8'
 
     stage1_pids = example.results.map { |r| r[:stage1_pid] }.uniq.sort
     stage2_pids = example.results.map { |r| r[:stage2_pid] }.uniq.sort
@@ -101,21 +101,21 @@ if __FILE__ == $PROGRAM_NAME
               example.results.all? { |r| r[:stage1_processed] && r[:stage2_processed] }
 
     puts "  Status: #{success ? '✓ SUCCESS' : '✗ FAILED'}"
-    puts "=" * 80
-    puts ""
-    puts "Key Points:"
-    puts "  - Two sequential IPC fork stages"
-    puts "  - Four serialization boundaries:"
-    puts "    1. Parent -> Stage1 workers (item in)"
-    puts "    2. Stage1 workers -> Parent (result out)"
-    puts "    3. Parent -> Stage2 workers (item in)"
-    puts "    4. Stage2 workers -> Parent (result out)"
-    puts "  - Parent orchestrates routing between stages via Queues"
-    puts "  - IPC workers are persistent (handle multiple items)"
-    puts "  - Strong process isolation at each stage"
-    puts "=" * 80
+    puts '=' * 80
+    puts ''
+    puts 'Key Points:'
+    puts '  - Two sequential IPC fork stages'
+    puts '  - Four serialization boundaries:'
+    puts '    1. Parent -> Stage1 workers (item in)'
+    puts '    2. Stage1 workers -> Parent (result out)'
+    puts '    3. Parent -> Stage2 workers (item in)'
+    puts '    4. Stage2 workers -> Parent (result out)'
+    puts '  - Parent orchestrates routing between stages via Queues'
+    puts '  - IPC workers are persistent (handle multiple items)'
+    puts '  - Strong process isolation at each stage'
+    puts '=' * 80
   rescue NotImplementedError => e
     puts "\nForking not available on this platform: #{e.message}"
-    puts "(This is expected on Windows)"
+    puts '(This is expected on Windows)'
   end
 end

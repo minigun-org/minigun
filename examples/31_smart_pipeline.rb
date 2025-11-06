@@ -62,4 +62,3 @@ if __FILE__ == $PROGRAM_NAME
   puts "  Processes: #{smart.processes}"
   puts "  Batch size: #{smart.batch_size}"
 end
-

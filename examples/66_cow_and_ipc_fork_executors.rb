@@ -16,9 +16,9 @@ require_relative '../lib/minigun'
 # - Strong process isolation
 # - Useful when you need explicit communication channels
 
-puts "=" * 80
-puts "COW Fork Executor Example"
-puts "=" * 80
+puts '=' * 80
+puts 'COW Fork Executor Example'
+puts '=' * 80
 
 class CowForkExample
   include Minigun::DSL
@@ -30,7 +30,7 @@ class CowForkExample
 
   def initialize
     @results = []
-    @shared_data = Array.new(1000) { |i| i * 2 }  # Large data structure
+    @shared_data = Array.new(1000) { |i| i * 2 } # Large data structure
   end
 
   pipeline do
@@ -59,13 +59,13 @@ begin
   puts "PIDs used: #{cow_task.results.map { |r| r[:pid] }.uniq.join(', ')}"
 rescue NotImplementedError => e
   puts "\nCOW Fork not available on this platform: #{e.message}"
-  puts "(This is expected on Windows)"
+  puts '(This is expected on Windows)'
 end
 
 puts "\n"
-puts "=" * 80
-puts "IPC Fork Executor Example"
-puts "=" * 80
+puts '=' * 80
+puts 'IPC Fork Executor Example'
+puts '=' * 80
 
 class IpcForkExample
   include Minigun::DSL
@@ -90,7 +90,7 @@ class IpcForkExample
       output << {
         id: item[:id],
         value: item[:value],
-        computed: item[:value] ** 2,
+        computed: item[:value]**2,
         pid: Process.pid
       }
     end
@@ -109,25 +109,24 @@ begin
   puts "PIDs used: #{ipc_task.results.map { |r| r[:pid] }.uniq.join(', ')}"
 rescue NotImplementedError => e
   puts "\nIPC Fork not available on this platform: #{e.message}"
-  puts "(This is expected on Windows)"
+  puts '(This is expected on Windows)'
 end
 
 puts "\n"
-puts "=" * 80
-puts "Comparison: Both executors use forked processes"
-puts "=" * 80
-puts ""
-puts "COW Fork:"
-puts "  - Best for: Read-heavy operations on large shared data"
-puts "  - Memory: Shared via copy-on-write"
-puts "  - Performance: Lower overhead (no serialization)"
-puts "  - Use case: Processing large datasets without modification"
-puts ""
-puts "IPC Fork:"
-puts "  - Best for: Independent process execution with explicit communication"
-puts "  - Memory: Isolated processes"
-puts "  - Performance: Serialization overhead via pipes"
-puts "  - Use case: Strong isolation, error handling via IPC"
-puts ""
-puts "=" * 80
-
+puts '=' * 80
+puts 'Comparison: Both executors use forked processes'
+puts '=' * 80
+puts ''
+puts 'COW Fork:'
+puts '  - Best for: Read-heavy operations on large shared data'
+puts '  - Memory: Shared via copy-on-write'
+puts '  - Performance: Lower overhead (no serialization)'
+puts '  - Use case: Processing large datasets without modification'
+puts ''
+puts 'IPC Fork:'
+puts '  - Best for: Independent process execution with explicit communication'
+puts '  - Memory: Isolated processes'
+puts '  - Performance: Serialization overhead via pipes'
+puts '  - Use case: Strong isolation, error handling via IPC'
+puts ''
+puts '=' * 80

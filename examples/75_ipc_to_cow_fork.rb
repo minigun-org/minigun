@@ -76,19 +76,19 @@ class IpcToCowForkExample
 end
 
 if __FILE__ == $PROGRAM_NAME
-  puts "=" * 80
-  puts "Example: IPC Fork -> COW Fork Routing"
-  puts "=" * 80
-  puts ""
+  puts '=' * 80
+  puts 'Example: IPC Fork -> COW Fork Routing'
+  puts '=' * 80
+  puts ''
 
   example = IpcToCowForkExample.new
   begin
     example.run
 
-    puts "\n" + "=" * 80
-    puts "Results:"
+    puts "\n#{'=' * 80}"
+    puts 'Results:'
     puts "  Items processed: #{example.results.size}"
-    puts "  Expected: 8"
+    puts '  Expected: 8'
 
     ipc_pids = example.results.map { |r| r[:ipc_pid] }.uniq.sort
     cow_pids = example.results.map { |r| r[:cow_pid] }.uniq.sort
@@ -100,21 +100,21 @@ if __FILE__ == $PROGRAM_NAME
               example.results.all? { |r| r[:ipc_processed] && r[:cow_processed] }
 
     puts "  Status: #{success ? '✓ SUCCESS' : '✗ FAILED'}"
-    puts "=" * 80
-    puts ""
-    puts "Key Points:"
-    puts "  - IPC stage: Persistent workers (handle multiple items)"
-    puts "  - COW stage: Ephemeral forks (one per item)"
-    puts "  - Different process lifecycle models"
-    puts "  - Serialization boundaries:"
-    puts "    1. Parent -> IPC workers (full serialization)"
-    puts "    2. IPC workers -> Parent (full serialization)"
-    puts "    3. Parent -> COW forks (COW-shared, no serialization)"
-    puts "    4. COW forks -> Parent (IPC serialization)"
-    puts "  - COW forks may create many more PIDs than IPC workers"
-    puts "=" * 80
+    puts '=' * 80
+    puts ''
+    puts 'Key Points:'
+    puts '  - IPC stage: Persistent workers (handle multiple items)'
+    puts '  - COW stage: Ephemeral forks (one per item)'
+    puts '  - Different process lifecycle models'
+    puts '  - Serialization boundaries:'
+    puts '    1. Parent -> IPC workers (full serialization)'
+    puts '    2. IPC workers -> Parent (full serialization)'
+    puts '    3. Parent -> COW forks (COW-shared, no serialization)'
+    puts '    4. COW forks -> Parent (IPC serialization)'
+    puts '  - COW forks may create many more PIDs than IPC workers'
+    puts '=' * 80
   rescue NotImplementedError => e
     puts "\nForking not available on this platform: #{e.message}"
-    puts "(This is expected on Windows)"
+    puts '(This is expected on Windows)'
   end
 end
