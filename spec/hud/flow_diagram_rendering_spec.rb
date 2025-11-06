@@ -45,6 +45,24 @@ RSpec.describe 'FlowDiagram Rendering' do
 
     # Create flow diagram and stats
     flow_diagram = Minigun::HUD::FlowDiagram.new(width, height)
+
+    # Stub animation to always return thin static characters for deterministic test output
+    allow(Minigun::HUD::Theme).to receive(:animated_flow_char) do |char_type, distance, animation_frame, active, drain_distance: nil|
+      char = case char_type
+             when :vertical then '│'
+             when :horizontal then '─'
+             when :corner_tl then '┌'
+             when :corner_tr then '┐'
+             when :corner_bl then '└'
+             when :corner_br then '┘'
+             when :t_up then '┴'
+             when :t_down then '┬'
+             when :cross then '┼'
+             else '?'
+             end
+      [char, '']  # Return character and empty color
+    end
+
     stats_aggregator = Minigun::HUD::StatsAggregator.new(pipeline)
 
     # Run pipeline briefly to generate DAG structure
