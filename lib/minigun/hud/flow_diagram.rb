@@ -13,7 +13,6 @@ module Minigun
         @width = 0  # Actual width of diagram content
         @height = 0  # Actual height of diagram content
         @finished_stages = {} # Track when each stage finished {stage_name => render_tick}
-        @stage_positions = {} # Map stage name to position index for animation staggering
       end
 
       # Update dimensions (called on resize)
@@ -33,23 +32,20 @@ module Minigun
         # Filter out router stages (internal implementation details)
         visible_stages = stages.reject { |s| s[:type] == :router }
 
-        # Build stage position mapping for animation staggering (0, 1, 2, 3, ...)
-        @stage_positions = {}
-        visible_stages.each_with_index do |stage_data, index|
-          @stage_positions[stage_data[:stage_name]] = index
-        end
-
         # Calculate layout (boxes with positions) using DAG structure
         @cached_layout = calculate_layout(visible_stages, dag)
         @cached_visible_stages = visible_stages
         @cached_dag = dag
 
-        # Create DiagramStage instances for each stage
+        # Create DiagramStage instances and store animation indices for each stage
         @cached_stages = {}
-        visible_stages.each do |stage_data|
+        visible_stages.each_with_index do |stage_data, index|
           stage_name = stage_data[:stage_name]
           pos = @cached_layout[stage_name]
           next unless pos
+
+          # Store animation index in layout for O(1) lookup during rendering
+          pos[:animation_index] = index
 
           @cached_stages[stage_name] = DiagramStage.new(
             name: stage_name,
@@ -394,8 +390,12 @@ module Minigun
       # Get animation offset for a stage to stagger animations
       # Returns negative of stage position index (0, -1, -2, -3, ...)
       def animation_offset(stage_data)
-        return 0 unless stage_data && stage_data[:stage_name]
-        -(@stage_positions[stage_data[:stage_name]] || 0)
+        return 0 unless stage_data && stage_data[:stage_name] && @cached_layout
+
+        # O(1) hash lookup of cached animation index
+        pos = @cached_layout[stage_data[:stage_name]]
+        index = pos&.[](:animation_index) || 0
+        -index
       end
 
       # Draw a fan-out connection (one source to multiple targets)
