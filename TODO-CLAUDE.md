@@ -15,6 +15,7 @@ plan based on the current codebase state and TODOS.md.
 - [ ] thread/threads, fiber/fibers etc. as alias to pool methods if they don't exist on parent
 - [ ] Hooks
 - [ ] Config
+- [ ] Sort-out pipeline inheritance (https://github.com/minigun-org/minigun/pull/4)
 - [ ] Rubocop
 - [ ] Cleanup examples
 - [ ] Example runner context
