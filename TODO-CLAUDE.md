@@ -15,6 +15,7 @@ plan based on the current codebase state and TODOS.md.
 - [ ] thread/threads, fiber/fibers etc. as alias to pool methods if they don't exist on parent
 - [ ] Hooks
 - [ ] Config
+- [ ] Auto-config: # forks should match # of cores
 - [ ] Sort-out pipeline inheritance (https://github.com/minigun-org/minigun/pull/4)
 - [ ] Remove processor alias?
 - [ ] Rubocop

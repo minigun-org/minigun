@@ -536,5 +536,5 @@ Every design decision involves trade-offs. Minigun optimizes for:
 
 **See Also:**
 - [System Architecture](system_architecture.md) - How it all fits together
-- [When to Use Minigun](../comparison/when_to_use.md) - Decision guide
+- [When to Use Minigun](../comparison.md) - Decision guide
 - [Extending Minigun](../advanced/extending.md) - Build on these foundations

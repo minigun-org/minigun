@@ -52,13 +52,13 @@ Monitor your pipelines in real-time with the built-in HUD interface. View throug
 
 ## Three Ways to Learn
 
-### 📚 Tutorial: Tour of Minigun
+### 📚 Guide: Tour of Minigun
 
 Take a guided tour through Minigun's core concepts. Build your understanding step-by-step from first principles to advanced patterns.
 
 **Start Here If:** You're new to Minigun or want to understand the fundamentals.
 
-→ [**Start the Tutorial**](tutorial/01_introduction.md)
+→ [**Start the Guide**](guides/01_introduction.md)
 
 ---
 
@@ -85,42 +85,7 @@ Complete reference documentation for all classes, methods, and configuration opt
 
 **Start Here If:** You know what you're looking for and need detailed API information.
 
-→ [**View API Reference**](api/)
-
----
-
-## Feature Guides
-
-Comprehensive guides organized by topic:
-
-### Stages
-- [Overview](guides/stages/overview.md) - Understanding stage types
-- [Producers](guides/stages/producers.md) - Generating data
-- [Processors](guides/stages/processors.md) - Transforming data
-- [Consumers](guides/stages/consumers.md) - Terminal processing
-- [Accumulators](guides/stages/accumulators.md) - Batching strategies
-- [Custom Stages](guides/stages/custom_stages.md) - Build your own
-
-### Routing
-- [Overview](guides/routing/overview.md) - Routing strategies
-- [Sequential](guides/routing/sequential.md) - Default flow
-- [Explicit](guides/routing/explicit.md) - Using `from:` and `to:`
-- [Queue-Based](guides/routing/queue_based.md) - Named queue routing
-- [Dynamic](guides/routing/dynamic.md) - Runtime routing decisions
-
-### Execution Strategies
-- [Overview](guides/execution/overview.md) - Choosing the right strategy
-- [Inline](guides/execution/inline.md) - Single-threaded (debugging)
-- [Thread Pool](guides/execution/thread_pool.md) - Shared-memory concurrency
-- [COW Fork](guides/execution/cow_fork.md) - Copy-on-write processes
-- [IPC Fork](guides/execution/ipc_fork.md) - Persistent worker pools
-
-### More Guides
-- [Configuration](guides/configuration.md) - Configure pipelines and stages
-- [Hooks](guides/hooks.md) - Lifecycle hooks
-- [Queue Management](guides/queue_management.md) - Backpressure and flow control
-- [Error Handling](guides/error_handling.md) - Retry and recovery strategies
-- [Nested Pipelines](guides/composition/nested_pipelines.md) - Composing pipelines
+→ [**View API Reference**](guides/09_api_reference.md)
 
 ---
 
@@ -128,10 +93,7 @@ Comprehensive guides organized by topic:
 
 Monitor your pipelines with the built-in heads-up display.
 
-- [Overview](hud/overview.md) - Introduction to the HUD
-- [Quick Start](hud/quick_start.md) - Get started in 60 seconds
-- [Interface Guide](hud/interface.md) - Understanding the UI
-- [Metrics](hud/metrics.md) - Reading performance data
+→ [**HUD Overview**](guides/10_hud.md) - Real-time monitoring interface
 
 ---
 
@@ -139,44 +101,16 @@ Monitor your pipelines with the built-in heads-up display.
 
 Understand how Minigun works under the hood.
 
-- [System Architecture](architecture/system_architecture.md) - High-level overview
-- [Pipeline & DAG](architecture/pipeline_and_dag.md) - Routing and graph structure
-- [Stage Execution Model](architecture/stage_execution.md) - How stages run
-- [Queue System](architecture/queue_system.md) - Data flow internals
-- [Termination Protocol](architecture/termination_protocol.md) - Shutdown mechanics
+- [System Architecture](architecture/system_architecture.md) - Components and data flow
 - [Design Decisions](architecture/design_decisions.md) - Why things work this way
 
 ---
 
-## Advanced Topics
-
-Deep dives for power users:
-
-- [Yield Syntax](advanced/yield_syntax.md) - Class-based stages with Ruby yield
-- [IPC Internals](advanced/ipc_internals.md) - Serialization and optimization
-- [Performance Tuning](advanced/performance_tuning.md) - Optimization strategies
-- [Extending Minigun](advanced/extending.md) - Custom executors and stage types
-
----
-
-## Comparison & Migration
+## Comparison
 
 Choose the right tool for your use case:
 
-- [When to Use Minigun](comparison/when_to_use.md) - Decision guide
-- [Minigun vs Sidekiq](comparison/sidekiq.md)
-- [Minigun vs Resque](comparison/resque.md)
-- [Minigun vs Solid Queue](comparison/solid_queue.md)
-
----
-
-## Contributing
-
-Help make Minigun better:
-
-- [Development Setup](contributing/development.md)
-- [Running Tests](contributing/testing.md)
-- [Code Style Guide](contributing/style_guide.md)
+→ [**Comparison Guide**](comparison.md) - When to use Minigun vs Sidekiq
 
 ---
 
@@ -215,4 +149,4 @@ gem install minigun
 
 ---
 
-Ready to get started? [Begin the Tutorial →](tutorial/01_introduction.md)
+Ready to get started? [Begin the Guide →](guides/01_introduction.md)

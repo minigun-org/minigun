@@ -9,7 +9,7 @@ Minigun's architecture consists of several layers:
 ```
 ┌─────────────────────────────────────────────────────┐
 │                   User DSL Layer                    │
-│  (pipeline do, producer, processor, consumer, etc.)  │
+│ (pipeline do, producer, processor, consumer, etc.)  │
 └───────────────────┬─────────────────────────────────┘
                     │
 ┌───────────────────▼─────────────────────────────────┐
@@ -24,7 +24,7 @@ Minigun's architecture consists of several layers:
                     │
         ┌───────────┴──────────┬──────────────┐
         │                      │              │
-┌───────▼────────┐   ┌────────▼────────┐  ┌─▼─────────┐
+┌───────▼────────┐   ┌─────────▼───────┐  ┌───▼───────┐
 │   Stage        │   │      DAG        │  │  Stats    │
 │ (business      │   │  (routing       │  │ (metrics) │
 │  logic)        │   │   graph)        │  │           │
@@ -32,12 +32,11 @@ Minigun's architecture consists of several layers:
          │
 ┌────────▼────────────────────────────────────────────┐
 │              Execution Layer                        │
-│                                                     │
-│  ┌──────────┐  ┌──────────┐  ┌─────────────────┐  │
-│  │  Worker  │  │ Executor │  │  Queue System   │  │
-│  │ (thread  │  │ (thread/ │  │ (InputQueue/    │  │
-│  │ wrapper) │  │  fork)   │  │  OutputQueue)   │  │
-│  └──────────┘  └──────────┘  └─────────────────┘  │
+│  ┌────────────┐  ┌──────────┐  ┌─────────────────┐  │
+│  │   Worker   │  │ Executor │  │  Queue System   │  │
+│  │  (thread   │  │ (thread/ │  │ (InputQueue/    │  │
+│  │  wrapper)  │  │  fork)   │  │  OutputQueue)   │  │
+│  └────────────┘  └──────────┘  └─────────────────┘  │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -660,6 +659,6 @@ Understanding these internals helps you:
 ---
 
 **See Also:**
-- [API Reference](../api/) - Complete API docs
+- [API Reference](09_api_reference.md) - Complete API docs
 - [Extending Minigun](../advanced/extending.md) - Custom executors
 - [Source Code](../../lib/minigun/) - Read the implementation

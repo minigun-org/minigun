@@ -64,7 +64,7 @@ gem install minigun
 
 ### Learning
 
-- **[Tutorial](docs/tutorial/01_introduction.md)** - Learn Minigun step-by-step (7 lessons)
+- **[Guide](docs/guides/01_introduction.md)** - Learn Minigun step-by-step (7 lessons)
 - **[Recipes](docs/recipes/)** - Practical examples for common use cases
 - **[Examples](examples/)** - 100+ working examples
 
@@ -132,13 +132,13 @@ end
 
 ### Getting Started
 
-1. [Introduction](docs/tutorial/01_introduction.md) - What is Minigun?
-2. [Hello World](docs/tutorial/02_hello_world.md) - Your first pipeline
-3. [Understanding Stages](docs/tutorial/03_stages.md) - Producers, processors, consumers
-4. [Routing](docs/tutorial/04_routing.md) - Connecting stages
-5. [Concurrency](docs/tutorial/05_concurrency.md) - Adding parallelism
-6. [Execution Strategies](docs/tutorial/06_execution_strategies.md) - Threads vs forks
-7. [Monitoring](docs/tutorial/07_monitoring.md) - Using the HUD
+1. [Introduction](docs/guides/01_introduction.md) - What is Minigun?
+2. [Hello World](docs/guides/02_hello_world.md) - Your first pipeline
+3. [Understanding Stages](docs/guides/03_stages.md) - Producers, processors, consumers
+4. [Routing](docs/guides/04_routing.md) - Connecting stages
+5. [Concurrency](docs/guides/05_concurrency.md) - Adding parallelism
+6. [Execution Strategies](docs/guides/06_execution_strategies.md) - Threads vs forks
+7. [Monitoring](docs/guides/07_monitoring.md) - Using the HUD
 
 ### Recipes
 
@@ -164,4 +164,4 @@ Minigun is available as open source under the terms of the [MIT License](LICENSE
 
 ---
 
-**Ready to get started?** [Begin the Tutorial →](docs/tutorial/01_introduction.md)
+**Ready to get started?** [Begin the Tutorial →](docs/guides/01_introduction.md)

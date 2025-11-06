@@ -162,5 +162,5 @@ Ready to build your first pipeline? Let's start with a simple Hello World exampl
 
 **Additional Resources:**
 - [Examples Directory](../../examples/) - 100+ working examples
-- [API Reference](../api/) - Complete API documentation
+- [API Reference](09_api_reference.md) - Complete API documentation
 - [Recipes](../recipes/) - Common patterns and solutions

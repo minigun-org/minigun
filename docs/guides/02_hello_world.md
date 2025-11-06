@@ -286,9 +286,10 @@ Experiment with these variations:
 Example with a filter:
 
 ```ruby
+COMMON_WORDS = %w[the a an and or but].freeze
+
 processor :remove_common do |word, output|
-  common_words = %w[the a an and or but]
-  output << word unless common_words.include?(word)
+  output << word unless COMMON_WORDS.include?(word)
 end
 ```
 
@@ -312,4 +313,4 @@ Now that you understand basic pipelines, let's explore the different stage types
 **See Also:**
 - [Example: Quick Start](../../examples/00_quick_start.rb) - Working example
 - [Stage Guide](../guides/stages/overview.md) - Detailed stage documentation
-- [API Reference: DSL](../api/dsl.md) - Complete DSL reference
+- [API Reference: DSL](../guides/09_api_reference.md) - Complete DSL reference

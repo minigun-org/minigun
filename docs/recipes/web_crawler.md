@@ -494,7 +494,7 @@ end
 
 ## See Also
 
-- [Tutorial: Concurrency](../tutorial/05_concurrency.md) - Thread safety
+- [Guide: Concurrency](../guides/05_concurrency.md) - Thread safety
 - [Routing Guide](../guides/routing/dynamic.md) - Dynamic routing
 - [Example: Web Crawler](../../examples/10_web_crawler.rb) - Working example
 - [Performance Tuning](../advanced/performance_tuning.md) - Optimization
