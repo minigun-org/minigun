@@ -72,6 +72,8 @@ module Minigun
       raise ArgumentError, "Unknown target stage: #{target} (resolved to #{target_stage.name})" unless target_queue
 
       # Track this as a runtime edge for END signal handling
+      # Ensure the entry exists before adding to it (important for fork contexts)
+      @runtime_edges[@stage] ||= Set.new
       @runtime_edges[@stage].add(target_stage)
 
       # Create and cache the OutputQueue for this target
@@ -128,6 +130,9 @@ module Minigun
         case message[:type]
         when :item
           return message[:item]
+        when :routed_item
+          # Item targeted at specific nested stage - return with routing metadata
+          return RoutedItem.new(message[:target_stage], message[:item])
         when :end_of_stage, :shutdown
           return EndOfStage.new(@stage)
         end
@@ -140,6 +145,41 @@ module Minigun
 
   # IPC-backed output queue that writes results back to parent via IPC pipe
   # Used by IpcForkPoolExecutor workers to send results to parent process
+  # Wrapper for IPC output that encodes routing information
+  class IpcRoutedOutputQueue
+    def initialize(pipe_writer, stage_stats, target_stage)
+      @pipe_writer = pipe_writer
+      @stage_stats = stage_stats
+      @target_stage = target_stage
+    end
+
+    def <<(item)
+      # Send result with routing target back to parent via IPC
+      begin
+        Marshal.dump({
+          type: :routed_result,
+          target: @target_stage,
+          result: item
+        }, @pipe_writer)
+        @pipe_writer.flush
+        @stage_stats&.increment_produced
+      rescue TypeError, ArgumentError => e
+        Minigun.logger.warn "[Minigun] Cannot serialize routed result for IPC: #{e.message}"
+        begin
+          Marshal.dump({
+            type: :serialization_error,
+            error: "Cannot serialize result: #{e.message}",
+            item_type: item.class.to_s
+          }, @pipe_writer)
+          @pipe_writer.flush
+        rescue
+          raise
+        end
+      end
+      self
+    end
+  end
+
   class IpcOutputQueue
     def initialize(pipe_writer, stage_stats)
       @pipe_writer = pipe_writer
@@ -151,6 +191,10 @@ module Minigun
       begin
         if item.nil?
           Marshal.dump({ type: :no_result }, @pipe_writer)
+        elsif item.is_a?(Minigun::EndOfStage)
+          # EndOfStage contains Stage objects which aren't marshalable
+          # Send as a control message instead
+          Marshal.dump({ type: :end_of_stage }, @pipe_writer)
         else
           Marshal.dump({ type: :result, result: item }, @pipe_writer)
         end
@@ -176,10 +220,10 @@ module Minigun
       self
     end
 
-    def to(_target_stage)
-      # For IPC workers, routing is handled by parent process
-      # Just return self as a proxy
-      self
+    def to(target_stage)
+      # For IPC workers, routing must be encoded in the result
+      # Return a wrapper that includes routing information
+      IpcRoutedOutputQueue.new(@pipe_writer, @stage_stats, target_stage)
     end
 
     def to_proc

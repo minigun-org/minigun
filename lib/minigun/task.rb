@@ -23,6 +23,11 @@ module Minigun
       # Queue registry for cross-pipeline routing (Stage => Queue)
       @stage_queues = {}
 
+      # Track all IPC pipes to prevent FD leaks across multiple IPC fork stages
+      # When multiple IPC stages exist, workers from one stage inherit FDs from other stages
+      @ipc_pipes = []
+      @ipc_pipes_mutex = Mutex.new
+
       # Root pipeline - all stages and nested pipelines live here
       @root_pipeline = root_pipeline || Pipeline.new(:default, self, nil, @config)
     end
@@ -35,6 +40,32 @@ module Minigun
     # Find a stage's input queue for cross-pipeline routing
     def find_queue(stage)
       @stage_queues[stage]
+    end
+
+    # Register IPC pipes to track across all fork stages
+    # This prevents FD leaks when workers from one stage inherit pipes from another
+    def register_ipc_pipes(pipes)
+      @ipc_pipes_mutex.synchronize do
+        @ipc_pipes.concat(pipes)
+      end
+    end
+
+    # Unregister IPC pipes when executor shuts down
+    def unregister_ipc_pipes(pipes)
+      @ipc_pipes_mutex.synchronize do
+        pipes.each { |pipe| @ipc_pipes.delete(pipe) }
+      end
+    end
+
+    # Close all IPC pipes except the ones specified
+    # Called by forked workers to prevent FD leaks while keeping their own pipes open
+    def close_all_ipc_pipes_except(keep_pipes)
+      @ipc_pipes_mutex.synchronize do
+        @ipc_pipes.each do |pipe|
+          next if keep_pipes.include?(pipe)
+          pipe.close rescue nil
+        end
+      end
     end
 
     # Set config value (applies to all pipelines)
@@ -77,7 +108,7 @@ module Minigun
       nested_pipeline = Pipeline.new(name, self, @root_pipeline, @config)
 
       # Create a PipelineStage and configure it (pipeline-first positional style)
-      pipeline_stage = PipelineStage.new(name, @root_pipeline, nested_pipeline, nil, options)
+      pipeline_stage = PipelineStage.new(name, @root_pipeline, nested_pipeline, options)
 
       # Add stages to the nested pipeline via block
       if block_given?
@@ -122,7 +153,7 @@ module Minigun
       else
         # Create new PipelineStage and add to root_pipeline (pipeline-first positional style)
         pipeline = Pipeline.new(name, self, @root_pipeline, @config)
-        pipeline_stage = PipelineStage.new(name, @root_pipeline, pipeline, nil, options)
+        pipeline_stage = PipelineStage.new(name, @root_pipeline, pipeline, options)
 
         @root_pipeline.stages << pipeline_stage
         @root_pipeline.dag.add_node(pipeline_stage)

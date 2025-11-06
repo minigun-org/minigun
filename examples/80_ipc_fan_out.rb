@@ -23,7 +23,15 @@ class IpcFanOutExample
     @results_a = []
     @results_b = []
     @results_c = []
-    @mutex = Mutex.new
+    @results_a_file = "/tmp/minigun_80_ipc_a_#{Process.pid}.txt"
+    @results_b_file = "/tmp/minigun_80_ipc_b_#{Process.pid}.txt"
+    @results_c_file = "/tmp/minigun_80_ipc_c_#{Process.pid}.txt"
+  end
+
+  def cleanup
+    File.unlink(@results_a_file) if File.exist?(@results_a_file)
+    File.unlink(@results_b_file) if File.exist?(@results_b_file)
+    File.unlink(@results_c_file) if File.exist?(@results_c_file)
   end
 
   pipeline do
@@ -60,8 +68,10 @@ class IpcFanOutExample
         puts "[ProcessA:ipc_fork] Processing #{item[:id]} in PID #{pid}"
         sleep 0.03
 
-        @mutex.synchronize do
-          @results_a << item.merge(worker_pid: pid)
+        File.open(@results_a_file, 'a') do |f|
+          f.flock(File::LOCK_EX)
+          f.puts "#{item[:id]}:#{item[:routed_to]}:#{item[:splitter_pid]}:#{pid}"
+          f.flock(File::LOCK_UN)
         end
       end
     end
@@ -72,8 +82,10 @@ class IpcFanOutExample
         puts "[ProcessB:ipc_fork] Processing #{item[:id]} in PID #{pid}"
         sleep 0.03
 
-        @mutex.synchronize do
-          @results_b << item.merge(worker_pid: pid)
+        File.open(@results_b_file, 'a') do |f|
+          f.flock(File::LOCK_EX)
+          f.puts "#{item[:id]}:#{item[:routed_to]}:#{item[:splitter_pid]}:#{pid}"
+          f.flock(File::LOCK_UN)
         end
       end
     end
@@ -84,8 +96,34 @@ class IpcFanOutExample
         puts "[ProcessC:ipc_fork] Processing #{item[:id]} in PID #{pid}"
         sleep 0.03
 
-        @mutex.synchronize do
-          @results_c << item.merge(worker_pid: pid)
+        File.open(@results_c_file, 'a') do |f|
+          f.flock(File::LOCK_EX)
+          f.puts "#{item[:id]}:#{item[:routed_to]}:#{item[:splitter_pid]}:#{pid}"
+          f.flock(File::LOCK_UN)
+        end
+      end
+    end
+
+    after_run do
+      # Read results from temp files
+      if File.exist?(@results_a_file)
+        @results_a = File.readlines(@results_a_file).map do |line|
+          id, routed_to, splitter_pid, worker_pid = line.strip.split(':')
+          { id: id.to_i, routed_to: routed_to, splitter_pid: splitter_pid.to_i, worker_pid: worker_pid.to_i }
+        end
+      end
+
+      if File.exist?(@results_b_file)
+        @results_b = File.readlines(@results_b_file).map do |line|
+          id, routed_to, splitter_pid, worker_pid = line.strip.split(':')
+          { id: id.to_i, routed_to: routed_to, splitter_pid: splitter_pid.to_i, worker_pid: worker_pid.to_i }
+        end
+      end
+
+      if File.exist?(@results_c_file)
+        @results_c = File.readlines(@results_c_file).map do |line|
+          id, routed_to, splitter_pid, worker_pid = line.strip.split(':')
+          { id: id.to_i, routed_to: routed_to, splitter_pid: splitter_pid.to_i, worker_pid: worker_pid.to_i }
         end
       end
     end
@@ -140,5 +178,7 @@ if __FILE__ == $PROGRAM_NAME
   rescue NotImplementedError => e
     puts "\nForking not available on this platform: #{e.message}"
     puts "(This is expected on Windows)"
+  ensure
+    example.cleanup
   end
 end

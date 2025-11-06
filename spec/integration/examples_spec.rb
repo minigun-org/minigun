@@ -107,10 +107,10 @@ RSpec.describe 'Examples Integration' do
       pipeline = FanOutPipeline.new
       pipeline.run
 
-      # Each consumer should receive all 3 items
-      expect(pipeline.emails.size).to eq(3)
-      expect(pipeline.sms_messages.size).to eq(3)
-      expect(pipeline.push_notifications.size).to eq(3)
+      # Each consumer should receive all 8 items (expanded for HUD visualization)
+      expect(pipeline.emails.size).to eq(8)
+      expect(pipeline.sms_messages.size).to eq(8)
+      expect(pipeline.push_notifications.size).to eq(8)
 
       # Verify content
       expect(pipeline.emails.first).to include('Alice')
@@ -610,7 +610,7 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
-  describe '27_process_execution.rb', skip: !Minigun.fork? do
+  describe '27_process_execution.rb' do
     it 'demonstrates process-based execution with isolation' do
       load File.expand_path('../../examples/27_process_execution.rb', __dir__)
 
@@ -1406,7 +1406,7 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
-  describe '66_cow_and_ipc_fork_executors.rb', skip: !Minigun.fork? do
+  describe '66_cow_and_ipc_fork_executors.rb' do
     it 'demonstrates COW and IPC fork executors' do
       load File.expand_path('../../examples/66_cow_and_ipc_fork_executors.rb', __dir__)
 
@@ -1473,9 +1473,10 @@ RSpec.describe 'Examples Integration' do
   end
 
   # Phase 1.0: Cross-Boundary Routing Examples (70-88)
+  # Note: Fork-based examples are skipped on Windows (fork not supported)
 
   describe '70_thread_to_ipc_fork.rb' do
-    it 'routes from thread pool to IPC fork (terminal consumer)' do
+    it 'routes from thread pool to IPC fork (terminal consumer)', skip: !Minigun.fork? do
       load File.expand_path('../../examples/70_thread_to_ipc_fork.rb', __dir__)
 
       example = ThreadToIpcForkExample.new
@@ -1512,7 +1513,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '72_thread_to_cow_fork.rb' do
-    it 'routes from thread pool to COW fork (terminal consumer)' do
+    it 'routes from thread pool to COW fork (terminal consumer)', skip: !Minigun.fork? do
       load File.expand_path('../../examples/72_thread_to_cow_fork.rb', __dir__)
 
       example = ThreadToCowForkExample.new
@@ -1611,7 +1612,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '78_master_to_ipc_via_to.rb' do
-    it 'routes from master to IPC fork via output.to()', skip: 'Hangs - IPC fork with explicit routing and no downstream needs investigation' do
+    it 'routes from master to IPC fork via output.to()', skip: !Minigun.fork? do
       load File.expand_path('../../examples/78_master_to_ipc_via_to.rb', __dir__)
 
       example = MasterToIpcViaToExample.new
@@ -1628,7 +1629,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '79_master_to_cow_via_to.rb' do
-    it 'routes from master to COW fork via output.to()' do
+    it 'routes from master to COW fork via output.to()', skip: !Minigun.fork? do
       load File.expand_path('../../examples/79_master_to_cow_via_to.rb', __dir__)
 
       example = MasterToCowViaToExample.new
@@ -1647,7 +1648,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '80_ipc_fan_out.rb' do
-    it 'demonstrates IPC fork fan-out pattern', skip: 'Hangs - IPC fork fan-out with explicit routing needs investigation' do
+    it 'demonstrates IPC fork fan-out pattern', skip: !Minigun.fork? do
       load File.expand_path('../../examples/80_ipc_fan_out.rb', __dir__)
 
       example = IpcFanOutExample.new
@@ -1665,7 +1666,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '81_ipc_fan_in.rb' do
-    it 'demonstrates IPC fork fan-in pattern', skip: 'Hangs - IPC fork with multiple producers needs investigation' do
+    it 'demonstrates IPC fork fan-in pattern', skip: !Minigun.fork? do
       load File.expand_path('../../examples/81_ipc_fan_in.rb', __dir__)
 
       example = IpcFanInExample.new
@@ -1682,7 +1683,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '82_cow_fan_out.rb' do
-    it 'demonstrates COW fork fan-out pattern', skip: 'Hangs - COW fork fan-out with explicit routing needs investigation' do
+    it 'demonstrates COW fork fan-out pattern', skip: !Minigun.fork? do
       load File.expand_path('../../examples/82_cow_fan_out.rb', __dir__)
 
       example = CowFanOutExample.new
@@ -1702,7 +1703,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '83_cow_fan_in.rb' do
-    it 'demonstrates COW fork fan-in pattern' do
+    it 'demonstrates COW fork fan-in pattern', skip: !Minigun.fork? do
       load File.expand_path('../../examples/83_cow_fan_in.rb', __dir__)
 
       example = CowFanInExample.new
@@ -1721,7 +1722,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '84_mixed_ipc_cow_fan_out.rb' do
-    it 'demonstrates mixed IPC/COW fork fan-out', skip: 'Hangs - Mixed fork fan-out with explicit routing needs investigation' do
+    it 'demonstrates mixed IPC/COW fork fan-out', skip: !Minigun.fork? do
       load File.expand_path('../../examples/84_mixed_ipc_cow_fan_out.rb', __dir__)
 
       example = MixedIpcCowFanOutExample.new
@@ -1758,7 +1759,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '86_ipc_spawns_nested_cow.rb' do
-    it 'demonstrates IPC workers spawning nested COW forks' do
+    it 'demonstrates IPC workers spawning nested COW forks', skip: !Minigun.fork? do
       load File.expand_path('../../examples/86_ipc_spawns_nested_cow.rb', __dir__)
 
       example = IpcSpawnsNestedCowExample.new
@@ -1778,7 +1779,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '87_cow_spawns_nested_ipc.rb' do
-    it 'demonstrates COW forks spawning nested IPC workers' do
+    it 'demonstrates COW forks spawning nested IPC workers', skip: !Minigun.fork? do
       load File.expand_path('../../examples/87_cow_spawns_nested_ipc.rb', __dir__)
 
       example = CowSpawnsNestedIpcExample.new
@@ -1868,6 +1869,199 @@ RSpec.describe 'Examples Integration' do
       expect(reroute_both.results.size).to eq(6)
       # All items go directly from producers to collect (no processing - no merged_at, no processed_by)
       expect(reroute_both.results.all? { |r| !r[:merged_at] && !r[:processed_by] }).to be true
+    end
+  end
+
+  describe '92_reroute_ipc_basic.rb' do
+    it 'demonstrates rerouting with IPC fork executors' do
+      load File.expand_path('../../examples/92_reroute_ipc_basic.rb', __dir__)
+
+      # All three test cases should pass
+      base = RerouteIpcBasicExample.new
+      base.run
+      expect(base.results.map { |r| r[:value] }.sort).to eq([2, 4, 6, 8, 10])
+      base.cleanup
+
+      skip_example = RerouteIpcSkipExample.new
+      skip_example.run
+      expect(skip_example.results.map { |r| r[:value] }.sort).to eq([1, 2, 3, 4, 5])
+      skip_example.cleanup
+
+      insert_example = RerouteIpcInsertExample.new
+      insert_example.run
+      expect(insert_example.results.map { |r| r[:value] }.sort).to eq([6, 12, 18, 24, 30])
+      insert_example.cleanup
+    end
+  end
+
+  describe '93_reroute_cow_basic.rb' do
+    it 'demonstrates rerouting with COW fork executors' do
+      load File.expand_path('../../examples/93_reroute_cow_basic.rb', __dir__)
+
+      base = RerouteCowBasicExample.new
+      base.run
+      expect(base.results.map { |r| r[:value] }.sort).to eq([1, 4, 9, 16, 25])
+      base.cleanup
+
+      skip_example = RerouteCowSkipExample.new
+      skip_example.run
+      expect(skip_example.results.map { |r| r[:value] }.sort).to eq([1, 2, 3, 4, 5])
+      skip_example.cleanup
+
+      insert_example = RerouteCowInsertExample.new
+      insert_example.run
+      expect(insert_example.results.map { |r| r[:value] }.sort).to eq([1, 64, 729, 4096, 15625])
+      insert_example.cleanup
+    end
+  end
+
+  describe '94_reroute_mixed_executors.rb' do
+    it 'demonstrates rerouting across different executor types' do
+      load File.expand_path('../../examples/94_reroute_mixed_executors.rb', __dir__)
+
+      base = RerouteMixedExecutorsExample.new
+      base.run
+      expect(base.results.map { |r| r[:value] }.sort).to eq([22, 24, 26, 28, 30, 32])
+      base.cleanup
+
+      reverse = RerouteReverseOrderExample.new
+      reverse.run
+      expect(reverse.results.map { |r| r[:value] }.sort).to eq([2, 4, 6, 8, 10, 12])
+      reverse.cleanup
+    end
+  end
+
+  describe '95_reroute_to_inner_fork_stages.rb' do
+    it 'demonstrates rerouting to stages inside fork blocks' do
+      load File.expand_path('../../examples/95_reroute_to_inner_fork_stages.rb', __dir__)
+
+      base = RerouteToInnerIpcStagesExample.new
+      base.run
+      expect(base.results_b.map { |r| r[:value] }.sort).to eq([20, 40, 60])
+      base.cleanup
+
+      direct = RerouteDirectlyToInnerIpcExample.new
+      direct.run
+      expect(direct.results_b.map { |r| r[:value] }.sort).to eq([10, 20, 30, 40, 50, 60])
+      direct.cleanup
+
+      to_cow = RerouteFromInnerIpcToCowExample.new
+      to_cow.run
+      expect(to_cow.results_a.map { |r| r[:value] }.sort).to eq([20, 40, 60])
+      to_cow.cleanup
+
+      complex = RerouteIpcInnerComplexExample.new
+      complex.run
+      expect(complex.results_b.map { |r| r[:value] }.sort).to eq([110, 120, 130, 140, 150, 160])
+      complex.cleanup
+    end
+  end
+
+  describe '96_reroute_fork_fan_patterns.rb' do
+    it 'demonstrates rerouting with fork-based fan-out/fan-in' do
+      load File.expand_path('../../examples/96_reroute_fork_fan_patterns.rb', __dir__)
+
+      # Fan-out patterns should work with rerouting
+      fan_out = RerouteForkFanOutExample.new
+      fan_out.run
+      expect(fan_out.results_a.size).to eq(3)
+      expect(fan_out.results_b.size).to eq(3)
+      expect(fan_out.results_c.size).to eq(3)
+      fan_out.cleanup
+
+      # Fan-in patterns should work with rerouting
+      fan_in = RerouteForkFanInExample.new
+      fan_in.run
+      expect(fan_in.results.size).to eq(9)
+      fan_in.cleanup
+    end
+  end
+
+  describe '97_dynamic_routing_to_inner_fork_stages.rb' do
+    it 'demonstrates dynamic routing to stages inside fork blocks' do
+      load File.expand_path('../../examples/97_dynamic_routing_to_inner_fork_stages.rb', __dir__)
+
+      # Routing from thread to inner IPC/COW stages
+      example1 = DynamicRoutingToInnerIpcExample.new
+      example1.run
+      # Items should be split: 3 to A (IDs % 3 == 0), 3 to B (% 3 == 1), 3 to C (% 3 == 2)
+      expect(example1.results_a.size).to eq(3)
+      expect(example1.results_b.size).to eq(3)
+      expect(example1.results_c.size).to eq(3)
+      example1.cleanup
+
+      # Routing from inner IPC to inner COW stages (even/odd split)
+      example2 = DynamicRoutingFromInnerToInnerExample.new
+      example2.run
+      expect(example2.results.size).to eq(6)
+      # Items should be split between paths X (even IDs) and Y (odd IDs)
+      by_path = example2.results.group_by { |r| r[:path] }
+      expect(by_path['X'].size).to eq(3)
+      expect(by_path['Y'].size).to eq(3)
+      example2.cleanup
+    end
+  end
+
+  describe '98_await_stages_complex_routing.rb' do
+    it 'demonstrates complex multi-level routing with await stages' do
+      load File.expand_path('../../examples/98_await_stages_complex_routing.rb', __dir__)
+
+      # Test 1: Multi-level routing
+      example1 = ComplexAwaitRoutingExample.new
+      example1.run
+
+      # Verify item distribution
+      expect(example1.high_priority.size).to eq(10)
+      expect(example1.low_priority.size).to eq(5)
+      expect(example1.errors.size).to eq(5)
+
+      # Verify enrichment chain for high priority items
+      expect(example1.high_priority).to all(satisfy { |item| item[:validated] && item[:enriched] })
+
+      # Verify low priority items are processed
+      expect(example1.low_priority).to all(satisfy { |item| item[:processed] })
+
+      # Verify errors are handled
+      expect(example1.errors).to all(satisfy { |item| item[:error] })
+
+      example1.cleanup
+
+      # Test 2: IPC fork with await stages
+      example2 = AwaitWithIpcExample.new
+      example2.run
+
+      expect(example2.results.size).to eq(10)
+
+      by_worker = example2.results.group_by { |r| r[:worker] }
+      expect(by_worker[:a].size).to eq(5)
+      expect(by_worker[:b].size).to eq(5)
+
+      # Verify workers ran in different PIDs
+      pids = example2.results.map { |r| r[:pid] }.uniq
+      expect(pids.size).to be > 1
+
+      example2.cleanup
+    end
+  end
+
+  describe 'hud_demo.rb' do
+    it 'defines HudDemoTask class' do
+      # HUD demo is an interactive infinite loop with user prompts
+      # Just verify the file defines the expected class
+      hud_demo_code = File.read(File.expand_path('../../examples/hud_demo.rb', __dir__))
+      expect(hud_demo_code).to include('class HudDemoTask')
+      expect(hud_demo_code).to include('Minigun::HUD.run_with_hud')
+    end
+  end
+
+  describe 'irb_with_hud.rb' do
+    it 'defines DataProcessingTask for IRB usage' do
+      # IRB example demonstrates background execution
+      # Just verify the file defines the expected class
+      irb_code = File.read(File.expand_path('../../examples/irb_with_hud.rb', __dir__))
+      expect(irb_code).to include('class DataProcessingTask')
+      expect(irb_code).to include('background: true')
+      expect(irb_code).to include('task.hud')
     end
   end
 

@@ -102,7 +102,7 @@ module Minigun
       end
 
       # Read result from child via IPC pipe
-      def read_result_from_pipe(reader, output_queue)
+      def read_result_from_pipe(reader, output_queue, stage_ctx = nil)
         response = Marshal.load(reader)
         case response[:type]
         when :result
@@ -112,6 +112,33 @@ module Minigun
             result.each { |item| output_queue << item }
           elsif !result.nil?
             output_queue << result
+          end
+        when :routed_result
+          # Handle explicitly routed result from IPC worker
+          target = response[:target]
+          result = response[:result]
+          if stage_ctx && target
+            # Route to specific target stage
+            task = stage_ctx.stage.task
+            target_stage = task.stage_registry.find(target, from_pipeline: stage_ctx.stage.pipeline)
+            if target_stage
+              target_queue = task.find_queue(target_stage)
+              if target_queue
+                target_queue << result
+                # Track runtime edge for END signal handling
+                runtime_edges = stage_ctx.runtime_edges
+                runtime_edges[stage_ctx.stage] ||= Set.new
+                runtime_edges[stage_ctx.stage].add(target_stage)
+              else
+                warn "[Minigun] Target queue not found for routed result: #{target}"
+                output_queue << result # Fallback to default output
+              end
+            else
+              warn "[Minigun] Target stage not found for routed result: #{target}"
+              output_queue << result # Fallback to default output
+            end
+          else
+            output_queue << result # Fallback if no routing context
           end
         when :error
           error_msg = response[:error] || "Unknown error in forked process"
@@ -125,6 +152,12 @@ module Minigun
           warn "[Minigun] Skipped non-serializable result: #{response[:error]} (type: #{response[:item_type]})"
         when :no_result
           # Child processed but produced no output
+        when :end_of_stage
+          # Worker finished processing and sent EndOfStage
+          # Create a new EndOfStage for this IPC stage and propagate it
+          if stage_ctx
+            output_queue << Minigun::EndOfStage.new(stage_ctx.stage)
+          end
         end
       rescue EOFError
         # Normal EOF - worker finished processing, re-raise to exit collection loop
@@ -226,14 +259,8 @@ module Minigun
 
             # Child process has inherited item via COW
             # Execute the stage's block on this single item
-            # Create a capture queue to collect results written to output_queue
-            capture_queue = Queue.new
-            capture_output = Minigun::OutputQueue.new(
-              stage,
-              [capture_queue],
-              {},
-              stage_stats: stage_stats
-            )
+            # Use IPC-backed output queue for routing support
+            capture_output = Minigun::IpcOutputQueue.new(writer, stage_stats)
 
             # Execute stage block with item and capture output queue
             start_time = Time.now if stage_stats
@@ -244,19 +271,8 @@ module Minigun
             end
             stage_stats&.record_latency(Time.now - start_time) if stage_stats
 
-            # Collect all results written to capture queue
-            results = []
-            loop do
-              result = capture_queue.pop(true)  # non_block = true
-              results << result
-            rescue ThreadError
-              break
-            end
-
-            # Send first result (or nil if none) back to parent via IPC pipe
-            # For multiple results, we send them as an array
-            result_to_send = results.size == 1 ? results.first : (results.empty? ? nil : results)
-            write_result_to_pipe(result_to_send, writer)
+            # Results already sent via IpcOutputQueue during execution
+            # Just close the pipe to signal completion
           rescue => e
             # Send error back to parent via IPC
             write_error_to_pipe(e, writer)
@@ -313,11 +329,15 @@ module Minigun
 
             begin
               if process_status.success?
-                # Read result from child via IPC pipe
-                read_result_from_pipe(reader, output_queue)
+                # Read all results from child via IPC pipe (may be multiple with routing)
+                loop do
+                  read_result_from_pipe(reader, output_queue, @stage_ctx)
+                end
               else
                 warn "[Minigun] COW forked process #{pid} failed with status: #{process_status.exitstatus}"
               end
+            rescue EOFError, IOError
+              # Normal - child closed pipe after sending results
             ensure
               reader.close rescue nil
             end
@@ -334,6 +354,7 @@ module Minigun
       def initialize(stage_ctx, max_size:)
         super(stage_ctx, max_size: max_size)
         @workers = []
+        @my_pipes = []  # Track this executor's pipes for cleanup/unregister
       end
 
       def execute_stage(stage, user_context, input_queue, output_queue)
@@ -390,6 +411,11 @@ module Minigun
             end
           end
           @workers.clear
+
+          # Unregister pipes from task tracking
+          task = @stage_ctx.stage.task
+          task.unregister_ipc_pipes(@my_pipes)
+          @my_pipes.clear
         end
       end
 
@@ -404,10 +430,21 @@ module Minigun
           parent_read, child_write = IO.pipe
           child_read, parent_write = IO.pipe
 
+          # Register pipes with task to track across all IPC stages
+          # This prevents FD leaks when multiple IPC stages run concurrently
+          task = stage.task
+          pipes = [parent_read, child_write, child_read, parent_write]
+          task.register_ipc_pipes(pipes)
+          @my_pipes.concat(pipes)
+
           pid = fork do
             # Worker process - close parent ends
             parent_read.close
             parent_write.close
+
+            # Close ALL IPC pipes from ALL stages EXCEPT our own pipes
+            # This prevents FD leaks when multiple IPC stages run concurrently
+            task.close_all_ipc_pipes_except([child_read, child_write])
 
             worker_loop(stage, user_context, stage_stats, child_read, child_write, pipeline)
           end
@@ -455,6 +492,7 @@ module Minigun
       rescue EOFError, IOError
         # Parent closed pipe, exit gracefully
       ensure
+        # Close pipes - EOF will naturally signal parent that worker is done
         from_parent.close rescue nil
         to_parent.close rescue nil
         exit! 0
@@ -463,21 +501,26 @@ module Minigun
       def distribute_work(input_queue, output_queue)
         worker_index = 0
         result_threads = []
+        received_end_of_stage = nil
+
+        # Get nested stages' queues for dynamic routing support
+        nested_queues = get_nested_stage_queues
 
         # Start result collection threads for each worker
         @workers.each do |worker|
           result_threads << Thread.new do
             begin
               loop do
-                read_result_from_pipe(worker[:from_worker], output_queue)
+                read_result_from_pipe(worker[:from_worker], output_queue, @stage_ctx)
               end
-            rescue EOFError, IOError => e
-              # Worker closed pipe, done (suppress warnings for normal EOF)
-              # Only warn if it's not a normal EOF
-              warn "[Minigun] Worker #{worker[:pid]} pipe closed: #{e.message}" unless e.is_a?(EOFError)
+            rescue EOFError, IOError
+              # Worker closed pipe, done
             end
           end
         end
+
+        # Start threads to monitor nested stages' queues and forward to workers
+        nested_queue_threads = start_nested_queue_monitors(nested_queues)
 
         # Distribute items to workers round-robin
         begin
@@ -485,12 +528,13 @@ module Minigun
             item = input_queue.pop
 
             if item.is_a?(Minigun::EndOfStage)
+              received_end_of_stage = item
               # Send EndOfStage to all workers
               @workers.each do |worker|
                 begin
                   Marshal.dump({ type: :end_of_stage }, worker[:to_worker])
                   worker[:to_worker].flush
-                rescue IOError, EOFError
+                rescue IOError, EOFError, Errno::EPIPE
                   # Worker already closed, ignore
                 end
               end
@@ -514,8 +558,70 @@ module Minigun
             end
           end
         ensure
+          # Stop nested queue monitor threads
+          nested_queue_threads&.each { |t| t.kill }
           # Wait for all result collection threads to finish
           result_threads.each(&:join)
+        end
+      end
+
+      # Get queues for nested stages (for dynamic routing support)
+      def get_nested_stage_queues
+        return [] unless @stage_ctx.respond_to?(:stage)
+
+        stage = @stage_ctx.stage
+        return [] unless stage.is_a?(Minigun::PipelineStage)
+
+        nested_pipeline = stage.nested_pipeline
+        return [] unless nested_pipeline
+
+        task = stage.respond_to?(:task) ? stage.task : nil
+        return [] unless task
+
+        # Get all nested stages and their queues
+        nested_pipeline.instance_variable_get(:@stages).map do |nested_stage|
+          queue = task.find_queue(nested_stage)
+          { stage: nested_stage, queue: queue } if queue
+        end.compact
+      rescue => e
+        # If anything goes wrong, just skip nested queue monitoring
+        Minigun.logger.debug "[IPC] Could not get nested stage queues: #{e.message}"
+        []
+      end
+
+      # Start threads to monitor nested stages' queues
+      def start_nested_queue_monitors(nested_queues)
+        return [] if nested_queues.empty?
+
+        worker_index_ref = { value: 0 }  # Use ref to share across threads
+        nested_queues.map do |nested_info|
+          Thread.new do
+            loop do
+              # Non-blocking check for items in nested queue
+              begin
+                item = nested_info[:queue].pop(true)  # non_block = true
+
+                # Send item to worker with routing metadata
+                worker_idx = worker_index_ref[:value]
+                worker_index_ref[:value] = (worker_idx + 1) % @workers.size
+                worker = @workers[worker_idx]
+
+                Marshal.dump({
+                  type: :routed_item,
+                  target_stage: nested_info[:stage].name,
+                  item: item
+                }, worker[:to_worker])
+                worker[:to_worker].flush
+              rescue ThreadError
+                # Queue empty, sleep briefly
+                sleep 0.01
+              rescue => e
+                # Log but don't crash the monitor thread
+                Minigun.logger.debug "[IPC] Nested queue monitor error: #{e.message}"
+                sleep 0.1
+              end
+            end
+          end
         end
       end
     end

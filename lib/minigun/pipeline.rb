@@ -5,7 +5,8 @@ module Minigun
   # A Pipeline can be standalone or part of a multi-pipeline Task
   class Pipeline
     attr_reader :name, :config, :stages, :hooks, :dag, :output_queues, :stats,
-                :context, :stage_hooks, :runtime_edges, :input_queues, :parent_pipeline, :task
+                :context, :stage_hooks, :runtime_edges, :input_queues, :parent_pipeline, :task,
+                :entrance_router
 
     def initialize(name, task, parent_pipeline, config = {}, stages: nil, hooks: nil, stage_hooks: nil, dag: nil, stats: nil)
       @name = name
@@ -518,6 +519,10 @@ module Minigun
           # Skip autonomous stages
           next if candidate.run_mode == :autonomous
 
+          # Skip stages with await: true - they're dynamic routing targets
+          # and shouldn't be auto-connected
+          next if candidate.options[:await] == true
+
           # Found a valid non-producer stage
           next_stage = candidate
           break
@@ -525,6 +530,10 @@ module Minigun
 
         # No valid next stage found
         next unless next_stage
+
+        # Skip if current stage has await: true - it shouldn't connect to anything
+        # (it's a dynamic routing target that only receives via output.to())
+        next if stage.options[:await] == true
 
         # Skip if BOTH current and next are composite stages (isolated pipelines)
         next if stage.run_mode == :composite && next_stage.run_mode == :composite

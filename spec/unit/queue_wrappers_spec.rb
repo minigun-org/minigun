@@ -4,46 +4,28 @@ require 'spec_helper'
 require 'minigun/queue_wrappers'
 
 RSpec.describe Minigun::OutputQueue do
-  # Create mock Stage objects
-  let(:pipeline_context) { Object.new }
-  let(:stage_a) { double('stage_a', name: :stage_a) }
-  let(:stage_b) { double('stage_b', name: :stage_b) }
-  let(:stage_c) { double('stage_c', name: :stage_c) }
+  # Create real Stage objects
+  let(:config) { { max_threads: 1, max_processes: 1 } }
+  let(:task) { Minigun::Task.new(config: config) }
+  let(:pipeline) { task.root_pipeline }
+
+  let(:stage_a) { Minigun::ProducerStage.new(:stage_a, pipeline, proc {}, {}) }
+  let(:stage_b) { Minigun::ProducerStage.new(:stage_b, pipeline, proc {}, {}) }
+  let(:stage_c) { Minigun::ProducerStage.new(:stage_c, pipeline, proc {}, {}) }
+  let(:test_stage) { Minigun::ProducerStage.new(:test_stage, pipeline, proc {}, {}) }
 
   let(:downstream_queues) { [Queue.new, Queue.new] }
   let(:all_stage_queues) { { stage_a => Queue.new, stage_b => Queue.new, stage_c => Queue.new } }
   let(:runtime_edges) { Hash.new { |h, k| h[k] = Set.new } }
-  let(:stage_stats) { double('stage_stats', increment_produced: nil) }
+  let(:stage_stats) { Minigun::Stats.new(test_stage) }
 
-  # Mock stage_registry that can find stages by name
-  let(:stage_registry) do
-    double('stage_registry').tap do |sr|
-      allow(sr).to receive(:find) do |name, from_pipeline:|
-        case name
-        when :stage_a then stage_a
-        when :stage_b then stage_b
-        when :stage_c then stage_c
-        when :unknown_stage then nil
-        end
-      end
+  before do
+    # Register stages and their queues with the task so OutputQueue#to can find them
+    [stage_a, stage_b, stage_c].each do |stage|
+      task.stage_registry.register(stage, pipeline)
+      task.register_stage_queue(stage, all_stage_queues[stage])
     end
   end
-
-  # Mock task that provides stage_registry and find_queue
-  let(:task) do
-    double('task').tap do |t|
-      allow(t).to receive(:stage_registry).and_return(stage_registry)
-      allow(t).to receive(:find_queue).with(stage_a).and_return(all_stage_queues[stage_a])
-      allow(t).to receive(:find_queue).with(stage_b).and_return(all_stage_queues[stage_b])
-      allow(t).to receive(:find_queue).with(stage_c).and_return(all_stage_queues[stage_c])
-    end
-  end
-
-  # Mock pipeline that provides task
-  let(:pipeline) { double('pipeline', task: task) }
-
-  # Test stage that references pipeline
-  let(:test_stage) { double('test_stage', name: :test_stage, pipeline: pipeline) }
 
   let(:output_queue) do
     described_class.new(
@@ -65,9 +47,11 @@ RSpec.describe Minigun::OutputQueue do
     end
 
     it 'increments produced count in stats' do
-      expect(stage_stats).to receive(:increment_produced).once
+      initial_count = stage_stats.items_produced
 
       output_queue << 42
+
+      expect(stage_stats.items_produced).to eq(initial_count + 1)
     end
 
     it 'returns self for chaining' do
@@ -141,8 +125,10 @@ RSpec.describe Minigun::OutputQueue do
       it 'shares the same stats object' do
         routed_queue = output_queue.to(:stage_a)
 
-        expect(stage_stats).to receive(:increment_produced).once
+        initial_count = stage_stats.items_produced
         routed_queue << 42
+
+        expect(stage_stats.items_produced).to eq(initial_count + 1)
       end
 
       it 'tracks runtime edges for END signal handling' do
@@ -218,11 +204,14 @@ RSpec.describe Minigun::OutputQueue do
 end
 
 RSpec.describe Minigun::InputQueue do
+  let(:config) { { max_threads: 1, max_processes: 1 } }
+  let(:task) { Minigun::Task.new(config: config) }
+  let(:pipeline) { task.root_pipeline }
+
   let(:raw_queue) { Queue.new }
-  let(:task) { double('task', register_stage_queue: nil) }
-  let(:test_stage) { double('test_stage', name: :test_stage, task: task) }
-  let(:source_a) { double('source_a', name: :source_a) }
-  let(:source_b) { double('source_b', name: :source_b) }
+  let(:test_stage) { Minigun::ConsumerStage.new(:test_stage, pipeline, proc {}, {}) }
+  let(:source_a) { Minigun::ProducerStage.new(:source_a, pipeline, proc {}, {}) }
+  let(:source_b) { Minigun::ProducerStage.new(:source_b, pipeline, proc {}, {}) }
   let(:sources_expected) { Set.new([source_a, source_b]) }
 
   let(:input_queue) do

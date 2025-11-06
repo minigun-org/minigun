@@ -70,14 +70,24 @@ module Minigun
       # Use await: option to control behavior
       await = @stage.options[:await]
 
+      # Auto-await for fork/IPC stages (commonly used for dynamic routing)
+      exec_ctx = @stage.execution_context
+      is_fork_stage = exec_ctx && %i[ipc_fork cow_fork].include?(exec_ctx[:type])
+
       case await
       when nil
-        # Default: warn + 5 second timeout
-        log_warning "Stage has no DAG upstream connections, using default 5s await timeout. " \
-                    "If this is intentional (dynamic routing via output.to(:#{@stage_name})), " \
-                    "consider setting 'await: true'. " \
-                    "If unintentional, check your pipeline routing."
-        wait_for_first_item(timeout: 5, stage_ctx: stage_ctx)
+        if is_fork_stage
+          # Fork stages with no upstream automatically await (common pattern for output.to routing)
+          log_debug 'Fork stage with no DAG upstream, awaiting items indefinitely (auto-await)'
+          false
+        else
+          # Default: warn + 5 second timeout
+          log_warning "Stage has no DAG upstream connections, using default 5s await timeout. " \
+                      "If this is intentional (dynamic routing via output.to(:#{@stage_name})), " \
+                      "consider setting 'await: true'. " \
+                      "If unintentional, check your pipeline routing."
+          wait_for_first_item(timeout: 5, stage_ctx: stage_ctx)
+        end
 
       when true
         # Explicit infinite wait - no warning, no timeout
@@ -103,12 +113,9 @@ module Minigun
 
     # Wait for first item to arrive via dynamic routing
     # Returns true if timed out (should shutdown), false if item received (continue)
+    # TODO: This implementation looks wonky, consider alternatives
     def wait_for_first_item(timeout:, stage_ctx:)
-      input_queue = stage_ctx.input_queue
-      return false unless input_queue # Safety check for mocked contexts
-
-      raw_queue = input_queue.instance_variable_get(:@queue) if input_queue.respond_to?(:instance_variable_get)
-      return false unless raw_queue # Safety check for mocked queues
+      raw_queue = stage_ctx.input_queue
 
       # Try to pop with timeout using Timeout module
       begin
@@ -164,8 +171,8 @@ module Minigun
                            Set.new
                          else
                            # Check if this stage is an entrance router or single entry stage for nested pipeline
-                           input_queues = @pipeline.instance_variable_get(:@input_queues)
-                           entrance_router = @pipeline.instance_variable_get(:@entrance_router)
+                           input_queues = @pipeline.input_queues
+                           entrance_router = @pipeline.entrance_router
 
                            if @stage == entrance_router && input_queues
                              # For entrance router, use sources from parent pipeline

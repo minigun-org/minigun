@@ -8,30 +8,94 @@ Minigun is a high-performance data processing pipeline framework for Ruby with s
 
 ### Phase 1.0: Cross-Boundary Routing
 
-- [ ] **Cross-Boundary Routing**
-  - Remove "skip" from hanging example tests.
-  - IPC fork getting input via `to` from various sources (IPC, COW, threads, master)
-  - IPC fork doing output routing
-  - IPC to COW, COW to IPC, IPC to master routing
-  - IPC/COW fan-out/fan-in patterns
-  - Ingress delegator for routing to inner stages
+- [x] **Cross-Boundary Routing** ✓ (Completed 2025-01-04)
+  - [x] Remove "skip" from hanging example tests
+  - [x] IPC fork getting input via `to` from various sources (IPC, COW, threads, master)
+  - [x] IPC fork doing output routing
+  - [x] IPC to COW, COW to IPC, IPC to master routing
+  - [x] IPC/COW fan-out/fan-in patterns
   - Routing patterns
-    - [ ] output.to of IpcQueues
-    - [ ] Fork/Thread etc should create an implicit pipeline
-    - [ ] cow_fork getting IPC input via to from IPC
-    - [ ] cow_fork getting IPC input via to from COW
-    - [ ] cow_fork getting IPC input via to from threads
-    - [ ] cow_fork getting IPC input via to from master(?)
-    - [ ] cow_fork doing IPC output
-    - [ ] ipc 2 cow, cow to ipc, ipc to master
-    - [ ] ipc/cow fan-out/fan-in
+    - [x] output.to of IpcQueues - implemented via IpcRoutedOutputQueue
+    - [x] cow_fork getting IPC input via to from IPC
+    - [x] cow_fork getting IPC input via to from COW
+    - [x] cow_fork getting IPC input via to from threads
+    - [x] cow_fork getting IPC input via to from master
+    - [x] cow_fork doing IPC output - COW now uses IpcOutputQueue
+    - [x] ipc 2 cow, cow to ipc, ipc to master - all working
+    - [x] ipc/cow fan-out/fan-in - examples 80, 81, 82, 84 working
     - [ ] routing to inner stages of pipelines
     - [ ] routing to inner stages of cow and ipc fork via an ingress delegator
+  - Additional scenarios
+    - [ ] test reroute with IPC/COW complex scenarios, inner routing, etc. - all tests passing
+    - [ ] producers inside IPC/COW forks
+    - [ ] routing with multiple forked processes - round-robin via IPC workers
+    - [ ] start of IPC/COW stage should not require await - added await: true option
+  - [X] :worker_finished event seems like it should not work like it does. It resends back into the master... hmmm
+  - [ ] cleanup pipeline, etc constructor args
+  - [ ] wait_for_first_item implmentation look wonky
+  - [ ] make StageContext and actual class
+  - [ ] Transmit stats across forks
+  - [ ] Transmit logs across forks--look at Puma
+  - [ ] Support MINIGUN_LOG_LEVEL var
+
+
+### Phase 1.01: HUD
+
+- [X] Initial HUD work:
+  - [X] make a HUD inspired by htop to run as part of CLI
+  - [X] two columns:
+    - [X] LHS: flow diagram (ascii) on the other side, with ascii flow animations. make it inspired by cyberpunk (blade-runner/matrix/hackers)
+    - [X] RHS: list of processes on one side
+  - [X] use keys to navigate the hud.
+  - [X] use ascii colors
+  - [X] Before doing anything, plan it all out.
+
+- [X] Running hud
+  - [X] task.hud to run in IRB/Rails console
+  - [ ] Test task.hud to run in rake
+
+- [ ] Add hud to all examples when running
+  - [ ] Add idiomatic representation for each example
+
+- [ ] HUD UI improvement
+  - [X] Introduce Hud::DiagramStage
+  - [X] Re-add throughput and bottleneck icons to stages
+  - [X] Improve animations, use 24-frame counter (or just int counter which rolls over?)
+  - [X] Stagger each connections starting animation frame
+  - [ ] Stage box color to gray when finished
+  - [ ] Round-robin vs. fanout animations
+  - [ ] Extract DiagramConnection to its own class
+  - [ ] DiagramLayoutBuilder to its own class?
+  - [ ] Add DiagramPipeline/Executor
+  - [ ] Add IPC stages thick/yellow connections
+  - [ ] Add ractor, threadcount, etc.
+  - [ ] connection length should account for frame size
+  - [ ] Arrows on lines?
+  - [ ] fix up/down of stages (not clearing lines)
+  - [ ] auto-size width of stage columns
+  - [ ] p95 rather than p99?
+  - [ ] HUD IPC support
+    - [ ] Process tree, forked routing
+    - [ ] process wrappers
+
+- [ ] HUD QoL
+  - [ ] % completion metrics
+  - [ ] CPU / MEM / disk / processes / queues
+  - [ ] tab menu?
+  - [ ] Error/log stream at bottom
+
+- [ ] HUD in examples
+  - [ ] Enable running hud in all examples with example wrapper
 
 ### Phase 1.1: QoL Improvements
 
+- [ ] **Graceful shutdown**
+  - [ ] signal trapping, child state management/killing
+  - [ ] Kill child threads/forks/ractors
+  - [ ] Ctrl+C once to start graceful shutdown (send end signals from all producers)
+  - [ ] Press Ctrl+C again to force quit.
+
 - [ ] to_mermaid
-- [ ] signal trapping, child state management/killing
 - [ ] child culling (look at puma)
 - [ ] supervision tree of processes
 - [ ] htop-like monitoring dashboard (CLI)

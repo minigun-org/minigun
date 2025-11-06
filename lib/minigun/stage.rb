@@ -59,12 +59,11 @@ module Minigun
     end
 
     def task
-      return unless @pipeline&.respond_to?(:task)
       @pipeline.task
     end
 
     def root_pipeline
-      pipeline&.root_pipeline
+      @pipeline.root_pipeline
     end
 
     # Get the queue size for this stage
@@ -179,7 +178,7 @@ module Minigun
       task = stage_ctx.stage.task
 
       all_targets.each do |target|
-        queue = task&.find_queue(target)
+        queue = task.find_queue(target)
         next unless queue
 
         queue << EndOfSource.new(stage_ctx.stage)
@@ -242,6 +241,7 @@ module Minigun
       loop do
         item = input_queue.pop
 
+        # Just break from the loop - the worker_loop will handle signaling completion
         break if item.is_a?(EndOfStage)
 
         # Execute the block or call method with the item, tracking per-item latency
@@ -413,6 +413,19 @@ module Minigun
           next
         end
 
+        # Handle routed items from IPC dynamic routing
+        if item.is_a?(Minigun::RoutedItem)
+          # Route to specific target stage only
+          target = @targets.find { |t| t.name == item.target_stage }
+          if target
+            queue = task&.find_queue(target)
+            queue&.<< item.item
+          else
+            Minigun.logger.warn "[RouterBroadcast] Unknown routed target: #{item.target_stage}"
+          end
+          next
+        end
+
         # Broadcast to all downstream stages (fan-out semantics)
         @targets.each do |target|
           queue = task&.find_queue(target)
@@ -442,6 +455,19 @@ module Minigun
           next
         end
 
+        # Handle routed items from IPC dynamic routing
+        if item.is_a?(Minigun::RoutedItem)
+          # Route to specific target stage only
+          target = @targets.find { |t| t.name == item.target_stage }
+          if target
+            queue = task&.find_queue(target)
+            queue&.<< item.item
+          else
+            Minigun.logger.warn "[RouterRoundRobin] Unknown routed target: #{item.target_stage}"
+          end
+          next
+        end
+
         # Round-robin to downstream stages
         target_queues[round_robin_index] << item
         round_robin_index = (round_robin_index + 1) % target_queues.size
@@ -464,9 +490,9 @@ module Minigun
   class PipelineStage < Stage
     attr_reader :nested_pipeline
 
-    # Positional constructor: PipelineStage.new(name, pipeline, nested_pipeline, block, options)
-    def initialize(name, pipeline, nested_pipeline, block, options = {})
-      super(name, pipeline, block, options)
+    # Positional constructor: PipelineStage.new(name, pipeline, nested_pipeline, options)
+    def initialize(name, pipeline, nested_pipeline, options = {})
+      super(name, pipeline, nil, options)
       @nested_pipeline = nested_pipeline
     end
 
