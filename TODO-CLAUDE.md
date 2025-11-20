@@ -13,6 +13,10 @@ plan based on the current codebase state and TODOS.md.
 - [X] Docs - mine the tmp/cursor-docs-cleanup folder for more ideas.
 - [X] Docs - explain what a DAG is in fundamentals. then add DAG based explanations elsewhere
 - [ ] Docs - nested pipelines, entrances and exits
+- [ ] produce(User.find_each) # enumerator as arg
+- [ ] task = Minigun.pipeline do
+- [ ] task = Minigun.task do (same)?
+- [ ] task.start ; task.join
 - [ ] Cleanup accumulator vs. batch
 - [ ] thread/threads, fiber/fibers etc. as alias to pool methods if they don't exist on parent
 - [ ] Hooks
@@ -166,6 +170,11 @@ plan based on the current codebase state and TODOS.md.
 - [ ] **Flush Timers**
   - Time-based batch flushing
   - Consolidate accumulator and batch logic
+
+- [ ] Routing strategies (inspired by GenStage)
+  - DemandDispatcher (default): Dispatches events to the consumer with the highest outstanding demand, ensuring the busiest consumer gets priority.
+  - BroadcastDispatcher: Sends all events to all consumers.
+  - PartitionDispatcher: Distributes events to a fixed number of consumers based on a hash function, useful for maintaining order or state per partition.
 
 #### 2.2 Execution Strategies
 **Priority: MEDIUM**
