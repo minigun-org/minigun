@@ -11,6 +11,7 @@ RSpec.describe 'Pipeline Inheritance' do
     it 'evaluates stages directly on root_pipeline' do
       klass = Class.new do
         include Minigun::DSL
+
         attr_accessor :results
 
         def initialize
@@ -38,6 +39,7 @@ RSpec.describe 'Pipeline Inheritance' do
     it 'combines all stages on root_pipeline' do
       klass = Class.new do
         include Minigun::DSL
+
         attr_accessor :results_a, :results_b
 
         def initialize
@@ -82,6 +84,7 @@ RSpec.describe 'Pipeline Inheritance' do
     it 'extends named pipeline when declared again in same class' do
       klass = Class.new do
         include Minigun::DSL
+
         attr_accessor :results
 
         def initialize
@@ -102,7 +105,7 @@ RSpec.describe 'Pipeline Inheritance' do
         # Extend the :main pipeline
         pipeline :main do
           processor :double do |n, output|
-            output << n * 2
+            output << (n * 2)
           end
 
           reroute_stage :source, to: :double
@@ -120,6 +123,7 @@ RSpec.describe 'Pipeline Inheritance' do
     let(:parent_class) do
       Class.new do
         include Minigun::DSL
+
         attr_accessor :results
 
         def initialize
@@ -151,7 +155,7 @@ RSpec.describe 'Pipeline Inheritance' do
       child_class = Class.new(parent_class) do
         pipeline do
           processor :double do |n, output|
-            output << n * 2
+            output << (n * 2)
           end
 
           reroute_stage :source, to: :double
@@ -169,7 +173,7 @@ RSpec.describe 'Pipeline Inheritance' do
       Class.new(parent_class) do
         pipeline do
           processor :double do |n, output|
-            output << n * 2
+            output << (n * 2)
           end
 
           reroute_stage :source, to: :double
@@ -188,6 +192,7 @@ RSpec.describe 'Pipeline Inheritance' do
     let(:parent_class) do
       Class.new do
         include Minigun::DSL
+
         attr_accessor :results
 
         def initialize
@@ -212,7 +217,7 @@ RSpec.describe 'Pipeline Inheritance' do
         # Extend the :main pipeline by declaring it again
         pipeline :main do
           processor :add_five do |n, output|
-            output << n + 5
+            output << (n + 5)
           end
 
           reroute_stage :source, to: :add_five
@@ -249,6 +254,7 @@ RSpec.describe 'Pipeline Inheritance' do
     let(:grandparent_class) do
       Class.new do
         include Minigun::DSL
+
         attr_accessor :events
 
         def initialize
@@ -315,6 +321,7 @@ RSpec.describe 'Pipeline Inheritance' do
     it 'unnamed provides stages that named pipelines route to' do
       klass = Class.new do
         include Minigun::DSL
+
         attr_accessor :results
 
         def initialize
@@ -325,7 +332,7 @@ RSpec.describe 'Pipeline Inheritance' do
         # Unnamed pipeline provides shared stages on root
         pipeline do
           processor :transform do |item, output|
-            output << item * 10
+            output << (item * 10)
           end
 
           consumer :collect do |item|
@@ -353,6 +360,7 @@ RSpec.describe 'Pipeline Inheritance' do
     it 'multiple named pipelines can route to same shared stage' do
       klass = Class.new do
         include Minigun::DSL
+
         attr_accessor :results
 
         def initialize
@@ -425,6 +433,7 @@ RSpec.describe 'Pipeline Inheritance' do
     it 'handles empty pipeline block' do
       klass = Class.new do
         include Minigun::DSL
+
         attr_accessor :results
 
         def initialize
@@ -456,6 +465,7 @@ RSpec.describe 'Pipeline Inheritance' do
     it 'allows child to skip adding stages' do
       parent = Class.new do
         include Minigun::DSL
+
         attr_accessor :results
 
         def initialize

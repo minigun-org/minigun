@@ -106,6 +106,7 @@ RSpec/DescribeClass:
     - 'spec/integration/isolated_pipelines_spec.rb'
     - 'spec/integration/mixed_pipeline_stage_routing_spec.rb'
     - 'spec/integration/multiple_producers_spec.rb'
+    - 'spec/integration/pipeline_inheritance_spec.rb'
     - 'spec/integration/test_16_debug.rb'
     - 'spec/integration/test_mixed_spec.rb'
     - 'spec/minigun/stage_spec.rb'

@@ -2113,7 +2113,7 @@ RSpec.describe 'Examples Integration' do
         end
 
         consume :collector do |item|
-          mutex.synchronize { results << item * 2 }
+          mutex.synchronize { results << (item * 2) }
         end
       end
 
@@ -2165,8 +2165,8 @@ RSpec.describe 'Examples Integration' do
     end
 
     it 'demonstrates the newsletter sender pattern' do
-      user_batches = 3.times.map do |batch_num|
-        (1..100).map { |i| { id: batch_num * 100 + i, email: "user#{batch_num * 100 + i}@example.com" } }
+      user_batches = Array.new(3) do |batch_num|
+        (1..100).map { |i| { id: (batch_num * 100) + i, email: "user#{(batch_num * 100) + i}@example.com" } }
       end
 
       emails_sent = Concurrent::AtomicFixnum.new(0)
@@ -2258,7 +2258,7 @@ RSpec.describe 'Examples Integration' do
       # Example 3: Multiple unnamed pipelines
       multi = MultipleUnnamedChild.new
       multi.run
-      expect(multi.results.sort).to eq(['A', 'B', 'extra_X', 'extra_Y'].sort)
+      expect(multi.results.sort).to eq(%w[A B extra_X extra_Y].sort)
     end
   end
 end

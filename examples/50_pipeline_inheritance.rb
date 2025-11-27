@@ -18,7 +18,7 @@ class BaseTask
 
   pipeline do
     producer :source do |output|
-      puts "[Base] Producing: 1, 2, 3"
+      puts '[Base] Producing: 1, 2, 3'
       [1, 2, 3].each { |n| output << n }
     end
 
@@ -35,9 +35,9 @@ class BaseTask
   end
 end
 
+# Extends BaseTask by adding a triple stage
 class ExtendedTask < BaseTask
   # This pipeline block is MERGED with parent's unnamed pipeline
-  # because it's the first unnamed pipeline
   pipeline do
     processor :triple do |n, output|
       result = n * 3
@@ -51,6 +51,7 @@ class ExtendedTask < BaseTask
   end
 end
 
+# Extends BaseTask by skipping the double stage
 class SkipStageTask < BaseTask
   # This also merges with parent's unnamed pipeline
   pipeline do
@@ -72,7 +73,7 @@ class NamedPipelineBase
 
   pipeline :pipeline_a do
     producer :source_a do |output|
-      puts "[Base A] Producing: 10, 20"
+      puts '[Base A] Producing: 10, 20'
       [10, 20].each { |n| output << n }
     end
 
@@ -84,7 +85,7 @@ class NamedPipelineBase
 
   pipeline :pipeline_b do
     producer :source_b do |output|
-      puts "[Base B] Producing: 100, 200"
+      puts '[Base B] Producing: 100, 200'
       [100, 200].each { |n| output << n }
     end
 
@@ -95,6 +96,7 @@ class NamedPipelineBase
   end
 end
 
+# Extends NamedPipelineBase by adding processing to pipeline_a
 class ExtendedNamedPipeline < NamedPipelineBase
   # Extend pipeline_a by declaring it again
   pipeline :pipeline_a do
@@ -123,8 +125,8 @@ class MultipleUnnamedBase
 
   pipeline do
     producer :main_source do |output|
-      puts "[Main] Producing: A, B"
-      ['A', 'B'].each { |c| output << c }
+      puts '[Main] Producing: A, B'
+      %w[A B].each { |c| output << c }
     end
 
     consumer :main_collect do |c|
@@ -134,6 +136,7 @@ class MultipleUnnamedBase
   end
 end
 
+# Extends MultipleUnnamedBase with merged and isolated pipelines
 class MultipleUnnamedChild < MultipleUnnamedBase
   # First unnamed pipeline: MERGES with parent
   pipeline do
@@ -150,8 +153,8 @@ class MultipleUnnamedChild < MultipleUnnamedBase
   # Second unnamed pipeline: ISOLATED (does not merge)
   pipeline do
     producer :extra_source do |output|
-      puts "[Extra] Producing: X, Y"
-      ['X', 'Y'].each { |c| output << c }
+      puts '[Extra] Producing: X, Y'
+      %w[X Y].each { |c| output << c }
     end
 
     consumer :extra_collect do |c|
@@ -161,52 +164,52 @@ class MultipleUnnamedChild < MultipleUnnamedBase
   end
 end
 
-if __FILE__ == $0
+if __FILE__ == $PROGRAM_NAME
   puts "=== Pipeline Inheritance Example ===\n\n"
 
-  puts "--- Example 1a: Base Task ---"
+  puts '--- Example 1a: Base Task ---'
   base = BaseTask.new
   base.run
   puts "Results: #{base.results.inspect}"
-  puts "Expected: [2, 4, 6] (doubled)"
-  puts base.results == [2, 4, 6] ? "✓ Pass" : "✗ Fail"
+  puts 'Expected: [2, 4, 6] (doubled)'
+  puts base.results == [2, 4, 6] ? '✓ Pass' : '✗ Fail'
 
   puts "\n--- Example 1b: Extended Task (insert triple stage) ---"
   extended = ExtendedTask.new
   extended.run
   puts "Results: #{extended.results.inspect}"
-  puts "Expected: [6, 12, 18] (double then triple)"
-  puts extended.results == [6, 12, 18] ? "✓ Pass" : "✗ Fail"
+  puts 'Expected: [6, 12, 18] (double then triple)'
+  puts extended.results == [6, 12, 18] ? '✓ Pass' : '✗ Fail'
 
   puts "\n--- Example 1c: Skip Stage Task ---"
   skip = SkipStageTask.new
   skip.run
   puts "Results: #{skip.results.inspect}"
-  puts "Expected: [1, 2, 3] (skip double)"
-  puts skip.results == [1, 2, 3] ? "✓ Pass" : "✗ Fail"
+  puts 'Expected: [1, 2, 3] (skip double)'
+  puts skip.results == [1, 2, 3] ? '✓ Pass' : '✗ Fail'
 
   puts "\n--- Example 2a: Named Pipeline Base ---"
   named_base = NamedPipelineBase.new
   named_base.run
   puts "Results A: #{named_base.results_a.inspect}"
   puts "Results B: #{named_base.results_b.inspect}"
-  puts "Expected A: [10, 20], Expected B: [100, 200]"
-  puts (named_base.results_a == [10, 20] && named_base.results_b == [100, 200]) ? "✓ Pass" : "✗ Fail"
+  puts 'Expected A: [10, 20], Expected B: [100, 200]'
+  puts(named_base.results_a == [10, 20] && named_base.results_b == [100, 200] ? '✓ Pass' : '✗ Fail')
 
   puts "\n--- Example 2b: Extended Named Pipeline (only pipeline_a extended) ---"
   extended_named = ExtendedNamedPipeline.new
   extended_named.run
   puts "Results A: #{extended_named.results_a.inspect}"
   puts "Results B: #{extended_named.results_b.inspect}"
-  puts "Expected A: [15, 25] (processed), Expected B: [100, 200] (unchanged)"
-  puts (extended_named.results_a == [15, 25] && extended_named.results_b == [100, 200]) ? "✓ Pass" : "✗ Fail"
+  puts 'Expected A: [15, 25] (processed), Expected B: [100, 200] (unchanged)'
+  puts(extended_named.results_a == [15, 25] && extended_named.results_b == [100, 200] ? '✓ Pass' : '✗ Fail')
 
   puts "\n--- Example 3: Multiple Unnamed Pipelines ---"
   multi = MultipleUnnamedChild.new
   multi.run
   puts "Results: #{multi.results.sort.inspect}"
   puts "Expected: ['A', 'B', 'extra_X', 'extra_Y'] (first merged, second isolated)"
-  puts multi.results.sort == ['A', 'B', 'extra_X', 'extra_Y'].sort ? "✓ Pass" : "✗ Fail"
+  puts multi.results.sort == %w[A B extra_X extra_Y].sort ? '✓ Pass' : '✗ Fail'
 
   puts "\n=== Key Concepts ==="
   puts "• First unnamed pipeline in child: MERGES with parent's unnamed pipeline"
@@ -215,4 +218,3 @@ if __FILE__ == $0
   puts "• Allows natural inheritance: children can add stages and reroute parent's stages"
   puts "\n✓ Pipeline inheritance complete!"
 end
-
