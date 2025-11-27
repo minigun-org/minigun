@@ -371,7 +371,7 @@ RSpec.describe 'Functional DSL' do
         producer :source do |output|
           # Send 3 batches of 100 items each
           3.times do |batch_num|
-            batch = (1..100).map { |i| batch_num * 100 + i }
+            batch = (1..100).map { |i| (batch_num * 100) + i }
             output << batch
           end
         end
@@ -398,7 +398,7 @@ RSpec.describe 'Functional DSL' do
         producer :source do |output|
           # Send 15 batches of 20 items each (300 total)
           15.times do |batch_num|
-            batch = (1..20).map { |i| batch_num * 20 + i }
+            batch = (1..20).map { |i| (batch_num * 20) + i }
             output << batch
           end
         end
@@ -425,7 +425,7 @@ RSpec.describe 'Functional DSL' do
         producer :source do |output|
           # Send 2 batches of 50 items each (100 total)
           2.times do |batch_num|
-            batch = (1..50).map { |i| batch_num * 50 + i }
+            batch = (1..50).map { |i| (batch_num * 50) + i }
             output << batch
           end
         end
@@ -560,7 +560,7 @@ RSpec.describe 'Functional DSL' do
 
           in_threads(2) do
             consume :sink do |item|
-              mutex.synchronize { results << item * 10 }
+              mutex.synchronize { results << (item * 10) }
             end
           end
         end
