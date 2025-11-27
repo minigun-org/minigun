@@ -1896,7 +1896,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '92_reroute_ipc_basic.rb' do
-    it 'demonstrates rerouting with IPC fork executors' do
+    it 'demonstrates rerouting with IPC fork executors', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/92_reroute_ipc_basic.rb', __dir__)
 
       # All three test cases should pass
@@ -1918,7 +1918,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '93_reroute_cow_basic.rb' do
-    it 'demonstrates rerouting with COW fork executors' do
+    it 'demonstrates rerouting with COW fork executors', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/93_reroute_cow_basic.rb', __dir__)
 
       base = RerouteCowBasicExample.new
@@ -1939,7 +1939,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '94_reroute_mixed_executors.rb' do
-    it 'demonstrates rerouting across different executor types' do
+    it 'demonstrates rerouting across different executor types', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/94_reroute_mixed_executors.rb', __dir__)
 
       base = RerouteMixedExecutorsExample.new
@@ -1955,7 +1955,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '95_reroute_to_inner_fork_stages.rb' do
-    it 'demonstrates rerouting to stages inside fork blocks' do
+    it 'demonstrates rerouting to stages inside fork blocks', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/95_reroute_to_inner_fork_stages.rb', __dir__)
 
       base = RerouteToInnerIpcStagesExample.new
@@ -1981,7 +1981,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '96_reroute_fork_fan_patterns.rb' do
-    it 'demonstrates rerouting with fork-based fan-out/fan-in' do
+    it 'demonstrates rerouting with fork-based fan-out/fan-in', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/96_reroute_fork_fan_patterns.rb', __dir__)
 
       # Fan-out patterns should work with rerouting
@@ -2001,7 +2001,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '97_dynamic_routing_to_inner_fork_stages.rb' do
-    it 'demonstrates dynamic routing to stages inside fork blocks' do
+    it 'demonstrates dynamic routing to stages inside fork blocks', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/97_dynamic_routing_to_inner_fork_stages.rb', __dir__)
 
       # Routing from thread to inner IPC/COW stages
@@ -2026,7 +2026,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '98_await_stages_complex_routing.rb' do
-    it 'demonstrates complex multi-level routing with await stages' do
+    it 'demonstrates complex multi-level routing with await stages', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/98_await_stages_complex_routing.rb', __dir__)
 
       # Test 1: Multi-level routing
