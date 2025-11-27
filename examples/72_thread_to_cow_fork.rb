@@ -41,7 +41,7 @@ class ThreadToCowForkExample
     end
 
     # Processor runs in thread pool
-    thread_pool(3) do
+    in_threads(3) do
       processor :enrich do |item, output|
         puts "[Processor:thread_pool] Processing #{item[:id]} in thread #{Thread.current.object_id}"
         enriched = item.merge(
@@ -54,7 +54,7 @@ class ThreadToCowForkExample
 
     # Consumer runs in COW fork pool
     # Item is COW-shared (no serialization overhead for input)
-    cow_fork(2) do
+    in_cow_forks(2) do
       consumer :save do |item|
         puts "[Consumer:cow_fork] Saving #{item[:id]} in forked process (PID #{Process.pid})"
 

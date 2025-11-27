@@ -43,7 +43,7 @@ class CowFanOutExample
     end
 
     # Splitter stage in COW fork - routes to different stages
-    cow_fork(2) do
+    in_cow_forks(2) do
       processor :splitter do |item, output|
         pid = Process.pid
         puts "[Splitter:cow_fork] Routing #{item[:id]} in ephemeral fork PID #{pid}"
@@ -61,7 +61,7 @@ class CowFanOutExample
     end
 
     # Three COW fork consumer stages (fan-out targets)
-    cow_fork(2) do
+    in_cow_forks(2) do
       consumer :process_a do |item|
         pid = Process.pid
         puts "[ProcessA:cow_fork] Processing #{item[:id]} in ephemeral fork PID #{pid}"
@@ -75,7 +75,7 @@ class CowFanOutExample
       end
     end
 
-    cow_fork(2) do
+    in_cow_forks(2) do
       consumer :process_b do |item|
         pid = Process.pid
         puts "[ProcessB:cow_fork] Processing #{item[:id]} in ephemeral fork PID #{pid}"
@@ -89,7 +89,7 @@ class CowFanOutExample
       end
     end
 
-    cow_fork(2) do
+    in_cow_forks(2) do
       consumer :process_c do |item|
         pid = Process.pid
         puts "[ProcessC:cow_fork] Processing #{item[:id]} in ephemeral fork PID #{pid}"

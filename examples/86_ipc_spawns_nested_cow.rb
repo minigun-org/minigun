@@ -63,7 +63,7 @@ class IpcSpawnsNestedCowExample
             end
 
             # COW forks process each item (spawned by IPC worker)
-            cow_fork(2) do
+            in_cow_forks(2) do
               consumer :cow_process do |item|
                 cow_pid = Process.pid
                 puts "    [Nested:CowFork] Processing #{item[:id]} in COW fork PID #{cow_pid} (parent IPC worker #{@ipc_pid})"

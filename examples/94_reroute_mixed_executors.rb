@@ -27,7 +27,7 @@ class RerouteMixedExecutorsExample
     end
 
     # Thread pool processor
-    thread_pool(2) do
+    in_threads(2) do
       processor :add_ten do |item, output|
         result = item.merge(value: item[:value] + 10, thread_processed: true)
         puts "[AddTen:thread] #{item[:id]}: #{item[:value]} + 10 = #{result[:value]}"
@@ -45,7 +45,7 @@ class RerouteMixedExecutorsExample
     end
 
     # COW fork consumer
-    cow_fork(2) do
+    in_cow_forks(2) do
       consumer :collect do |item|
         puts "[Collect:cow_fork] #{item[:id]} = #{item[:value]} (PID #{Process.pid})"
         File.open(@results_file, 'a') do |f|
@@ -85,7 +85,7 @@ end
 class RerouteReverseOrderExample < RerouteMixedExecutorsExample
   pipeline do
     # Create a new COW stage at the beginning
-    cow_fork(2) do
+    in_cow_forks(2) do
       processor :subtract_five do |item, output|
         result = item.merge(value: item[:value] - 5)
         puts "[SubtractFive:cow_fork] #{item[:id]}: #{item[:value]} - 5 = #{result[:value]} (PID #{Process.pid})"

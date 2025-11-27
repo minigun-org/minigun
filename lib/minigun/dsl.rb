@@ -202,7 +202,7 @@ module Minigun
         _with_execution_context(context, &)
       end
 
-      def thread_pool(pool_size, &)
+      def in_threads(pool_size, &)
         context = { type: :thread_pool, pool_size: pool_size }
         _with_execution_context(context, &)
       end
@@ -212,7 +212,7 @@ module Minigun
         _with_execution_context(context, &)
       end
 
-      def cow_fork(pool_size, &)
+      def in_cow_forks(pool_size, &)
         context = { type: :cow_fork, pool_size: pool_size }
         _with_execution_context(context, &)
       end
@@ -273,6 +273,33 @@ module Minigun
 
       # Processor - alias for consumer (both receive item and output)
       alias_method :processor, :consumer
+
+      # Aliases for simplified DSL
+      alias_method :produce, :producer
+      alias_method :consume, :consumer
+
+      # Debatch: Unpacks Array items into individual items
+      # Receives Array<T> and emits T for each element
+      # @param name [Symbol] Optional stage name (auto-generated if nil)
+      # @param options [Hash] Stage options
+      def debatch(name = nil, options = {})
+        options = _apply_execution_context(options)
+        options[:stage_type] = :consumer
+        @pipeline.add_stage(DebatchStage, name, options)
+      end
+
+      # Rebatch: Re-batches incoming batches into new batch sizes
+      # Receives batches (items responding to #each) and emits new batches of specified size
+      # @param size [Integer] New batch size
+      # @param name [Symbol] Optional stage name (auto-generated if nil)
+      # @param options [Hash] Stage options
+      def rebatch(size, name = nil, options = {})
+        options = _apply_execution_context(options)
+        options[:stage_type] = :consumer
+        options[:_rebatch_size] = size
+
+        @pipeline.add_stage(RebatchStage, name, options)
+      end
 
       # Generic stage - for advanced use (input loop), receives input and output queues
       def stage(name, options = {}, &)
@@ -485,6 +512,12 @@ module Minigun
       else
         puts 'No background task to wait for'
       end
+    end
+
+    # Start the task in a background thread
+    # Alias for run(background: true)
+    def start
+      run(background: true)
     end
 
     # Convenience aliases

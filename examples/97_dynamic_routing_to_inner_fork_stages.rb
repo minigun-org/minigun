@@ -33,7 +33,7 @@ class DynamicRoutingToInnerIpcExample
     end
 
     # Router stage - dynamically routes to inner stages of IPC fork block
-    thread_pool(2) do
+    in_threads(2) do
       processor :router do |item, output|
         # Route based on modulo to different INNER stages of the IPC fork
         case item[:id] % 3
@@ -72,7 +72,7 @@ class DynamicRoutingToInnerIpcExample
 
     # COW fork with inner consumer
     # IMPORTANT: await: true required for disconnected stages receiving dynamic routing
-    cow_fork(2) do
+    in_cow_forks(2) do
       # Inner stage C - collects its own subset
       consumer :inner_collect_c, await: true do |item|
         puts "[InnerCollectC:cow_fork] #{item[:id]} = #{item[:value]} (PID #{Process.pid})"
@@ -171,7 +171,7 @@ class DynamicRoutingFromInnerToInnerExample
 
     # COW fork with two inner stages that receive from IPC inner router
     # IMPORTANT: await: true required for disconnected stages receiving dynamic routing
-    cow_fork(2) do
+    in_cow_forks(2) do
       processor :cow_process_x, await: true do |item, output|
         result = item.merge(value: item[:value] * 100, path: 'X')
         puts "[CowProcessX:cow] #{item[:id]}: #{item[:value]} * 100 = #{result[:value]} (PID #{Process.pid})"

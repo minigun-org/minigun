@@ -22,7 +22,7 @@ class ThreadsBatchProcessBatchExample
       20.times { |i| output << i }
     end
 
-    thread_pool(3) do
+    in_threads(3) do
       processor :work do |item, output|
         output << (item * 2)
       end
@@ -30,7 +30,7 @@ class ThreadsBatchProcessBatchExample
 
     batch 5
 
-    cow_fork(2) do
+    in_cow_forks(2) do
       processor :process_batch do |batch, output|
         batch.each { |item| output << (item + 100) }
       end

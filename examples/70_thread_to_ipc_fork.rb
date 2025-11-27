@@ -36,7 +36,7 @@ class ThreadToIpcForkExample
     end
 
     # Processor runs in thread pool
-    thread_pool(3) do
+    in_threads(3) do
       processor :enrich do |item, output|
         puts "[Processor:thread_pool] Processing #{item[:id]} in thread #{Thread.current.object_id}"
         # Enrich data (threads have shared memory)

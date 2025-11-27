@@ -32,7 +32,7 @@ class CowToIpcForkExample
     end
 
     # First stage: COW fork (ephemeral, one fork per item)
-    cow_fork(2) do
+    in_cow_forks(2) do
       processor :cow_stage do |item, output|
         pid = Process.pid
         puts "[COW Stage:cow_fork] Processing #{item[:id]} in ephemeral fork PID #{pid}"

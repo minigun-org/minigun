@@ -43,7 +43,7 @@ class MixedIpcCowFanOutExample
     end
 
     # Splitter stage in threads - routes to different fork types
-    thread_pool(2) do
+    in_threads(2) do
       processor :splitter do |item, output|
         thread_id = Thread.current.object_id
         puts "[Splitter:thread_pool] Routing #{item[:id]} in thread #{thread_id}"
@@ -76,7 +76,7 @@ class MixedIpcCowFanOutExample
     end
 
     # COW fork consumer B (ephemeral forks)
-    cow_fork(2) do
+    in_cow_forks(2) do
       consumer :process_cow_b do |item|
         pid = Process.pid
         puts "[ProcessCowB:cow_fork] Processing #{item[:id]} in ephemeral fork PID #{pid}"

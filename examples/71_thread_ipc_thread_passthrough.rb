@@ -33,7 +33,7 @@ class ThreadIpcThreadPassthroughExample
     end
 
     # Light processor runs in thread pool
-    thread_pool(2) do
+    in_threads(2) do
       processor :enrich do |item, output|
         puts "[Processor:thread_pool] Enriching #{item[:id]} in thread #{Thread.current.object_id}"
         enriched = item.merge(enriched_at: Time.now.to_i)
@@ -62,7 +62,7 @@ class ThreadIpcThreadPassthroughExample
 
     # Final collector runs in thread pool
     # Receives results from IPC fork via parent's routing
-    thread_pool(2) do
+    in_threads(2) do
       consumer :collect do |item|
         puts "[Consumer:thread_pool] Collecting #{item[:id]} from PID #{item[:worker_pid]}"
         @mutex.synchronize do

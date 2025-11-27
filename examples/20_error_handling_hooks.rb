@@ -109,7 +109,7 @@ class ErrorHandlingExample
       @process_errors = []
     end
 
-    cow_fork(2) do
+    in_cow_forks(2) do
       after_fork :save_results do
         # Report errors from this child process
         puts "Child process #{Process.pid} had #{@process_errors.size} errors" if @process_errors&.any?
