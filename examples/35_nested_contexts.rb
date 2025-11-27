@@ -40,7 +40,7 @@ class NestedPipeline
     end
 
     # Outer context: thread pool for I/O work
-    thread_pool(50) do
+    in_threads(50) do
       processor :download do |item, output|
         # Simulate I/O-bound download
         output << { id: item, data: "downloaded-#{item}" }
@@ -55,7 +55,7 @@ class NestedPipeline
       batch 20
 
       # Inner context: process per batch for CPU work
-      cow_fork(4) do
+      in_cow_forks(4) do
         consumer :process_batch do |batch|
           # Write PID to temp file (fork-safe)
           File.open(@temp_pids_file.path, 'a') do |f|
@@ -97,7 +97,7 @@ begin
   puts "  Unique PIDs: #{pipeline.batch_pids.uniq.size}"
   puts "\n✓ Outer threads(50) for I/O stages"
   puts '✓ batch 20 accumulates items'
-  puts '✓ Inner cow_fork(4) for CPU work'
+  puts '✓ Inner in_cow_forks(4) for CPU work'
   puts '✓ Proper context inheritance and isolation'
 ensure
   pipeline.cleanup
@@ -124,7 +124,7 @@ class DeepNesting
     end
 
     # Level 1: Thread pool
-    thread_pool(20) do
+    in_threads(20) do
       processor :fetch do |item, output|
         output << (item * 2)
       end
@@ -133,7 +133,7 @@ class DeepNesting
       batch 10
 
       # Level 3: Thread per batch
-      thread_pool(5) do
+      in_threads(5) do
         processor :parse_batch do |batch, _output|
           # Each batch in its own thread
           batch.map { |x| x + 100 }
@@ -144,7 +144,7 @@ class DeepNesting
       batch 5
 
       # Level 5: Process per batch
-      cow_fork(2) do
+      in_cow_forks(2) do
         consumer :final_process do |batch|
           @mutex.synchronize do
             @results.concat(batch)
@@ -186,7 +186,7 @@ class ImageProcessor
     end
 
     # Download images in parallel
-    thread_pool(30) do
+    in_threads(30) do
       processor :download_image do |filename, output|
         # Simulate download
         output << { filename: filename, bytes: 1024 * 100 }
@@ -200,7 +200,7 @@ class ImageProcessor
       batch 10
 
       # Process batches in separate processes (CPU-intensive)
-      cow_fork(4) do
+      in_cow_forks(4) do
         processor :resize_batch do |batch, _output|
           # CPU-intensive image resizing
           batch.map do |img|

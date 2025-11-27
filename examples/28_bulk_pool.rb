@@ -19,7 +19,7 @@ class BulkExample
       100.times { |i| output << i }
     end
 
-    thread_pool(20) do
+    in_threads(20) do
       processor :process do |item, output|
         output << (item**2)
       end

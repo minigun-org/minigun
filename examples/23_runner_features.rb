@@ -36,7 +36,7 @@ class RunnerFeaturesExample
     # Use accumulator + cow_fork to see process title in action
     accumulator :batch, max_size: 5
 
-    cow_fork(2) do
+    in_cow_forks(2) do
       consumer :process do |batch|
         # On Unix systems, run 'ps aux | grep minigun' while this is running
         # You'll see: "minigun-default-consumer-12345"

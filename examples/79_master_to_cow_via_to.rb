@@ -49,7 +49,7 @@ class MasterToCowViaToExample
     end
 
     # COW fork stage A - receives even IDs
-    cow_fork(2) do
+    in_cow_forks(2) do
       consumer :process_a do |item|
         pid = Process.pid
         puts "[ProcessA:cow_fork] Processing #{item[:id]} in ephemeral fork PID #{pid}"
@@ -65,7 +65,7 @@ class MasterToCowViaToExample
     end
 
     # COW fork stage B - receives odd IDs
-    cow_fork(2) do
+    in_cow_forks(2) do
       consumer :process_b do |item|
         pid = Process.pid
         puts "[ProcessB:cow_fork] Processing #{item[:id]} in ephemeral fork PID #{pid}"

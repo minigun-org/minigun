@@ -32,7 +32,7 @@ class RerouteForkFanOutExample
     end
 
     # Splitter routes to three IPC fork consumers
-    thread_pool(2) do
+    in_threads(2) do
       processor :splitter do |item, output|
         # Route based on modulo
         case item[:id] % 3
@@ -50,7 +50,7 @@ class RerouteForkFanOutExample
     end
 
     # Three IPC fork consumers (fan-out targets)
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       consumer :process_a do |item|
         result = item.merge(value: item[:value] * 2)
         puts "[ProcessA:ipc_fork] #{item[:id]}: #{item[:value]} * 2 = #{result[:value]} (PID #{Process.pid})"
@@ -62,7 +62,7 @@ class RerouteForkFanOutExample
       end
     end
 
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       consumer :process_b do |item|
         result = item.merge(value: item[:value] * 3)
         puts "[ProcessB:ipc_fork] #{item[:id]}: #{item[:value]} * 3 = #{result[:value]} (PID #{Process.pid})"
@@ -74,7 +74,7 @@ class RerouteForkFanOutExample
       end
     end
 
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       consumer :process_c do |item|
         result = item.merge(value: item[:value] * 4)
         puts "[ProcessC:ipc_fork] #{item[:id]}: #{item[:value]} * 4 = #{result[:value]} (PID #{Process.pid})"
@@ -121,7 +121,7 @@ end
 class RerouteChangeFanOutExample < RerouteForkFanOutExample
   pipeline do
     # Add a new COW fork consumer
-    cow_fork(2) do
+    in_cow_forks(2) do
       consumer :process_d do |item|
         result = item.merge(value: item[:value] * 5)
         puts "[ProcessD:cow_fork] #{item[:id]}: #{item[:value]} * 5 = #{result[:value]} (PID #{Process.pid})"
@@ -156,21 +156,21 @@ class RerouteForkFanInExample
 
   pipeline do
     # Three IPC fork producers (fan-in sources)
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       producer :producer_a do |output|
         puts "[ProducerA:ipc_fork] Generating items (PID #{Process.pid})"
         3.times { |i| output << { id: "A#{i + 1}", value: i + 1, source: 'A' } }
       end
     end
 
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       producer :producer_b do |output|
         puts "[ProducerB:ipc_fork] Generating items (PID #{Process.pid})"
         3.times { |i| output << { id: "B#{i + 1}", value: i + 4, source: 'B' } }
       end
     end
 
-    cow_fork(2) do
+    in_cow_forks(2) do
       producer :producer_c do |output|
         puts "[ProducerC:cow_fork] Generating items (PID #{Process.pid})"
         3.times { |i| output << { id: "C#{i + 1}", value: i + 7, source: 'C' } }
@@ -178,7 +178,7 @@ class RerouteForkFanInExample
     end
 
     # Aggregator receives from all three (fan-in)
-    thread_pool(2) do
+    in_threads(2) do
       consumer :aggregator do |item|
         puts "[Aggregator:thread] Received #{item[:id]} from #{item[:source]}: #{item[:value]}"
         File.open(@results_file, 'a') do |f|

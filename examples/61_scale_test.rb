@@ -39,7 +39,7 @@ class ScaleTestExample
       output << item
     end
 
-    thread_pool(@threads) do
+    in_threads(@threads) do
       processor :download do |item, output|
         @mutex.synchronize { @stats[:downloaded] += 1 }
         item[:data] = "data-#{item[:id]}"
@@ -54,7 +54,7 @@ class ScaleTestExample
 
     batch @batch_size
 
-    cow_fork(2) do
+    in_cow_forks(2) do
       processor :parse_batch do |batch, output|
         @mutex.synchronize { @stats[:parsed] += batch.size }
         batch.each do |item|
@@ -67,7 +67,7 @@ class ScaleTestExample
       output << item
     end
 
-    thread_pool(2) do
+    in_threads(2) do
       consumer :upload do |item|
         @mutex.synchronize do
           @stats[:uploaded] += 1

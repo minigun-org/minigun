@@ -21,7 +21,7 @@ class ProcessExample
 
     # Process isolation for CPU-bound tasks
     batch 1
-    cow_fork(2) do
+    in_cow_forks(2) do
       processor :process do |batch, output|
         batch.each do |item|
           output << { item: item, pid: Process.pid, result: item * 100 }

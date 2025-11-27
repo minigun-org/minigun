@@ -165,7 +165,7 @@ accumulator :custom_batch, max_size: 50 do |item, output|
 end
 ```
 
-### `cow_fork(name, options = {}, &block)`
+### `in_cow_forks(name, options = {}, &block)`
 
 Alias for a consumer stage with COW fork execution.
 
@@ -182,7 +182,7 @@ cow_fork :process, max: 4 do |batch|
 end
 ```
 
-### `ipc_fork(name, options = {}, &block)`
+### `in_ipc_forks(name, options = {}, &block)`
 
 Alias for a consumer stage with IPC fork execution.
 

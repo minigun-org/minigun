@@ -33,7 +33,7 @@ class ThreadCowThreadPassthroughExample
     end
 
     # Light processor runs in thread pool
-    thread_pool(2) do
+    in_threads(2) do
       processor :enrich do |item, output|
         puts "[Processor:thread_pool] Enriching #{item[:id]} in thread #{Thread.current.object_id}"
         enriched = item.merge(enriched_at: Time.now.to_i)
@@ -43,7 +43,7 @@ class ThreadCowThreadPassthroughExample
 
     # Heavy processor runs in COW fork pool (middle stage - NOT terminal)
     # Input: COW-shared (efficient), Output: IPC-serialized (required)
-    cow_fork(2) do
+    in_cow_forks(2) do
       processor :heavy_compute do |item, output|
         pid = Process.pid
         puts "[Processor:cow_fork] Heavy computation for #{item[:id]} in PID #{pid}"
@@ -63,7 +63,7 @@ class ThreadCowThreadPassthroughExample
 
     # Final collector runs in thread pool
     # Receives results from COW fork via parent's routing
-    thread_pool(2) do
+    in_threads(2) do
       consumer :collect do |item|
         puts "[Consumer:thread_pool] Collecting #{item[:id]} from PID #{item[:worker_pid]}"
         @mutex.synchronize do

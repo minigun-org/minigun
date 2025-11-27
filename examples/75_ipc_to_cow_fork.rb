@@ -32,7 +32,7 @@ class IpcToCowForkExample
     end
 
     # First stage: IPC fork (persistent workers)
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       processor :ipc_stage do |item, output|
         pid = Process.pid
         puts "[IPC Stage:ipc_fork] Processing #{item[:id]} in persistent worker PID #{pid}"
@@ -49,7 +49,7 @@ class IpcToCowForkExample
     end
 
     # Second stage: COW fork (ephemeral, one fork per item)
-    cow_fork(2) do
+    in_cow_forks(2) do
       processor :cow_stage do |item, output|
         pid = Process.pid
         puts "[COW Stage:cow_fork] Processing #{item[:id]} in ephemeral fork PID #{pid}"

@@ -26,7 +26,7 @@ class RerouteIpcBasicExample
     end
 
     # IPC fork processor - doubles values
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       processor :double do |item, output|
         result = item.merge(value: item[:value] * 2, doubled: true)
         puts "[Double:ipc_fork] #{item[:id]}: #{item[:value]} * 2 = #{result[:value]} (PID #{Process.pid})"
@@ -35,7 +35,7 @@ class RerouteIpcBasicExample
     end
 
     # IPC fork consumer - collects results
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       consumer :collect do |item|
         puts "[Collect:ipc_fork] Received: #{item[:id]} = #{item[:value]} (PID #{Process.pid})"
         File.open(@results_file, 'a') do |f|
@@ -69,7 +69,7 @@ end
 class RerouteIpcInsertExample < RerouteIpcBasicExample
   pipeline do
     # Add a new IPC fork stage
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       processor :triple do |item, output|
         result = item.merge(value: item[:value] * 3, tripled: true)
         puts "[Triple:ipc_fork] #{item[:id]}: #{item[:value]} * 3 = #{result[:value]} (PID #{Process.pid})"

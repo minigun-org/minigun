@@ -7,12 +7,12 @@
 # the old strategy-based system with clear, composable execution contexts.
 #
 # Key Features:
-# - fiber_pool(N)  # Delegate to N fibers (future)
-# - thread_pool(N) # Delegate to N threads
-# - ractor_pool(N) # Delegate to N ractors (future)
+# - in_fibers(N)  # Delegate to N fibers (future)
+# - in_threads(N) # Delegate to N threads
+# - in_ractors(N) # Delegate to N ractors (future)
 # - batch(N)       # Accumulate items into batches of N items, useful for cow_fork
-# - cow_fork(N)    # Spawn a Copy-On-Write (COW) fork process to process a batch
-# - ipc_fork(N)    # Spawn a fork an process items via Inter-Process Communication (IPC)
+# - in_cow_forks(N)    # Spawn a Copy-On-Write (COW) fork process to process a batch
+# - in_ipc_forks(N)    # Spawn a fork an process items via Inter-Process Communication (IPC)
 # - Composable nesting with proper context inheritance
 
 require_relative '../lib/minigun'
@@ -38,7 +38,7 @@ class ThreadPoolExample
     end
 
     # All stages within threads block use thread pool of 5
-    thread_pool(5) do
+    in_threads(5) do
       processor :double do |item, output|
         output << (item * 2)
       end
@@ -80,7 +80,7 @@ class BatchProcessExample
       100.times { |i| output << i }
     end
 
-    thread_pool(10) do
+    in_threads(10) do
       processor :download do |item, output|
         # Simulate I/O-bound work
         output << { id: item, data: "data-#{item}" }
@@ -91,7 +91,7 @@ class BatchProcessExample
     batch 20
 
     # Spawn a new process for each batch (max 4 concurrent)
-    cow_fork(4) do
+    in_cow_forks(4) do
       consumer :process_batch do |batch|
         @mutex.synchronize do
           @processed << { pid: Process.pid, size: batch.size }
@@ -129,7 +129,7 @@ class NestedContextExample
     end
 
     # Outer: thread pool for I/O work
-    thread_pool(20) do
+    in_threads(20) do
       processor :fetch do |item, output|
         # Simulate fetch
         output << (item * 2)
@@ -139,7 +139,7 @@ class NestedContextExample
       batch 10
 
       # Inner: process per batch for CPU work
-      cow_fork(3) do
+      in_cow_forks(3) do
         processor :compute do |batch, _output|
           # CPU-intensive work in isolated process
           batch.map { |x| x**2 }
@@ -229,7 +229,7 @@ class ComplexPipeline
     end
 
     # Download in parallel with threads (I/O-bound)
-    thread_pool(50) do
+    in_threads(50) do
       processor :download do |url, output|
         # Simulate HTTP request
         output << { url: url, html: '<html>content</html>', size: 1024 }
@@ -245,7 +245,7 @@ class ComplexPipeline
     batch 20
 
     # Parse in separate processes (CPU-bound)
-    cow_fork(4) do
+    in_cow_forks(4) do
       processor :parse_batch do |batch, _output|
         # CPU-intensive parsing
         batch.map do |page|
@@ -259,7 +259,7 @@ class ComplexPipeline
     end
 
     # Save results (back to threads)
-    thread_pool(10) do
+    in_threads(10) do
       consumer :save_to_db do |results|
         @mutex.synchronize { @saved_count += results.size }
       end
@@ -296,7 +296,7 @@ class ThreadPerBatchExample
     batch 10
 
     # Spawn a new thread for each batch
-    thread_pool(5) do
+    in_threads(5) do
       consumer :process do |_batch|
         @mutex.synchronize { @batch_count += 1 }
       end
@@ -318,7 +318,7 @@ puts <<~SUMMARY
   Execution Block Syntax:
 
   1. Thread Pools:
-     thread_pool(N) do ... end
+     in_threads(N) do ... end
      - Reuses N threads for all stages in block
      - Good for I/O-bound work
 
@@ -328,7 +328,7 @@ puts <<~SUMMARY
      - Good for CPU-bound work with isolation
 
   3. Ractor Pools:
-     ractor_pool(N) do ... end
+     in_ractors(N) do ... end
      - Reuses N ractors for all stages in block
      - True parallelism (Ruby 3.0+)
 
@@ -337,12 +337,12 @@ puts <<~SUMMARY
      - Accumulates N items before passing to next stage
 
   5. Per-Batch Spawning:
-     cow_fork(N) do ... end
+     in_cow_forks(N) do ... end
      - Spawns new process for each batch
      - Max N concurrent processes
      - Copy-on-write optimization
 
-     thread_pool(N) do ... end
+     in_threads(N) do ... end
      - Spawns new thread for each batch
      - Max N concurrent threads
 

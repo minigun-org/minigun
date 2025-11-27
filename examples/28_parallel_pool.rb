@@ -19,7 +19,7 @@ class ParallelPoolExample
       50.times { |i| output << i }
     end
 
-    thread_pool(10) do
+    in_threads(10) do
       processor :process do |item, output|
         output << (item * 2)
       end

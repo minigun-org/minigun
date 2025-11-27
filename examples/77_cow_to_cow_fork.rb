@@ -32,7 +32,7 @@ class CowToCowForkExample
     end
 
     # First COW fork stage
-    cow_fork(2) do
+    in_cow_forks(2) do
       processor :stage1 do |item, output|
         pid = Process.pid
         puts "[Stage1:cow_fork] Processing #{item[:id]} in ephemeral fork PID #{pid}"
@@ -51,7 +51,7 @@ class CowToCowForkExample
 
     # Second COW fork stage
     # Receives items from parent (via Queue) after Stage1
-    cow_fork(2) do
+    in_cow_forks(2) do
       processor :stage2 do |item, output|
         pid = Process.pid
         puts "[Stage2:cow_fork] Processing #{item[:id]} in ephemeral fork PID #{pid}"

@@ -33,7 +33,7 @@ class DynamicRoutingToInnerIpcExample
     end
 
     # Router stage - dynamically routes to inner stages of IPC fork block
-    thread_pool(2) do
+    in_threads(2) do
       processor :router do |item, output|
         # Route based on modulo to different INNER stages of the IPC fork
         case item[:id] % 3
@@ -54,7 +54,7 @@ class DynamicRoutingToInnerIpcExample
     # These stages are INSIDE the ipc_fork block and can be targeted with output.to()
     # IMPORTANT: await: true is required since these stages have no upstream DAG connections
     # within the fork block, but receive items via dynamic routing from outside
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       # Inner stage A - processes subset of items
       processor :inner_process_a, await: true do |item, output|
         result = item.merge(value: item[:value] * 10, processed_by: 'A')
@@ -72,7 +72,7 @@ class DynamicRoutingToInnerIpcExample
 
     # COW fork with inner consumer
     # IMPORTANT: await: true required for disconnected stages receiving dynamic routing
-    cow_fork(2) do
+    in_cow_forks(2) do
       # Inner stage C - collects its own subset
       consumer :inner_collect_c, await: true do |item|
         puts "[InnerCollectC:cow_fork] #{item[:id]} = #{item[:value]} (PID #{Process.pid})"
@@ -151,7 +151,7 @@ class DynamicRoutingFromInnerToInnerExample
     end
 
     # First IPC fork with two inner stages
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       # Inner router - routes from INSIDE ipc_fork to INNER stages of COW fork
       processor :inner_router do |item, output|
         if item[:id].even?
@@ -171,7 +171,7 @@ class DynamicRoutingFromInnerToInnerExample
 
     # COW fork with two inner stages that receive from IPC inner router
     # IMPORTANT: await: true required for disconnected stages receiving dynamic routing
-    cow_fork(2) do
+    in_cow_forks(2) do
       processor :cow_process_x, await: true do |item, output|
         result = item.merge(value: item[:value] * 100, path: 'X')
         puts "[CowProcessX:cow] #{item[:id]}: #{item[:value]} * 100 = #{result[:value]} (PID #{Process.pid})"

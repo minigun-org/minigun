@@ -19,7 +19,7 @@ class TerminationExample
       10.times { |i| output << i }
     end
 
-    thread_pool(3) do
+    in_threads(3) do
       processor :process do |item, output|
         output << item
       end

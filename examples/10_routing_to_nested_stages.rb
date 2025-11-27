@@ -44,7 +44,7 @@ class RoutingToNestedStagesExample
     end
 
     # Nested pipeline with forked execution
-    cow_fork(2) do
+    in_cow_forks(2) do
       consumer :save do |batch|
         puts "[Consumer:save] (PID #{Process.pid}) Received batch: #{batch.inspect}"
 

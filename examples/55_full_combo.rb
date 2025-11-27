@@ -38,7 +38,7 @@ class FullComboExample
       output << item
     end
 
-    thread_pool(@threads) do
+    in_threads(@threads) do
       processor :download do |item, output|
         @mutex.synchronize { @stats[:downloaded] += 1 }
         item[:data] = "data-#{item[:id]}"
@@ -53,7 +53,7 @@ class FullComboExample
 
     batch @batch_size
 
-    cow_fork(@processes) do
+    in_cow_forks(@processes) do
       processor :parse_batch do |batch, output|
         @mutex.synchronize { @stats[:parsed] += batch.size }
         batch.each do |item|
@@ -66,7 +66,7 @@ class FullComboExample
       output << item
     end
 
-    thread_pool(5) do
+    in_threads(5) do
       consumer :upload do |_item|
         @mutex.synchronize { @stats[:uploaded] += 1 }
       end

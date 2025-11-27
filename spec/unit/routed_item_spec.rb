@@ -76,7 +76,7 @@ RSpec.describe Minigun::RoutedItem do
             end
           end
 
-          ipc_fork(2) do
+          in_ipc_forks(2) do
             processor :nested_a, await: true do |item, output|
               output << "a:#{item}"
             end
