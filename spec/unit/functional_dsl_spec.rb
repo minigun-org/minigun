@@ -234,6 +234,26 @@ RSpec.describe 'Functional DSL' do
     end
   end
 
+  describe 'in_ipc_forks', if: Minigun.fork? do
+    it 'executes stages in IPC forked processes' do
+      task = Minigun.task('ipc_forks_test') do
+        producer :source do |output|
+          3.times { |i| output << i }
+        end
+
+        in_ipc_forks(2) do
+          consumer :sink do |item|
+            # Just verify it runs without error
+            item * 2
+          end
+        end
+      end
+
+      # Should complete without error
+      expect { task.run }.not_to raise_error
+    end
+  end
+
   describe 'debatch' do
     it 'unpacks arrays into individual items' do
       results = []
