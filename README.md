@@ -32,6 +32,31 @@ end
 DataPipeline.new.run
 ```
 
+```ruby
+# Declare the task
+task = Minigun.task('newsletter_sender') do
+
+  # Producer: Emits Array<User> (5000 per batch) to next stage
+  produce(User.find_in_batches(5_000))
+  
+  # Spawn a copy-on-write fork for each batch (max 8 forks at once)
+  in_cow_forks(8) do
+
+    # Unpack the Array<User> batches to emit single User objects to next stage
+    debatch
+
+    # Spawn 10 worker threads (10 threads on each forked process)
+    in_threads(10) do
+
+      # Consumer: Send an email to each user.
+      consume do |user|     
+        NewsletterMailer.with(user: user).deliver_now
+      end
+    end
+  end
+end
+```
+
 ## Why Minigun?
 
 **Full-Stack Parallelism** - Thread pools, COW forks, and IPC workers—all in one framework.
