@@ -174,14 +174,23 @@ RSpec.describe Minigun::Worker do
 
       worker = described_class.new(pipeline, immediate_stage, config)
 
-      allow(Minigun.logger).to receive(:debug).and_call_original
+      # Track debug messages to verify shutdown message was logged
+      debug_messages = []
+      allow(Minigun.logger).to receive(:debug) do |msg|
+        debug_messages << msg
+      end
 
       worker.start
       worker.join
 
+      # Should have logged the shutdown message
+      expect(debug_messages.any? { |msg| msg.to_s.include?('Shutting down immediately') }).to(
+        be(true),
+        "Expected 'Shutting down immediately' in debug logs, got: #{debug_messages.inspect}"
+      )
+
       # Should have sent END signal to downstream immediately
       downstream_queue = task.find_queue(downstream_stage)
-      expect(Minigun.logger).to receive(:debug).with(/Shutting down immediately/)
 
       msg = begin
         downstream_queue.pop(true)
