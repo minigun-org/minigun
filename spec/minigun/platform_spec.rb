@@ -12,7 +12,7 @@ RSpec.describe Minigun::Platform do
 
   describe '.fork?' do
     it 'returns a boolean' do
-      expect([true, false]).to include(described_class.fork?)
+      expect([true, false]).to include(described_class.fork?) # rubocop:disable RSpec/ExpectActual
     end
 
     it 'memoizes the result' do
@@ -46,7 +46,7 @@ RSpec.describe Minigun::Platform do
 
   describe '.windows?' do
     it 'returns a boolean' do
-      expect([true, false]).to include(described_class.windows?)
+      expect([true, false]).to include(described_class.windows?) # rubocop:disable RSpec/ExpectActual
     end
 
     it 'memoizes the result' do
@@ -66,7 +66,7 @@ RSpec.describe Minigun::Platform do
 
   describe '.jruby?' do
     it 'returns a boolean' do
-      expect([true, false]).to include(described_class.jruby?)
+      expect([true, false]).to include(described_class.jruby?) # rubocop:disable RSpec/ExpectActual
     end
 
     it 'memoizes the result' do
@@ -92,7 +92,7 @@ RSpec.describe Minigun::Platform do
 
   describe '.truffleruby?' do
     it 'returns a boolean' do
-      expect([true, false]).to include(described_class.truffleruby?)
+      expect([true, false]).to include(described_class.truffleruby?) # rubocop:disable RSpec/ExpectActual
     end
 
     it 'memoizes the result' do
