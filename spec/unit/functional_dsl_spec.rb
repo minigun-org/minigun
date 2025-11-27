@@ -214,7 +214,7 @@ RSpec.describe 'Functional DSL' do
     end
   end
 
-  describe 'in_cow_forks', if: Minigun.fork? do
+  describe 'in_cow_forks', if: Minigun::Platform.fork? do
     it 'executes stages in forked processes' do
       task = Minigun.task('cow_forks_test') do
         producer :source do |output|
@@ -234,7 +234,7 @@ RSpec.describe 'Functional DSL' do
     end
   end
 
-  describe 'in_ipc_forks', if: Minigun.fork? do
+  describe 'in_ipc_forks', if: Minigun::Platform.fork? do
     it 'executes stages in IPC forked processes' do
       task = Minigun.task('ipc_forks_test') do
         producer :source do |output|

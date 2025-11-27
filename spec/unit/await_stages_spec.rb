@@ -115,7 +115,7 @@ RSpec.describe 'Await Stages' do
     end
 
     it 'works with IPC fork executors' do
-      skip 'Forking not supported' unless Minigun.fork?
+      skip 'Forking not supported' unless Minigun::Platform.fork?
 
       results = []
       results_file = "/tmp/minigun_await_ipc_test_#{Process.pid}.txt"
@@ -163,7 +163,7 @@ RSpec.describe 'Await Stages' do
     end
 
     it 'works with COW fork executors' do
-      skip 'Forking not supported' unless Minigun.fork?
+      skip 'Forking not supported' unless Minigun::Platform.fork?
 
       results = []
       results_file = "/tmp/minigun_await_cow_test_#{Process.pid}.txt"

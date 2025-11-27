@@ -314,7 +314,7 @@ RSpec.describe Minigun::Execution::ThreadPoolExecutor do
   end
 end
 
-RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: !Minigun.fork? do
+RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: !Minigun::Platform.fork? do
   let(:task) { Minigun::Task.new }
   let(:pipeline) { task.root_pipeline }
   let(:test_stage_for_ctx) { Minigun::ConsumerStage.new(:test_ctx, pipeline, proc { |item, output| output << item }, {}) }
@@ -399,7 +399,7 @@ RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: !Minigun.fork? do
   end
 end
 
-RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: !Minigun.fork? do
+RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: !Minigun::Platform.fork? do
   let(:task) { Minigun::Task.new }
   let(:pipeline) { task.root_pipeline }
   let(:test_stage) { Minigun::ConsumerStage.new(:test, pipeline, proc { |item, output| output << item }, {}) }
@@ -502,7 +502,7 @@ RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: !Minigun.fork? do
   end
 end
 
-RSpec.describe Minigun::Execution::IpcForkPoolExecutor, skip: !Minigun.fork? do
+RSpec.describe Minigun::Execution::IpcForkPoolExecutor, skip: !Minigun::Platform.fork? do
   let(:task) { Minigun::Task.new }
   let(:pipeline) { task.root_pipeline }
   let(:test_stage) { Minigun::ConsumerStage.new(:ipc_test, pipeline, proc { |item, output| output << item }, {}) }

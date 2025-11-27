@@ -54,7 +54,7 @@ RSpec.describe Minigun::RoutedItem do
 
   describe 'integration with router stages' do
     it 'is handled by RouterBroadcastStage' do
-      skip 'Forking not supported' unless Minigun.fork?
+      skip 'Forking not supported' unless Minigun::Platform.fork?
 
       results = []
       results_file = "/tmp/minigun_routed_item_broadcast_#{Process.pid}.txt"
@@ -161,7 +161,7 @@ RSpec.describe Minigun::RoutedItem do
     end
 
     it 'handles items with non-serializable content gracefully in IpcInputQueue' do
-      skip 'Forking not supported' unless Minigun.fork?
+      skip 'Forking not supported' unless Minigun::Platform.fork?
 
       # This tests that RoutedItem itself is serializable
       # Non-serializable items should be caught at the OutputQueue level

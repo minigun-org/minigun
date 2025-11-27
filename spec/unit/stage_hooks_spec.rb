@@ -147,7 +147,7 @@ RSpec.describe 'Stage-Specific Hooks' do
       task.run
 
       # Fork hooks should be present if forking occurred
-      if Minigun.fork?
+      if Minigun::Platform.fork?
         expect(task.events).to include(:before_fork_process)
         # after_fork happens in child process, won't be in @events
       end
