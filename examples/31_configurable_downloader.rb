@@ -22,7 +22,7 @@ class ConfigurableDownloader
     end
 
     # Use instance variable for thread count
-    thread_pool(@thread_count) do
+    in_threads(@thread_count) do
       processor :download do |url, output|
         # Simulate download
         sleep 0.01

@@ -76,7 +76,7 @@ class CrossContextEmitExample
     end
 
     # Fast processor - runs in a thread pool (shared memory)
-    thread_pool(3) do
+    in_threads(3) do
       consumer :fast_processor do |task|
         sleep 0.01 # Simulate fast work
         puts "    ⚡ [Thread #{Thread.current.object_id}] Fast processed task #{task[:id]}"
@@ -84,7 +84,7 @@ class CrossContextEmitExample
     end
 
     # Slow processor - runs in a separate thread pool (shared memory)
-    thread_pool(2) do
+    in_threads(2) do
       consumer :slow_processor do |task|
         sleep 0.05 # Simulate slower work
         puts "    🐢 [Thread #{Thread.current.object_id}] Slow processed task #{task[:id]}"
@@ -92,7 +92,7 @@ class CrossContextEmitExample
     end
 
     # Heavy processor - runs in forked processes (IPC required!)
-    cow_fork(2) do
+    in_cow_forks(2) do
       consumer :heavy_processor do |task|
         sleep 0.1 # Simulate heavy work
         puts "    💪 [Process #{Process.pid}] Heavy processed task #{task[:id]}"

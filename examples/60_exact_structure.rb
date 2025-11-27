@@ -34,7 +34,7 @@ class ExactStructureExample
       output << item
     end
 
-    thread_pool(5) do
+    in_threads(5) do
       processor :download do |item, output|
         @mutex.synchronize { @stats[:downloaded] += 1 }
         item[:data] = "data-#{item[:id]}"
@@ -49,7 +49,7 @@ class ExactStructureExample
 
     batch 5
 
-    cow_fork(2) do
+    in_cow_forks(2) do
       processor :parse_batch do |batch, output|
         @mutex.synchronize { @stats[:parsed] += batch.size }
         batch.each do |item|
@@ -62,7 +62,7 @@ class ExactStructureExample
       output << item
     end
 
-    thread_pool(2) do
+    in_threads(2) do
       consumer :upload do |_item|
         @mutex.synchronize { @stats[:uploaded] += 1 }
       end

@@ -33,7 +33,7 @@ class IpcToIpcForkExample
     end
 
     # First IPC fork stage
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       processor :stage1 do |item, output|
         pid = Process.pid
         puts "[Stage1:ipc_fork] Processing #{item[:id]} in PID #{pid}"
@@ -51,7 +51,7 @@ class IpcToIpcForkExample
 
     # Second IPC fork stage
     # Receives items from parent (via Queue) after Stage1
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       processor :stage2 do |item, output|
         pid = Process.pid
         puts "[Stage2:ipc_fork] Processing #{item[:id]} in PID #{pid}"

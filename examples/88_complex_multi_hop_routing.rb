@@ -41,7 +41,7 @@ class ComplexMultiHopRoutingExample
     end
 
     # Stage 2: Validator in thread pool
-    thread_pool(2) do
+    in_threads(2) do
       processor :validate do |item, output|
         thread_id = Thread.current.object_id
         puts "[2. Validator:thread_pool] Validating #{item[:id]} in thread #{thread_id}"
@@ -56,7 +56,7 @@ class ComplexMultiHopRoutingExample
     end
 
     # Stage 3: Heavy compute in IPC fork (persistent workers)
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       processor :heavy_compute do |item, output|
         pid = Process.pid
         puts "[3. HeavyCompute:ipc_fork] Computing #{item[:id]} in IPC worker PID #{pid}"
@@ -72,7 +72,7 @@ class ComplexMultiHopRoutingExample
     end
 
     # Stage 4: Transform in COW fork (ephemeral forks)
-    cow_fork(2) do
+    in_cow_forks(2) do
       processor :transform do |item, output|
         pid = Process.pid
         puts "[4. Transform:cow_fork] Transforming #{item[:id]} in COW fork PID #{pid}"
@@ -88,7 +88,7 @@ class ComplexMultiHopRoutingExample
     end
 
     # Stage 5: Aggregator in thread pool
-    thread_pool(2) do
+    in_threads(2) do
       processor :aggregate do |item, output|
         thread_id = Thread.current.object_id
         puts "[5. Aggregator:thread_pool] Aggregating #{item[:id]} in thread #{thread_id}"

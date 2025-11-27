@@ -223,7 +223,7 @@ RSpec.describe 'output.to(:stage) routing' do
             end
           end
 
-          thread_pool(2) do
+          in_threads(2) do
             consumer :even_processor do |item|
               sleep 0.01
               @mutex.synchronize { @results << { type: :even, value: item } }
@@ -273,14 +273,14 @@ RSpec.describe 'output.to(:stage) routing' do
           end
 
           # Light processor in thread pool
-          thread_pool(2) do
+          in_threads(2) do
             consumer :light_processor do |item|
               @mutex.synchronize { @results << { type: :thread, value: item[:value] } }
             end
           end
 
           # Heavy processor in thread pool
-          thread_pool(1) do
+          in_threads(1) do
             consumer :heavy_processor do |item|
               @mutex.synchronize { @results << { type: :thread_heavy, value: item[:value] } }
             end
@@ -320,7 +320,7 @@ RSpec.describe 'output.to(:stage) routing' do
             end
           end
 
-          thread_pool(1) do
+          in_threads(1) do
             consumer :threaded_consumer do |item|
               @mutex.synchronize do
                 @results << { type: 'threaded', value: item }
@@ -374,14 +374,14 @@ RSpec.describe 'output.to(:stage) routing' do
           end
 
           # Light processor in thread pool
-          thread_pool(2) do
+          in_threads(2) do
             consumer :light_processor do |item|
               @results << { 'type' => 'thread', 'value' => item[:value] }
             end
           end
 
           # Heavy processor in forked processes (requires tempfile IPC)
-          cow_fork(1) do
+          in_cow_forks(1) do
             consumer :heavy_processor do |item|
               # Write to temp file (fork-safe)
               File.open(@temp_file_path, 'a') do |f|

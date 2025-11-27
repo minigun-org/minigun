@@ -26,7 +26,7 @@ class RerouteCowBasicExample
     end
 
     # COW fork processor - squares values
-    cow_fork(3) do
+    in_cow_forks(3) do
       processor :square do |item, output|
         result = item.merge(value: item[:value]**2, squared: true)
         puts "[Square:cow_fork] #{item[:id]}: #{item[:value]}^2 = #{result[:value]} (PID #{Process.pid})"
@@ -35,7 +35,7 @@ class RerouteCowBasicExample
     end
 
     # COW fork consumer - collects results
-    cow_fork(3) do
+    in_cow_forks(3) do
       consumer :collect do |item|
         puts "[Collect:cow_fork] Received: #{item[:id]} = #{item[:value]} (PID #{Process.pid})"
         File.open(@results_file, 'a') do |f|
@@ -69,7 +69,7 @@ end
 class RerouteCowInsertExample < RerouteCowBasicExample
   pipeline do
     # Add a new COW fork stage
-    cow_fork(3) do
+    in_cow_forks(3) do
       processor :cube do |item, output|
         result = item.merge(value: item[:value]**3, cubed: true)
         puts "[Cube:cow_fork] #{item[:id]}: #{item[:value]}^3 = #{result[:value]} (PID #{Process.pid})"

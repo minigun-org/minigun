@@ -2077,6 +2077,96 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
+  describe '100_functional_dsl.rb' do
+    it 'demonstrates the Minigun.task functional DSL' do
+      # Example 1: Basic Minigun.task
+      results = []
+      mutex = Mutex.new
+
+      task = Minigun.task('simple_example') do
+        produce :numbers do |output|
+          10.times { |i| output << i }
+        end
+
+        consume :collector do |item|
+          mutex.synchronize { results << item * 2 }
+        end
+      end
+
+      task.run
+      expect(results.sort).to eq([0, 2, 4, 6, 8, 10, 12, 14, 16, 18])
+    end
+
+    it 'demonstrates debatch and rebatch' do
+      batch_sizes = []
+      mutex = Mutex.new
+
+      task = Minigun.task('batch_example') do
+        produce :batches do |output|
+          3.times do |batch_num|
+            batch = (1..100).map { |i| "item_#{batch_num}_#{i}" }
+            output << batch
+          end
+        end
+
+        rebatch(25)
+
+        consume :process_batches do |batch|
+          mutex.synchronize { batch_sizes << batch.size }
+        end
+      end
+
+      task.run
+      expect(batch_sizes.size).to eq(12)
+      expect(batch_sizes).to all(eq(25))
+    end
+
+    it 'demonstrates threaded processing' do
+      processed = Concurrent::AtomicFixnum.new(0)
+
+      task = Minigun.task('threaded_example') do
+        produce :source do |output|
+          100.times { |i| output << i }
+        end
+
+        in_threads(4) do
+          consume :worker do |_item|
+            processed.increment
+          end
+        end
+      end
+
+      task.run
+      expect(processed.value).to eq(100)
+    end
+
+    it 'demonstrates the newsletter sender pattern' do
+      user_batches = 3.times.map do |batch_num|
+        (1..100).map { |i| { id: batch_num * 100 + i, email: "user#{batch_num * 100 + i}@example.com" } }
+      end
+
+      emails_sent = Concurrent::AtomicFixnum.new(0)
+
+      task = Minigun.task('newsletter_sender') do
+        produce :user_batches do |output|
+          user_batches.each { |batch| output << batch }
+        end
+
+        rebatch(50)
+        debatch
+
+        in_threads(5) do
+          consume :send_email do |_user|
+            emails_sent.increment
+          end
+        end
+      end
+
+      task.run
+      expect(emails_sent.value).to eq(300)
+    end
+  end
+
   # Coverage check: ensure all example files have tests
   describe 'Example Coverage' do
     it 'has tests for all example files' do

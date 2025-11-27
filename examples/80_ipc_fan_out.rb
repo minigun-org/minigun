@@ -43,7 +43,7 @@ class IpcFanOutExample
     end
 
     # Splitter stage in IPC fork - routes to different stages
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       processor :splitter do |item, output|
         pid = Process.pid
         puts "[Splitter:ipc_fork] Routing #{item[:id]} in PID #{pid}"
@@ -61,7 +61,7 @@ class IpcFanOutExample
     end
 
     # Three IPC fork consumer stages (fan-out targets)
-    ipc_fork(1) do
+    in_ipc_forks(1) do
       consumer :process_a do |item|
         pid = Process.pid
         puts "[ProcessA:ipc_fork] Processing #{item[:id]} in PID #{pid}"
@@ -75,7 +75,7 @@ class IpcFanOutExample
       end
     end
 
-    ipc_fork(1) do
+    in_ipc_forks(1) do
       consumer :process_b do |item|
         pid = Process.pid
         puts "[ProcessB:ipc_fork] Processing #{item[:id]} in PID #{pid}"
@@ -89,7 +89,7 @@ class IpcFanOutExample
       end
     end
 
-    ipc_fork(1) do
+    in_ipc_forks(1) do
       consumer :process_c do |item|
         pid = Process.pid
         puts "[ProcessC:ipc_fork] Processing #{item[:id]} in PID #{pid}"

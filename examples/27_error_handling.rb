@@ -20,7 +20,7 @@ class ErrorExample
       5.times { |i| output << i }
     end
 
-    thread_pool(2) do
+    in_threads(2) do
       processor :process do |item, output|
         raise StandardError, "Error on item #{item}" if item == 2
 

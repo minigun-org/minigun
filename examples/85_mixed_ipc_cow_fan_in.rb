@@ -25,7 +25,7 @@ class MixedIpcCowFanInExample
 
   pipeline do
     # Producer A in IPC fork (persistent worker)
-    ipc_fork(1) do
+    in_ipc_forks(1) do
       producer :producer_ipc_a do |output|
         pid = Process.pid
         puts "[ProducerIpcA:ipc_fork] Generating items in persistent worker PID #{pid}"
@@ -36,7 +36,7 @@ class MixedIpcCowFanInExample
     end
 
     # Producer B in COW fork (ephemeral forks)
-    cow_fork(2) do
+    in_cow_forks(2) do
       producer :producer_cow_b do |output|
         pid = Process.pid
         puts "[ProducerCowB:cow_fork] Generating items in ephemeral fork PID #{pid}"
@@ -47,7 +47,7 @@ class MixedIpcCowFanInExample
     end
 
     # Producer C in IPC fork (persistent worker)
-    ipc_fork(1) do
+    in_ipc_forks(1) do
       producer :producer_ipc_c do |output|
         pid = Process.pid
         puts "[ProducerIpcC:ipc_fork] Generating items in persistent worker PID #{pid}"
@@ -58,7 +58,7 @@ class MixedIpcCowFanInExample
     end
 
     # Aggregator in thread pool - receives from all three producers
-    thread_pool(2) do
+    in_threads(2) do
       consumer :aggregator do |item|
         thread_id = Thread.current.object_id
         puts "[Aggregator:thread_pool] Processing #{item[:id]} from #{item[:source]} (producer PID #{item[:pid]}) in thread #{thread_id}"

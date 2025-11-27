@@ -20,7 +20,7 @@ class RactorExample
     end
 
     # Ractors provide true parallelism (falls back to threads if unavailable)
-    ractor_pool(2) do
+    in_ractors(2) do
       processor :process do |item, output|
         output << (item**2)
       end

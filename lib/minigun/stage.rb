@@ -374,6 +374,98 @@ module Minigun
     end
   end
 
+  # Debatch stage - unpacks incoming batches into individual items
+  # Receives items that respond to #each and emits each element individually
+  class DebatchStage < ConsumerStage
+    def execute(context, input_queue, output_queue, stage_stats)
+      loop do
+        item = input_queue.pop
+        break if item.is_a?(EndOfStage)
+
+        begin
+          start_time = Time.now if stage_stats
+
+          if item.respond_to?(:each)
+            item.each { |element| output_queue << element }
+          else
+            output_queue << item
+          end
+
+          stage_stats&.record_latency(Time.now - start_time)
+        rescue StandardError => e
+          Minigun.logger.error "[Stage:#{name}] Error debatching: #{e.message}"
+          Minigun.logger.debug e.backtrace.join("\n") if Minigun.logger.debug?
+        end
+      end
+    end
+  end
+
+  # Rebatch stage - re-batches incoming batches into new batch sizes
+  # Receives items that respond to #each and emits new batches of specified size
+  class RebatchStage < ConsumerStage
+    attr_reader :batch_size
+
+    def initialize(name, pipeline, block = nil, options = {})
+      super
+      @batch_size = options[:_rebatch_size] || 100
+      @buffer = []
+      @mutex = Mutex.new
+    end
+
+    def execute(context, input_queue, output_queue, stage_stats)
+      loop do
+        item = input_queue.pop
+        break if item.is_a?(EndOfStage)
+
+        begin
+          start_time = Time.now if stage_stats
+
+          # Handle incoming batch (anything responding to #each)
+          if item.respond_to?(:each)
+            item.each do |element|
+              @mutex.synchronize do
+                @buffer << element
+                if @buffer.size >= @batch_size
+                  output_queue << @buffer.dup
+                  @buffer.clear
+                end
+              end
+            end
+          else
+            # Single item - add to buffer
+            @mutex.synchronize do
+              @buffer << item
+              if @buffer.size >= @batch_size
+                output_queue << @buffer.dup
+                @buffer.clear
+              end
+            end
+          end
+
+          stage_stats&.record_latency(Time.now - start_time)
+        rescue StandardError => e
+          Minigun.logger.error "[Stage:#{name}] Error processing batch: #{e.message}"
+          Minigun.logger.debug e.backtrace.join("\n") if Minigun.logger.debug?
+        end
+      end
+    end
+
+    def flush(context, output_queue)
+      buffer = nil
+
+      @mutex.synchronize do
+        unless @buffer.empty?
+          buffer = @buffer.dup
+          @buffer.clear
+        end
+      end
+
+      return unless buffer && output_queue
+
+      output_queue << buffer
+    end
+  end
+
   # Router stages for fan-out patterns
   # Base functionality for all routers
   class RouterStage < Stage

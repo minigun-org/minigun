@@ -28,6 +28,44 @@ module Minigun
 
       @fork = Process.respond_to?(:fork) && RUBY_ENGINE != 'truffleruby'
     end
+
+    # Create a task using the functional DSL
+    #
+    # @param name [String] Optional task name
+    # @yield Block containing pipeline definition (evaluated in instance context)
+    # @return [Object] Instance with DSL methods and run/start capabilities
+    #
+    # @example
+    #   task = Minigun.task('my_task') do
+    #     producer :source do |output|
+    #       10.times { |i| output << i }
+    #     end
+    #     consumer :sink do |item|
+    #       puts item
+    #     end
+    #   end
+    #   task.start
+    def task(name = nil, &block)
+      # Create anonymous class with DSL
+      klass = Class.new do
+        include Minigun::DSL
+
+        def initialize(task_name, &definition_block)
+          @task_name = task_name
+          @definition_block = definition_block
+        end
+
+        def self.define_pipeline_from_block(definition_block)
+          pipeline(&definition_block)
+        end
+      end
+
+      # Define the pipeline from the block
+      klass.define_pipeline_from_block(block) if block
+
+      # Return instance
+      klass.new(name, &block)
+    end
   end
 end
 

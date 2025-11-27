@@ -132,7 +132,7 @@ RSpec.describe 'Await Stages' do
             output.to(:ipc_processor) << item
           end
 
-          ipc_fork(2) do
+          in_ipc_forks(2) do
             processor :ipc_processor, await: true do |item, output|
               output << (item * 10)
             end
@@ -180,7 +180,7 @@ RSpec.describe 'Await Stages' do
             output.to(:cow_processor) << item
           end
 
-          cow_fork(2) do
+          in_cow_forks(2) do
             processor :cow_processor, await: true do |item, output|
               output << (item * 100)
             end

@@ -39,7 +39,7 @@ class CowSpawnsNestedIpcExample
 
     # COW forks receive batches (ephemeral, one per batch)
     # Each COW fork spawns nested IPC workers
-    cow_fork(2) do
+    in_cow_forks(2) do
       consumer :cow_processor do |batch|
         cow_pid = Process.pid
         puts "[CowProcessor:cow_fork] Received batch of #{batch.size} in COW fork PID #{cow_pid}"
@@ -64,7 +64,7 @@ class CowSpawnsNestedIpcExample
             end
 
             # IPC workers process items (spawned by COW fork)
-            ipc_fork(2) do
+            in_ipc_forks(2) do
               consumer :ipc_process do |item|
                 ipc_pid = Process.pid
                 puts "    [Nested:IpcFork] Processing #{item[:id]} in IPC worker PID #{ipc_pid} (parent COW fork #{@cow_pid})"

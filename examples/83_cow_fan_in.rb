@@ -52,7 +52,7 @@ class CowFanInExample
 
     # Aggregator stage - receives from all three producers
     # Uses COW fork to process merged stream
-    cow_fork(2) do
+    in_cow_forks(2) do
       consumer :aggregator do |item|
         pid = Process.pid
         puts "[Aggregator:cow_fork] Processing #{item[:id]} from #{item[:source]} in ephemeral fork PID #{pid}"

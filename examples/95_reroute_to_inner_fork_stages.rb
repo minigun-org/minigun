@@ -40,7 +40,7 @@ class RerouteToInnerIpcStagesExample
     end
 
     # IPC fork context with TWO inner stages
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       # Inner stage A - processes filtered items
       processor :process_a do |item, output|
         result = item.merge(value: item[:value] * 10, processed_by: 'A')
@@ -60,7 +60,7 @@ class RerouteToInnerIpcStagesExample
     end
 
     # COW fork consumer - separate collection point
-    cow_fork(2) do
+    in_cow_forks(2) do
       consumer :collect_a do |item|
         puts "[CollectA:cow_fork] Received: #{item[:id]} = #{item[:value]} (PID #{Process.pid})"
         File.open(@results_a_file, 'a') do |f|
@@ -111,7 +111,7 @@ end
 class RerouteIpcInnerComplexExample < RerouteToInnerIpcStagesExample
   pipeline do
     # Add an external thread stage
-    thread_pool(2) do
+    in_threads(2) do
       processor :transform do |item, output|
         result = item.merge(value: item[:value] + 100, transformed: true)
         puts "[Transform:thread] #{item[:id]}: #{item[:value]} + 100 = #{result[:value]}"

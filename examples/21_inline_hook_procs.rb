@@ -71,7 +71,7 @@ class InlineHookExample
     accumulator :batch, max_size: 5
 
     # Inline fork hooks for consumers
-    cow_fork(2) do
+    in_cow_forks(2) do
       consumer :save_data,
                before: -> { @timer[:save_start] = Time.now },
                after: -> { @timer[:save_end] = Time.now },

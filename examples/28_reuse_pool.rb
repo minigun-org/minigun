@@ -19,7 +19,7 @@ class ReuseExample
       20.times { |i| output << i }
     end
 
-    thread_pool(3) do
+    in_threads(3) do
       processor :track do |item, output|
         @mutex.synchronize { @thread_ids << Thread.current.object_id }
         output << item

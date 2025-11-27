@@ -36,7 +36,7 @@ class ThreadToIpcForkExample
     end
 
     # Processor runs in thread pool
-    thread_pool(3) do
+    in_threads(3) do
       processor :enrich do |item, output|
         puts "[Processor:thread_pool] Processing #{item[:id]} in thread #{Thread.current.object_id}"
         # Enrich data (threads have shared memory)
@@ -50,7 +50,7 @@ class ThreadToIpcForkExample
 
     # Consumer runs in IPC fork pool
     # Data is serialized via IPC pipes to isolated processes
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       consumer :save do |item|
         puts "[Consumer:ipc_fork] Saving #{item[:id]} in forked process (PID #{Process.pid})"
 

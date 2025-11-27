@@ -42,7 +42,7 @@ class AdaptivePipeline
       1000.times { |i| output << i }
     end
 
-    thread_pool(thread_count) do
+    in_threads(thread_count) do
       processor :fetch do |item, output|
         output << { id: item, data: 'fetched' }
       end
@@ -50,7 +50,7 @@ class AdaptivePipeline
 
     batch batch_size
 
-    cow_fork(process_count) do
+    in_cow_forks(process_count) do
       processor :process do |batch, _output|
         batch.map { |x| x[:data].upcase }
       end
