@@ -36,7 +36,7 @@ class RerouteMixedExecutorsExample
     end
 
     # IPC fork processor
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       processor :multiply_two do |item, output|
         result = item.merge(value: item[:value] * 2, ipc_processed: true)
         puts "[MultiplyTwo:ipc_fork] #{item[:id]}: #{item[:value]} * 2 = #{result[:value]} (PID #{Process.pid})"

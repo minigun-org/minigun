@@ -357,11 +357,11 @@ puts <<~SUMMARY
      - Access configuration objects (@config.setting)
 
   4. Patterns Supported:
-     - fiber_pool(N)  # Delegate to N fibers (future)
-     - in_threads(N) # Delegate to N threads     - ractor_pool(N) # Delegate to N ractors (future)
+     - in_fibers(N)  # Delegate to N fibers (future)
+     - in_threads(N) # Delegate to N threads     - in_ractors(N) # Delegate to N ractors (future)
      - batch(N)       # Accumulate items into batches of N items, useful for cow_fork
      - in_cow_forks(N)    # Spawn a Copy-On-Write (COW) fork process to process a batch
-     - ipc_fork(N)    # Spawn a fork an process items via Inter-Process Communication (IPC)
+     - in_ipc_forks(N)    # Spawn a fork an process items via Inter-Process Communication (IPC)
 
   5. Use Cases:
      - Web scraping with configurable parallelism

@@ -174,7 +174,7 @@ class AwaitWithIpcExample
     end
 
     # IPC workers - these are await stages inside IPC fork
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       processor :ipc_worker_a, await: true do |item, output|
         result = item.merge(worker: :a, processed_at: Time.now.to_i, pid: Process.pid)
         puts "[IpcWorkerA] Processed #{item[:id]} in PID #{Process.pid}"

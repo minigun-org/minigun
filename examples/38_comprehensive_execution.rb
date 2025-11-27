@@ -156,11 +156,11 @@ puts '=' * 60
 puts <<~SUMMARY
 
   ✓ Execution Blocks:
-    - fiber_pool(N) do ... end
+    - in_fibers(N) do ... end
     - in_threads(N) do ... end
-    - ractor_pool(N) do ... end
+    - in_ractors(N) do ... end
     - in_cow_forks(N) do ... end
-    - ipc_fork(N) do ... end
+    - in_ipc_forks(N) do ... end
 
   ✓ Per-Batch Spawning:
     - in_threads(N) do ... end

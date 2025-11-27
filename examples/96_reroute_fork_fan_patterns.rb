@@ -50,7 +50,7 @@ class RerouteForkFanOutExample
     end
 
     # Three IPC fork consumers (fan-out targets)
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       consumer :process_a do |item|
         result = item.merge(value: item[:value] * 2)
         puts "[ProcessA:ipc_fork] #{item[:id]}: #{item[:value]} * 2 = #{result[:value]} (PID #{Process.pid})"
@@ -62,7 +62,7 @@ class RerouteForkFanOutExample
       end
     end
 
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       consumer :process_b do |item|
         result = item.merge(value: item[:value] * 3)
         puts "[ProcessB:ipc_fork] #{item[:id]}: #{item[:value]} * 3 = #{result[:value]} (PID #{Process.pid})"
@@ -74,7 +74,7 @@ class RerouteForkFanOutExample
       end
     end
 
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       consumer :process_c do |item|
         result = item.merge(value: item[:value] * 4)
         puts "[ProcessC:ipc_fork] #{item[:id]}: #{item[:value]} * 4 = #{result[:value]} (PID #{Process.pid})"
@@ -156,14 +156,14 @@ class RerouteForkFanInExample
 
   pipeline do
     # Three IPC fork producers (fan-in sources)
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       producer :producer_a do |output|
         puts "[ProducerA:ipc_fork] Generating items (PID #{Process.pid})"
         3.times { |i| output << { id: "A#{i + 1}", value: i + 1, source: 'A' } }
       end
     end
 
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       producer :producer_b do |output|
         puts "[ProducerB:ipc_fork] Generating items (PID #{Process.pid})"
         3.times { |i| output << { id: "B#{i + 1}", value: i + 4, source: 'B' } }

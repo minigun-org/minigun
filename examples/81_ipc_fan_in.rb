@@ -52,7 +52,7 @@ class IpcFanInExample
 
     # Aggregator stage - receives from all three producers
     # Uses IPC fork to process merged stream
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       consumer :aggregator do |item|
         pid = Process.pid
         puts "[Aggregator:ipc_fork] Processing #{item[:id]} from #{item[:source]} in PID #{pid}"

@@ -7,12 +7,12 @@
 # the old strategy-based system with clear, composable execution contexts.
 #
 # Key Features:
-# - fiber_pool(N)  # Delegate to N fibers (future)
+# - in_fibers(N)  # Delegate to N fibers (future)
 # - in_threads(N) # Delegate to N threads
-# - ractor_pool(N) # Delegate to N ractors (future)
+# - in_ractors(N) # Delegate to N ractors (future)
 # - batch(N)       # Accumulate items into batches of N items, useful for cow_fork
 # - in_cow_forks(N)    # Spawn a Copy-On-Write (COW) fork process to process a batch
-# - ipc_fork(N)    # Spawn a fork an process items via Inter-Process Communication (IPC)
+# - in_ipc_forks(N)    # Spawn a fork an process items via Inter-Process Communication (IPC)
 # - Composable nesting with proper context inheritance
 
 require_relative '../lib/minigun'
@@ -328,7 +328,7 @@ puts <<~SUMMARY
      - Good for CPU-bound work with isolation
 
   3. Ractor Pools:
-     ractor_pool(N) do ... end
+     in_ractors(N) do ... end
      - Reuses N ractors for all stages in block
      - True parallelism (Ruby 3.0+)
 

@@ -56,7 +56,7 @@ class ComplexMultiHopRoutingExample
     end
 
     # Stage 3: Heavy compute in IPC fork (persistent workers)
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       processor :heavy_compute do |item, output|
         pid = Process.pid
         puts "[3. HeavyCompute:ipc_fork] Computing #{item[:id]} in IPC worker PID #{pid}"

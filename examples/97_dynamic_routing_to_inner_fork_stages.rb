@@ -54,7 +54,7 @@ class DynamicRoutingToInnerIpcExample
     # These stages are INSIDE the ipc_fork block and can be targeted with output.to()
     # IMPORTANT: await: true is required since these stages have no upstream DAG connections
     # within the fork block, but receive items via dynamic routing from outside
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       # Inner stage A - processes subset of items
       processor :inner_process_a, await: true do |item, output|
         result = item.merge(value: item[:value] * 10, processed_by: 'A')
@@ -151,7 +151,7 @@ class DynamicRoutingFromInnerToInnerExample
     end
 
     # First IPC fork with two inner stages
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       # Inner router - routes from INSIDE ipc_fork to INNER stages of COW fork
       processor :inner_router do |item, output|
         if item[:id].even?

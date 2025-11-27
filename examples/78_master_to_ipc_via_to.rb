@@ -49,7 +49,7 @@ class MasterToIpcViaToExample
     end
 
     # IPC fork stage A - receives even IDs
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       consumer :process_a do |item|
         pid = Process.pid
         puts "[ProcessA:ipc_fork] Processing #{item[:id]} in PID #{pid}"
@@ -64,7 +64,7 @@ class MasterToIpcViaToExample
     end
 
     # IPC fork stage B - receives odd IDs
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       consumer :process_b do |item|
         pid = Process.pid
         puts "[ProcessB:ipc_fork] Processing #{item[:id]} in PID #{pid}"

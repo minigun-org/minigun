@@ -40,7 +40,7 @@ class RerouteToInnerIpcStagesExample
     end
 
     # IPC fork context with TWO inner stages
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       # Inner stage A - processes filtered items
       processor :process_a do |item, output|
         result = item.merge(value: item[:value] * 10, processed_by: 'A')

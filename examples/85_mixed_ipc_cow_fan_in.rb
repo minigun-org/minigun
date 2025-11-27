@@ -25,7 +25,7 @@ class MixedIpcCowFanInExample
 
   pipeline do
     # Producer A in IPC fork (persistent worker)
-    ipc_fork(1) do
+    in_ipc_forks(1) do
       producer :producer_ipc_a do |output|
         pid = Process.pid
         puts "[ProducerIpcA:ipc_fork] Generating items in persistent worker PID #{pid}"
@@ -47,7 +47,7 @@ class MixedIpcCowFanInExample
     end
 
     # Producer C in IPC fork (persistent worker)
-    ipc_fork(1) do
+    in_ipc_forks(1) do
       producer :producer_ipc_c do |output|
         pid = Process.pid
         puts "[ProducerIpcC:ipc_fork] Generating items in persistent worker PID #{pid}"

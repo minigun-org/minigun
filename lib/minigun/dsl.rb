@@ -197,7 +197,7 @@ module Minigun
       end
 
       # Execution block methods
-      def fiber_pool(pool_size, &)
+      def in_fibers(pool_size, &)
         context = { type: :fiber_pool, pool_size: pool_size }
         _with_execution_context(context, &)
       end
@@ -207,7 +207,7 @@ module Minigun
         _with_execution_context(context, &)
       end
 
-      def ractor_pool(pool_size, &)
+      def in_ractors(pool_size, &)
         context = { type: :ractor_pool, pool_size: pool_size }
         _with_execution_context(context, &)
       end
@@ -217,7 +217,7 @@ module Minigun
         _with_execution_context(context, &)
       end
 
-      def ipc_fork(pool_size, &)
+      def in_ipc_forks(pool_size, &)
         context = { type: :ipc_fork, pool_size: pool_size }
         _with_execution_context(context, &)
       end

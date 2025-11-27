@@ -61,7 +61,7 @@ class MixedIpcCowFanOutExample
     end
 
     # IPC fork consumer A (persistent workers)
-    ipc_fork(1) do
+    in_ipc_forks(1) do
       consumer :process_ipc_a do |item|
         pid = Process.pid
         puts "[ProcessIpcA:ipc_fork] Processing #{item[:id]} in persistent worker PID #{pid}"
@@ -92,7 +92,7 @@ class MixedIpcCowFanOutExample
     end
 
     # IPC fork consumer C (persistent workers)
-    ipc_fork(1) do
+    in_ipc_forks(1) do
       consumer :process_ipc_c do |item|
         pid = Process.pid
         puts "[ProcessIpcC:ipc_fork] Processing #{item[:id]} in persistent worker PID #{pid}"

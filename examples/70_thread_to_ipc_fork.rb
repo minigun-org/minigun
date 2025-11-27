@@ -50,7 +50,7 @@ class ThreadToIpcForkExample
 
     # Consumer runs in IPC fork pool
     # Data is serialized via IPC pipes to isolated processes
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       consumer :save do |item|
         puts "[Consumer:ipc_fork] Saving #{item[:id]} in forked process (PID #{Process.pid})"
 

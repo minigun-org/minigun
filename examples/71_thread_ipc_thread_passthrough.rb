@@ -43,7 +43,7 @@ class ThreadIpcThreadPassthroughExample
 
     # Heavy processor runs in IPC fork pool (middle stage - NOT terminal)
     # Results MUST be sent back to parent via IPC
-    ipc_fork(2) do
+    in_ipc_forks(2) do
       processor :heavy_compute do |item, output|
         pid = Process.pid
         puts "[Processor:ipc_fork] Heavy computation for #{item[:id]} in PID #{pid}"
