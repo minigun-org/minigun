@@ -1061,6 +1061,30 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
+  describe '49_nested_pipeline_variations.rb' do
+    it 'supports named and unnamed pipelines at various nesting levels' do
+      require_relative '../../examples/49_nested_pipeline_variations'
+
+      example = NestedPipelineVariations.new
+      example.run
+
+      # Should have results from all pipelines
+      expect(example.results).not_to be_empty
+
+      # Check for results from named pipeline_a
+      has_pipeline_a = example.results.any? { |r| r.to_s.include?('from_pipeline_a') }
+      expect(has_pipeline_a).to be(true), 'Expected results from pipeline_a'
+
+      # Check for results from default (unnamed) pipeline
+      has_default = example.results.any? { |r| r.to_s.include?('from_default') }
+      expect(has_default).to be(true), 'Expected results from default pipeline'
+
+      # Check for results from named pipeline_b
+      has_pipeline_b = example.results.any? { |r| r.to_s.include?('from_pipeline_b') }
+      expect(has_pipeline_b).to be(true), 'Expected results from pipeline_b'
+    end
+  end
+
   describe '46_deduplicator_stage.rb' do
     it 'demonstrates simple value deduplication' do
       load File.expand_path('../../examples/46_deduplicator_stage.rb', __dir__)
@@ -2200,6 +2224,41 @@ RSpec.describe 'Examples Integration' do
       puts
 
       expect(described_files.size).to be > 40
+    end
+  end
+
+  describe '50_pipeline_inheritance.rb' do
+    it 'demonstrates pipeline inheritance and merging' do
+      require_relative '../../examples/50_pipeline_inheritance'
+
+      # Example 1: Unnamed pipeline inheritance
+      base = BaseTask.new
+      base.run
+      expect(base.results).to eq([2, 4, 6])
+
+      extended = ExtendedTask.new
+      extended.run
+      expect(extended.results).to eq([6, 12, 18])
+
+      skip = SkipStageTask.new
+      skip.run
+      expect(skip.results).to eq([1, 2, 3])
+
+      # Example 2: Named pipeline extension
+      named_base = NamedPipelineBase.new
+      named_base.run
+      expect(named_base.results_a).to eq([10, 20])
+      expect(named_base.results_b).to eq([100, 200])
+
+      extended_named = ExtendedNamedPipeline.new
+      extended_named.run
+      expect(extended_named.results_a).to eq([15, 25])
+      expect(extended_named.results_b).to eq([100, 200])
+
+      # Example 3: Multiple unnamed pipelines
+      multi = MultipleUnnamedChild.new
+      multi.run
+      expect(multi.results.sort).to eq(['A', 'B', 'extra_X', 'extra_Y'].sort)
     end
   end
 end
