@@ -1,46 +1,79 @@
-# Project: Localize - Translation Management System
+# Project: Minigun - High-Performance Data Pipeline Framework
 
 ## Tech Stack
-- Backend:
-  - Rails 8.x
-  - MongoDB with Mongoid ODM
-  - Slim templates (Rails) - NEVER use ERB
-- Frontend:
-  - React + TypeScript (Frontend engine)
-  - Tailwind CSS (React)
-- Client libaries in various languages
+- Language: Ruby 3.2+
+- Testing: RSpec
+- Linting: RuboCop
 
 ## Architecture
-- Core Rails/React app in `engines/` dir:
-    - **Core**: Models and business logic (`Localize::Project`, `Localize::User`)
-    - **Backend**: Admin/web API controllers (`Localize::Backend::ProjectsController`)
-    - **Frontend**: React SPA in `engines/frontend/` with Tailwind CSS
-    - **API**: Public REST API (`Localize::Api::ProjectsController`)
-- Client libraries in `clients/` dir.
-    - `clients/react-i18next-editor` Plugin for React+I18next.
+
+Minigun is a Ruby framework for building concurrent data processing pipelines.
+
+### Core Components
+- **Task**: Orchestrates pipelines, holds configuration
+- **Pipeline**: Collection of stages that process data
+- **Stage**: Single processing unit (producer, processor, consumer, accumulator)
+- **DAG**: Directed Acyclic Graph for stage routing
+- **Worker**: Executes stages in threads/processes
+- **Executor**: Manages execution strategies (thread pool, fork pool, etc.)
+
+### Directory Structure
+```
+lib/minigun/
+├── dsl.rb           # DSL for defining pipelines
+├── task.rb          # Task orchestration
+├── pipeline.rb      # Pipeline management
+├── stage.rb         # Stage types (Producer, Processor, Consumer, etc.)
+├── dag.rb           # Directed Acyclic Graph
+├── worker.rb        # Worker execution
+├── runner.rb        # Pipeline runner with signal handling
+├── execution/       # Execution strategies
+├── hud/             # Terminal UI monitoring
+└── queue_wrappers.rb # Thread-safe queue implementations
+```
 
 ## Code Conventions
 
-### Models (Mongoid)
-- Location: `engines/core/app/models/localize/`
-- Include `Mongoid::Document` and `Mongoid::Timestamps`
-- Use typed fields: `field :name, type: String`
-- Add indexes: `index({ field: 1 })`
-- Namespaced references: `belongs_to :team, class_name: 'Localize::Team'`
+### DSL Usage
+```ruby
+class MyPipeline
+  include Minigun::DSL
 
-### Controllers
-- Use `fetch_` prefix for before_actions (NOT `set_`)
-  ```ruby
-  before_action :fetch_project
+  pipeline do
+    producer :source do |output|
+      output << item
+    end
 
-  def fetch_project
-    @project = Localize::Project.find(params[:id])
+    consumer :sink do |item|
+      # final processing
+    end
   end
-  ```
-- Check access: `@project.project_users.where(user: current_user).exists?`
-- API responses: `render json: { success: true, data: {...} }`
-- Always use namespaced models: `Localize::Project.find(...)`
+end
+```
 
-### Templates
-- Rails: **ALWAYS use Slim** (`.html.slim`) - NEVER ERB
-- React: Use Tailwind CSS
+### Testing
+- Run tests: `bundle exec rspec`
+- Run specific: `bundle exec rspec spec/unit/dsl_spec.rb`
+- Examples: `ruby examples/00_quick_start.rb`
+
+### Execution Contexts
+```ruby
+in_threads(5) do
+  processor :parallel do |item, output|
+    # runs in thread pool
+  end
+end
+
+in_ipc_forks(4) do
+  consumer :forked do |item|
+    # runs in forked processes with IPC
+  end
+end
+```
+
+## Key Files
+- `lib/minigun/dsl.rb` - Main DSL implementation
+- `lib/minigun/task.rb` - Task orchestration
+- `lib/minigun/pipeline.rb` - Pipeline execution
+- `spec/integration/` - Integration tests
+- `examples/` - Working examples

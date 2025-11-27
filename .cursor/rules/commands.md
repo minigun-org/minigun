@@ -4,7 +4,6 @@
 - "Test" means:
   - Run tests and fix ALL issues and all warnings in the output (do not ignore/suppress them).
   - Ruby -> `rspec`
-  - Javascript/Typescript -> `npm test`
 - "Assess" means:
   - Review the recent changes in the thread holistically.
   - Make a plan to refactor/cleanup to:
@@ -27,12 +26,9 @@
 - "Lint" means:
   - Fix any warnings in the output of the tests ("Test" command) and (if applicable to project) the output of the build ("Build" command)
   - Ruby -> `rubocop -A` (check fixes) then `rubocop`. Anything that isn't easily fixed, leave as-is then run `rubocop --auto-gen-config --exclude-limit 1000`
-  - Javascript/Typescript -> `npm run lint -- --fix` (check fixes) then `npm run lint` and `npm run type-check`
   - Fix all issues and all warnings in the output (do not suppress them). Focus on getting all linter and warnings fixed.
   - (After Lint -> re-run tests)
-- "Deps" means:
-  - Ruby -> `bundle update`
-  - Javascript/Typescript -> Update NPM package.
+- "Deps" means Ruby -> `bundle update`
 - "Coverage" means run tests with coverage enabled and increase code coverage.
 - "Build" means to run the project's relevant build command (i.e. to compile to a dist or build folder), **ONLY** if applicable to project.
 - "Summarize" (alias "Compact") means summarize the AI's current context window. Write the summary as per the "Lore" command.

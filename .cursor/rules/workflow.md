@@ -13,5 +13,10 @@
 - **100% pass rate required** - 95% is not acceptable
 - Avoid `sleep`/`timeout` in tests. Instead attach a listener/callback/hook (if readily available) or a check-loop that X component is ready/loaded, with some reasonably long timeout.
 
+## Examples (Tests)
+- Whenever you create a file in /examples dir:
+  - Run `git update-index --chmod=+x <file_path>` to ensure it have execute permissions.
+  - Add the example to `spec/integration/examples_spec.rb`
+
 ## Documentation
 - Implementation summaries: Save to `/lore` folder (see "Lore" command above)
