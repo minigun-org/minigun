@@ -1,7 +1,8 @@
-# Demand-Based Backpressure Implementation Plan
+# Demand-Based Backpressure Implementation
 
 **Date:** 2025-11-28
 **Feature:** GenStage-style demand handling for Minigun
+**Status:** ✅ IMPLEMENTED
 
 ## Executive Summary
 
@@ -651,3 +652,73 @@ end
 - [Elixir Forum: min_demand/max_demand](https://elixirforum.com/t/could-you-explain-min-demand-and-max-demand-in-genstage/25625)
 - [Concurrent-Ruby Channels](https://ruby-concurrency.github.io/concurrent-ruby/1.1.5/Concurrent/Promises/Channel.html)
 - [Backpressure Explained](https://medium.com/@jayphelps/backpressure-explained-the-flow-of-data-through-software-2350b3e77ce7)
+
+---
+
+## Implementation Summary
+
+### Files Created
+
+| File | Description |
+|------|-------------|
+| `lib/minigun/demand.rb` | Main demand module with documentation |
+| `lib/minigun/demand/tracker.rb` | Core demand counting with watermark logic |
+| `lib/minigun/demand/channel.rb` | Producer-consumer demand channel |
+| `lib/minigun/demand/registry.rb` | Manages all demand channels for a pipeline |
+| `lib/minigun/demand/aware_queues.rb` | AwareInputQueue and AwareOutputQueue wrappers |
+| `spec/unit/demand/tracker_spec.rb` | 27 unit tests for Tracker |
+| `spec/unit/demand/channel_spec.rb` | 17 unit tests for Channel |
+| `spec/unit/demand/registry_spec.rb` | 14 unit tests for Registry |
+| `spec/integration/demand_backpressure_spec.rb` | 8 integration tests |
+
+### Files Modified
+
+| File | Changes |
+|------|---------|
+| `lib/minigun.rb` | Added `require_relative 'minigun/demand'` |
+| `lib/minigun/configuration.rb` | Added `demand_enabled`, `default_min_demand`, `default_max_demand`, `demand_timeout` |
+| `lib/minigun/stage.rb` | Added `demand_mode`, `min_demand`, `max_demand`, `demand_timeout` methods; Updated `create_input_queue` and `create_output_queue` to use demand-aware wrappers |
+| `lib/minigun/pipeline.rb` | Added `demand_registry` attr_reader; Added `demand_enabled?` and `build_demand_channels` methods; Closes demand channels on completion |
+| `lib/minigun/stats.rb` | Added `demand_wait_count`, `demand_wait_duration`, `demand_requests` metrics; Added `record_demand_wait`, `increment_demand_requests`, `demand_data?` methods |
+
+### Test Results
+
+- **66 tests** total for demand functionality
+- **58 unit tests** (Tracker: 27, Channel: 17, Registry: 14)
+- **8 integration tests**
+- All tests passing
+
+### Usage
+
+```ruby
+# Enable demand globally
+Minigun.configure do |c|
+  c.demand_enabled = true
+  c.default_min_demand = 500  # Request more when below this
+  c.default_max_demand = 1000 # Max items to request at once
+end
+
+# Or enable per-pipeline
+pipeline demand: true do
+  producer :source do |output|
+    1000.times { |i| output << i }
+  end
+
+  # Custom demand settings per-stage
+  consumer :processor, min_demand: 100, max_demand: 500 do |item, output|
+    output << process(item)
+  end
+
+  consumer :sink do |item|
+    save(item)
+  end
+end
+```
+
+### Future Work
+
+1. **Manual demand mode** - Allow stages to explicitly control demand requests
+2. **Dispatcher strategies** - DemandDispatcher, BroadcastDispatcher, PartitionDispatcher
+3. **IPC fork compatibility** - Propagate demand signals across process boundaries
+4. **HUD integration** - Display demand metrics in terminal UI
+5. **Accumulate/Forward modes** - Buffer demand until explicit forward call
