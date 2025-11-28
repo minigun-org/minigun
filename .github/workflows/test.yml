@@ -46,8 +46,10 @@ jobs:
             experimental: true
           - ruby: jruby-10.0
             os: ubuntu-latest
+            experimental: true
           - ruby: truffleruby
             os: ubuntu-latest
+            experimental: true
 
     steps:
       - name: repo checkout
