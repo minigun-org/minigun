@@ -95,11 +95,11 @@ module Minigun
       # @param demand_timeout [Float, nil] Timeout for demand wait (nil = infinite)
       def initialize(stage, downstream_queues, runtime_edges, stage_stats: nil,
                      demand_channels: [], demand_mode: :auto, demand_timeout: nil)
+        @stage = stage
         @inner = Minigun::OutputQueue.new(stage, downstream_queues, runtime_edges, stage_stats: stage_stats)
         @demand_channels = demand_channels
         @demand_mode = demand_mode
         @demand_timeout = demand_timeout
-        @stage_stats = stage_stats
         @to_cache = {}
       end
 
@@ -124,8 +124,8 @@ module Minigun
 
         # Find demand channel to this target (if any)
         # Need to resolve target to Stage for channel lookup
-        target_stage = @inner.instance_variable_get(:@stage).pipeline.task.stage_registry.find(
-          target, from_pipeline: @inner.instance_variable_get(:@stage).pipeline
+        target_stage = @stage.pipeline.task.stage_registry.find(
+          target, from_pipeline: @stage.pipeline
         )
         target_channels = @demand_channels.select { |ch| ch.consumer_stage == target_stage }
 
