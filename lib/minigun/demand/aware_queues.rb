@@ -12,9 +12,7 @@ module Minigun
         return if @demand_mode != :auto || @demand_channels.empty?
 
         loop do
-          @demand_channels.each do |channel|
-            return if channel.wait_for_demand(1, timeout: 0.01)
-          end
+          return if @demand_channels.any? { |channel| channel.wait_for_demand(1, timeout: 0.01) }
 
           sleep(0.001)
           return if @demand_channels.all?(&:closed?)
@@ -154,7 +152,7 @@ module Minigun
       # @param count [Integer] Number of tokens
       # @param timeout [Float, nil] Timeout override
       # @return [Boolean] true if demand acquired
-      def wait_for_demand(count = 1, timeout: nil)
+      def wait_for_demand(count = 1, timeout: nil) # rubocop:disable Naming/PredicateMethod
         return true if @demand_channels.empty?
 
         timeout ||= @demand_timeout
