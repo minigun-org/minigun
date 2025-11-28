@@ -606,6 +606,8 @@ module Minigun
       end
     end
 
+    alias_method :join, :wait
+
     # Start the task in a background thread
     # Alias for run(background: true)
     def start

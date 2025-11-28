@@ -8,6 +8,36 @@ RSpec.describe 'Functional DSL' do
     allow(Minigun.logger).to receive(:debug)
   end
 
+  describe 'Minigun.pipeline' do
+    it 'is an alias for Minigun.task' do
+      pipeline = Minigun.pipeline('my_pipeline') do
+        producer :source do |output|
+          output << 1
+        end
+        consumer :sink do |_item|
+          # no-op
+        end
+      end
+
+      expect(pipeline).to respond_to(:run)
+      expect(pipeline).to respond_to(:start)
+      expect(pipeline.instance_variable_get(:@task_name)).to eq('my_pipeline')
+    end
+
+    it 'works without a name' do
+      pipeline = Minigun.pipeline do
+        producer :source do |output|
+          output << 1
+        end
+        consumer :sink do |_item|
+          # no-op
+        end
+      end
+
+      expect(pipeline.instance_variable_get(:@task_name)).to be_nil
+    end
+  end
+
   describe 'Minigun.task' do
     it 'creates a task with a name' do
       task = Minigun.task('my_task') do
