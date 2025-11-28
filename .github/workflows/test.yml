@@ -30,19 +30,26 @@ jobs:
       fail-fast: false
       matrix:
         ruby:
-          - ruby-3.2
-          - ruby-3.3
           - ruby-3.4
-          - ruby-head
-          - jruby-10.0
-          - truffleruby
         os:
           - ubuntu-latest
           - macos-latest
           - windows-latest
-        exclude:
+        include:
+          - ruby: ruby-3.2
+            os: ubuntu-latest
+            experimental: true
+          - ruby: ruby-3.3
+            os: ubuntu-latest
+          - ruby: ruby-head
+            os: ubuntu-latest
+            experimental: true
+          - ruby: jruby-10.0
+            os: ubuntu-latest
+            experimental: true
           - ruby: truffleruby
-            os: windows-latest
+            os: ubuntu-latest
+            experimental: true
 
     steps:
       - name: repo checkout

@@ -377,7 +377,7 @@ module Minigun
   # Debatch stage - unpacks incoming batches into individual items
   # Receives items that respond to #each and emits each element individually
   class DebatchStage < ConsumerStage
-    def execute(context, input_queue, output_queue, stage_stats)
+    def execute(_context, input_queue, output_queue, stage_stats)
       loop do
         item = input_queue.pop
         break if item.is_a?(EndOfStage)
@@ -412,7 +412,7 @@ module Minigun
       @mutex = Mutex.new
     end
 
-    def execute(context, input_queue, output_queue, stage_stats)
+    def execute(_context, input_queue, output_queue, stage_stats)
       loop do
         item = input_queue.pop
         break if item.is_a?(EndOfStage)
@@ -450,7 +450,7 @@ module Minigun
       end
     end
 
-    def flush(context, output_queue)
+    def flush(_context, output_queue)
       buffer = nil
 
       @mutex.synchronize do

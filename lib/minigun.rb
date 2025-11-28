@@ -22,13 +22,6 @@ module Minigun
   class << self
     attr_accessor :logger
 
-    # Check if platform supports forking
-    def fork?
-      return @fork if defined?(@fork)
-
-      @fork = Process.respond_to?(:fork) && RUBY_ENGINE != 'truffleruby'
-    end
-
     # Create a task using the functional DSL
     #
     # @param name [String] Optional task name
@@ -70,6 +63,7 @@ module Minigun
 end
 
 require_relative 'minigun/version'
+require_relative 'minigun/platform'
 require_relative 'minigun/configuration'
 require_relative 'minigun/signal'
 require_relative 'minigun/queue_wrappers'

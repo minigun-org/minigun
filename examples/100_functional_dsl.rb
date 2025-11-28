@@ -26,7 +26,7 @@ if __FILE__ == $PROGRAM_NAME
     end
 
     consume :collector do |item|
-      mutex.synchronize { results << item * 2 }
+      mutex.synchronize { results << (item * 2) }
     end
   end
 
@@ -86,8 +86,8 @@ if __FILE__ == $PROGRAM_NAME
   puts '--- Example 4: Newsletter Sender Pattern ---'
 
   # Simulated user data (5 batches of 1000 users each)
-  user_batches = 5.times.map do |batch_num|
-    (1..1000).map { |i| { id: batch_num * 1000 + i, email: "user#{batch_num * 1000 + i}@example.com" } }
+  user_batches = Array.new(5) do |batch_num|
+    (1..1000).map { |i| { id: (batch_num * 1000) + i, email: "user#{(batch_num * 1000) + i}@example.com" } }
   end
 
   emails_sent = Concurrent::AtomicFixnum.new(0)

@@ -31,9 +31,10 @@ module Minigun
       # Pipeline block - stores block for lazy instance-level evaluation
       # All pipeline definitions (both unnamed and named) are stored and evaluated at instance time
       # This allows blocks to access instance variables correctly
+      # The :source field tracks whether this block was defined in this class (:self) or inherited (:inherited)
       def pipeline(name = nil, options = {}, &block)
         @_pipeline_definition_blocks ||= []
-        @_pipeline_definition_blocks << { name: name, options: options, block: block }
+        @_pipeline_definition_blocks << { name: name, options: options, block: block, source: :self }
       end
 
       def _pipeline_definition_blocks
@@ -82,18 +83,18 @@ module Minigun
       def base.inherited(subclass)
         super if defined?(super)
         parent_task = _minigun_task
-        # Create a new task and copy the parent's configuration and pipelines
+        # Create a new task with parent's configuration (don't copy pipeline - it's rebuilt from blocks)
         new_task = Minigun::Task.new(
-          config: parent_task.config.dup,
-          root_pipeline: parent_task.root_pipeline.dup
+          config: parent_task.config.dup
         )
         subclass._minigun_task = new_task
 
-        # Inherit pipeline definition blocks (deep dup to avoid shared hashes)
-        subclass.instance_variable_set(
-          :@_pipeline_definition_blocks,
-          (@_pipeline_definition_blocks || []).map(&:dup)
-        )
+        # Inherit pipeline definition blocks, marking them as :inherited
+        # Deep dup to avoid shared hashes, and update source to :inherited
+        parent_blocks = (@_pipeline_definition_blocks || []).map do |entry|
+          entry.dup.merge(source: :inherited)
+        end
+        subclass.instance_variable_set(:@_pipeline_definition_blocks, parent_blocks)
       end
     end
 
@@ -102,48 +103,110 @@ module Minigun
 
     # Evaluate pipeline blocks using PipelineDSL (called before run)
     # Creates an instance-level deep copy of the class task for execution isolation
+    #
+    # Pipeline Inheritance Rules:
+    # 1. Unnamed pipelines: always evaluate on root_pipeline (stages accessible by named pipelines)
+    # 2. Named pipelines: always extend when same name is declared again
+    # 3. For inheritance: child's blocks extend parent's (all combined appropriately)
+    #
+    # Key insight: unnamed pipelines provide "shared" stages that named pipelines can route to.
+    # Multiple unnamed pipelines from same class all go on root (their stages coexist).
     def _evaluate_pipeline_blocks!
       return if @_pipeline_blocks_evaluated
 
       @_pipeline_blocks_evaluated = true
 
       # Create a fresh task for this instance with config from class task
-      # Don't duplicate the pipeline since we'll re-evaluate blocks to create stages
       class_task = self.class._minigun_task
       @_minigun_task = Minigun::Task.new(
         config: class_task.config.dup
       )
 
-      # Evaluate stored pipeline blocks on instance task with instance context
-      self.class._pipeline_definition_blocks.each do |entry|
-        name = entry[:name]
-        opts = entry[:options]
+      blocks = self.class._pipeline_definition_blocks
+      return if blocks.empty?
 
-        if name
-          # Named pipeline - define on instance task, then evaluate block with instance context
-          @_minigun_task.define_pipeline(name, opts) do |pipeline|
-            pipeline_dsl = PipelineDSL.new(pipeline, self)
-            _pipeline_dsl_stack.push(pipeline_dsl)
-            begin
-              # Evaluate in instance context so @config, @results etc. are accessible
-              instance_eval(&entry[:block])
-            ensure
-              _pipeline_dsl_stack.pop
-            end
-          end
+      # Separate unnamed and named blocks
+      unnamed_blocks = blocks.select { |b| b[:name].nil? }
+      named_blocks = blocks.reject { |b| b[:name].nil? }
+
+      # Track which named pipelines have been created (for extension)
+      created_pipelines = {}
+
+      # Process unnamed pipelines first - they go on root_pipeline
+      # This allows named pipelines to route to/from their stages
+      unnamed_blocks.each do |entry|
+        _evaluate_block_on_root(entry)
+      end
+
+      # Process named pipelines (allows extension when same name appears multiple times)
+      named_blocks.each do |entry|
+        name = entry[:name]
+        if created_pipelines[name]
+          _extend_named_pipeline(name, entry)
         else
-          # Unnamed pipeline - evaluate with instance context on root pipeline
-          pipeline_dsl = PipelineDSL.new(@_minigun_task.root_pipeline, self)
-          _pipeline_dsl_stack.push(pipeline_dsl)
-          begin
-            # Evaluate in instance context so @config, @results etc. are accessible
-            instance_eval(&entry[:block])
-          ensure
-            _pipeline_dsl_stack.pop
-          end
+          created_pipelines[name] = _create_named_pipeline(name, entry)
         end
       end
     end
+
+    private
+
+    # Evaluate a pipeline block directly on root_pipeline (for single unnamed pipeline)
+    def _evaluate_block_on_root(entry)
+      pipeline_dsl = PipelineDSL.new(@_minigun_task.root_pipeline, self)
+      _pipeline_dsl_stack.push(pipeline_dsl)
+      begin
+        instance_eval(&entry[:block])
+      ensure
+        _pipeline_dsl_stack.pop
+      end
+    end
+
+    # Create a new named pipeline as a PipelineStage
+    def _create_named_pipeline(name, entry)
+      @_minigun_task.define_pipeline(name, entry[:options]) do |pipeline|
+        pipeline_dsl = PipelineDSL.new(pipeline, self)
+        _pipeline_dsl_stack.push(pipeline_dsl)
+        begin
+          instance_eval(&entry[:block])
+        ensure
+          _pipeline_dsl_stack.pop
+        end
+      end
+    end
+
+    # Extend an existing named pipeline by adding stages to it
+    def _extend_named_pipeline(name, entry)
+      pipeline_stage = @_minigun_task.root_pipeline.find_stage(name)
+      raise Minigun::Error, "Pipeline #{name} not found for extension" unless pipeline_stage
+
+      pipeline = pipeline_stage.nested_pipeline
+      pipeline_dsl = PipelineDSL.new(pipeline, self)
+      _pipeline_dsl_stack.push(pipeline_dsl)
+      begin
+        instance_eval(&entry[:block])
+      ensure
+        _pipeline_dsl_stack.pop
+      end
+    end
+
+    # Create an isolated pipeline for an unnamed block
+    def _create_isolated_pipeline(entry)
+      # Generate unique name for unnamed pipeline
+      isolated_name = :"_pipeline_#{SecureRandom.uuid.tr('-', '')}"
+
+      @_minigun_task.define_pipeline(isolated_name, entry[:options]) do |pipeline|
+        pipeline_dsl = PipelineDSL.new(pipeline, self)
+        _pipeline_dsl_stack.push(pipeline_dsl)
+        begin
+          instance_eval(&entry[:block])
+        ensure
+          _pipeline_dsl_stack.pop
+        end
+      end
+    end
+
+    public
 
     # Pipeline DSL delegation stack - allows nested pipelines to delegate correctly
     def _pipeline_dsl_stack

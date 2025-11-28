@@ -201,7 +201,7 @@ module Minigun
     def initialize(pipeline, dag)
       @pipeline = pipeline # Direct pipeline reference
       @dag = dag
-      @stage_stats = {}
+      @stage_stats = Concurrent::Map.new
       @start_time = nil
       @end_time = nil
     end
@@ -211,9 +211,9 @@ module Minigun
       @pipeline.name
     end
 
-    # Get or create stats for a stage
+    # Get or create stats for a stage (thread-safe)
     def for_stage(stage, is_terminal: false)
-      @stage_stats[stage] ||= Stats.new(stage, is_terminal: is_terminal)
+      @stage_stats.compute_if_absent(stage) { Stats.new(stage, is_terminal: is_terminal) }
     end
 
     # Mark pipeline as started

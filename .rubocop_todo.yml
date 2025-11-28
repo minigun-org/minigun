@@ -106,11 +106,13 @@ RSpec/DescribeClass:
     - 'spec/integration/isolated_pipelines_spec.rb'
     - 'spec/integration/mixed_pipeline_stage_routing_spec.rb'
     - 'spec/integration/multiple_producers_spec.rb'
+    - 'spec/integration/pipeline_inheritance_spec.rb'
     - 'spec/integration/test_16_debug.rb'
     - 'spec/integration/test_mixed_spec.rb'
     - 'spec/minigun/stage_spec.rb'
     - 'spec/unit/await_stages_spec.rb'
     - 'spec/unit/execution/fork_executors_jepsen_spec.rb'
+    - 'spec/unit/functional_dsl_spec.rb'
     - 'spec/unit/inheritance_spec.rb'
     - 'spec/unit/output_to_stage_spec.rb'
     - 'spec/unit/stage_hooks_advanced_spec.rb'
@@ -129,10 +131,11 @@ RSpec/ExpectActual:
     - '**/spec/routing/**/*'
     - 'spec/integration/examples_spec.rb'
 
-# Offense count: 2
+# Offense count: 4
 RSpec/ExpectOutput:
   Exclude:
     - 'spec/integration/examples_spec.rb'
+    - 'spec/unit/functional_dsl_spec.rb'
 
 # Offense count: 2
 # Configuration parameters: Max, AllowedIdentifiers, AllowedPatterns.

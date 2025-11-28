@@ -240,7 +240,7 @@ RSpec.describe 'Examples Integration' do
       example.run
 
       # All 10 items should be processed by both consumers (via explicit fan-out routing)
-      expect(example.fork_results.sort).to eq((1..10).to_a) if Minigun.fork?
+      expect(example.fork_results.sort).to eq((1..10).to_a) if Minigun::Platform.fork?
       expect(example.thread_results.sort).to eq((1..10).to_a)
     end
   end
@@ -408,7 +408,7 @@ RSpec.describe 'Examples Integration' do
       expect(example.results.size).to eq(10)
       expect(example.connection_events).to include(match(/Connected to database/))
 
-      if Minigun.fork?
+      if Minigun::Platform.fork?
         # On platforms with fork support, verify fork hooks fired
         expect(example.connection_events).to include(match(/Disconnected from database before fork/))
         expect(example.connection_events).to include(match(/Reconnected to database in child/))
@@ -431,7 +431,7 @@ RSpec.describe 'Examples Integration' do
       expect(example.resource_events).to include('Initialized API client')
       expect(example.resource_events).to include('Shutdown API client')
 
-      if Minigun.fork?
+      if Minigun::Platform.fork?
         # On platforms with fork support, verify fork-related resource management
         expect(example.resource_events).to include('Closing connections before fork')
         expect(example.resource_events).to include('Reopening connections in child process')
@@ -462,7 +462,7 @@ RSpec.describe 'Examples Integration' do
       expect(example.stats).to have_key(:consumer_count)
       expect(example.stats).to have_key(:transformer_count)
 
-      if Minigun.fork?
+      if Minigun::Platform.fork?
         # On platforms with fork support, verify fork statistics
         expect(example.stats[:forks_created]).to be > 0
         expect(example.stats[:child_processes]).not_to be_empty
@@ -507,7 +507,7 @@ RSpec.describe 'Examples Integration' do
       expect(example.events).to include(:validate_start, :validate_end)
       expect(example.events).to include(:transform_start, :transform_end)
 
-      if Minigun.fork?
+      if Minigun::Platform.fork?
         # On platforms with fork support, verify fork hooks fired
         expect(example.events).to include(:before_fork, :after_fork)
       end
@@ -1061,6 +1061,30 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
+  describe '49_nested_pipeline_variations.rb' do
+    it 'supports named and unnamed pipelines at various nesting levels' do
+      require_relative '../../examples/49_nested_pipeline_variations'
+
+      example = NestedPipelineVariations.new
+      example.run
+
+      # Should have results from all pipelines
+      expect(example.results).not_to be_empty
+
+      # Check for results from named pipeline_a
+      has_pipeline_a = example.results.any? { |r| r.to_s.include?('from_pipeline_a') }
+      expect(has_pipeline_a).to be(true), 'Expected results from pipeline_a'
+
+      # Check for results from default (unnamed) pipeline
+      has_default = example.results.any? { |r| r.to_s.include?('from_default') }
+      expect(has_default).to be(true), 'Expected results from default pipeline'
+
+      # Check for results from named pipeline_b
+      has_pipeline_b = example.results.any? { |r| r.to_s.include?('from_pipeline_b') }
+      expect(has_pipeline_b).to be(true), 'Expected results from pipeline_b'
+    end
+  end
+
   describe '46_deduplicator_stage.rb' do
     it 'demonstrates simple value deduplication' do
       load File.expand_path('../../examples/46_deduplicator_stage.rb', __dir__)
@@ -1476,7 +1500,7 @@ RSpec.describe 'Examples Integration' do
   # Note: Fork-based examples are skipped on Windows (fork not supported)
 
   describe '70_thread_to_ipc_fork.rb' do
-    it 'routes from thread pool to IPC fork (terminal consumer)', skip: !Minigun.fork? do
+    it 'routes from thread pool to IPC fork (terminal consumer)', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/70_thread_to_ipc_fork.rb', __dir__)
 
       example = ThreadToIpcForkExample.new
@@ -1486,7 +1510,7 @@ RSpec.describe 'Examples Integration' do
       expect(example.results.map { |r| r[:id] }.sort).to eq((1..10).to_a)
 
       # Multiple IPC workers should have been used
-      if Minigun.fork?
+      if Minigun::Platform.fork?
         pids = example.results.map { |r| r[:pid] }.uniq
         expect(pids.size).to be >= 2
       end
@@ -1511,7 +1535,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '72_thread_to_cow_fork.rb' do
-    it 'routes from thread pool to COW fork (terminal consumer)', skip: !Minigun.fork? do
+    it 'routes from thread pool to COW fork (terminal consumer)', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/72_thread_to_cow_fork.rb', __dir__)
 
       example = ThreadToCowForkExample.new
@@ -1521,7 +1545,7 @@ RSpec.describe 'Examples Integration' do
       expect(example.results.map { |r| r[:id] }.sort).to eq((1..10).to_a)
 
       # COW forks create many ephemeral processes
-      if Minigun.fork?
+      if Minigun::Platform.fork?
         pids = example.results.map { |r| r[:pid] }.uniq
         expect(pids.size).to be >= 2
       end
@@ -1611,7 +1635,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '78_master_to_ipc_via_to.rb' do
-    it 'routes from master to IPC fork via output.to()', skip: !Minigun.fork? do
+    it 'routes from master to IPC fork via output.to()', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/78_master_to_ipc_via_to.rb', __dir__)
 
       example = MasterToIpcViaToExample.new
@@ -1628,7 +1652,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '79_master_to_cow_via_to.rb' do
-    it 'routes from master to COW fork via output.to()', skip: !Minigun.fork? do
+    it 'routes from master to COW fork via output.to()', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/79_master_to_cow_via_to.rb', __dir__)
 
       example = MasterToCowViaToExample.new
@@ -1647,7 +1671,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '80_ipc_fan_out.rb' do
-    it 'demonstrates IPC fork fan-out pattern', skip: !Minigun.fork? do
+    it 'demonstrates IPC fork fan-out pattern', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/80_ipc_fan_out.rb', __dir__)
 
       example = IpcFanOutExample.new
@@ -1665,7 +1689,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '81_ipc_fan_in.rb' do
-    it 'demonstrates IPC fork fan-in pattern', skip: !Minigun.fork? do
+    it 'demonstrates IPC fork fan-in pattern', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/81_ipc_fan_in.rb', __dir__)
 
       example = IpcFanInExample.new
@@ -1682,7 +1706,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '82_cow_fan_out.rb' do
-    it 'demonstrates COW fork fan-out pattern', skip: !Minigun.fork? do
+    it 'demonstrates COW fork fan-out pattern', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/82_cow_fan_out.rb', __dir__)
 
       example = CowFanOutExample.new
@@ -1702,7 +1726,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '83_cow_fan_in.rb' do
-    it 'demonstrates COW fork fan-in pattern', skip: !Minigun.fork? do
+    it 'demonstrates COW fork fan-in pattern', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/83_cow_fan_in.rb', __dir__)
 
       example = CowFanInExample.new
@@ -1721,7 +1745,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '84_mixed_ipc_cow_fan_out.rb' do
-    it 'demonstrates mixed IPC/COW fork fan-out', skip: !Minigun.fork? do
+    it 'demonstrates mixed IPC/COW fork fan-out', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/84_mixed_ipc_cow_fan_out.rb', __dir__)
 
       example = MixedIpcCowFanOutExample.new
@@ -1758,7 +1782,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '86_ipc_spawns_nested_cow.rb' do
-    it 'demonstrates IPC workers spawning nested COW forks', skip: !Minigun.fork? do
+    it 'demonstrates IPC workers spawning nested COW forks', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/86_ipc_spawns_nested_cow.rb', __dir__)
 
       example = IpcSpawnsNestedCowExample.new
@@ -1778,7 +1802,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '87_cow_spawns_nested_ipc.rb' do
-    it 'demonstrates COW forks spawning nested IPC workers', skip: !Minigun.fork? do
+    it 'demonstrates COW forks spawning nested IPC workers', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/87_cow_spawns_nested_ipc.rb', __dir__)
 
       example = CowSpawnsNestedIpcExample.new
@@ -1872,7 +1896,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '92_reroute_ipc_basic.rb' do
-    it 'demonstrates rerouting with IPC fork executors' do
+    it 'demonstrates rerouting with IPC fork executors', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/92_reroute_ipc_basic.rb', __dir__)
 
       # All three test cases should pass
@@ -1894,7 +1918,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '93_reroute_cow_basic.rb' do
-    it 'demonstrates rerouting with COW fork executors' do
+    it 'demonstrates rerouting with COW fork executors', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/93_reroute_cow_basic.rb', __dir__)
 
       base = RerouteCowBasicExample.new
@@ -1915,7 +1939,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '94_reroute_mixed_executors.rb' do
-    it 'demonstrates rerouting across different executor types' do
+    it 'demonstrates rerouting across different executor types', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/94_reroute_mixed_executors.rb', __dir__)
 
       base = RerouteMixedExecutorsExample.new
@@ -1931,7 +1955,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '95_reroute_to_inner_fork_stages.rb' do
-    it 'demonstrates rerouting to stages inside fork blocks' do
+    it 'demonstrates rerouting to stages inside fork blocks', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/95_reroute_to_inner_fork_stages.rb', __dir__)
 
       base = RerouteToInnerIpcStagesExample.new
@@ -1957,7 +1981,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '96_reroute_fork_fan_patterns.rb' do
-    it 'demonstrates rerouting with fork-based fan-out/fan-in' do
+    it 'demonstrates rerouting with fork-based fan-out/fan-in', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/96_reroute_fork_fan_patterns.rb', __dir__)
 
       # Fan-out patterns should work with rerouting
@@ -1977,7 +2001,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '97_dynamic_routing_to_inner_fork_stages.rb' do
-    it 'demonstrates dynamic routing to stages inside fork blocks' do
+    it 'demonstrates dynamic routing to stages inside fork blocks', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/97_dynamic_routing_to_inner_fork_stages.rb', __dir__)
 
       # Routing from thread to inner IPC/COW stages
@@ -2002,7 +2026,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '98_await_stages_complex_routing.rb' do
-    it 'demonstrates complex multi-level routing with await stages' do
+    it 'demonstrates complex multi-level routing with await stages', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/98_await_stages_complex_routing.rb', __dir__)
 
       # Test 1: Multi-level routing
@@ -2089,7 +2113,7 @@ RSpec.describe 'Examples Integration' do
         end
 
         consume :collector do |item|
-          mutex.synchronize { results << item * 2 }
+          mutex.synchronize { results << (item * 2) }
         end
       end
 
@@ -2141,8 +2165,8 @@ RSpec.describe 'Examples Integration' do
     end
 
     it 'demonstrates the newsletter sender pattern' do
-      user_batches = 3.times.map do |batch_num|
-        (1..100).map { |i| { id: batch_num * 100 + i, email: "user#{batch_num * 100 + i}@example.com" } }
+      user_batches = Array.new(3) do |batch_num|
+        (1..100).map { |i| { id: (batch_num * 100) + i, email: "user#{(batch_num * 100) + i}@example.com" } }
       end
 
       emails_sent = Concurrent::AtomicFixnum.new(0)
@@ -2200,6 +2224,41 @@ RSpec.describe 'Examples Integration' do
       puts
 
       expect(described_files.size).to be > 40
+    end
+  end
+
+  describe '50_pipeline_inheritance.rb' do
+    it 'demonstrates pipeline inheritance and merging' do
+      require_relative '../../examples/50_pipeline_inheritance'
+
+      # Example 1: Unnamed pipeline inheritance
+      base = BaseTask.new
+      base.run
+      expect(base.results).to eq([2, 4, 6])
+
+      extended = ExtendedTask.new
+      extended.run
+      expect(extended.results).to eq([6, 12, 18])
+
+      skip = SkipStageTask.new
+      skip.run
+      expect(skip.results).to eq([1, 2, 3])
+
+      # Example 2: Named pipeline extension
+      named_base = NamedPipelineBase.new
+      named_base.run
+      expect(named_base.results_a).to eq([10, 20])
+      expect(named_base.results_b).to eq([100, 200])
+
+      extended_named = ExtendedNamedPipeline.new
+      extended_named.run
+      expect(extended_named.results_a).to eq([15, 25])
+      expect(extended_named.results_b).to eq([100, 200])
+
+      # Example 3: Multiple unnamed pipelines
+      multi = MultipleUnnamedChild.new
+      multi.run
+      expect(multi.results.sort).to eq(%w[A B extra_X extra_Y].sort)
     end
   end
 end

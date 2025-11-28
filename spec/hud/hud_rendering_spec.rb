@@ -64,9 +64,10 @@ RSpec.describe 'HUD Full Rendering' do
     # Create HUD controller
     controller = Minigun::HUD::Controller.new(pipeline)
 
-    # Override terminal size
+    # Override terminal size and prevent reset
     controller.terminal.instance_variable_set(:@width, width)
     controller.terminal.instance_variable_set(:@height, height)
+    allow(controller.terminal).to receive(:update_size) if Minigun::Platform.windows?
 
     # Setup buffer capture
     captured_buffer = setup_buffer_capture(controller, width, height)
@@ -219,6 +220,8 @@ ASCII
       controller.paused = true
       controller.terminal.instance_variable_set(:@width, 120)
       controller.terminal.instance_variable_set(:@height, 20)
+      # Stub update_size to prevent it from resetting our dimensions
+      allow(controller.terminal).to receive(:update_size) if Minigun::Platform.windows?
       buffer = setup_buffer_capture(controller, 120, 20)
       controller.send(:calculate_layout)
       controller.flow_diagram.instance_variable_set(:@animation_frame, 0)
@@ -254,6 +257,8 @@ ASCII
       controller.pipeline_finished = true
       controller.terminal.instance_variable_set(:@width, 120)
       controller.terminal.instance_variable_set(:@height, 20)
+      # Stub update_size to prevent it from resetting our dimensions
+      allow(controller.terminal).to receive(:update_size) if Minigun::Platform.windows?
       buffer = setup_buffer_capture(controller, 120, 20)
       controller.send(:calculate_layout)
       controller.flow_diagram.instance_variable_set(:@animation_frame, 0)

@@ -36,7 +36,7 @@ class ProcessExample
 end
 
 if __FILE__ == $PROGRAM_NAME
-  if Minigun.fork?
+  if Minigun::Platform.fork?
     example = ProcessExample.new
     example.run
     puts "Processed #{example.results.size} items"

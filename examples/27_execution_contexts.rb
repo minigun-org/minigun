@@ -124,7 +124,7 @@ puts "  Results: #{example.results.sort.inspect}"
 puts "  ✓ Ractor execution (or thread fallback)\n\n"
 
 # Example 4: Process Isolation
-if Minigun.fork?
+if Minigun::Platform.fork?
   puts '4. Process Isolation'
   puts '-' * 50
 

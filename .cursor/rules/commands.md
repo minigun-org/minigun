@@ -1,0 +1,42 @@
+## User Commands
+- "Refactor" Unless otherwise indicated by "soft", means a hard, aggressive refactor which does not preserve backwards compatibility and removes/cleanups and obsolete code paths.
+- "Lore" means adding an implementation summary to `lore` folder (NOT project root) in Markdown format, filename: "%Y%m%d-%H%M-lowercase-name.md" (include leading zero of %m/%d/%H/etc)
+- "Test" means:
+  - Run tests and fix ALL issues and all warnings in the output (do not ignore/suppress them).
+  - Ruby -> `rspec`
+- "Assess" means:
+  - Review the recent changes in the thread holistically.
+  - Make a plan to refactor/cleanup to:
+    - Consolidate code
+    - Fix implementation inconsistencies
+    - Fix anything hacky/bloated/redundant
+    - DRY up code / extract out a common component (do NOT go overboard)
+    - Remove dead/unused/obsolete code
+    - Add missing test coverage
+    - (BUT do NOT go overboard here; focus on obvious problems and obvious wins.)
+  - Write and save the plan summary as per the "Lore" command above.
+- "Assess Staged" is same as Assess, but specifically for the changes in `git diff --staged` in the context of the recent thread.
+- "Assess Last" is same as Assess, but specifically for the changes in `git show` (last commit) in the context of the recent thread.
+- "Assess Deep" is same as Assess, but focus on deeper opportunities and give more complex refactors ideas.
+- "Harden" means to:
+  - Do the "Assess" command above, make a refactor/cleanup plan and output to Lore.
+  - If you are 95%+ confident the refactor/cleanups will be an obvious "slam-dunk" improvement, go ahead and do it automatically. Otherwise write Lore and ask me.
+  - (Before Harden -> If there are uncommitted git changes, ask if I would like to commit)
+  - (After Harden -> re-run tests)
+- "Lint" means:
+  - Fix any warnings in the output of the tests ("Test" command) and (if applicable to project) the output of the build ("Build" command)
+  - Ruby -> `rubocop -A` (check fixes) then `rubocop`. Anything that isn't easily fixed, leave as-is then run `rubocop --auto-gen-config --exclude-limit 1000`
+  - Fix all issues and all warnings in the output (do not suppress them). Focus on getting all linter and warnings fixed.
+  - (After Lint -> re-run tests)
+- "Deps" means Ruby -> `bundle update`
+- "Coverage" means run tests with coverage enabled and increase code coverage.
+- "Build" means to run the project's relevant build command (i.e. to compile to a dist or build folder), **ONLY** if applicable to project.
+- "Summarize" (alias "Compact") means summarize the AI's current context window. Write the summary as per the "Lore" command.
+- "Sync Claude Commands" means:
+  - Review the commands in .claude/commands/*.md versus the commands in this document (.cursor/rules/commands.md)
+  - Update/rename/delete so the Claude commands exactly match these.
+  - If there are references to other commands, inline the of the commands to the Claude files.
+  - Be aggressive in editing so that the Claude commands are matching closely.
+
+## Shell Execution
+- Always prefix with `bundle exec` for Ruby commands
