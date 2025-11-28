@@ -23,7 +23,7 @@ module Minigun
     end
 
     # Wraps InputQueue with demand signaling.
-    # After consuming items, automatically requests more when below min_demand.
+    # Delegates to InputQueue for core functionality, adds demand replenishment.
     #
     # @example
     #   channels = registry.channels_to_consumer(stage)
@@ -42,42 +42,20 @@ module Minigun
       # @param stage_stats [Stats, nil] Stats tracker
       # @param demand_channels [Array<Channel>] Channels from upstream producers
       def initialize(queue, stage, expected_sources, stage_stats: nil, demand_channels: [])
-        @queue = queue
-        @stage = stage
-        @sources_expected = Set.new(expected_sources)
-        @sources_done = Set.new
-        @stage_stats = stage_stats
+        @inner = Minigun::InputQueue.new(queue, stage, expected_sources, stage_stats: stage_stats)
         @demand_channels = demand_channels
       end
 
       # Pop an item from the queue.
-      # Handles EndOfSource signals and triggers demand replenishment.
+      # Delegates to InputQueue, then notifies demand channels.
       # @return [Object, EndOfStage] The next item or end sentinel
       def pop
-        loop do
-          item = @queue.pop
+        item = @inner.pop
 
-          # Handle EndOfSource signals
-          if item.is_a?(EndOfSource)
-            @sources_expected << item.stage  # Discover dynamic source
-            @sources_done << item.stage
+        # Notify demand channels about consumption (unless it's end sentinel)
+        notify_consumption unless item.is_a?(EndOfStage)
 
-            # All sources done? Return sentinel
-            return EndOfStage.new(@stage) if @sources_done == @sources_expected
-
-            # More sources pending, keep looping
-            next
-          end
-
-          # Track consumption
-          @stage_stats&.increment_consumed
-
-          # Notify demand channels about consumption
-          notify_consumption
-
-          # Regular item
-          return item
-        end
+        item
       end
 
       # Initialize demand on all upstream channels
@@ -95,7 +73,7 @@ module Minigun
     end
 
     # Wraps OutputQueue with demand gating.
-    # Producers must wait for demand before emitting items.
+    # Delegates to OutputQueue for core functionality, adds demand waiting.
     #
     # @example
     #   channels = registry.channels_from_producer(stage)
@@ -117,13 +95,11 @@ module Minigun
       # @param demand_timeout [Float, nil] Timeout for demand wait (nil = infinite)
       def initialize(stage, downstream_queues, runtime_edges, stage_stats: nil,
                      demand_channels: [], demand_mode: :auto, demand_timeout: nil)
-        @stage = stage
-        @downstream_queues = downstream_queues
-        @runtime_edges = runtime_edges
-        @stage_stats = stage_stats
+        @inner = Minigun::OutputQueue.new(stage, downstream_queues, runtime_edges, stage_stats: stage_stats)
         @demand_channels = demand_channels
         @demand_mode = demand_mode
         @demand_timeout = demand_timeout
+        @stage_stats = stage_stats
         @to_cache = {}
       end
 
@@ -133,9 +109,7 @@ module Minigun
       # @return [self]
       def <<(item)
         wait_for_demand_if_needed
-
-        @downstream_queues.each { |queue| queue << item }
-        @stage_stats&.increment_produced
+        @inner << item
         self
       end
 
@@ -145,25 +119,19 @@ module Minigun
       def to(target)
         return @to_cache[target] if @to_cache.key?(target)
 
-        # Resolve target to Stage object
-        target_stage = task.stage_registry.find(target, from_pipeline: pipeline)
-        raise ArgumentError, "Unknown target stage: #{target}" unless target_stage
-
-        # Look up queue
-        target_queue = task.find_queue(target_stage)
-        raise ArgumentError, "Unknown target stage queue: #{target}" unless target_queue
-
-        # Track runtime edge
-        @runtime_edges[@stage] ||= Set.new
-        @runtime_edges[@stage].add(target_stage)
+        # Use inner OutputQueue to resolve target and track runtime edge
+        inner_targeted = @inner.to(target)
 
         # Find demand channel to this target (if any)
+        # Need to resolve target to Stage for channel lookup
+        target_stage = @inner.instance_variable_get(:@stage).pipeline.task.stage_registry.find(
+          target, from_pipeline: @inner.instance_variable_get(:@stage).pipeline
+        )
         target_channels = @demand_channels.select { |ch| ch.consumer_stage == target_stage }
 
-        # Create and cache
+        # Create and cache demand-aware wrapper
         @to_cache[target] = AwareTargetedOutputQueue.new(
-          target_queue,
-          stage_stats: @stage_stats,
+          inner_targeted,
           demand_channels: target_channels,
           demand_mode: @demand_mode
         )
@@ -213,29 +181,18 @@ module Minigun
 
         @demand_channels.sum(&:pending_demand)
       end
-
-      private
-
-      def pipeline
-        @stage.pipeline
-      end
-
-      def task
-        pipeline&.task
-      end
     end
 
     # Targeted output queue for explicit routing with demand awareness.
+    # Wraps an OutputQueue (returned from OutputQueue#to) and adds demand waiting.
     class AwareTargetedOutputQueue
       include DemandWaiter
 
-      # @param target_queue [Queue] The target stage's input queue
-      # @param stage_stats [Stats, nil] Stats tracker
+      # @param inner [OutputQueue] The inner targeted OutputQueue
       # @param demand_channels [Array<Channel>] Channels to target consumer
       # @param demand_mode [Symbol] How demand is handled (:auto, :manual, :disabled)
-      def initialize(target_queue, stage_stats: nil, demand_channels: [], demand_mode: :auto)
-        @target_queue = target_queue
-        @stage_stats = stage_stats
+      def initialize(inner, demand_channels: [], demand_mode: :auto)
+        @inner = inner
         @demand_channels = demand_channels
         @demand_mode = demand_mode
       end
@@ -245,9 +202,7 @@ module Minigun
       # @return [self]
       def <<(item)
         wait_for_demand_if_needed
-
-        @target_queue << item
-        @stage_stats&.increment_produced
+        @inner << item
         self
       end
     end
