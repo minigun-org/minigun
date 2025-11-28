@@ -223,6 +223,347 @@ RSpec.describe Minigun::DSL do
     end
   end
 
+  describe 'produce_each' do
+    before do
+      allow(Minigun.logger).to receive(:info)
+      allow(Minigun.logger).to receive(:debug)
+    end
+
+    # Named + array
+    it 'supports produce_each :name, array' do
+      test_class = Class.new do
+        include Minigun::DSL
+
+        attr_accessor :results
+
+        def initialize
+          @results = []
+        end
+
+        pipeline do
+          produce_each :source, [1, 2, 3]
+
+          consumer :sink do |num|
+            results << num
+          end
+        end
+      end
+
+      instance = test_class.new
+      instance.run
+
+      expect(instance.results).to contain_exactly(1, 2, 3)
+    end
+
+    # Named + range
+    it 'supports produce_each :name, range' do
+      test_class = Class.new do
+        include Minigun::DSL
+
+        attr_accessor :results
+
+        def initialize
+          @results = []
+        end
+
+        pipeline do
+          produce_each :source, (1..3)
+
+          consumer :sink do |num|
+            results << num
+          end
+        end
+      end
+
+      instance = test_class.new
+      instance.run
+
+      expect(instance.results).to contain_exactly(1, 2, 3)
+    end
+
+    # Named + proc
+    it 'supports produce_each :name, proc' do
+      test_class = Class.new do
+        include Minigun::DSL
+
+        attr_accessor :results
+
+        def initialize
+          @results = []
+        end
+
+        pipeline do
+          produce_each :source, -> { [10, 20] }
+
+          consumer :sink do |num|
+            results << num
+          end
+        end
+      end
+
+      instance = test_class.new
+      instance.run
+
+      expect(instance.results).to contain_exactly(10, 20)
+    end
+
+    # Named + method symbol
+    it 'supports produce_each :name, :method_symbol' do
+      test_class = Class.new do
+        include Minigun::DSL
+
+        attr_accessor :results
+
+        def initialize
+          @results = []
+        end
+
+        def fetch_data
+          [100, 200]
+        end
+
+        pipeline do
+          produce_each :source, :fetch_data
+
+          consumer :sink do |num|
+            results << num
+          end
+        end
+      end
+
+      instance = test_class.new
+      instance.run
+
+      expect(instance.results).to contain_exactly(100, 200)
+    end
+
+    # Named + block
+    it 'supports produce_each(:name) { block }' do
+      test_class = Class.new do
+        include Minigun::DSL
+
+        attr_accessor :results
+
+        def initialize
+          @results = []
+        end
+
+        pipeline do
+          produce_each(:source) { [5, 10, 15] }
+
+          consumer :sink do |num|
+            results << num
+          end
+        end
+      end
+
+      instance = test_class.new
+      instance.run
+
+      expect(instance.results).to contain_exactly(5, 10, 15)
+    end
+
+    # Unnamed + array
+    it 'supports produce_each array (unnamed)' do
+      test_class = Class.new do
+        include Minigun::DSL
+
+        attr_accessor :results
+
+        def initialize
+          @results = []
+        end
+
+        pipeline do
+          produce_each [1, 2, 3]
+
+          consumer :sink do |num|
+            results << num
+          end
+        end
+      end
+
+      instance = test_class.new
+      instance.run
+
+      expect(instance.results).to contain_exactly(1, 2, 3)
+    end
+
+    # Unnamed + range
+    it 'supports produce_each range (unnamed)' do
+      test_class = Class.new do
+        include Minigun::DSL
+
+        attr_accessor :results
+
+        def initialize
+          @results = []
+        end
+
+        pipeline do
+          produce_each(1..3)
+
+          consumer :sink do |num|
+            results << num
+          end
+        end
+      end
+
+      instance = test_class.new
+      instance.run
+
+      expect(instance.results).to contain_exactly(1, 2, 3)
+    end
+
+    # Unnamed + proc
+    it 'supports produce_each proc (unnamed)' do
+      test_class = Class.new do
+        include Minigun::DSL
+
+        attr_accessor :results
+
+        def initialize
+          @results = []
+        end
+
+        pipeline do
+          produce_each -> { [7, 8, 9] }
+
+          consumer :sink do |num|
+            results << num
+          end
+        end
+      end
+
+      instance = test_class.new
+      instance.run
+
+      expect(instance.results).to contain_exactly(7, 8, 9)
+    end
+
+    # Unnamed + method symbol
+    it 'supports produce_each :method_symbol (unnamed)' do
+      test_class = Class.new do
+        include Minigun::DSL
+
+        attr_accessor :results
+
+        def initialize
+          @results = []
+        end
+
+        def items
+          [42, 43]
+        end
+
+        pipeline do
+          produce_each :items
+
+          consumer :sink do |num|
+            results << num
+          end
+        end
+      end
+
+      instance = test_class.new
+      instance.run
+
+      expect(instance.results).to contain_exactly(42, 43)
+    end
+
+    # Unnamed + block
+    it 'supports produce_each { block } (unnamed)' do
+      test_class = Class.new do
+        include Minigun::DSL
+
+        attr_accessor :results
+
+        def initialize
+          @results = []
+        end
+
+        pipeline do
+          produce_each { [99, 100] }
+
+          consumer :sink do |num|
+            results << num
+          end
+        end
+      end
+
+      instance = test_class.new
+      instance.run
+
+      expect(instance.results).to contain_exactly(99, 100)
+    end
+
+    # Creates correct stage type
+    it 'creates EnumeratorProducerStage' do
+      test_class = Class.new do
+        include Minigun::DSL
+
+        pipeline do
+          produce_each :source, [1, 2, 3]
+          consumer(:sink) { |_x| }
+        end
+      end
+
+      instance = test_class.new
+      instance.send(:_evaluate_pipeline_blocks!)
+
+      stage = instance._minigun_task.root_pipeline.find_stage(:source)
+      expect(stage).to be_a(Minigun::EnumeratorProducerStage)
+    end
+
+    # Validation
+    it 'raises error when called with no source' do
+      test_class = Class.new do
+        include Minigun::DSL
+
+        pipeline do
+          produce_each
+          consumer(:sink) { |_x| }
+        end
+      end
+
+      expect { test_class.new.run }.to raise_error(ArgumentError, /produce_each requires/)
+    end
+  end
+
+  describe 'block-based producer' do
+    before do
+      allow(Minigun.logger).to receive(:info)
+      allow(Minigun.logger).to receive(:debug)
+    end
+
+    it 'supports producer(:name) { block }' do
+      test_class = Class.new do
+        include Minigun::DSL
+
+        attr_accessor :results
+
+        def initialize
+          @results = []
+        end
+
+        pipeline do
+          producer :source do |output|
+            [1, 2, 3].each { |i| output << i }
+          end
+
+          consumer :sink do |num|
+            results << num
+          end
+        end
+      end
+
+      instance = test_class.new
+      instance.run
+
+      expect(instance.results).to contain_exactly(1, 2, 3)
+    end
+  end
+
   describe 'pipeline do wrapper requirement' do
     before do
       allow(Minigun.logger).to receive(:info)

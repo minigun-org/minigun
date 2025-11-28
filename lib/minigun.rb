@@ -59,6 +59,8 @@ module Minigun
       # Return instance
       klass.new(name, &block)
     end
+
+    alias_method :pipeline, :task
   end
 end
 

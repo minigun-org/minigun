@@ -317,13 +317,42 @@ module Minigun
         task.add_nested_pipeline(name, options, &)
       end
 
-      # Main unified stage method
-      # Stage determines its own type based on block arity
-      # Producer - generates items, receives output queue
-      def producer(name, options = {}, &)
+      # Producer - block-based, you write the loop
+      # producer(:name) { |out| items.each { |i| out << i } }
+      def producer(name = nil, options = {}, &)
         options = _apply_execution_context(options)
         options[:stage_type] = :producer
         @pipeline.add_stage(:stage, name, options, &)
+      end
+
+      # Producer from enumerable - we iterate for you
+      # - produce_each :name, [1,2,3]         # enumerable
+      # - produce_each :name, -> { User.all } # proc/lambda
+      # - produce_each :name, :fetch_users    # method symbol (called on context)
+      # - produce_each(:name) { User.all }    # block returning enumerable
+      # - produce_each [1,2,3]                # unnamed
+      def produce_each(name_or_source = nil, source_or_opts = nil, opts = {}, &block)
+        if name_or_source.is_a?(Symbol) && (source_or_opts || block)
+          # produce_each :name, source  OR  produce_each(:name) { }
+          name = name_or_source
+          source = block || source_or_opts
+          opts = {} unless opts.is_a?(Hash)
+        else
+          # produce_each source  (unnamed)
+          name = nil
+          source = block || name_or_source
+          opts = source_or_opts.is_a?(Hash) ? source_or_opts : {}
+        end
+
+        unless source && (source.respond_to?(:each) || source.respond_to?(:call) || source.is_a?(Symbol))
+          raise ArgumentError, 'produce_each requires an enumerable, proc, method name, or block'
+        end
+
+        opts = _apply_execution_context(opts)
+        opts[:stage_type] = :enumerator_producer
+        opts[:_enumerator_source] = source
+
+        @pipeline.add_stage(:stage, name, opts)
       end
 
       # Consumer - processes items, receives item and output queue
@@ -576,6 +605,8 @@ module Minigun
         puts 'No background task to wait for'
       end
     end
+
+    alias_method :join, :wait
 
     # Start the task in a background thread
     # Alias for run(background: true)

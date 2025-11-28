@@ -12,28 +12,28 @@ plan based on the current codebase state and TODOS.md.
 
 - [X] Docs - mine the tmp/cursor-docs-cleanup folder for more ideas.
 - [X] Docs - explain what a DAG is in fundamentals. then add DAG based explanations elsewhere
+- [ ] Docs - Cleanup examples
+- [ ] Docs - Review and fix all docs
 - [ ] Docs - nested pipelines, entrances and exits
-- [ ] produce(User.find_each) # enumerator as arg
-- [ ] task = Minigun.pipeline do
-- [ ] task = Minigun.task do (same)?
-- [ ] task.start ; task.join
+- [X] produce_each(User.find_each) # enumerator as arg
+- [X] task = Minigun.pipeline do
+- [X] task = Minigun.task do (same)?
+- [X] task.start ; task.join
+- [X] in_threads, in_cow_forks, in_fibers
+- [X] Sort-out pipeline inheritance (https://github.com/minigun-org/minigun/pull/4)
 - [ ] Cleanup accumulator vs. batch
-- [ ] thread/threads, fiber/fibers etc. as alias to pool methods if they don't exist on parent
 - [ ] Hooks
 - [ ] Config
 - [ ] Minigun.task do
-- [ ] in_threads, in_cow_forks, in_fibers
+- [ ] Genstage --> names required?
 - [ ] Demand (see polyphony example)
 - [ ] Ractors on Ruby 3.5
 - [ ] Minigun global configs
 - [ ] Auto-config: # forks should match # of cores
-- [ ] Sort-out pipeline inheritance (https://github.com/minigun-org/minigun/pull/4)
 - [ ] Remove processor alias?
 - [ ] Example runner context
 - [ ] Fix JRuby/Mac/etc.
 - [ ] Consider what concurrent-ruby abstractions we can use.
-- [ ] Docs - Cleanup examples
-- [ ] Docs - Review and fix all docs
 - [ ] Rubocop final pass
 
 ### 0.2 Error Handling & Reliability

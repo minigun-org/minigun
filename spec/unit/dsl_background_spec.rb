@@ -173,6 +173,18 @@ RSpec.describe Minigun::DSL, 'Background Execution' do
     end
   end
 
+  describe '#join' do
+    it 'is an alias for wait' do
+      task = task_class.new
+      task.start
+
+      task.join
+
+      expect(task.running?).to be false
+      expect(task.items_processed.size).to eq(5)
+    end
+  end
+
   describe '#hud' do
     it 'raises error if task not initialized' do
       task = task_class.new
