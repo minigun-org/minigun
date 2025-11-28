@@ -67,26 +67,5 @@ module Minigun
   # @see Demand::Registry Channel management
   #
   module Demand
-    # Default minimum demand threshold (request more when below this)
-    DEFAULT_MIN_DEMAND = 500
-
-    # Default maximum demand (items to request at once)
-    DEFAULT_MAX_DEMAND = 1000
-
-    # Create a demand channel between two stages
-    # @param producer [Stage] Upstream producer stage
-    # @param consumer [Stage] Downstream consumer stage
-    # @param config [Hash] Configuration options
-    # @option config [Integer] :min_demand Threshold for replenishment
-    # @option config [Integer] :max_demand Maximum items to request
-    # @return [Channel]
-    def self.create_channel(producer, consumer, config = {})
-      Channel.new(
-        producer,
-        consumer,
-        min_demand: config[:min_demand] || DEFAULT_MIN_DEMAND,
-        max_demand: config[:max_demand] || DEFAULT_MAX_DEMAND
-      )
-    end
   end
 end

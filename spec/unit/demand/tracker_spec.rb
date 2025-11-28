@@ -30,7 +30,7 @@ RSpec.describe Minigun::Demand::Tracker do
 
     it 'raises error if min_demand is negative' do
       expect { described_class.new(min_demand: -1, max_demand: 100) }
-        .to raise_error(ArgumentError, /min_demand must be positive/)
+        .to raise_error(ArgumentError, /min_demand must be non-negative/)
     end
 
     it 'raises error if max_demand is not positive' do
@@ -54,7 +54,7 @@ RSpec.describe Minigun::Demand::Tracker do
       tracker = described_class.new
 
       expect { tracker.add_demand(-1) }
-        .to raise_error(ArgumentError, /count must be positive/)
+        .to raise_error(ArgumentError, /count must be non-negative/)
     end
 
     it 'does nothing if closed' do
