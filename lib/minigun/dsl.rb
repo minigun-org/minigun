@@ -317,13 +317,24 @@ module Minigun
         task.add_nested_pipeline(name, options, &)
       end
 
-      # Main unified stage method
-      # Stage determines its own type based on block arity
       # Producer - generates items, receives output queue
-      def producer(name, options = {}, &)
-        options = _apply_execution_context(options)
-        options[:stage_type] = :producer
-        @pipeline.add_stage(:stage, name, options, &)
+      # Signatures:
+      # - producer(:name) { |out| ... }  - block-based
+      # - producer(:name, enumerable)    - enumerable-based
+      # - producer(enumerable)           - unnamed enumerable
+      def producer(*args, &block)
+        # Pop args: name (Symbol), enumerable (responds to #each), options (Hash)
+        name = args.shift if args.first.is_a?(Symbol)
+        enumerator = args.shift if args.first.respond_to?(:each) && !args.first.is_a?(Hash)
+        opts = args.shift || {}
+
+        raise ArgumentError, 'Cannot use both enumerable and block for producer' if enumerator && block
+
+        opts = _apply_execution_context(opts)
+        opts[:stage_type] = enumerator ? :enumerator_producer : :producer
+        opts[:_enumerator] = enumerator if enumerator
+
+        @pipeline.add_stage(:stage, name, opts, &block)
       end
 
       # Consumer - processes items, receives item and output queue

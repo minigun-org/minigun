@@ -234,6 +234,21 @@ module Minigun
     end
   end
 
+  # Enumerator-based producer stage - iterates over an enumerator/enumerable
+  # Usage: produce(:name, User.find_each) or produce(my_array)
+  class EnumeratorProducerStage < ProducerStage
+    attr_reader :enumerator
+
+    def initialize(name, pipeline, enumerator, _block = nil, options = {})
+      super(name, pipeline, nil, options)
+      @enumerator = enumerator
+    end
+
+    def execute(_context, _input_queue, output_queue, _stage_stats)
+      @enumerator.each { |item| output_queue << item }
+    end
+  end
+
   # Consumer/Processor stage - loops on input, processes items
   class ConsumerStage < Stage
     def execute(context, input_queue, output_queue, stage_stats)

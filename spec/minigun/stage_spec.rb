@@ -57,6 +57,61 @@ RSpec.describe Minigun::ProducerStage do
   end
 end
 
+RSpec.describe Minigun::EnumeratorProducerStage do
+  let(:config) { { max_threads: 1, max_processes: 1 } }
+  let(:task) { Minigun::Task.new(config: config) }
+  let(:pipeline) { task.root_pipeline }
+
+  describe 'enumerator producer behavior' do
+    it 'is a ProducerStage subclass' do
+      stage = described_class.new(:test, pipeline, [1, 2, 3])
+      expect(stage).to be_a(Minigun::ProducerStage)
+    end
+
+    it 'iterates over an array and emits items' do
+      stage = described_class.new(:test, pipeline, [1, 2, 3])
+
+      emitted = []
+      output_queue = Object.new
+      output_queue.define_singleton_method(:<<) { |item| emitted << item }
+
+      stage.execute(nil, nil, output_queue, nil)
+
+      expect(emitted).to eq([1, 2, 3])
+    end
+
+    it 'iterates over an Enumerator and emits items' do
+      stage = described_class.new(:test, pipeline, (1..3).each)
+
+      emitted = []
+      output_queue = Object.new
+      output_queue.define_singleton_method(:<<) { |item| emitted << item }
+
+      stage.execute(nil, nil, output_queue, nil)
+
+      expect(emitted).to eq([1, 2, 3])
+    end
+
+    it 'works with lazy enumerators' do
+      stage = described_class.new(:test, pipeline, [10, 20, 30].lazy)
+
+      emitted = []
+      output_queue = Object.new
+      output_queue.define_singleton_method(:<<) { |item| emitted << item }
+
+      stage.execute(nil, nil, output_queue, nil)
+
+      expect(emitted).to eq([10, 20, 30])
+    end
+
+    it 'stores the enumerator' do
+      enum = [1, 2, 3]
+      stage = described_class.new(:test, pipeline, enum)
+      expect(stage.enumerator).to eq(enum)
+    end
+  end
+end
+
 RSpec.describe Minigun::ConsumerStage do
   let(:config) { { max_threads: 1, max_processes: 1 } }
   let(:task) { Minigun::Task.new(config: config) }

@@ -125,6 +125,9 @@ module Minigun
                 case actual_type
                 when :producer
                   ProducerStage.new(name, self, block, options)
+                when :enumerator_producer
+                  enumerator = options.delete(:_enumerator)
+                  EnumeratorProducerStage.new(name, self, enumerator, block, options)
                 when :processor, :consumer
                   ConsumerStage.new(name, self, block, options)
                 when :stage
