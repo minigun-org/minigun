@@ -2,6 +2,26 @@
 
 module Minigun
   module Demand
+    # Shared demand waiting logic for output queues
+    module DemandWaiter
+      private
+
+      # Wait for demand if in :auto mode
+      # Loops through channels trying to acquire demand with short timeouts
+      def wait_for_demand_if_needed
+        return if @demand_mode != :auto || @demand_channels.empty?
+
+        loop do
+          @demand_channels.each do |channel|
+            return if channel.wait_for_demand(1, timeout: 0.01)
+          end
+
+          sleep(0.001)
+          return if @demand_channels.all?(&:closed?)
+        end
+      end
+    end
+
     # Wraps InputQueue with demand signaling.
     # After consuming items, automatically requests more when below min_demand.
     #
@@ -86,11 +106,7 @@ module Minigun
     #   output << item
     #
     class AwareOutputQueue
-      # Demand modes:
-      # - :auto - wait for demand before each emit (default)
-      # - :manual - producer controls demand via explicit calls
-      # - :disabled - no demand control, acts like regular OutputQueue
-      MODES = %i[auto manual disabled].freeze
+      include DemandWaiter
 
       # @param stage [Stage] The producing stage
       # @param downstream_queues [Array<Queue>] Downstream stage queues
@@ -146,14 +162,10 @@ module Minigun
 
         # Create and cache
         @to_cache[target] = AwareTargetedOutputQueue.new(
-          @stage,
           target_queue,
-          target_stage,
-          @runtime_edges,
           stage_stats: @stage_stats,
           demand_channels: target_channels,
-          demand_mode: @demand_mode,
-          demand_timeout: @demand_timeout
+          demand_mode: @demand_mode
         )
       end
 
@@ -204,24 +216,6 @@ module Minigun
 
       private
 
-      def wait_for_demand_if_needed
-        return if @demand_mode != :auto || @demand_channels.empty?
-
-        # Wait on first channel that has demand
-        # This provides a simple strategy - could be more sophisticated
-        loop do
-          @demand_channels.each do |channel|
-            return if channel.wait_for_demand(1, timeout: 0.01)
-          end
-
-          # Small sleep to avoid busy loop, then retry
-          sleep(0.001)
-
-          # Check if all channels are closed
-          return if @demand_channels.all?(&:closed?)
-        end
-      end
-
       def pipeline
         @stage.pipeline
       end
@@ -233,16 +227,17 @@ module Minigun
 
     # Targeted output queue for explicit routing with demand awareness.
     class AwareTargetedOutputQueue
-      def initialize(stage, target_queue, target_stage, runtime_edges, stage_stats: nil,
-                     demand_channels: [], demand_mode: :auto, demand_timeout: nil)
-        @stage = stage
+      include DemandWaiter
+
+      # @param target_queue [Queue] The target stage's input queue
+      # @param stage_stats [Stats, nil] Stats tracker
+      # @param demand_channels [Array<Channel>] Channels to target consumer
+      # @param demand_mode [Symbol] How demand is handled (:auto, :manual, :disabled)
+      def initialize(target_queue, stage_stats: nil, demand_channels: [], demand_mode: :auto)
         @target_queue = target_queue
-        @target_stage = target_stage
-        @runtime_edges = runtime_edges
         @stage_stats = stage_stats
         @demand_channels = demand_channels
         @demand_mode = demand_mode
-        @demand_timeout = demand_timeout
       end
 
       # Send item to the targeted stage
@@ -254,21 +249,6 @@ module Minigun
         @target_queue << item
         @stage_stats&.increment_produced
         self
-      end
-
-      private
-
-      def wait_for_demand_if_needed
-        return if @demand_mode != :auto || @demand_channels.empty?
-
-        loop do
-          @demand_channels.each do |channel|
-            return if channel.wait_for_demand(1, timeout: 0.01)
-          end
-
-          sleep(0.001)
-          return if @demand_channels.all?(&:closed?)
-        end
       end
     end
   end
