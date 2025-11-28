@@ -319,10 +319,10 @@ module Minigun
 
       # Producer - block-based, you write the loop
       # producer(:name) { |out| items.each { |i| out << i } }
-      def producer(name = nil, options = {}, &block)
+      def producer(name = nil, options = {}, &)
         options = _apply_execution_context(options)
         options[:stage_type] = :producer
-        @pipeline.add_stage(:stage, name, options, &block)
+        @pipeline.add_stage(:stage, name, options, &)
       end
 
       # Producer from enumerable - we iterate for you
@@ -336,7 +336,7 @@ module Minigun
           # produce_each :name, source  OR  produce_each(:name) { }
           name = name_or_source
           source = block || source_or_opts
-          opts = opts.is_a?(Hash) ? opts : {}
+          opts = {} unless opts.is_a?(Hash)
         else
           # produce_each source  (unnamed)
           name = nil

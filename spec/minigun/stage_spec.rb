@@ -81,7 +81,7 @@ RSpec.describe Minigun::EnumeratorProducerStage do
     end
 
     it 'iterates over a range' do
-      stage = described_class.new(:test, pipeline, (1..3))
+      stage = described_class.new(:test, pipeline, 1..3)
 
       emitted = []
       output_queue = Object.new

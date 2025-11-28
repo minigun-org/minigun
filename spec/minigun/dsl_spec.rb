@@ -452,12 +452,12 @@ RSpec.describe Minigun::DSL do
           @results = []
         end
 
-        def get_items
+        def items
           [42, 43]
         end
 
         pipeline do
-          produce_each :get_items
+          produce_each :items
 
           consumer :sink do |num|
             results << num
