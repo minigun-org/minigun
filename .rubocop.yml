@@ -60,6 +60,9 @@ RSpec/ContextWording:
 RSpec/ExampleLength:
   Enabled: false
 
+RSpec/IndexedLet:
+  Enabled: false
+
 RSpec/InstanceVariable:
   Enabled: false
 

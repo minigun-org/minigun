@@ -65,7 +65,7 @@ module Minigun
 
       # Check and send demand replenishment if needed
       # @return [Boolean] true if replenishment was sent
-      def maybe_replenish
+      def maybe_replenish # rubocop:disable Naming/PredicateMethod
         return false unless @tracker.should_request_more?
 
         amount = @tracker.demand_to_request

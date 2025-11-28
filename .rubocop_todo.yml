@@ -137,12 +137,6 @@ RSpec/ExpectOutput:
     - 'spec/integration/examples_spec.rb'
     - 'spec/unit/functional_dsl_spec.rb'
 
-# Offense count: 2
-# Configuration parameters: Max, AllowedIdentifiers, AllowedPatterns.
-RSpec/IndexedLet:
-  Exclude:
-    - 'spec/unit/stage_registry_spec.rb'
-
 # Offense count: 1
 # This cop supports safe autocorrection (--autocorrect).
 RSpec/IteratedExpectation:
