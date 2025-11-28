@@ -62,52 +62,67 @@ RSpec.describe Minigun::EnumeratorProducerStage do
   let(:task) { Minigun::Task.new(config: config) }
   let(:pipeline) { task.root_pipeline }
 
-  describe 'enumerator producer behavior' do
+  describe 'source types' do
     it 'is a ProducerStage subclass' do
       stage = described_class.new(:test, pipeline, [1, 2, 3])
       expect(stage).to be_a(Minigun::ProducerStage)
     end
 
-    it 'iterates over an array and emits items' do
+    it 'iterates over an array' do
       stage = described_class.new(:test, pipeline, [1, 2, 3])
 
       emitted = []
       output_queue = Object.new
       output_queue.define_singleton_method(:<<) { |item| emitted << item }
 
-      stage.execute(nil, nil, output_queue, nil)
+      stage.execute(Object.new, nil, output_queue, nil)
 
       expect(emitted).to eq([1, 2, 3])
     end
 
-    it 'iterates over an Enumerator and emits items' do
-      stage = described_class.new(:test, pipeline, (1..3).each)
+    it 'iterates over a range' do
+      stage = described_class.new(:test, pipeline, (1..3))
 
       emitted = []
       output_queue = Object.new
       output_queue.define_singleton_method(:<<) { |item| emitted << item }
 
-      stage.execute(nil, nil, output_queue, nil)
+      stage.execute(Object.new, nil, output_queue, nil)
 
       expect(emitted).to eq([1, 2, 3])
     end
 
-    it 'works with lazy enumerators' do
-      stage = described_class.new(:test, pipeline, [10, 20, 30].lazy)
+    it 'calls a proc and iterates result' do
+      stage = described_class.new(:test, pipeline, -> { [10, 20, 30] })
 
       emitted = []
       output_queue = Object.new
       output_queue.define_singleton_method(:<<) { |item| emitted << item }
 
-      stage.execute(nil, nil, output_queue, nil)
+      stage.execute(Object.new, nil, output_queue, nil)
 
       expect(emitted).to eq([10, 20, 30])
     end
 
-    it 'stores the enumerator' do
-      enum = [1, 2, 3]
-      stage = described_class.new(:test, pipeline, enum)
-      expect(stage.enumerator).to eq(enum)
+    it 'calls a method symbol on context and iterates result' do
+      stage = described_class.new(:test, pipeline, :fetch_items)
+
+      context = Object.new
+      context.define_singleton_method(:fetch_items) { [100, 200] }
+
+      emitted = []
+      output_queue = Object.new
+      output_queue.define_singleton_method(:<<) { |item| emitted << item }
+
+      stage.execute(context, nil, output_queue, nil)
+
+      expect(emitted).to eq([100, 200])
+    end
+
+    it 'stores the source' do
+      source = [1, 2, 3]
+      stage = described_class.new(:test, pipeline, source)
+      expect(stage.source).to eq(source)
     end
   end
 end

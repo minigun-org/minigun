@@ -234,18 +234,32 @@ module Minigun
     end
   end
 
-  # Enumerator-based producer stage - iterates over an enumerator/enumerable
-  # Usage: produce(:name, User.find_each) or produce(my_array)
+  # Enumerator-based producer stage - iterates over a source
+  # Source can be: enumerable, proc/lambda, or method symbol
   class EnumeratorProducerStage < ProducerStage
-    attr_reader :enumerator
+    attr_reader :source
 
-    def initialize(name, pipeline, enumerator, _block = nil, options = {})
+    def initialize(name, pipeline, source, _block = nil, options = {})
       super(name, pipeline, nil, options)
-      @enumerator = enumerator
+      @source = source
     end
 
-    def execute(_context, _input_queue, output_queue, _stage_stats)
-      @enumerator.each { |item| output_queue << item }
+    def execute(context, _input_queue, output_queue, _stage_stats)
+      enumerable = resolve_source(context)
+      enumerable.each { |item| output_queue << item }
+    end
+
+    private
+
+    def resolve_source(context)
+      case @source
+      when Symbol
+        context.send(@source)
+      when Proc
+        @source.call
+      else
+        @source
+      end
     end
   end
 

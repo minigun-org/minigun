@@ -223,13 +223,13 @@ RSpec.describe Minigun::DSL do
     end
   end
 
-  describe 'enumerator-based producers' do
+  describe 'produce_each' do
     before do
       allow(Minigun.logger).to receive(:info)
       allow(Minigun.logger).to receive(:debug)
     end
 
-    it 'supports produce(:name, enumerable) syntax' do
+    it 'supports produce_each :name, enumerable' do
       test_class = Class.new do
         include Minigun::DSL
 
@@ -240,7 +240,7 @@ RSpec.describe Minigun::DSL do
         end
 
         pipeline do
-          produce :source, [1, 2, 3]
+          produce_each :source, [1, 2, 3]
 
           consumer :sink do |num|
             results << num
@@ -254,7 +254,7 @@ RSpec.describe Minigun::DSL do
       expect(instance.results).to contain_exactly(1, 2, 3)
     end
 
-    it 'supports produce(enumerable) syntax (unnamed)' do
+    it 'supports produce_each enumerable (unnamed)' do
       test_class = Class.new do
         include Minigun::DSL
 
@@ -265,7 +265,7 @@ RSpec.describe Minigun::DSL do
         end
 
         pipeline do
-          produce [10, 20, 30]
+          produce_each [10, 20, 30]
 
           consumer :sink do |num|
             results << num
@@ -279,7 +279,7 @@ RSpec.describe Minigun::DSL do
       expect(instance.results).to contain_exactly(10, 20, 30)
     end
 
-    it 'supports range enumerables' do
+    it 'supports produce_each :name, proc' do
       test_class = Class.new do
         include Minigun::DSL
 
@@ -290,7 +290,7 @@ RSpec.describe Minigun::DSL do
         end
 
         pipeline do
-          produce :numbers, (1..5)
+          produce_each :source, -> { [100, 200] }
 
           consumer :sink do |num|
             results << num
@@ -301,10 +301,39 @@ RSpec.describe Minigun::DSL do
       instance = test_class.new
       instance.run
 
-      expect(instance.results).to contain_exactly(1, 2, 3, 4, 5)
+      expect(instance.results).to contain_exactly(100, 200)
     end
 
-    it 'supports lazy enumerators' do
+    it 'supports produce_each :name, :method_symbol' do
+      test_class = Class.new do
+        include Minigun::DSL
+
+        attr_accessor :results
+
+        def initialize
+          @results = []
+        end
+
+        def fetch_data
+          [1000, 2000]
+        end
+
+        pipeline do
+          produce_each :source, :fetch_data
+
+          consumer :sink do |num|
+            results << num
+          end
+        end
+      end
+
+      instance = test_class.new
+      instance.run
+
+      expect(instance.results).to contain_exactly(1000, 2000)
+    end
+
+    it 'supports produce_each(:name) { block }' do
       test_class = Class.new do
         include Minigun::DSL
 
@@ -315,7 +344,7 @@ RSpec.describe Minigun::DSL do
         end
 
         pipeline do
-          produce :items, [100, 200, 300].lazy
+          produce_each(:source) { [5, 10, 15] }
 
           consumer :sink do |num|
             results << num
@@ -326,15 +355,15 @@ RSpec.describe Minigun::DSL do
       instance = test_class.new
       instance.run
 
-      expect(instance.results).to contain_exactly(100, 200, 300)
+      expect(instance.results).to contain_exactly(5, 10, 15)
     end
 
-    it 'creates EnumeratorProducerStage for enumerable producers' do
+    it 'creates EnumeratorProducerStage' do
       test_class = Class.new do
         include Minigun::DSL
 
         pipeline do
-          produce :source, [1, 2, 3]
+          produce_each :source, [1, 2, 3]
           consumer(:sink) { |_x| }
         end
       end
@@ -346,7 +375,15 @@ RSpec.describe Minigun::DSL do
       expect(stage).to be_a(Minigun::EnumeratorProducerStage)
     end
 
-    it 'still supports block-based producers' do
+  end
+
+  describe 'block-based producer' do
+    before do
+      allow(Minigun.logger).to receive(:info)
+      allow(Minigun.logger).to receive(:debug)
+    end
+
+    it 'supports producer(:name) { block }' do
       test_class = Class.new do
         include Minigun::DSL
 
@@ -371,21 +408,6 @@ RSpec.describe Minigun::DSL do
       instance.run
 
       expect(instance.results).to contain_exactly(1, 2, 3)
-    end
-
-    it 'raises error when using both enumerable and block' do
-      test_class = Class.new do
-        include Minigun::DSL
-
-        pipeline do
-          produce :source, [1, 2, 3] do |item, output|
-            output << item
-          end
-          consumer(:sink) { |_x| }
-        end
-      end
-
-      expect { test_class.new.run }.to raise_error(ArgumentError, /Cannot use both enumerable and block/)
     end
   end
 

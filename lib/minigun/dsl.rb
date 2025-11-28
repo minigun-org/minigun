@@ -317,24 +317,42 @@ module Minigun
         task.add_nested_pipeline(name, options, &)
       end
 
-      # Producer - generates items, receives output queue
-      # Signatures:
-      # - producer(:name) { |out| ... }  - block-based
-      # - producer(:name, enumerable)    - enumerable-based
-      # - producer(enumerable)           - unnamed enumerable
-      def producer(*args, &block)
-        # Pop args: name (Symbol), enumerable (responds to #each), options (Hash)
-        name = args.shift if args.first.is_a?(Symbol)
-        enumerator = args.shift if args.first.respond_to?(:each) && !args.first.is_a?(Hash)
-        opts = args.shift || {}
+      # Producer - block-based, you write the loop
+      # producer(:name) { |out| items.each { |i| out << i } }
+      def producer(name = nil, options = {}, &block)
+        options = _apply_execution_context(options)
+        options[:stage_type] = :producer
+        @pipeline.add_stage(:stage, name, options, &block)
+      end
 
-        raise ArgumentError, 'Cannot use both enumerable and block for producer' if enumerator && block
+      # Producer from enumerable - we iterate for you
+      # - produce_each :name, [1,2,3]         # enumerable
+      # - produce_each :name, -> { User.all } # proc/lambda
+      # - produce_each :name, :fetch_users    # method symbol (called on context)
+      # - produce_each(:name) { User.all }    # block returning enumerable
+      # - produce_each [1,2,3]                # unnamed
+      def produce_each(name_or_source = nil, source_or_opts = nil, opts = {}, &block)
+        if name_or_source.is_a?(Symbol) && (source_or_opts || block)
+          # produce_each :name, source  OR  produce_each(:name) { }
+          name = name_or_source
+          source = block || source_or_opts
+          opts = opts.is_a?(Hash) ? opts : {}
+        else
+          # produce_each source  (unnamed)
+          name = nil
+          source = block || name_or_source
+          opts = source_or_opts.is_a?(Hash) ? source_or_opts : {}
+        end
+
+        unless source && (source.respond_to?(:each) || source.respond_to?(:call) || source.is_a?(Symbol))
+          raise ArgumentError, 'produce_each requires an enumerable, proc, method name, or block'
+        end
 
         opts = _apply_execution_context(opts)
-        opts[:stage_type] = enumerator ? :enumerator_producer : :producer
-        opts[:_enumerator] = enumerator if enumerator
+        opts[:stage_type] = :enumerator_producer
+        opts[:_enumerator_source] = source
 
-        @pipeline.add_stage(:stage, name, opts, &block)
+        @pipeline.add_stage(:stage, name, opts)
       end
 
       # Consumer - processes items, receives item and output queue
