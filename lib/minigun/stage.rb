@@ -81,6 +81,32 @@ module Minigun
       size.to_i
     end
 
+    # --- Demand configuration ---
+
+    # Get demand mode for this stage
+    # @return [Symbol] :auto, :manual, or :disabled
+    def demand_mode
+      @options[:demand_mode] || :auto
+    end
+
+    # Get min_demand threshold for this stage
+    # @return [Integer]
+    def min_demand
+      @options[:min_demand] || Minigun.default_min_demand
+    end
+
+    # Get max_demand limit for this stage
+    # @return [Integer]
+    def max_demand
+      @options[:max_demand] || Minigun.default_max_demand
+    end
+
+    # Get demand timeout for this stage
+    # @return [Float, nil]
+    def demand_timeout
+      @options[:demand_timeout] || Minigun.demand_timeout
+    end
+
     # Execute the stage with the given context
     # For loop-based stages, this receives input_queue and output_queue
     def execute(context, input_queue, output_queue, _stage_stats)
@@ -148,12 +174,31 @@ module Minigun
 
     # Create wrapped input queue for this stage
     def create_input_queue(stage_ctx)
-      InputQueue.new(
-        stage_ctx.input_queue,
-        stage_ctx.stage,
-        stage_ctx.sources_expected,
-        stage_stats: stage_ctx.stage_stats
-      )
+      pipeline = stage_ctx.stage.pipeline
+
+      # Use demand-aware queue if demand is enabled
+      if pipeline&.demand_enabled? && pipeline.demand_registry
+        demand_channels = pipeline.demand_registry.channels_to_consumer(stage_ctx.stage)
+
+        queue = Demand::AwareInputQueue.new(
+          stage_ctx.input_queue,
+          stage_ctx.stage,
+          stage_ctx.sources_expected,
+          stage_stats: stage_ctx.stage_stats,
+          demand_channels: demand_channels
+        )
+
+        # Initialize demand on startup
+        queue.initialize_demand
+        queue
+      else
+        InputQueue.new(
+          stage_ctx.input_queue,
+          stage_ctx.stage,
+          stage_ctx.sources_expected,
+          stage_stats: stage_ctx.stage_stats
+        )
+      end
     end
 
     # Create wrapped output queue for this stage
@@ -162,12 +207,29 @@ module Minigun
       downstream = stage_ctx.dag.downstream(stage_ctx.stage)
       task = stage_ctx.stage.task
       downstream_queues = downstream.filter_map { |ds| task&.find_queue(ds) }
-      OutputQueue.new(
-        stage_ctx.stage,
-        downstream_queues,
-        stage_ctx.runtime_edges,
-        stage_stats: stage_ctx.stage_stats
-      )
+      pipeline = stage_ctx.stage.pipeline
+
+      # Use demand-aware queue if demand is enabled
+      if pipeline&.demand_enabled? && pipeline.demand_registry
+        demand_channels = pipeline.demand_registry.channels_from_producer(stage_ctx.stage)
+
+        Demand::AwareOutputQueue.new(
+          stage_ctx.stage,
+          downstream_queues,
+          stage_ctx.runtime_edges,
+          stage_stats: stage_ctx.stage_stats,
+          demand_channels: demand_channels,
+          demand_mode: stage_ctx.stage.demand_mode,
+          demand_timeout: stage_ctx.stage.demand_timeout
+        )
+      else
+        OutputQueue.new(
+          stage_ctx.stage,
+          downstream_queues,
+          stage_ctx.runtime_edges,
+          stage_stats: stage_ctx.stage_stats
+        )
+      end
     end
 
     # Consolidated end signal logic used by all stage types
