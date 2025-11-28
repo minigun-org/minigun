@@ -27,7 +27,7 @@ module Minigun
     #
     class Registry
       def initialize
-        @channels = {}  # { [producer, consumer] => Channel }
+        @channels = {} # { [producer, consumer] => Channel }
         @by_producer = Hash.new { |h, k| h[k] = [] }
         @by_consumer = Hash.new { |h, k| h[k] = [] }
         @mutex = Mutex.new
@@ -126,7 +126,7 @@ module Minigun
         end
       end
 
-      alias inspect to_s
+      alias_method :inspect, :to_s
     end
   end
 end

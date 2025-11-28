@@ -4,11 +4,11 @@ require 'spec_helper'
 
 RSpec.describe Minigun::Demand::Channel do
   let(:producer_stage) do
-    instance_double('Minigun::Stage', name: :producer)
+    instance_double(Minigun::Stage, name: :producer)
   end
 
   let(:consumer_stage) do
-    instance_double('Minigun::Stage', name: :consumer)
+    instance_double(Minigun::Stage, name: :consumer)
   end
 
   describe '#initialize' do
@@ -111,7 +111,6 @@ RSpec.describe Minigun::Demand::Channel do
     describe '#wait_for_demand' do
       it 'blocks until demand is available' do
         channel = described_class.new(producer_stage, consumer_stage)
-        acquired = false
 
         thread = Thread.new do
           sleep 0.01

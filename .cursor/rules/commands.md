@@ -24,10 +24,10 @@
   - (Before Harden -> If there are uncommitted git changes, ask if I would like to commit)
   - (After Harden -> re-run tests)
 - "Lint" means:
-  - Fix any warnings in the output of the tests ("Test" command) and (if applicable to project) the output of the build ("Build" command)
-  - Ruby -> `rubocop -A` (check fixes) then `rubocop`. Anything that isn't easily fixed, leave as-is then run `rubocop --auto-gen-config --exclude-limit 1000`
+  - Ruby -> `rubocop -A` (autocorrect) then check any non-autocorrected warnings. Anything that isn't easily fixed, leave as-is then run `rubocop --auto-gen-config --exclude-limit 1000`
   - Fix all issues and all warnings in the output (do not suppress them). Focus on getting all linter and warnings fixed.
-  - (After Lint -> re-run tests)
+  - Ignore any line-ending (CR-LF) warnings; these are just because we are using a Windows filesystem locally, but Git will handle them when we commit.
+  - (After Lint -> re-run tests if there have been significant changes)
 - "Deps" means Ruby -> `bundle update`
 - "Coverage" means run tests with coverage enabled and increase code coverage.
 - "Build" means to run the project's relevant build command (i.e. to compile to a dist or build folder), **ONLY** if applicable to project.

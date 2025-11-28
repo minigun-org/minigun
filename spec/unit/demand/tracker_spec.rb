@@ -80,7 +80,6 @@ RSpec.describe Minigun::Demand::Tracker do
 
     it 'blocks until demand is available' do
       tracker = described_class.new
-      acquired = false
 
       thread = Thread.new do
         sleep 0.01
@@ -239,14 +238,14 @@ RSpec.describe Minigun::Demand::Tracker do
       acquired_count = Concurrent::AtomicFixnum.new(0)
 
       # Add demand from multiple threads
-      add_threads = 5.times.map do
+      add_threads = Array.new(5) do
         Thread.new do
           100.times { tracker.add_demand(10) }
         end
       end
 
       # Acquire from multiple threads
-      acquire_threads = 5.times.map do
+      acquire_threads = Array.new(5) do
         Thread.new do
           100.times do
             acquired_count.increment if tracker.try_acquire(1)

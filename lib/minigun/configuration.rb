@@ -4,13 +4,10 @@
 module Minigun
   # Global configuration for Minigun
   class Configuration
-    attr_accessor :default_queue_size
+    attr_accessor :default_queue_size, :default_min_demand, :default_max_demand, :demand_timeout
 
     # Demand-based backpressure settings
-    attr_accessor :demand_enabled      # Enable demand system globally (default: false)
-    attr_accessor :default_min_demand  # Default min_demand threshold (default: 500)
-    attr_accessor :default_max_demand  # Default max_demand limit (default: 1000)
-    attr_accessor :demand_timeout      # Default timeout for demand wait (default: nil = infinite)
+    attr_accessor :demand_enabled # Enable demand system globally (default: false)  # Default min_demand threshold (default: 500)  # Default max_demand limit (default: 1000)      # Default timeout for demand wait (default: nil = infinite)
 
     def initialize
       @default_queue_size = 1000 # Default bounded queue size for backpressure

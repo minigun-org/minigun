@@ -3,10 +3,10 @@
 require 'spec_helper'
 
 RSpec.describe Minigun::Demand::Registry do
-  let(:producer1) { instance_double('Minigun::Stage', name: :producer1) }
-  let(:producer2) { instance_double('Minigun::Stage', name: :producer2) }
-  let(:consumer1) { instance_double('Minigun::Stage', name: :consumer1) }
-  let(:consumer2) { instance_double('Minigun::Stage', name: :consumer2) }
+  let(:producer1) { instance_double(Minigun::Stage, name: :producer1) }
+  let(:producer2) { instance_double(Minigun::Stage, name: :producer2) }
+  let(:consumer1) { instance_double(Minigun::Stage, name: :consumer1) }
+  let(:consumer2) { instance_double(Minigun::Stage, name: :consumer2) }
 
   describe '#register' do
     it 'creates a channel between producer and consumer' do
@@ -169,8 +169,8 @@ RSpec.describe Minigun::Demand::Registry do
   describe 'thread safety' do
     it 'handles concurrent registrations' do
       registry = described_class.new
-      producers = 10.times.map { |i| instance_double('Minigun::Stage', name: :"producer#{i}") }
-      consumers = 10.times.map { |i| instance_double('Minigun::Stage', name: :"consumer#{i}") }
+      producers = Array.new(10) { |i| instance_double(Minigun::Stage, name: :"producer#{i}") }
+      consumers = Array.new(10) { |i| instance_double(Minigun::Stage, name: :"consumer#{i}") }
 
       threads = producers.zip(consumers).map do |producer, consumer|
         Thread.new { registry.register(producer, consumer) }

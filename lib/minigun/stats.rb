@@ -245,9 +245,7 @@ module Minigun
 
       parts << "Latency P50/P90/P95: #{(p50 * 1000).round(1)}/#{(p90 * 1000).round(1)}/#{(p95 * 1000).round(1)}ms" if latency_data?
 
-      if demand_data?
-        parts << "Demand waits=#{demand_wait_count} avg=#{(avg_demand_wait * 1000).round(1)}ms"
-      end
+      parts << "Demand waits=#{demand_wait_count} avg=#{(avg_demand_wait * 1000).round(1)}ms" if demand_data?
 
       parts.join(', ')
     end
