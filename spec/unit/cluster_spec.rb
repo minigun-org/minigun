@@ -151,11 +151,12 @@ RSpec.describe Minigun::Cluster do
       it 'registers a stage processor' do
         worker = described_class.new(coordinator_uri: 'druby://localhost:9000')
 
-        worker.register_stage(:compute) do |item, output|
-          output.call(item * 2)
-        end
-
-        # We can't easily test the internal registry, but we can verify it doesn't raise
+        # Should not raise when registering a stage
+        expect do
+          worker.register_stage(:compute) do |item, output|
+            output.call(item * 2)
+          end
+        end.not_to raise_error
       end
     end
   end
@@ -172,7 +173,7 @@ RSpec.describe Minigun::Cluster do
       discovery = described_class.new(port: 9999)
       # rswim should be available since we added it to Gemfile
       # But it may fail to load in some environments
-      expect([true, false]).to include(discovery.available?)
+      expect([true, false]).to include(discovery.available?) # rubocop:disable RSpec/ExpectActual
     end
   end
 
