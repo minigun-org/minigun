@@ -32,5 +32,19 @@ module Minigun
 
       @truffleruby = RUBY_ENGINE == 'truffleruby'
     end
+
+    # Check if async gem is available for fiber-based concurrency
+    def async?
+      return @async if defined?(@async)
+
+      @async = begin
+        require 'async'
+        require 'async/semaphore'
+        require 'async/barrier'
+        true
+      rescue LoadError
+        false
+      end
+    end
   end
 end

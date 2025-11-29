@@ -2380,4 +2380,120 @@ RSpec.describe 'Examples Integration' do
       expect(multi.results.sort).to eq(%w[A B extra_X extra_Y].sort)
     end
   end
+
+  describe '100_fiber_concurrency.rb' do
+    it 'demonstrates fiber-based concurrency with async gem', skip: !Minigun::Platform.async? do
+      load File.expand_path('../../examples/100_fiber_concurrency.rb', __dir__)
+
+      # Both scrapers should complete successfully
+      expect(captured_output).to include('Downloaded: 30 pages')
+      expect(captured_output).to include('Fibers are lightweight')
+    end
+  end
+
+  describe '101_fiber_basic_pipeline.rb' do
+    it 'demonstrates basic fiber pipeline', skip: !Minigun::Platform.async? do
+      load File.expand_path('../../examples/101_fiber_basic_pipeline.rb', __dir__)
+
+      expect(captured_output).to include('Processed: 20 items')
+      expect(captured_output).to include('All transformed: true')
+      expect(captured_output).to include('All enriched: true')
+    end
+  end
+
+  describe '102_fiber_multiple_pools.rb' do
+    it 'demonstrates multiple fiber pools', skip: !Minigun::Platform.async? do
+      load File.expand_path('../../examples/102_fiber_multiple_pools.rb', __dir__)
+
+      expect(captured_output).to include('Processed: 30 items')
+      expect(captured_output).to include('All valid: true')
+      expect(captured_output).to include('All computed: true')
+      expect(captured_output).to include('All persisted: true')
+    end
+  end
+
+  describe '103_fiber_with_threads.rb' do
+    it 'mixes fibers with threads', skip: !Minigun::Platform.async? do
+      load File.expand_path('../../examples/103_fiber_with_threads.rb', __dir__)
+
+      expect(captured_output).to include('Processed: 20 items')
+      expect(captured_output).to include('All IO done: true')
+      expect(captured_output).to include('All CPU done: true')
+      expect(captured_output).to include('All finalized: true')
+      expect(captured_output).to include('Fiber stages used 1 thread')
+    end
+  end
+
+  describe '104_fiber_inside_ipc_fork.rb' do
+    it 'combines IPC forks with fibers', skip: !Minigun::Platform.async? || !Minigun::Platform.fork? do
+      load File.expand_path('../../examples/104_fiber_inside_ipc_fork.rb', __dir__)
+
+      expect(captured_output).to include('Processed: 20 items')
+      expect(captured_output).to include('Fork worker PIDs:')
+      expect(captured_output).to include('All I/O done: true')
+      expect(captured_output).to include('IPC forks for CPU parallelism')
+    end
+  end
+
+  describe '105_fiber_inside_cow_fork.rb' do
+    it 'combines COW forks with fibers', skip: !Minigun::Platform.async? || !Minigun::Platform.fork? do
+      load File.expand_path('../../examples/105_fiber_inside_cow_fork.rb', __dir__)
+
+      expect(captured_output).to include('Processed: 15 items')
+      expect(captured_output).to include('All I/O done: true')
+      expect(captured_output).to include('COW forks for process isolation')
+    end
+  end
+
+  describe '106_fiber_to_fork_handoff.rb' do
+    it 'hands off from fibers to forks and back', skip: !Minigun::Platform.async? || !Minigun::Platform.fork? do
+      load File.expand_path('../../examples/106_fiber_to_fork_handoff.rb', __dir__)
+
+      expect(captured_output).to include('Processed: 12 items')
+      expect(captured_output).to include('All fetched: true')
+      expect(captured_output).to include('All computed: true')
+      expect(captured_output).to include('All stored: true')
+    end
+  end
+
+  describe '107_fiber_fan_out_fan_in.rb' do
+    it 'demonstrates fiber fan-out/fan-in pattern', skip: !Minigun::Platform.async? do
+      load File.expand_path('../../examples/107_fiber_fan_out_fan_in.rb', __dir__)
+
+      expect(captured_output).to include('Total processed: 15 items')
+      expect(captured_output).to include('Path A count: 5')
+      expect(captured_output).to include('Path B count: 5')
+      expect(captured_output).to include('Path C count: 5')
+    end
+  end
+
+  describe '108_fiber_error_handling.rb' do
+    it 'handles errors gracefully in fibers', skip: !Minigun::Platform.async? do
+      load File.expand_path('../../examples/108_fiber_error_handling.rb', __dir__)
+
+      expect(captured_output).to include('Successfully processed: 16 items')
+      expect(captured_output).to include('Errors encountered: 4 items')
+      expect(captured_output).to include('Errors are isolated per fiber')
+    end
+  end
+
+  describe '109_fiber_high_concurrency.rb' do
+    it 'handles high concurrency with fibers', skip: !Minigun::Platform.async? do
+      load File.expand_path('../../examples/109_fiber_high_concurrency.rb', __dir__)
+
+      expect(captured_output).to include('Processed: 500 items')
+      expect(captured_output).to include('Max concurrent fibers:')
+      expect(captured_output).to include('100 concurrent fibers with minimal memory')
+    end
+  end
+
+  describe '110_fiber_batching.rb' do
+    it 'demonstrates fiber with batching', skip: !Minigun::Platform.async? do
+      load File.expand_path('../../examples/110_fiber_batching.rb', __dir__)
+
+      expect(captured_output).to include('Total items processed: 100')
+      expect(captured_output).to include('Batches processed: 10')
+      expect(captured_output).to include('All batch-processed: true')
+    end
+  end
 end

@@ -648,6 +648,66 @@ module Minigun
       end
     end
 
+    # Fiber pool executor - uses async gem for cooperative concurrency
+    # Best for I/O-bound workloads (HTTP requests, database queries, file I/O)
+    # Fibers are lightweight (~4KB) and yield automatically on blocking I/O
+    class FiberPoolExecutor < Executor
+      attr_reader :max_size
+
+      def initialize(stage_ctx, max_size: nil)
+        super(stage_ctx)
+        @max_size = max_size || 5
+
+        unless Minigun::Platform.async?
+          raise Minigun::Error,
+                "Fiber execution requires the 'async' gem. Add `gem 'async'` to your Gemfile."
+        end
+      end
+
+      def execute_stage(stage, user_context, input_queue, output_queue)
+        # Run within Sync reactor (blocks until all fibers complete)
+        Sync do
+          semaphore = Async::Semaphore.new(@max_size)
+          barrier = Async::Barrier.new(parent: semaphore)
+
+          # Process items concurrently with semaphore limiting
+          loop do
+            item = input_queue.pop
+            break if item.is_a?(Minigun::EndOfStage)
+
+            # Spawn fiber for each item (semaphore limits concurrency)
+            barrier.async do
+              process_item(stage, user_context, item, output_queue)
+            end
+          end
+
+          # Wait for all fibers to complete
+          barrier.wait
+        end
+      end
+
+      def shutdown
+        # Fibers are automatically cleaned up when Sync block exits
+      end
+
+      private
+
+      def process_item(stage, user_context, item, output_queue)
+        start_time = Time.now if @stage_ctx.stage_stats
+
+        if stage.respond_to?(:block) && stage.block
+          user_context.instance_exec(item, output_queue, &stage.block)
+        elsif stage.respond_to?(:call)
+          stage.call_with_arity(item, output_queue, &output_queue.to_proc)
+        end
+
+        @stage_ctx.stage_stats&.record_latency(Time.now - start_time)
+      rescue StandardError => e
+        Minigun.logger.error "[Stage:#{@stage_ctx.stage.name}] Fiber error: #{e.message}"
+        Minigun.logger.debug e.backtrace.join("\n") if Minigun.logger.debug?
+      end
+    end
+
     # Ractor pool executor - manages ractor execution
     class RactorPoolExecutor < Executor
       def initialize(stage_ctx, max_size: nil)
@@ -675,6 +735,8 @@ module Minigun
         InlineExecutor.new(...)
       when :thread
         ThreadPoolExecutor.new(...)
+      when :fiber
+        FiberPoolExecutor.new(...)
       when :cow_fork
         CowForkPoolExecutor.new(...)
       when :ipc_fork
@@ -682,7 +744,7 @@ module Minigun
       when :ractor
         RactorPoolExecutor.new(...)
       else
-        raise ArgumentError, "Unknown executor type: #{type}. Valid types: :inline, :thread, :cow_fork, :ipc_fork, :ractor"
+        raise ArgumentError, "Unknown executor type: #{type}. Valid types: :inline, :thread, :fiber, :cow_fork, :ipc_fork, :ractor"
       end
     end
   end

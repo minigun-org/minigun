@@ -30,6 +30,12 @@ RSpec.describe Minigun::Execution::Executor do
       ipc_fork_executor = Minigun::Execution.create_executor(:ipc_fork, stage_ctx, max_size: 4)
       expect(ipc_fork_executor).to be_a(Minigun::Execution::IpcForkPoolExecutor)
       expect(ipc_fork_executor.max_size).to eq(4)
+
+      if Minigun::Platform.async?
+        fiber_executor = Minigun::Execution.create_executor(:fiber, stage_ctx, max_size: 10)
+        expect(fiber_executor).to be_a(Minigun::Execution::FiberPoolExecutor)
+        expect(fiber_executor.max_size).to eq(10)
+      end
     end
 
     it 'all executors extend Executor base class' do
@@ -612,6 +618,194 @@ RSpec.describe Minigun::Execution::IpcForkPoolExecutor, skip: !Minigun::Platform
 
   describe '#shutdown' do
     it 'terminates active processes' do
+      expect { executor.shutdown }.not_to raise_error
+    end
+  end
+end
+
+RSpec.describe Minigun::Execution::FiberPoolExecutor, skip: !Minigun::Platform.async? do
+  let(:task) { Minigun::Task.new }
+  let(:pipeline) { task.root_pipeline }
+  let(:test_stage) { Minigun::ConsumerStage.new(:fiber_test, pipeline, proc { |item, output| output << item }, {}) }
+  let(:stage_stats) { Minigun::Stats.new(test_stage) }
+  let(:stage_ctx) do
+    Struct.new(:pipeline, :root_pipeline, :stage_name, :stage_stats, :dag, :stage).new(
+      pipeline, pipeline, :fiber_test, stage_stats, pipeline.dag, test_stage
+    )
+  end
+  let(:executor) { described_class.new(stage_ctx, max_size: 3) }
+
+  describe '#initialize' do
+    it 'sets max_size' do
+      expect(executor.max_size).to eq(3)
+    end
+
+    it 'defaults max_size to 5' do
+      default_executor = described_class.new(stage_ctx)
+      expect(default_executor.max_size).to eq(5)
+    end
+  end
+
+  describe '#execute_stage' do
+    let(:user_context) { {} }
+
+    it 'executes in fiber (same thread)' do
+      calling_thread_id = Thread.current.object_id
+      execution_thread_id = nil
+
+      # Create a stage that captures thread ID
+      fiber_capture_stage = Minigun::ConsumerStage.new(
+        :fiber_capture,
+        pipeline,
+        proc { |item, output|
+          execution_thread_id = Thread.current.object_id
+          output << item
+        },
+        {}
+      )
+
+      input_queue = Queue.new
+      output_queue = Queue.new
+      input_queue << 1
+      input_queue << Minigun::EndOfStage.new(:test)
+
+      executor.execute_stage(fiber_capture_stage, user_context, input_queue, output_queue)
+      # Fibers run in same thread (cooperative concurrency)
+      expect(execution_thread_id).to eq(calling_thread_id)
+    end
+
+    it 'processes items through the stage' do
+      input_queue = Queue.new
+      output_queue = Queue.new
+      input_queue << 42
+      input_queue << Minigun::EndOfStage.new(:test)
+
+      executor.execute_stage(test_stage, user_context, input_queue, output_queue)
+
+      result = output_queue.pop
+      expect(result).to eq(42)
+    end
+
+    it 'processes multiple items concurrently' do
+      processed = []
+      mutex = Mutex.new
+
+      # Create a stage that tracks when items are processed
+      concurrent_stage = Minigun::ConsumerStage.new(
+        :concurrent_test,
+        pipeline,
+        proc { |item, output|
+          mutex.synchronize { processed << item }
+          output << item
+        },
+        {}
+      )
+
+      input_queue = Queue.new
+      output_queue = Queue.new
+      10.times { |i| input_queue << i }
+      input_queue << Minigun::EndOfStage.new(:test)
+
+      executor.execute_stage(concurrent_stage, user_context, input_queue, output_queue)
+
+      # All items should be processed
+      expect(processed.size).to eq(10)
+    end
+
+    it 'respects max_size concurrency limit' do
+      max_concurrent = 0
+      current_concurrent = 0
+      mutex = Mutex.new
+
+      # Create a stage that tracks concurrent executions
+      concurrency_stage = Minigun::ConsumerStage.new(
+        :concurrency_limit_test,
+        pipeline,
+        proc { |item, output|
+          mutex.synchronize do
+            current_concurrent += 1
+            max_concurrent = [max_concurrent, current_concurrent].max
+          end
+          # Yield to allow other fibers to run
+          sleep 0.001
+          mutex.synchronize { current_concurrent -= 1 }
+          output << item
+        },
+        {}
+      )
+
+      input_queue = Queue.new
+      output_queue = Queue.new
+      20.times { |i| input_queue << i }
+      input_queue << Minigun::EndOfStage.new(:test)
+
+      # max_size is 3, so max_concurrent should never exceed 3
+      executor.execute_stage(concurrency_stage, user_context, input_queue, output_queue)
+
+      expect(max_concurrent).to be <= 3
+    end
+
+    it 'handles errors without crashing other fibers' do
+      processed = []
+      mutex = Mutex.new
+
+      # Create a stage that raises an error on item 5
+      error_stage = Minigun::ConsumerStage.new(
+        :error_test,
+        pipeline,
+        proc { |item, output|
+          raise 'boom' if item == 5
+          mutex.synchronize { processed << item }
+          output << item
+        },
+        {}
+      )
+
+      input_queue = Queue.new
+      output_queue = Queue.new
+      10.times { |i| input_queue << i }
+      input_queue << Minigun::EndOfStage.new(:test)
+
+      # Should not raise - errors are caught within fibers
+      expect do
+        executor.execute_stage(error_stage, user_context, input_queue, output_queue)
+      end.not_to raise_error
+
+      # Other items should still be processed (item 5 errored)
+      expect(processed.size).to eq(9)
+      expect(processed).not_to include(5)
+    end
+
+    it 'records latency stats' do
+      stats_stage = Minigun::ConsumerStage.new(
+        :stats_test,
+        pipeline,
+        proc { |item, output|
+          sleep 0.001 # Small delay
+          output << item
+        },
+        {}
+      )
+
+      stage_ctx_with_stats = Struct.new(:pipeline, :root_pipeline, :stage_name, :stage_stats, :dag, :stage).new(
+        pipeline, pipeline, :stats_test, stage_stats, pipeline.dag, stats_stage
+      )
+      stats_executor = described_class.new(stage_ctx_with_stats, max_size: 3)
+
+      input_queue = Queue.new
+      output_queue = Queue.new
+      3.times { |i| input_queue << i }
+      input_queue << Minigun::EndOfStage.new(:test)
+
+      stats_executor.execute_stage(stats_stage, user_context, input_queue, output_queue)
+
+      # Should have recorded latencies (stored in latency_count)
+      expect(stage_stats.latency_count).to eq(3)
+    end
+  end
+
+  describe '#shutdown' do
+    it 'does nothing (fibers are cleaned up automatically)' do
       expect { executor.shutdown }.not_to raise_error
     end
   end

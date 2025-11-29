@@ -7,6 +7,9 @@ gemspec
 # Development dependencies
 gem 'msgpack'
 
+# Optional fiber concurrency support
+gem 'async'
+
 # Test dependencies
 gem 'benchmark'
 gem 'rake'
