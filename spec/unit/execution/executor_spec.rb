@@ -549,13 +549,6 @@ RSpec.describe Minigun::Execution::IpcForkPoolExecutor, skip: !Minigun::Platform
       expect(result).to eq(10)
     end
 
-    it 'propagates errors from child process via IPC' do
-      # ConsumerStage catches errors and logs them, so workers don't crash
-      # IPC workers are persistent and continue processing after errors
-      # This is correct production behavior
-      skip 'IPC workers have persistent error handling via ConsumerStage'
-    end
-
     it 'respects max_size concurrency limit' do
       # Real stage that processes items
       stage = Minigun::ConsumerStage.new(
@@ -1019,12 +1012,105 @@ RSpec.describe Minigun::Execution::RactorPoolExecutor do
   describe '#initialize' do
     it 'creates with max_size' do
       expect(executor).to be_a(described_class)
+      expect(executor.max_size).to eq(4)
+    end
+
+    it 'defaults to max_size of 5' do
+      default_executor = described_class.new(stage_ctx)
+      expect(default_executor.max_size).to eq(5)
+    end
+  end
+
+  describe 'Platform.ractors?' do
+    it 'returns true when Ractor::Port is available' do
+      if defined?(Ractor::Port)
+        expect(Minigun::Platform.ractors?).to be true
+      else
+        expect(Minigun::Platform.ractors?).to be false
+      end
     end
   end
 
   describe '#execute_stage' do
-    it 'falls back to thread pool' do
-      skip 'Ractor is experimental and flaky in full test suite (passes when run individually)'
+    context 'when Ractor::Port is not available' do
+      before do
+        allow(Minigun::Platform).to receive(:ractors?).and_return(false)
+      end
+
+      it 'falls back to thread pool' do
+        # Create executor after stubbing
+        fallback_executor = described_class.new(stage_ctx, max_size: 2)
+
+        expect { fallback_executor }.not_to raise_error
+        # The fallback is created in initialize when ractors? is false
+      end
+    end
+
+    context 'when Ractor::Port is available', if: Minigun::Platform.ractors? do
+      let(:shareable_proc) do
+        Ractor.shareable_proc { |item, output| output << (item * 2) }
+      end
+      let(:shareable_stage) do
+        Minigun::ConsumerStage.new(:shareable_test, pipeline, shareable_proc, {})
+      end
+      let(:shareable_ctx) do
+        Struct.new(:pipeline, :root_pipeline, :stage_name, :stage_stats, :dag, :stage).new(
+          pipeline, pipeline, :shareable_test, Minigun::Stats.new(shareable_stage), pipeline.dag, shareable_stage
+        )
+      end
+
+      it 'processes items with shareable blocks using Ractors' do
+        ractor_executor = described_class.new(shareable_ctx, max_size: 2)
+
+        input_queue = Queue.new
+        output_queue = Queue.new
+        user_context = Object.new
+
+        # Add test items
+        5.times { |i| input_queue << i }
+        input_queue << Minigun::EndOfStage.new(shareable_stage)
+
+        ractor_executor.execute_stage(shareable_stage, user_context, input_queue, output_queue)
+
+        # Collect results
+        results = []
+        5.times { results << output_queue.pop }
+
+        expect(results.sort).to eq([0, 2, 4, 6, 8])
+      end
+
+      it 'falls back to threads for non-shareable blocks' do
+        # Regular proc is not shareable
+        non_shareable_proc = proc { |item, output| output << (item * 2) }
+        non_shareable_stage = Minigun::ConsumerStage.new(:non_shareable, pipeline, non_shareable_proc, {})
+        non_shareable_ctx = Struct.new(:pipeline, :root_pipeline, :stage_name, :stage_stats, :dag, :stage).new(
+          pipeline, pipeline, :non_shareable, Minigun::Stats.new(non_shareable_stage), pipeline.dag, non_shareable_stage
+        )
+
+        executor = described_class.new(non_shareable_ctx, max_size: 2)
+
+        input_queue = Queue.new
+        output_queue = Queue.new
+        user_context = Object.new
+
+        3.times { |i| input_queue << i }
+        input_queue << Minigun::EndOfStage.new(non_shareable_stage)
+
+        # Should fall back to threads and still work
+        expect do
+          executor.execute_stage(non_shareable_stage, user_context, input_queue, output_queue)
+        end.not_to raise_error
+
+        results = []
+        3.times { results << output_queue.pop }
+        expect(results.sort).to eq([0, 2, 4])
+      end
+    end
+  end
+
+  describe '#shutdown' do
+    it 'cleans up workers' do
+      expect { executor.shutdown }.not_to raise_error
     end
   end
 end

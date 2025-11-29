@@ -130,11 +130,11 @@ module Minigun
                 runtime_edges[stage_ctx.stage] ||= Set.new
                 runtime_edges[stage_ctx.stage].add(target_stage)
               else
-                warn "[Minigun] Target queue not found for routed result: #{target}"
+                Minigun.logger.warn "[Minigun] Target queue not found for routed result: #{target}"
                 output_queue << result # Fallback to default output
               end
             else
-              warn "[Minigun] Target stage not found for routed result: #{target}"
+              Minigun.logger.warn "[Minigun] Target stage not found for routed result: #{target}"
               output_queue << result # Fallback to default output
             end
           else
@@ -149,7 +149,7 @@ module Minigun
         when :serialization_error
           # Result couldn't be serialized (contains IO, Proc, etc.)
           # Log warning but continue - item is skipped
-          warn "[Minigun] Skipped non-serializable result: #{response[:error]} (type: #{response[:item_type]})"
+          Minigun.logger.warn "[Minigun] Skipped non-serializable result: #{response[:error]} (type: #{response[:item_type]})"
         when :no_result
           # Child processed but produced no output
         when :end_of_stage
@@ -163,7 +163,7 @@ module Minigun
         # Normal EOF - worker finished processing, re-raise to exit collection loop
         raise
       rescue IOError => e
-        warn "[Minigun] Error reading from pipe: #{e.message}"
+        Minigun.logger.warn "[Minigun] Error reading from pipe: #{e.message}"
         raise
       end
 
@@ -194,7 +194,7 @@ module Minigun
 
       def execute_stage(stage, user_context, input_queue, output_queue)
         unless Minigun::Platform.fork?
-          warn '[Minigun] Process forking not available, falling back to inline'
+          Minigun.logger.warn '[Minigun] Process forking not available, falling back to inline'
           return stage.execute(user_context, input_queue, output_queue, @stage_ctx.stage_stats)
         end
 
@@ -279,8 +279,8 @@ module Minigun
           rescue StandardError => e
             # Send error back to parent via IPC
             write_error_to_pipe(e, writer)
-            warn "[Minigun] Error in COW forked process: #{e.message}"
-            warn e.backtrace.join("\n")
+            Minigun.logger.error "[Minigun] Error in COW forked process: #{e.message}"
+            Minigun.logger.debug e.backtrace.join("\n")
           ensure
             writer.close
             exit! 0
@@ -290,7 +290,7 @@ module Minigun
         unless pid
           reader.close
           writer.close
-          warn '[Minigun] Failed to fork process, falling back to inline'
+          Minigun.logger.warn '[Minigun] Failed to fork process, falling back to inline'
           # Fall back to processing inline for this item
           capture_queue = Queue.new
           capture_output = Minigun::OutputQueue.new(
@@ -337,7 +337,7 @@ module Minigun
                   read_result_from_pipe(reader, output_queue, @stage_ctx)
                 end
               else
-                warn "[Minigun] COW forked process #{pid} failed with status: #{process_status.exitstatus}"
+                Minigun.logger.warn "[Minigun] COW forked process #{pid} failed with status: #{process_status.exitstatus}"
               end
             rescue EOFError, IOError
               # Normal - child closed pipe after sending results
@@ -366,7 +366,7 @@ module Minigun
 
       def execute_stage(stage, user_context, input_queue, output_queue)
         unless Minigun::Platform.fork?
-          warn '[Minigun] Process forking not available, falling back to inline'
+          Minigun.logger.warn '[Minigun] Process forking not available, falling back to inline'
           return stage.execute(user_context, input_queue, output_queue, @stage_ctx.stage_stats)
         end
 
@@ -466,7 +466,7 @@ module Minigun
           end
 
           unless pid
-            warn '[Minigun] Failed to fork worker process'
+            Minigun.logger.warn '[Minigun] Failed to fork worker process'
             parent_read.close
             parent_write.close
             child_read.close
@@ -572,9 +572,9 @@ module Minigun
               worker[:to_worker].flush
             rescue TypeError, ArgumentError => e
               # Item contains non-serializable objects - skip it
-              warn "[Minigun] Cannot serialize item for IPC worker: #{e.message}. Item type: #{item.class}. Skipping."
+              Minigun.logger.warn "[Minigun] Cannot serialize item for IPC worker: #{e.message}. Item type: #{item.class}. Skipping."
             rescue IOError, EOFError => e
-              warn "[Minigun] Lost connection to worker #{worker[:pid]}: #{e.message}"
+              Minigun.logger.warn "[Minigun] Lost connection to worker #{worker[:pid]}: #{e.message}"
               raise
             end
           end
@@ -722,23 +722,226 @@ module Minigun
       end
     end
 
-    # Ractor pool executor - manages ractor execution
+    # Ractor pool executor - provides true parallelism using Ruby 4.0+ Ractor::Port API
+    # Each worker Ractor processes items from the main Ractor and sends results back.
+    #
+    # Architecture:
+    # - Main Ractor creates result_port (main can receive from it)
+    # - Workers receive work items via their default_port (Ractor.receive)
+    # - Workers send results to result_port
+    # - Main collects from result_port
+    #
+    # Constraints:
+    # - Stage blocks must be shareable (use Ractor.shareable_proc) or items are deep-copied
+    # - Input/output items must be shareable or will be copied
+    # - User context cannot be shared (Ractor stages operate as pure functions)
+    #
+    # Falls back to ThreadPoolExecutor if:
+    # - Ractor::Port not available (Ruby < 4.0)
+    # - Stage block cannot be made shareable
+    #
     class RactorPoolExecutor < Executor
-      def initialize(stage_ctx, max_size: nil, pool_timeout: nil) # rubocop:disable Lint/UnusedMethodArgument
+      attr_reader :max_size
+
+      def initialize(stage_ctx, max_size: nil, pool_timeout: nil)
         super(stage_ctx)
         @max_size = max_size || 5
-        @fallback = ThreadPoolExecutor.new(stage_ctx, max_size: max_size)
+        @pool_timeout = pool_timeout
+        @workers = []
+        @result_port = nil
+        @collector_thread = nil
+
+        # Create thread fallback for non-Ractor environments
+        @fallback = nil
+        return if Minigun::Platform.ractors?
+
+        @fallback = ThreadPoolExecutor.new(stage_ctx, max_size: max_size, pool_timeout: pool_timeout)
       end
 
       def execute_stage(stage, user_context, input_queue, output_queue)
-        unless defined?(::Ractor)
-          warn '[Minigun] Ractors not available, falling back to thread pool'
+        if @fallback
+          Minigun.logger.warn '[Minigun] Ractors not available (requires Ruby 4.0+), falling back to thread pool'
           return @fallback.execute_stage(stage, user_context, input_queue, output_queue)
         end
 
-        # NOTE: Ractors have similar IPC challenges as process pools
-        # Fall back to threads for now
-        @fallback.execute_stage(stage, user_context, input_queue, output_queue)
+        # Create result port - main Ractor can receive from this
+        @result_port = Ractor::Port.new
+
+        # Create shareable proc from stage block if possible
+        stage_proc = create_shareable_proc(stage)
+        unless stage_proc
+          Minigun.logger.warn '[Minigun] Stage block is not Ractor-shareable, falling back to threads'
+          @fallback = ThreadPoolExecutor.new(@stage_ctx, max_size: @max_size, pool_timeout: @pool_timeout)
+          return @fallback.execute_stage(stage, user_context, input_queue, output_queue)
+        end
+
+        # Spawn worker Ractors
+        spawn_workers(stage_proc)
+
+        # Distribute work and collect results
+        begin
+          distribute_work(input_queue, output_queue)
+        ensure
+          shutdown
+        end
+      end
+
+      def shutdown
+        # Send shutdown signal to all workers first (parallel)
+        # rubocop:disable Style/CombinableLoops -- intentionally separate: signal all, then join all
+        @workers.each do |worker|
+          worker.send(:shutdown)
+        rescue Ractor::ClosedError
+          # Already closed, will handle in join phase
+        end
+
+        # Then wait for all workers to finish (parallel join)
+        @workers.each do |worker|
+          worker.join
+        rescue Ractor::RemoteError => e
+          Minigun.logger.warn "[Ractor] Worker error during shutdown: #{e.cause&.message || e.message}"
+        end
+        # rubocop:enable Style/CombinableLoops
+
+        @workers.clear
+
+        # Close the result port
+        @result_port&.close
+        @result_port = nil
+      end
+
+      private
+
+      def create_shareable_proc(stage)
+        return nil unless stage.respond_to?(:block) && stage.block
+
+        block = stage.block
+
+        # Check if the block is already shareable (e.g., created with shareable: true option)
+        return block if Ractor.shareable?(block)
+
+        # Try to make the proc shareable
+        # Note: User's block must not capture non-shareable state
+        begin
+          Ractor.make_shareable(block.dup)
+        rescue Ractor::IsolationError => e
+          Minigun.logger.debug "[Ractor] Block not shareable: #{e.message}"
+          # Fall back to threads for non-shareable blocks
+          nil
+        end
+      end
+
+      def spawn_workers(stage_proc)
+        result_port = @result_port
+
+        @max_size.times do |i|
+          worker = Ractor.new(stage_proc, result_port, name: "minigun-ractor-#{i}") do |proc, rport|
+            # Output collector that responds to << for DSL compatibility
+            # Defined inline in the Ractor block since external classes can't be passed
+            output_collector = Class.new do
+              attr_reader :results
+
+              def initialize
+                @results = []
+              end
+
+              def <<(item)
+                @results << item
+                self
+              end
+
+              def push(item, target: nil) # rubocop:disable Lint/UnusedMethodArgument
+                # Routing not supported in Ractor mode - just collect
+                @results << item
+              end
+            end
+
+            loop do
+              msg = Ractor.receive # Receive from default port
+              break if msg == :shutdown
+
+              begin
+                start_time = Time.now
+                item = msg[:item]
+                # Process item with the shareable proc
+                # Use an output collector object that responds to <<
+                collector = output_collector.new
+                proc.call(item, collector)
+                latency = Time.now - start_time
+
+                # Send each result back to main via result_port
+                collector.results.each { |r| rport << { type: :result, result: r } }
+
+                # Signal item completion with latency for stats tracking
+                rport << { type: :item_done, latency: latency }
+              rescue StandardError => e
+                rport << { type: :error, error: e.message, backtrace: e.backtrace }
+                rport << { type: :item_done }
+              end
+            end
+          end
+          @workers << worker
+        end
+      end
+
+      def distribute_work(input_queue, output_queue)
+        worker_index = 0
+        pending_count = 0
+        all_sent = false
+        mutex = Mutex.new
+        done_cv = ConditionVariable.new
+
+        # Thread to collect results from result_port
+        @collector_thread = Thread.new do
+          loop do
+            begin
+              msg = @result_port.receive
+            rescue Ractor::ClosedError
+              break
+            end
+
+            case msg[:type]
+            when :result
+              output_queue << msg[:result]
+            when :error
+              Minigun.logger.error "[Ractor] Worker error: #{msg[:error]}"
+              Minigun.logger.debug msg[:backtrace]&.join("\n") if Minigun.logger.debug?
+            when :item_done
+              # Record latency if available
+              @stage_ctx.stage_stats&.record_latency(msg[:latency]) if msg[:latency]
+              mutex.synchronize do
+                pending_count -= 1
+                done_cv.signal if pending_count <= 0 && all_sent
+              end
+            when :collector_done
+              break
+            end
+          end
+        end
+
+        # Distribute items round-robin to workers
+        loop do
+          item = input_queue.pop
+
+          if item.is_a?(Minigun::EndOfStage)
+            mutex.synchronize { all_sent = true }
+            break
+          end
+
+          mutex.synchronize { pending_count += 1 }
+          @workers[worker_index % @max_size].send({ item: item })
+          worker_index += 1
+        end
+
+        # Wait for all pending items to complete
+        mutex.synchronize do
+          done_cv.wait(mutex) until pending_count <= 0
+        end
+
+        # Signal collector to stop and wait
+        @result_port << { type: :collector_done }
+        @collector_thread&.join
+        @collector_thread = nil
       end
     end
 

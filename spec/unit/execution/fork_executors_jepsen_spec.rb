@@ -156,7 +156,7 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun::Platform.f
     end
 
     describe 'Concurrency Stress Tests' do
-      it 'handles high concurrency (pool size << item count)' do
+      it 'handles high concurrency (pool size << item count)', timeout: 30 do
         items = (1..1000).to_a
         input_queue = Queue.new
         output_queue = Queue.new
@@ -446,10 +446,16 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun::Platform.f
         expected = items.map { |x| (x * 3) + 10 }.sort
         expect(results.sort).to eq(expected)
       end
+    end
+  end
+
+  describe 'COW Fork Pool Executor' do
+    it_behaves_like 'fork executor correctness', :cow_fork
+
+    describe 'COW-specific behavior' do
+      let(:executor) { Minigun::Execution.create_executor(:cow_fork, stage_ctx, max_size: 4) }
 
       it 'isolates mutations in user context (COW test)' do
-        skip 'This test is specific to COW behavior' unless executor.is_a?(Minigun::Execution::CowForkPoolExecutor)
-
         items = (1..5).to_a
         input_queue = Queue.new
         output_queue = Queue.new
@@ -481,14 +487,6 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun::Platform.f
 
         verify_exactly_once(items, results)
       end
-    end
-  end
-
-  describe 'COW Fork Pool Executor' do
-    it_behaves_like 'fork executor correctness', :cow_fork
-
-    describe 'COW-specific behavior' do
-      let(:executor) { Minigun::Execution.create_executor(:cow_fork, stage_ctx, max_size: 4) }
 
       it 'shares memory via copy-on-write' do
         # Large read-only data structure - captured in closure

@@ -46,5 +46,12 @@ module Minigun
         false
       end
     end
+
+    # Returns true if Ractor::Port is available (Ruby 4.0+)
+    def ractors?
+      return @ractors if defined?(@ractors)
+
+      @ractors = !!defined?(::Ractor::Port)
+    end
   end
 end

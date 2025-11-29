@@ -113,6 +113,25 @@ module Minigun
         add_stage_hook(:after_fork, name, &after_fork_proc)
       end
 
+      # Handle shareable options for Ractor-compatible blocks
+      # shareable: true - explicit request, raises error on failure
+      # shareable_auto: true - automatic from in_ractors, warns and falls back to threads on failure
+      shareable_explicit = options.delete(:shareable)
+      shareable_auto = options.delete(:shareable_auto)
+
+      if Minigun::Platform.ractors? && (shareable_explicit || shareable_auto) && block
+        begin
+          block = Ractor.shareable_proc(&block)
+        rescue ArgumentError, Ractor::IsolationError => e
+          # Explicit shareable: true - raise error
+          raise Minigun::Error, "Stage :#{name} block cannot be made shareable: #{e.message}" if shareable_explicit
+
+          # Automatic from in_ractors - warn and fall back to threads
+          Minigun.logger.warn "[Pipeline:#{@name}] Stage :#{name} block cannot be made Ractor-shareable, falling back to threads: #{e.message}"
+        end
+      end
+      # If Ractor not available, just use the block as-is (will fall back to threads)
+
       # Create stage instance
       stage = if type.is_a?(Class)
                 # Custom stage class provided (positional constructor style)
