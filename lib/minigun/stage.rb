@@ -170,6 +170,13 @@ module Minigun
       to_s
     end
 
+    # Call the stage's #call method with appropriate args based on arity
+    # Executors call this from outside the class for callable stages
+    def call_with_arity(*args, &)
+      arity = method(:call).arity.abs
+      call(*args[...arity], &)
+    end
+
     private
 
     # Create wrapped input queue for this stage
@@ -245,12 +252,6 @@ module Minigun
 
         queue << EndOfSource.new(stage_ctx.stage)
       end
-    end
-
-    # Call the stage's #call method with appropriate args based on arity
-    def call_with_arity(*args, &)
-      arity = method(:call).arity.abs
-      call(*args[...arity], &)
     end
   end
 

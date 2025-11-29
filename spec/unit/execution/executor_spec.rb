@@ -883,6 +883,124 @@ RSpec.describe Minigun::Execution::FiberPoolExecutor, skip: !Minigun::Platform.a
       expect(processed.size).to eq(5)
     end
   end
+
+  describe 'callable stages (call_with_arity path)' do
+    let(:user_context) { {} }
+
+    # Helper to create an output queue wrapper that supports to_proc for yield syntax
+    def make_output_queue(raw_queue)
+      # Create a simple wrapper with to_proc that pushes to raw queue
+      wrapper = Object.new
+      wrapper.define_singleton_method(:<<) { |item| raw_queue << item }
+      wrapper.define_singleton_method(:to_proc) do
+        proc { |item, **_kwargs| raw_queue << item }
+      end
+      wrapper
+    end
+
+    it 'processes callable stage with call method' do
+      processed = []
+      mutex = Mutex.new
+
+      # Create a callable stage class (defines #call instead of using a block)
+      # Use class_eval to define call method with yield support
+      callable_stage_class = Class.new(Minigun::ConsumerStage)
+      callable_stage_class.class_eval do
+        define_method(:processed) { processed }
+        define_method(:mutex) { mutex }
+
+        def call(item, _output)
+          mutex.synchronize { processed << item }
+          yield(item * 2)
+        end
+      end
+
+      callable_stage = callable_stage_class.new(:callable_test, pipeline, nil, {})
+
+      input_queue = Queue.new
+      raw_output = Queue.new
+      output_queue = make_output_queue(raw_output)
+      5.times { |i| input_queue << i }
+      input_queue << Minigun::EndOfStage.new(:test)
+
+      executor.execute_stage(callable_stage, user_context, input_queue, output_queue)
+
+      expect(processed.size).to eq(5)
+      expect(processed).to contain_exactly(0, 1, 2, 3, 4)
+
+      # Check output was written
+      results = []
+      5.times { results << raw_output.pop }
+      expect(results).to contain_exactly(0, 2, 4, 6, 8)
+    end
+
+    it 'handles callable stage with arity 1 (item only)' do
+      processed = []
+      mutex = Mutex.new
+
+      # Callable stage with arity 1 - only receives item
+      callable_stage_class = Class.new(Minigun::ConsumerStage)
+      callable_stage_class.class_eval do
+        define_method(:processed) { processed }
+        define_method(:mutex) { mutex }
+
+        def call(item)
+          mutex.synchronize { processed << item }
+          yield(item * 3)
+        end
+      end
+
+      callable_stage = callable_stage_class.new(:arity1_test, pipeline, nil, {})
+
+      input_queue = Queue.new
+      raw_output = Queue.new
+      output_queue = make_output_queue(raw_output)
+      3.times { |i| input_queue << (i + 1) }
+      input_queue << Minigun::EndOfStage.new(:test)
+
+      executor.execute_stage(callable_stage, user_context, input_queue, output_queue)
+
+      expect(processed).to contain_exactly(1, 2, 3)
+
+      results = []
+      3.times { results << raw_output.pop }
+      expect(results).to contain_exactly(3, 6, 9)
+    end
+
+    it 'handles errors in callable stages' do
+      processed = []
+      mutex = Mutex.new
+
+      callable_stage_class = Class.new(Minigun::ConsumerStage)
+      callable_stage_class.class_eval do
+        define_method(:processed) { processed }
+        define_method(:mutex) { mutex }
+
+        def call(item, _output)
+          raise 'callable boom' if item == 2
+
+          mutex.synchronize { processed << item }
+          yield(item)
+        end
+      end
+
+      callable_stage = callable_stage_class.new(:error_callable_test, pipeline, nil, {})
+
+      input_queue = Queue.new
+      raw_output = Queue.new
+      output_queue = make_output_queue(raw_output)
+      5.times { |i| input_queue << i }
+      input_queue << Minigun::EndOfStage.new(:test)
+
+      expect do
+        executor.execute_stage(callable_stage, user_context, input_queue, output_queue)
+      end.not_to raise_error
+
+      # Item 2 errored, others processed
+      expect(processed.size).to eq(4)
+      expect(processed).not_to include(2)
+    end
+  end
 end
 
 RSpec.describe Minigun::Execution::RactorPoolExecutor do
