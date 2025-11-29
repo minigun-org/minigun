@@ -136,7 +136,7 @@ RSpec.describe Minigun::Execution::Executor do
       error_stage = Minigun::ConsumerStage.new(
         :error_test,
         pipeline,
-        proc { |_item, _output| raise StandardError, 'test error' },
+        proc { |_item, _output| raise StandardError.new('test error') },
         {}
       )
 
@@ -296,7 +296,7 @@ RSpec.describe Minigun::Execution::ThreadPoolExecutor do
       error_stage = Minigun::ConsumerStage.new(
         :error_test,
         pipeline,
-        proc { |_item, _output| raise StandardError, 'boom' },
+        proc { |_item, _output| raise StandardError.new('boom') },
         {}
       )
 
@@ -382,7 +382,7 @@ RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: !Minigun::Platform
       error_stage = Minigun::ConsumerStage.new(
         :error_test,
         pipeline,
-        proc { |_item, _output| raise StandardError, 'boom' },
+        proc { |_item, _output| raise StandardError.new('boom') },
         {}
       )
 

@@ -163,7 +163,7 @@ RSpec.describe 'Multiple Producers' do
           end
 
           producer :bad_producer do |_output|
-            raise StandardError, 'Producer error'
+            raise StandardError.new('Producer error')
           end
 
           consumer :collect do |item|

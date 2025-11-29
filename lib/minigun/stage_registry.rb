@@ -35,9 +35,8 @@ module Minigun
             @pipeline_stages[pipeline] ||= {}
             if @pipeline_stages[pipeline].key?(name_str)
               existing_stage = @pipeline_stages[pipeline][name_str]
-              raise StageNameConflict,
-                    "Stage name '#{name}' already exists in pipeline '#{pipeline.name}' " \
-                    "(existing: #{existing_stage.inspect}, new: #{stage.inspect})"
+              raise StageNameConflict.new("Stage name '#{name}' already exists in pipeline '#{pipeline.name}' " \
+                                          "(existing: #{existing_stage.inspect}, new: #{stage.inspect})")
             end
             @pipeline_stages[pipeline][name_str] = stage
           end
@@ -63,17 +62,15 @@ module Minigun
       # Level 2: Children (stages in nested pipelines)
       children_stages = find_in_children(from_pipeline, name_str)
       if children_stages.size > 1
-        raise AmbiguousRoutingError,
-              "Stage name '#{name}' is ambiguous - found #{children_stages.size} matches in nested pipelines"
+        raise AmbiguousRoutingError.new("Stage name '#{name}' is ambiguous - found #{children_stages.size} matches in nested pipelines")
       end
       return children_stages.first if children_stages.size == 1
 
       # Level 3: Global (any stage anywhere)
       global_stages = @global_names[name_str]
       if global_stages.size > 1
-        raise AmbiguousRoutingError,
-              "Stage name '#{name}' is ambiguous - found #{global_stages.size} matches globally: " \
-              "#{global_stages.map(&:inspect).join(', ')}"
+        raise AmbiguousRoutingError.new("Stage name '#{name}' is ambiguous - found #{global_stages.size} matches globally: " \
+                                        "#{global_stages.map(&:inspect).join(', ')}")
       end
       return global_stages.first if global_stages.size == 1
 

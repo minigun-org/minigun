@@ -197,7 +197,7 @@ module Minigun
         Minigun.logger.info "[Cluster] Worker #{@worker_id} connected to #{@coordinator_uri}"
         true
       rescue DRb::DRbConnError => e
-        raise ConnectionError, "Failed to connect to coordinator at #{@coordinator_uri}: #{e.message}"
+        raise ConnectionError.new("Failed to connect to coordinator at #{@coordinator_uri}: #{e.message}")
       end
 
       # Start processing work
@@ -233,7 +233,7 @@ module Minigun
       def process_item_sync(stage_name, item)
         stage_proc = @stage_registry[stage_name.to_sym] || @stage_registry[:default]
 
-        raise Error, "No processor registered for stage :#{stage_name}" unless stage_proc
+        raise Error.new("No processor registered for stage :#{stage_name}") unless stage_proc
 
         results = []
         output_collector = ->(result) { results << result }
@@ -421,7 +421,7 @@ module Minigun
         end
 
         def start
-          raise Error, "Gossip discovery requires the 'rswim' gem" unless @available
+          raise Error.new("Gossip discovery requires the 'rswim' gem") unless @available
 
           if @encryption_key
             RSwim.encrypted = true

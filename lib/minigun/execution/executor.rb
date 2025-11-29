@@ -19,8 +19,8 @@ module Minigun
       # @param user_context [Object] User context for instance_exec
       # @param input_queue [Queue] Input queue for items
       # @param output_queue [Queue] Output queue for results
-      def execute_stage(stage, user_context, input_queue, output_queue)
-        raise NotImplementedError, "#{self.class}#execute_stage must be implemented"
+      def execute_stage(_stage, _user_context, _input_queue, _output_queue)
+        raise NotImplementedError.new("#{self.class}#execute_stage must be implemented")
       end
 
       # Shutdown and cleanup resources
@@ -665,8 +665,7 @@ module Minigun
 
         return if Minigun::Platform.fibers?
 
-        raise Minigun::Error,
-              "Fiber execution requires the 'async' gem. Add `gem 'async'` to your Gemfile."
+        raise Minigun::Error.new("Fiber execution requires the 'async' gem. Add `gem 'async'` to your Gemfile.")
       end
 
       def execute_stage(stage, user_context, input_queue, output_queue)
@@ -1011,7 +1010,7 @@ module Minigun
         setup_coordinator(stage.name)
 
         unless @coordinator.wait_for_workers(min_count: @min_workers, timeout: @worker_timeout)
-          raise Cluster::Error, "Timeout waiting for workers. Got #{@coordinator.worker_count}, need #{@min_workers}"
+          raise Cluster::Error.new("Timeout waiting for workers. Got #{@coordinator.worker_count}, need #{@min_workers}")
         end
 
         Minigun.logger.info "[Cluster] Starting stage :#{stage.name} with #{@coordinator.worker_count} workers"
@@ -1066,7 +1065,7 @@ module Minigun
         end
 
         if @direct_workers.empty?
-          raise Cluster::Error, 'No workers available in direct mode'
+          raise Cluster::Error.new('No workers available in direct mode')
         end
 
         Minigun.logger.info "[Cluster] Starting stage :#{stage.name} with #{@direct_workers.size} workers (direct mode)"
@@ -1187,7 +1186,7 @@ module Minigun
       when :cluster
         ClusterPoolExecutor.new(...)
       else
-        raise ArgumentError, "Unknown executor type: #{type}. Valid types: :inline, :thread, :fiber, :cow_fork, :ipc_fork, :ractor, :cluster"
+        raise ArgumentError.new("Unknown executor type: #{type}. Valid types: :inline, :thread, :fiber, :cow_fork, :ipc_fork, :ractor, :cluster")
       end
     end
   end

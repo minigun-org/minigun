@@ -270,7 +270,7 @@ RSpec.describe Minigun::Worker do
       error_stage = Minigun::ConsumerStage.new(
         :error_stage,
         pipeline,
-        proc { |_item, _output| raise StandardError, 'Test error' },
+        proc { |_item, _output| raise StandardError.new('Test error') },
         {}
       )
 

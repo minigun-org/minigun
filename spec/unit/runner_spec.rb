@@ -177,7 +177,7 @@ RSpec.describe Minigun::Runner do
       before do
         # Add a stage that raises an error
         error_pipeline.add_stage(:producer, :error_producer) do |_output|
-          raise StandardError, 'Pipeline error'
+          raise StandardError.new('Pipeline error')
         end
       end
 

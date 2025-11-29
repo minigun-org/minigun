@@ -33,9 +33,9 @@ module Minigun
       # @param min_demand [Integer] Threshold to trigger demand replenishment (default: 500)
       # @param max_demand [Integer] Maximum items to request at once (default: 1000)
       def initialize(min_demand: 500, max_demand: 1000)
-        raise ArgumentError, 'min_demand must be non-negative' if min_demand < 0
-        raise ArgumentError, 'max_demand must be positive' if max_demand <= 0
-        raise ArgumentError, 'min_demand must be less than max_demand' if min_demand >= max_demand
+        raise ArgumentError.new('min_demand must be non-negative') if min_demand < 0
+        raise ArgumentError.new('max_demand must be positive') if max_demand <= 0
+        raise ArgumentError.new('min_demand must be less than max_demand') if min_demand >= max_demand
 
         @min_demand = min_demand
         @max_demand = max_demand
@@ -55,7 +55,7 @@ module Minigun
       # @param count [Integer] Number of items to request
       # @return [void]
       def add_demand(count)
-        raise ArgumentError, 'count must be non-negative' if count < 0
+        raise ArgumentError.new('count must be non-negative') if count < 0
 
         @mutex.synchronize do
           return if @closed
@@ -72,7 +72,7 @@ module Minigun
       # @param timeout [Float, nil] Maximum seconds to wait (nil = infinite)
       # @return [Boolean] true if tokens acquired, false if timeout/closed
       def acquire(count = 1, timeout: nil)
-        raise ArgumentError, 'count must be positive' if count <= 0
+        raise ArgumentError.new('count must be positive') if count <= 0
 
         @mutex.synchronize do
           return false if @closed
@@ -103,7 +103,7 @@ module Minigun
       # @param count [Integer] Number of tokens to acquire
       # @return [Boolean] true if tokens acquired, false otherwise
       def try_acquire(count = 1)
-        raise ArgumentError, 'count must be positive' if count <= 0
+        raise ArgumentError.new('count must be positive') if count <= 0
 
         @mutex.synchronize do
           return false if @closed || @pending_demand < count

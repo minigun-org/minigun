@@ -47,7 +47,7 @@ RSpec.configure do |config|
       puts "#{'=' * 80}\n"
 
       # Re-raise with more context
-      raise Timeout::Error, "Test timed out after #{timeout_seconds}s: #{description} (#{location})"
+      raise Timeout::Error.new("Test timed out after #{timeout_seconds}s: #{description} (#{location})")
     end
   end
 end
