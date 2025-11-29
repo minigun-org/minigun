@@ -4,11 +4,9 @@ source 'https://rubygems.org'
 
 gemspec
 
-# Development dependencies
+# Optional dependencies
 gem 'msgpack'
-
-# Optional fiber concurrency support
-gem 'async'
+gem 'async', platforms: %i[ruby windows]
 
 # Test dependencies
 gem 'benchmark'
