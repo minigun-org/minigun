@@ -2617,4 +2617,71 @@ RSpec.describe 'Examples Integration' do
       #   2. Start this worker: ruby examples/111_cluster_worker.rb
     end
   end
+
+  describe '112_multi_stage_cluster.rb' do
+    it 'demonstrates multi-stage cluster pipeline', skip: 'Manual test - requires multiple terminals' do
+      # Multi-stage cluster with sequential processing through 3 clusters
+      # Usage:
+      #   Terminal 1: ruby examples/112_multi_stage_cluster.rb coordinator
+      #   Terminal 2: ruby examples/112_multi_stage_cluster.rb worker_preprocess
+      #   Terminal 3: ruby examples/112_multi_stage_cluster.rb worker_compute
+      #   Terminal 4: ruby examples/112_multi_stage_cluster.rb worker_postprocess
+    end
+  end
+
+  describe '113_hierarchical_cluster.rb' do
+    it 'demonstrates hierarchical cluster topology', skip: 'Manual test - requires multiple terminals' do
+      # Hierarchical clusters with parent workers delegating to child clusters
+      # Usage:
+      #   Terminal 1: ruby examples/113_hierarchical_cluster.rb child_coordinator 9100
+      #   Terminal 2: ruby examples/113_hierarchical_cluster.rb child_coordinator 9101
+      #   Terminal 3: ruby examples/113_hierarchical_cluster.rb child_worker 9100
+      #   Terminal 4: ruby examples/113_hierarchical_cluster.rb child_worker 9101
+      #   Terminal 5: ruby examples/113_hierarchical_cluster.rb parent_worker 9100
+      #   Terminal 6: ruby examples/113_hierarchical_cluster.rb parent_worker 9101
+      #   Terminal 7: ruby examples/113_hierarchical_cluster.rb parent_coordinator
+    end
+  end
+
+  describe '114_cluster_fan_out_fan_in.rb' do
+    it 'demonstrates fan-out/fan-in cluster topology', skip: 'Manual test - requires multiple terminals' do
+      # Diamond topology routing to specialized GPU/CPU clusters
+      # Usage:
+      #   Terminal 1: ruby examples/114_cluster_fan_out_fan_in.rb coordinator
+      #   Terminal 2: ruby examples/114_cluster_fan_out_fan_in.rb worker_image
+      #   Terminal 3: ruby examples/114_cluster_fan_out_fan_in.rb worker_text
+    end
+  end
+
+  describe '115_hybrid_local_cluster.rb' do
+    it 'demonstrates hybrid local + cluster execution', skip: 'Manual test - requires worker terminals' do
+      # Mix of local threads, forks, and cluster execution
+      # Usage:
+      #   Terminal 1: ruby examples/115_hybrid_local_cluster.rb coordinator
+      #   Terminal 2-N: ruby examples/115_hybrid_local_cluster.rb worker
+    end
+  end
+
+  describe '116_peer_to_peer_cluster.rb' do
+    it 'demonstrates peer-to-peer worker communication', skip: 'Manual test - requires multiple workers' do
+      # Workers communicate directly for distributed joins
+      # Usage:
+      #   Terminal 1: ruby examples/116_peer_to_peer_cluster.rb coordinator
+      #   Terminal 2: ruby examples/116_peer_to_peer_cluster.rb worker 0 9010
+      #   Terminal 3: ruby examples/116_peer_to_peer_cluster.rb worker 5 9011
+    end
+  end
+
+  describe '117_cluster_loopback.rb' do
+    it 'demonstrates circular cluster topology (A→B→C→A)', skip: 'Manual test - requires multiple terminals' do
+      # Circular topology where Node C sends back to Node A
+      # Usage (start in this order):
+      #   Terminal 1: ruby examples/117_cluster_loopback.rb coordinator_b
+      #   Terminal 2: ruby examples/117_cluster_loopback.rb coordinator_c
+      #   Terminal 3: ruby examples/117_cluster_loopback.rb worker_b
+      #   Terminal 4: ruby examples/117_cluster_loopback.rb worker_c
+      #   Terminal 5: ruby examples/117_cluster_loopback.rb worker_a
+      #   Terminal 6: ruby examples/117_cluster_loopback.rb coordinator_a
+    end
+  end
 end

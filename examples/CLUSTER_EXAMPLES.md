@@ -189,6 +189,48 @@ ruby examples/116_peer_to_peer_cluster.rb worker 5 9011 # Terminal 3 (shard 5-9)
 
 ---
 
+### 117: Circular Loopback
+**File**: `117_cluster_loopback.rb`
+
+Demonstrates circular cluster topology where work flows A → B → C → back to A. Node C sends processed results back to a receiving stage in Node A.
+
+**Topology**:
+```
+┌──────────────────────────────────────┐
+│                                      │
+▼                                      │
+Node A (port 9000)                     │
+- initial_process                      │
+- final_collect ◄──────────────────────┤
+    │                                  │
+    ▼                                  │
+Node B (port 9001)                     │
+- transform                            │
+    │                                  │
+    ▼                                  │
+Node C (port 9002)                     │
+- validate_and_loopback ───────────────┘
+```
+
+**Usage**:
+```bash
+# Start in this order:
+ruby examples/117_cluster_loopback.rb coordinator_b  # Terminal 1
+ruby examples/117_cluster_loopback.rb coordinator_c  # Terminal 2
+ruby examples/117_cluster_loopback.rb worker_b       # Terminal 3
+ruby examples/117_cluster_loopback.rb worker_c       # Terminal 4
+ruby examples/117_cluster_loopback.rb worker_a       # Terminal 5
+ruby examples/117_cluster_loopback.rb coordinator_a  # Terminal 6 (last!)
+```
+
+**Use Cases**:
+- Iterative algorithms (run until convergence)
+- Multi-pass processing (refine results through rounds)
+- Feedback loops (validate → correct → re-validate)
+- Ring topologies for distributed consensus
+
+---
+
 ## Common Patterns
 
 ### 1. Sequential Cluster Stages
