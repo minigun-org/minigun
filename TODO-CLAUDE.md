@@ -23,8 +23,11 @@ plan based on the current codebase state and TODOS.md.
 - [X] Sort-out pipeline inheritance (https://github.com/minigun-org/minigun/pull/4)
 - [X] Minigun.task do
 - [X] Demand (see polyphony example)
+- [X] Clustering basic implementation
+- [X] Cluster -- Jepsen tests, handle network partitions, etc. "At least once" vs "At most once", guaranteed delivery
+- [ ] Cluster -- test with demand
 - [ ] Demand -- consolidate registry?
-- [X] Fibers support via Async gem
+- [ ] Demand and custom routing
 - [ ] Cleanup accumulator vs. batch
 - [ ] Hooks
 - [ ] Config
@@ -37,6 +40,7 @@ plan based on the current codebase state and TODOS.md.
 - [ ] Example runner context
 - [ ] Fix JRuby/Mac/etc.
 - [ ] Consider what concurrent-ruby abstractions we can use.
+- [ ] Support MINIGUN_LOG_LEVEL var
 - [ ] Rubocop final pass
 
 ### 0.2 Error Handling & Reliability
@@ -84,7 +88,6 @@ plan based on the current codebase state and TODOS.md.
   - [ ] make StageContext and actual class
   - [ ] Transmit stats across forks
   - [ ] Transmit logs across forks--look at Puma
-  - [ ] Support MINIGUN_LOG_LEVEL var
 
 ### Phase 1.01: HUD
 
@@ -185,16 +188,16 @@ plan based on the current codebase state and TODOS.md.
 #### 2.2 Execution Strategies
 **Priority: MEDIUM**
 
-- [ ] **Fiber Support**
-  - Add Fiber-based executor
-  - Implement fiber pool
-  - Add `fibers(n)` DSL method
-  - Test fiber interop with other executors
+- [X] **Fiber Support**
+  - [X] Add Fiber-based executor
+  - [X] Implement fiber pool
+  - [X] Add `fibers(n)` DSL method
+  - [X] Test fiber interop with other executors
 
-- [ ] **Ractor Support** (Ruby 3.0+)
-  - Complete ractor executor implementation
-  - Add examples for ractor usage
-  - Test ractor limitations and workarounds
+- [X] **Ractor Support** (Ruby 3.0+)
+  - [X] Complete ractor executor implementation
+  - [X] Add examples for ractor usage
+  - [X] Test ractor limitations and workarounds
 
 #### 2.3 Routing & Connectivity
 **Priority: MEDIUM**

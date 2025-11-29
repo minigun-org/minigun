@@ -2595,4 +2595,151 @@ RSpec.describe 'Examples Integration' do
       end
     end
   end
+
+  # Cluster examples (110-111) - Manual tests requiring multi-process coordination
+
+  describe '110_cluster_coordinator.rb' do
+    it 'demonstrates cluster coordinator (requires workers)', skip: 'Manual test - requires running workers' do
+      # This example requires manually starting worker nodes
+      # See examples/111_cluster_worker.rb
+      # Usage:
+      #   1. Start coordinator: ruby examples/110_cluster_coordinator.rb
+      #   2. Start workers: ruby examples/111_cluster_worker.rb (can run multiple)
+    end
+  end
+
+  describe '111_cluster_worker.rb' do
+    it 'demonstrates cluster worker (requires coordinator)', skip: 'Manual test - requires running coordinator' do
+      # This example requires a running coordinator
+      # See examples/110_cluster_coordinator.rb
+      # Usage:
+      #   1. Start coordinator: ruby examples/110_cluster_coordinator.rb
+      #   2. Start this worker: ruby examples/111_cluster_worker.rb
+    end
+  end
+
+  describe '112_multi_stage_cluster.rb' do
+    it 'demonstrates multi-stage cluster pipeline', skip: 'Manual test - requires multiple terminals' do
+      # Multi-stage cluster with sequential processing through 3 clusters
+      # Usage:
+      #   Terminal 1: ruby examples/112_multi_stage_cluster.rb coordinator
+      #   Terminal 2: ruby examples/112_multi_stage_cluster.rb worker_preprocess
+      #   Terminal 3: ruby examples/112_multi_stage_cluster.rb worker_compute
+      #   Terminal 4: ruby examples/112_multi_stage_cluster.rb worker_postprocess
+    end
+  end
+
+  describe '113_hierarchical_cluster.rb' do
+    it 'demonstrates hierarchical cluster topology', skip: 'Manual test - requires multiple terminals' do
+      # Hierarchical clusters with parent workers delegating to child clusters
+      # Usage:
+      #   Terminal 1: ruby examples/113_hierarchical_cluster.rb child_coordinator 9100
+      #   Terminal 2: ruby examples/113_hierarchical_cluster.rb child_coordinator 9101
+      #   Terminal 3: ruby examples/113_hierarchical_cluster.rb child_worker 9100
+      #   Terminal 4: ruby examples/113_hierarchical_cluster.rb child_worker 9101
+      #   Terminal 5: ruby examples/113_hierarchical_cluster.rb parent_worker 9100
+      #   Terminal 6: ruby examples/113_hierarchical_cluster.rb parent_worker 9101
+      #   Terminal 7: ruby examples/113_hierarchical_cluster.rb parent_coordinator
+    end
+  end
+
+  describe '114_cluster_fan_out_fan_in.rb' do
+    it 'demonstrates fan-out/fan-in cluster topology', skip: 'Manual test - requires multiple terminals' do
+      # Diamond topology routing to specialized GPU/CPU clusters
+      # Usage:
+      #   Terminal 1: ruby examples/114_cluster_fan_out_fan_in.rb coordinator
+      #   Terminal 2: ruby examples/114_cluster_fan_out_fan_in.rb worker_image
+      #   Terminal 3: ruby examples/114_cluster_fan_out_fan_in.rb worker_text
+    end
+  end
+
+  describe '115_hybrid_local_cluster.rb' do
+    it 'demonstrates hybrid local + cluster execution', skip: 'Manual test - requires worker terminals' do
+      # Mix of local threads, forks, and cluster execution
+      # Usage:
+      #   Terminal 1: ruby examples/115_hybrid_local_cluster.rb coordinator
+      #   Terminal 2-N: ruby examples/115_hybrid_local_cluster.rb worker
+    end
+  end
+
+  describe '116_peer_to_peer_cluster.rb' do
+    it 'demonstrates peer-to-peer worker communication', skip: 'Manual test - requires multiple workers' do
+      # Workers communicate directly for distributed joins
+      # Usage:
+      #   Terminal 1: ruby examples/116_peer_to_peer_cluster.rb coordinator
+      #   Terminal 2: ruby examples/116_peer_to_peer_cluster.rb worker 0 9010
+      #   Terminal 3: ruby examples/116_peer_to_peer_cluster.rb worker 5 9011
+    end
+  end
+
+  describe '117_cluster_loopback.rb' do
+    it 'demonstrates circular cluster topology (A→B→C→A)', skip: 'Manual test - requires multiple terminals' do
+      # Circular topology where Node C sends back to Node A
+      # Usage (start in this order):
+      #   Terminal 1: ruby examples/117_cluster_loopback.rb coordinator_b
+      #   Terminal 2: ruby examples/117_cluster_loopback.rb coordinator_c
+      #   Terminal 3: ruby examples/117_cluster_loopback.rb worker_b
+      #   Terminal 4: ruby examples/117_cluster_loopback.rb worker_c
+      #   Terminal 5: ruby examples/117_cluster_loopback.rb worker_a
+      #   Terminal 6: ruby examples/117_cluster_loopback.rb coordinator_a
+    end
+  end
+
+  describe '118_cluster_direct_mode.rb' do
+    it 'demonstrates direct mode cluster (no coordinator)', skip: 'Manual test - requires multiple terminals' do
+      # Direct mode connects to workers without a coordinator
+      # Work is distributed round-robin to the worker URIs
+      # Usage:
+      #   Terminal 1: ruby examples/118_cluster_direct_mode.rb worker 9001
+      #   Terminal 2: ruby examples/118_cluster_direct_mode.rb worker 9002
+      #   Terminal 3: ruby examples/118_cluster_direct_mode.rb worker 9003
+      #   Terminal 4: ruby examples/118_cluster_direct_mode.rb client
+      #
+      # Or run loopback test (all in one process):
+      #   ruby examples/118_cluster_direct_mode.rb loopback
+    end
+  end
+
+  describe '119_cluster_shutdown_on_done.rb' do
+    it 'demonstrates shutdown_on_done option for direct mode', skip: 'Manual test - requires multiple terminals' do
+      # Demonstrates the shutdown_on_done option for direct mode cluster
+      # When shutdown_on_done: true, workers receive shutdown signal after stage completes
+      # Usage:
+      #   Terminal 1: ruby examples/119_cluster_shutdown_on_done.rb worker 9001
+      #   Terminal 2: ruby examples/119_cluster_shutdown_on_done.rb worker 9002
+      #   Terminal 3: ruby examples/119_cluster_shutdown_on_done.rb client
+      #   # After client completes, workers will automatically exit
+      #
+      # Or run loopback test (all in one process):
+      #   ruby examples/119_cluster_shutdown_on_done.rb loopback
+    end
+  end
+
+  describe '120_cluster_multi_stage_shutdown.rb' do
+    it 'demonstrates multi-stage pipeline with mixed shutdown behavior', skip: 'Manual test - requires multiple terminals' do
+      # Demonstrates pipelines with multiple cluster stages where different
+      # stages have different shutdown_on_done settings:
+      #   - Stage 1 (validate): shutdown_on_done: false - shared workers stay running
+      #   - Stage 2 (process): shutdown_on_done: true - dedicated workers shutdown
+      #
+      # Run loopback test:
+      #   ruby examples/120_cluster_multi_stage_shutdown.rb loopback
+    end
+  end
+
+  describe '121_cluster_loopback_shutdown.rb' do
+    it 'demonstrates careful shutdown handling in loopback topology', skip: 'Manual test - requires multiple terminals' do
+      # Demonstrates shutdown_on_done in a circular topology (A -> B -> C -> A)
+      # Key insight: The originator node (A) must NOT be shutdown or it
+      # cannot receive the final looped-back results.
+      #
+      # Pattern:
+      #   - Originator: shutdown_on_done: false (stays running)
+      #   - Intermediate nodes: shutdown_on_done: true (can shutdown)
+      #   - Final node: shutdown_on_done: true (originator still runs)
+      #
+      # Run loopback test:
+      #   ruby examples/121_cluster_loopback_shutdown.rb loopback
+    end
+  end
 end

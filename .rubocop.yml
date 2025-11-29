@@ -17,6 +17,10 @@ Layout/ClosingHeredocIndentation:
   Exclude:
     - 'spec/hud/**/*.rb'
 
+Lint/ConstantDefinitionInBlock:
+  Exclude:
+    - 'spec/**/*.rb'
+
 Layout/HeredocIndentation:
   Exclude:
     - 'spec/hud/**/*.rb'

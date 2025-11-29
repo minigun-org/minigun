@@ -9,19 +9,25 @@ or mischaracterized any project, please raise a PR to improve this documentation
 
 ## Capability Matrix
 
-| Library / System                           | Type                       | Ruby gem | Triggered in real-time | No persistence required | Pipeline DSL | Batch processing | Telemetry | Multi-machine | Multi-process | Ractors / multi-CPU | Threads / fibers |
-|--------------------------------------------|----------------------------|----------|------------------------|-------------------------|--------------|------------------|-----------|---------------|---------------|---------------------|------------------|
-| **Minigun**                                | Concurrent pipeline        | ✅        | ❌                      | ✅                       | ✅            | ✅                | ✅         | ❌                | ✅             | ✅                   | ✅ (threads & fibers)     |
-| **Elixir GenStage, Flow, Broadway**        | Concurrent pipeline        | ❌        | ✅                      | ✅                       | ✅            | ✅                | ✅         | ✅ (BEAM cluster) | ✅             | ✅                   | ✅ (actors)       |
-| **Solid Queue, Sidekiq, etc.**             | Job queue with workers     | ✅        | ✅                      | ❌                       | 🤏           | ❌                | ✅         | ✅                | ✅             | ❌                   | ✅ (threads)      |
-| **Kafka, SQS, RabbitMQ**                   | Message queue              | ❌        | ✅                      | ❌                       | ❌            | ❌                | ✅         | ✅                | ✅             | ❌                   | ✅ (workers)      |
-| **Karafka (uses Kafka)**                   | Message queue with workers | ✅        | ✅                      | ❌                       | 🤏           | ❌                | ✅         | ✅                | ✅             | ❌                   | ✅ (threads)      |
-| **Airflow, Luigi, Prefect, Dagster**       | Workflow orchestrator      | ❌        | 🤏 (event sensors)     | ❌                       | ✅ (DAGs)     | ✅                | ✅         | ✅                | ✅             | ❌                   | ❌                |
-| **Parallel**                               | Concurrency abstraction    | ✅        | ❌                      | ✅                       | ❌            | ✅                | ❌         | ❌                | ✅             | ✅                   | ✅ (threads)      |
-| **Async + async-container**                | Concurrency primitives     | ✅        | ❌                      | ✅                       | ❌            | ✅                | ❌         | ❌                | ✅             | ❌                   | ✅ (fibers)       |
-| **concurrent-ruby**                        | Concurrency primitives     | ✅        | ❌                      | ✅                       | ❌            | ✅                | ❌         | ❌                | ❌             | ❌                   | ✅ (threads)      |
-| **Piperator**                              | Pipeline abstraction       | ✅        | ❌                      | ✅                       | ✅            | ✅                | ❌         | ❌                | ❌             | ❌                   | ❌                |
-| **Trailblazer::Activity, dry-transaction** | Pipeline abstraction       | ✅        | ❌                      | ✅                       | ✅            | ❌                | ❌         | ❌                | ❌             | ❌                   | ❌                |
+| Library / System                           | Type                       | Ruby gem | Triggered in real-time | No persistence required | Pipeline DSL | Batch processing | Telemetry | Multi-machine    | Multi-process | Ractors / multi-CPU | Threads / fibers        |
+|--------------------------------------------|----------------------------|----------|------------------------|-------------------------|--------------|------------------|-----------|------------------|---------------|---------------------|-------------------------|
+| **Minigun**                                | Concurrent pipeline        | ✅        | ❌                      | ✅                       | ✅            | ✅                | ✅         | 🚧*              | ✅             | ✅**                 | ✅ (threads & fibers***) |
+| **Elixir GenStage, Flow, Broadway**        | Concurrent pipeline        | ❌        | ✅                      | ✅                       | ✅            | ✅                | ✅         | ✅ (BEAM cluster) | ✅             | ✅                   | ✅ (actors)              |
+| **Solid Queue, Sidekiq, etc.**             | Job queue with workers     | ✅        | ✅                      | ❌                       | 🤏           | ❌                | ✅         | ✅                | ✅             | ❌                   | ✅ (threads)             |
+| **Kafka, SQS, RabbitMQ**                   | Message queue              | ❌        | ✅                      | ❌                       | ❌            | ❌                | ✅         | ✅                | ✅             | ❌                   | ✅ (workers)             |
+| **Karafka (uses Kafka)**                   | Message queue with workers | ✅        | ✅                      | ❌                       | 🤏           | ❌                | ✅         | ✅                | ✅             | ❌                   | ✅ (threads)             |
+| **Airflow, Luigi, Prefect, Dagster**       | Workflow orchestrator      | ❌        | 🤏 (event sensors)     | ❌                       | ✅ (DAGs)     | ✅                | ✅         | ✅                | ✅             | ❌                   | ❌                       |
+| **Parallel**                               | Concurrency abstraction    | ✅        | ❌                      | ✅                       | ❌            | ✅                | ❌         | ❌                | ✅             | ✅                   | ✅ (threads)             |
+| **Async + async-container**                | Concurrency primitives     | ✅        | ❌                      | ✅                       | ❌            | ✅                | ❌         | ❌                | ✅             | ❌                   | ✅ (fibers)              |
+| **concurrent-ruby**                        | Concurrency primitives     | ✅        | ❌                      | ✅                       | ❌            | ✅                | ❌         | ❌                | ❌             | ❌                   | ✅ (threads)             |
+| **Piperator**                              | Pipeline abstraction       | ✅        | ❌                      | ✅                       | ✅            | ✅                | ❌         | ❌                | ❌             | ❌                   | ❌                       |
+| **Trailblazer::Activity, dry-transaction** | Pipeline abstraction       | ✅        | ❌                      | ✅                       | ✅            | ❌                | ❌         | ❌                | ❌             | ❌                   | ❌                       |
+
+`*` = Minigun clustering is an experimental feature; use at your own risk.
+
+`**` = Minigun ractor support requires Ruby 4.0+.
+
+`***` = Minigun fiber support is provided via the async gem.
 
 ### Column Meanings
 

@@ -209,6 +209,22 @@ module Minigun
       return Execution::InlineExecutor.new(stage_ctx) if exec_ctx.nil?
 
       type = exec_ctx[:type]
+
+      # Cluster executors have special handling - pass all cluster-specific options
+      if type == :cluster
+        return Execution.create_executor(
+          type, stage_ctx,
+          coordinator_uri: exec_ctx[:coordinator_uri],
+          worker_uris: exec_ctx[:worker_uris],
+          min_workers: exec_ctx[:min_workers],
+          worker_timeout: exec_ctx[:worker_timeout],
+          shutdown_on_done: exec_ctx[:shutdown_on_done],
+          pool_timeout: exec_ctx[:pool_timeout],
+          delivery_mode: exec_ctx[:delivery_mode] || :at_most_once,
+          max_retries: exec_ctx[:max_retries] || 3
+        )
+      end
+
       pool_size = exec_ctx[:pool_size] || exec_ctx[:max] || default_pool_size(type)
       pool_timeout = exec_ctx[:pool_timeout]
 
@@ -218,9 +234,9 @@ module Minigun
     # TODO: Move this elsewhere? DSL class?
     def default_pool_size(type)
       case type
-      when :fiber_pool then @config[:max_fibers] || 5
-      when :thread_pool then @config[:max_threads] || 5
-      when :ractor_pool then @config[:max_ractors] || 5
+      when :fiber, :fiber_pool then @config[:max_fibers] || 5
+      when :thread, :thread_pool then @config[:max_threads] || 5
+      when :ractor, :ractor_pool then @config[:max_ractors] || 5
       when :cow_fork, :ipc_fork then @config[:max_processes] || 3
       else
         raise ArgumentError.new("Unknown execution type: #{type}")
