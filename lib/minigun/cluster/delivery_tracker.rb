@@ -101,11 +101,6 @@ module Minigun
         nil
       end
 
-      # Check if there are pending retries
-      def retries_pending?
-        !@retry_queue.empty?
-      end
-
       # Check if all items are completed (in-flight empty and no retries pending)
       def all_complete?
         @mutex.synchronize do
