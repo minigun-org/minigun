@@ -26,7 +26,6 @@ module Minigun
         @result_queue = Queue.new
         @mutex = Mutex.new
         @running = false
-        @worker_index = 0
       end
 
       # Start the DRb service
@@ -218,8 +217,9 @@ module Minigun
         @running = false
       end
 
-      # Direct mode: Process a single item synchronously and return result
+      # Direct mode: Process a single item synchronously and return results
       # Used when connecting directly to workers without a coordinator
+      # Returns array of results (may be empty, single, or multiple)
       def process_item_sync(stage_name, item)
         stage_proc = @stage_registry[stage_name.to_sym] || @stage_registry[:default]
 
@@ -232,8 +232,8 @@ module Minigun
 
         stage_proc.call(item, output_collector)
 
-        # Return first result (or nil if no results)
-        results.first
+        # Return all results (supports fan-out stages)
+        results
       end
 
       private

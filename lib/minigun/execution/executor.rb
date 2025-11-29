@@ -1073,9 +1073,8 @@ module Minigun
       end
 
       def shutdown_direct_mode
-        @direct_workers.each do |w|
-          w[:proxy].shutdown rescue nil
-        end
+        # Don't call shutdown on workers - they're standalone services
+        # Just clear our references to them
         @direct_workers = []
       end
 
@@ -1095,8 +1094,9 @@ module Minigun
             begin
               result = results_queue.pop(true)
               case result[:type]
-              when :result
-                output_queue << result[:result]
+              when :results
+                # Array of results from worker (supports fan-out)
+                result[:results].each { |r| output_queue << r }
                 @stage_ctx.stage_stats&.record_latency(result[:latency]) if result[:latency]
               when :error
                 Minigun.logger.error "[Cluster] Worker error: #{result[:error][:message]}"
@@ -1130,8 +1130,8 @@ module Minigun
           Thread.new(worker, item, stage.name, results_queue) do |w, work_item, stage_name, rq|
             start_time = Time.now
             begin
-              result = w[:proxy].process_item(stage_name, work_item)
-              rq << { type: :result, result: result, latency: Time.now - start_time }
+              results = w[:proxy].process_item(stage_name, work_item)
+              rq << { type: :results, results: results, latency: Time.now - start_time }
             rescue StandardError => e
               rq << { type: :error, error: { message: e.message } }
             end
