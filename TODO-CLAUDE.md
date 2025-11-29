@@ -23,8 +23,9 @@ plan based on the current codebase state and TODOS.md.
 - [X] Sort-out pipeline inheritance (https://github.com/minigun-org/minigun/pull/4)
 - [X] Minigun.task do
 - [X] Demand (see polyphony example)
+- [X] Clustering basic implementation
+- [X] Cluster -- Jepsen tests, handle network partitions, etc. "At least once" vs "At most once", guaranteed delivery
 - [ ] Demand -- consolidate registry?
-- [ ] Cluster -- Jepsen tests, handle network partitions, etc. "At least once" vs "At most once", guaranteed delivery
 - [ ] Cleanup accumulator vs. batch
 - [ ] Hooks
 - [ ] Config

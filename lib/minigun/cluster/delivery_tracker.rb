@@ -45,10 +45,11 @@ module Minigun
       end
 
       # Record a successful completion
-      # Returns true if this was a new completion, false if already completed (duplicate)
+      # Returns true if this was a new completion, false if already completed (duplicate) or unknown
       def complete(item_id)
         @mutex.synchronize do
           return false if @completed_ids.include?(item_id)
+          return false unless @in_flight.key?(item_id)
 
           @completed_ids.add(item_id)
           @in_flight.delete(item_id)

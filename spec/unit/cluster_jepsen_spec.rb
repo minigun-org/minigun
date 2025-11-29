@@ -109,8 +109,9 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
     end
   end
 
-  # Delivery tracking for exactly-once/at-least-once verification
-  class DeliveryTracker
+  # Test harness for tracking sent/received items during verification
+  # Note: This is NOT the same as Minigun::Cluster::DeliveryTracker (production class)
+  class TestDeliveryVerifier
     attr_reader :items_sent, :items_received, :items_processed
 
     def initialize
@@ -166,7 +167,7 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
   end
 
   let(:network_sim) { NetworkSimulator.new }
-  let(:delivery_tracker) { DeliveryTracker.new }
+  let(:delivery_tracker) { TestDeliveryVerifier.new }
 
   # Track started services for cleanup
   let(:started_services) { [] }
@@ -704,7 +705,7 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
       3.times do
         results = []
         results_mutex = Mutex.new
-        tracker = DeliveryTracker.new
+        tracker = TestDeliveryVerifier.new
 
         klass = Class.new do
           include Minigun::DSL
@@ -752,7 +753,7 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
       items = (1..20).map { |i| { id: i, value: i } }
       results = []
       results_mutex = Mutex.new
-      tracker = DeliveryTracker.new
+      tracker = TestDeliveryVerifier.new
 
       # Fail one worker after some items
       fail_counter = 0
@@ -1224,7 +1225,7 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
       items = (1..10).map { |i| { id: i, value: i } }
       results = []
       results_mutex = Mutex.new
-      tracker = DeliveryTracker.new
+      tracker = TestDeliveryVerifier.new
 
       # First worker fails for first 3 items, then works
       fail_counter = 0
@@ -1284,7 +1285,7 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
       items = (1..15).map { |i| { id: i, value: i } }
       results = []
       results_mutex = Mutex.new
-      tracker = DeliveryTracker.new
+      tracker = TestDeliveryVerifier.new
 
       # First worker always fails
       workers.first[:service].define_singleton_method(:process_item) do |_stage_name, _item|
