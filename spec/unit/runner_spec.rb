@@ -213,15 +213,17 @@ RSpec.describe Minigun::Runner do
     end
 
     it 'restores original signal handlers after cleanup' do
-      original_int = Signal.trap('INT') { puts 'custom' }
+      custom_handler = proc { puts 'custom' }
+      original_int = Signal.trap('INT', &custom_handler)
 
       runner = described_class.new(task, context)
       runner.run
 
-      Signal.trap('INT', original_int)
-      # Handler should be restored to original
+      # Get the current handler after run completes
+      current_handler = Signal.trap('INT', original_int)
 
-      Signal.trap('INT', original_int)
+      # Handler should be restored to our custom handler
+      expect(current_handler).to eq(custom_handler)
     end
   end
 

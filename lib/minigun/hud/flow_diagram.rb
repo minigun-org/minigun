@@ -478,7 +478,8 @@ module Minigun
             x: pos[:x] + (pos[:width] / 2),
             y: pos[:y] + pos[:height]
           }
-        end.sort_by { |s| s[:x] }
+        end
+        source_data.sort_by! { |s| s[:x] }
 
         # Draw lines from each source down to merge level, then turn inward
         source_data.each do |source|

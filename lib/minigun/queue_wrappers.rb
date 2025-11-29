@@ -125,7 +125,7 @@ module Minigun
 
       # Read from IPC pipe
       loop do
-        message = Marshal.load(@pipe_reader)
+        message = Marshal.load(@pipe_reader) # rubocop:disable Security/MarshalLoad
 
         case message[:type]
         when :item
@@ -179,6 +179,7 @@ module Minigun
           )
           @pipe_writer.flush
         rescue StandardError
+          # If we can't even send the error, re-raise (pipe may be broken)
           raise
         end
       end
@@ -223,7 +224,7 @@ module Minigun
           )
           @pipe_writer.flush
         rescue StandardError
-          # If we can't even send the error, pipe is broken
+          # If we can't even send the error, re-raise (pipe may be broken)
           raise
         end
       end

@@ -103,7 +103,7 @@ module Minigun
 
       # Read result from child via IPC pipe
       def read_result_from_pipe(reader, output_queue, stage_ctx = nil)
-        response = Marshal.load(reader)
+        response = Marshal.load(reader) # rubocop:disable Security/MarshalLoad
         case response[:type]
         when :result
           result = response[:result]
