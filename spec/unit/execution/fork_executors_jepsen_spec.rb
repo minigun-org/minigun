@@ -156,7 +156,7 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun::Platform.f
     end
 
     describe 'Concurrency Stress Tests' do
-      it 'handles high concurrency (pool size << item count)' do
+      it 'handles high concurrency (pool size << item count)', timeout: 30 do
         items = (1..1000).to_a
         input_queue = Queue.new
         output_queue = Queue.new

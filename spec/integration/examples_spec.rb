@@ -602,7 +602,9 @@ RSpec.describe 'Examples Integration' do
     it 'demonstrates Ractor-based parallel execution' do
       load File.expand_path('../../examples/27_ractor_execution.rb', __dir__)
 
-      example = RactorExample.new
+      # Use RactorFallbackExample which collects results
+      # (RactorExample uses shareable blocks and just prints output)
+      example = RactorFallbackExample.new
       example.run
 
       expect(example.results.size).to eq(5)
@@ -2494,6 +2496,103 @@ RSpec.describe 'Examples Integration' do
       expect(captured_output).to include('Total items processed: 100')
       expect(captured_output).to include('Batches processed: 10')
       expect(captured_output).to include('All batch-processed: true')
+    end
+  end
+
+  describe '28_ractors_with_threads.rb' do
+    it 'demonstrates Ractors combined with thread pools' do
+      load File.expand_path('../../examples/28_ractors_with_threads.rb', __dir__)
+
+      example = RactorsWithThreads.new
+      example.run
+
+      expect(example.results.size).to eq(20)
+      example.results.each do |r|
+        expect(r).to have_key(:original)
+        expect(r).to have_key(:computed)
+        expect(r).to have_key(:io_done)
+        expect(r[:io_done]).to be true
+      end
+    end
+  end
+
+  describe '29_ractors_with_fibers.rb' do
+    it 'demonstrates Ractors combined with fiber pools', skip: !Minigun::Platform.fibers? do
+      load File.expand_path('../../examples/29_ractors_with_fibers.rb', __dir__)
+
+      example = RactorsWithFibers.new
+      example.run
+
+      expect(example.results.size).to eq(15)
+      example.results.each do |r|
+        expect(r).to have_key(:id)
+        expect(r).to have_key(:computed)
+        expect(r).to have_key(:async_done)
+        expect(r[:async_done]).to be true
+      end
+    end
+  end
+
+  describe '30_ractors_with_cow_forks.rb' do
+    it 'demonstrates Ractors combined with COW forks' do
+      load File.expand_path('../../examples/30_ractors_with_cow_forks.rb', __dir__)
+
+      example = RactorsWithCowForks.new
+      example.run
+
+      expect(example.results.size).to eq(12)
+      example.results.each do |r|
+        expect(r).to have_key(:id)
+        expect(r).to have_key(:computed)
+        expect(r).to have_key(:enriched)
+        expect(r).to have_key(:pid)
+      end
+      # Should have used multiple fork processes
+      pids = example.results.map { |r| r[:pid] }.uniq
+      expect(pids.size).to be >= 1
+    end
+  end
+
+  describe '31_ractors_with_ipc_forks.rb' do
+    it 'demonstrates Ractors combined with IPC forks' do
+      load File.expand_path('../../examples/31_ractors_with_ipc_forks.rb', __dir__)
+
+      example = RactorsWithIpcForks.new
+      example.run
+
+      expect(example.results.size).to eq(10)
+      example.results.each do |r|
+        expect(r).to have_key(:id)
+        expect(r).to have_key(:computed)
+        expect(r).to have_key(:isolated)
+        expect(r).to have_key(:pid)
+        expect(r[:isolated]).to be true
+      end
+      # Should have used multiple IPC fork processes
+      pids = example.results.map { |r| r[:pid] }.uniq
+      expect(pids.size).to be >= 1
+    end
+  end
+
+  describe '32_mixed_execution_strategies.rb' do
+    it 'demonstrates all execution strategies combined', skip: !Minigun::Platform.fibers? do
+      load File.expand_path('../../examples/32_mixed_execution_strategies.rb', __dir__)
+
+      example = MixedExecutionStrategies.new
+      example.run
+
+      expect(example.results.size).to eq(8)
+      example.results.each do |r|
+        # Should have passed through all stages
+        expect(r).to have_key(:id)
+        expect(r).to have_key(:computed)
+        expect(r).to have_key(:thread_id)
+        expect(r).to have_key(:fiber_id)
+        expect(r).to have_key(:cow_pid)
+        expect(r).to have_key(:ipc_pid)
+        expect(r).to have_key(:finalized)
+        expect(r[:finalized]).to be true
+      end
     end
   end
 end

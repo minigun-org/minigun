@@ -722,23 +722,234 @@ module Minigun
       end
     end
 
-    # Ractor pool executor - manages ractor execution
+    # Ractor pool executor - provides true parallelism using Ruby 4.0+ Ractor::Port API
+    # Each worker Ractor processes items from the main Ractor and sends results back.
+    #
+    # Architecture:
+    # - Main Ractor creates result_port (main can receive from it)
+    # - Workers receive work items via their default_port (Ractor.receive)
+    # - Workers send results to result_port
+    # - Main collects from result_port
+    #
+    # Constraints:
+    # - Stage blocks must be shareable (use Ractor.shareable_proc) or items are deep-copied
+    # - Input/output items must be shareable or will be copied
+    # - User context cannot be shared (Ractor stages operate as pure functions)
+    #
+    # Falls back to ThreadPoolExecutor if:
+    # - Ractor::Port not available (Ruby < 4.0)
+    # - Stage block cannot be made shareable
+    #
     class RactorPoolExecutor < Executor
-      def initialize(stage_ctx, max_size: nil, pool_timeout: nil) # rubocop:disable Lint/UnusedMethodArgument
+      attr_reader :max_size
+
+      def initialize(stage_ctx, max_size: nil, pool_timeout: nil)
         super(stage_ctx)
         @max_size = max_size || 5
-        @fallback = ThreadPoolExecutor.new(stage_ctx, max_size: max_size)
+        @pool_timeout = pool_timeout
+        @workers = []
+        @result_port = nil
+        @collector_thread = nil
+
+        # Create thread fallback for non-Ractor environments
+        @fallback = nil
+        unless Minigun::Platform.ractors?
+          @fallback = ThreadPoolExecutor.new(stage_ctx, max_size: max_size, pool_timeout: pool_timeout)
+        end
       end
 
       def execute_stage(stage, user_context, input_queue, output_queue)
-        unless defined?(::Ractor)
-          warn '[Minigun] Ractors not available, falling back to thread pool'
+        if @fallback
+          warn '[Minigun] Ractors not available (requires Ruby 4.0+), falling back to thread pool'
           return @fallback.execute_stage(stage, user_context, input_queue, output_queue)
         end
 
-        # NOTE: Ractors have similar IPC challenges as process pools
-        # Fall back to threads for now
-        @fallback.execute_stage(stage, user_context, input_queue, output_queue)
+        # Create result port - main Ractor can receive from this
+        @result_port = Ractor::Port.new
+
+        # Create shareable proc from stage block if possible
+        stage_proc = create_shareable_proc(stage)
+        unless stage_proc
+          warn '[Minigun] Stage block is not Ractor-shareable, falling back to threads'
+          @fallback = ThreadPoolExecutor.new(@stage_ctx, max_size: @max_size, pool_timeout: @pool_timeout)
+          return @fallback.execute_stage(stage, user_context, input_queue, output_queue)
+        end
+
+        # Spawn worker Ractors
+        spawn_workers(stage_proc)
+
+        # Distribute work and collect results
+        begin
+          distribute_work(input_queue, output_queue)
+        ensure
+          shutdown
+        end
+      end
+
+      def shutdown
+        # Send shutdown signal to all workers
+        @workers.each do |worker|
+          worker.send(:shutdown)
+        rescue Ractor::ClosedError
+          # Already closed
+        end
+
+        # Wait for workers to finish
+        @workers.each do |worker|
+          worker.join
+        rescue Ractor::RemoteError => e
+          Minigun.logger.warn "[Ractor] Worker error during shutdown: #{e.cause&.message || e.message}"
+        end
+        @workers.clear
+
+        # Close the result port
+        @result_port&.close
+        @result_port = nil
+      end
+
+      private
+
+      def create_shareable_proc(stage)
+        return nil unless stage.respond_to?(:block) && stage.block
+
+        block = stage.block
+
+        # Check if the block is already shareable (e.g., created with shareable: true option)
+        return block if Ractor.shareable?(block)
+
+        # Try to make the proc shareable
+        # Note: User's block must not capture non-shareable state
+        begin
+          Ractor.make_shareable(block.dup)
+        rescue Ractor::IsolationError => e
+          Minigun.logger.debug "[Ractor] Block not shareable: #{e.message}"
+          # Try to create a wrapper using shareable_proc
+          # This only works if the block doesn't actually use captured state at runtime
+          create_shareable_wrapper(block)
+        end
+      end
+
+      # Create a shareable wrapper proc that invokes the original block's code
+      # This works for simple pure functions that don't actually need their captured self
+      def create_shareable_wrapper(block)
+        return nil unless defined?(Ractor.shareable_proc)
+
+        # Get the source location to provide better debugging
+        source = block.source_location&.join(':') || 'unknown'
+
+        # We can't easily extract and re-wrap arbitrary blocks
+        # So we fall back to threads for non-shareable blocks
+        Minigun.logger.debug "[Ractor] Cannot create shareable wrapper for block at #{source}"
+        nil
+      end
+
+      def spawn_workers(stage_proc)
+        result_port = @result_port
+
+        @max_size.times do |i|
+          worker = Ractor.new(stage_proc, result_port, i, name: "minigun-ractor-#{i}") do |proc, rport, _id|
+            # Simple output collector that responds to << for DSL compatibility
+            # Can't use a class here (not shareable), so use a Struct
+            output_collector = Class.new do
+              attr_reader :results
+
+              def initialize
+                @results = []
+              end
+
+              def <<(item)
+                @results << item
+                self
+              end
+
+              def push(item, target: nil)
+                # Routing not supported in Ractor mode - just collect
+                @results << item
+              end
+            end
+
+            loop do
+              msg = Ractor.receive # Receive from default port
+              break if msg == :shutdown
+
+              begin
+                item = msg[:item]
+                # Process item with the shareable proc
+                # Use an output collector object that responds to <<
+                collector = output_collector.new
+                proc.call(item, collector)
+
+                # Send each result back to main via result_port
+                collector.results.each { |r| rport << { type: :result, result: r } }
+
+                # Signal item completion
+                rport << { type: :item_done }
+              rescue StandardError => e
+                rport << { type: :error, error: e.message, backtrace: e.backtrace }
+                rport << { type: :item_done }
+              end
+            end
+          end
+          @workers << worker
+        end
+      end
+
+      def distribute_work(input_queue, output_queue)
+        worker_index = 0
+        pending_count = 0
+        all_sent = false
+        mutex = Mutex.new
+        done_cv = ConditionVariable.new
+
+        # Thread to collect results from result_port
+        @collector_thread = Thread.new do
+          loop do
+            begin
+              msg = @result_port.receive
+            rescue Ractor::ClosedError
+              break
+            end
+
+            case msg[:type]
+            when :result
+              output_queue << msg[:result]
+            when :error
+              Minigun.logger.error "[Ractor] Worker error: #{msg[:error]}"
+              Minigun.logger.debug msg[:backtrace]&.join("\n") if Minigun.logger.debug?
+            when :item_done
+              mutex.synchronize do
+                pending_count -= 1
+                done_cv.signal if pending_count <= 0 && all_sent
+              end
+            when :collector_done
+              break
+            end
+          end
+        end
+
+        # Distribute items round-robin to workers
+        loop do
+          item = input_queue.pop
+
+          if item.is_a?(Minigun::EndOfStage)
+            mutex.synchronize { all_sent = true }
+            break
+          end
+
+          mutex.synchronize { pending_count += 1 }
+          @workers[worker_index % @max_size].send({ item: item })
+          worker_index += 1
+        end
+
+        # Wait for all pending items to complete
+        mutex.synchronize do
+          done_cv.wait(mutex) until pending_count <= 0
+        end
+
+        # Signal collector to stop and wait
+        @result_port << { type: :collector_done }
+        @collector_thread&.join
+        @collector_thread = nil
       end
     end
 

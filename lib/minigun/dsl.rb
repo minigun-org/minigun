@@ -271,7 +271,10 @@ module Minigun
       end
 
       def in_ractors(pool_size, &)
-        context = { type: :ractor_pool, pool_size: pool_size }
+        # Ractor execution requires shareable blocks, so automatically apply shareable_auto: true
+        # to all stages defined within this block. This differs from explicit shareable: true
+        # in that failures will warn and fall back to threads instead of raising an error.
+        context = { type: :ractor_pool, pool_size: pool_size, shareable_auto: true }
         _with_execution_context(context, &)
       end
 
@@ -501,6 +504,15 @@ module Minigun
         # Normalize the type if an execution context was set
         if options[:_execution_context] && options[:_execution_context][:type]
           options[:_execution_context][:type] = normalize_execution_type(options[:_execution_context][:type])
+        end
+
+        # Propagate shareable options from execution context to main options
+        # shareable_auto: from in_ractors - warns on failure and falls back to threads
+        # shareable: explicit user request - raises error on failure
+        if options[:_execution_context]&.[](:shareable_auto) && !options.key?(:shareable) && !options.key?(:shareable_auto)
+          options[:shareable_auto] = true
+        elsif options[:_execution_context]&.[](:shareable) && !options.key?(:shareable)
+          options[:shareable] = true
         end
 
         options
