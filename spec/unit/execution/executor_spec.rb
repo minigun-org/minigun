@@ -549,7 +549,6 @@ RSpec.describe Minigun::Execution::IpcForkPoolExecutor, skip: !Minigun::Platform
       expect(result).to eq(10)
     end
 
-
     it 'respects max_size concurrency limit' do
       # Real stage that processes items
       stage = Minigun::ConsumerStage.new(
@@ -1049,7 +1048,7 @@ RSpec.describe Minigun::Execution::RactorPoolExecutor do
 
     context 'when Ractor::Port is available', if: Minigun::Platform.ractors? do
       let(:shareable_proc) do
-        Ractor.shareable_proc { |item, output| output << item * 2 }
+        Ractor.shareable_proc { |item, output| output << (item * 2) }
       end
       let(:shareable_stage) do
         Minigun::ConsumerStage.new(:shareable_test, pipeline, shareable_proc, {})
@@ -1082,7 +1081,7 @@ RSpec.describe Minigun::Execution::RactorPoolExecutor do
 
       it 'falls back to threads for non-shareable blocks' do
         # Regular proc is not shareable
-        non_shareable_proc = proc { |item, output| output << item * 2 }
+        non_shareable_proc = proc { |item, output| output << (item * 2) }
         non_shareable_stage = Minigun::ConsumerStage.new(:non_shareable, pipeline, non_shareable_proc, {})
         non_shareable_ctx = Struct.new(:pipeline, :root_pipeline, :stage_name, :stage_stats, :dag, :stage).new(
           pipeline, pipeline, :non_shareable, Minigun::Stats.new(non_shareable_stage), pipeline.dag, non_shareable_stage
@@ -1098,9 +1097,9 @@ RSpec.describe Minigun::Execution::RactorPoolExecutor do
         input_queue << Minigun::EndOfStage.new(non_shareable_stage)
 
         # Should fall back to threads and still work
-        expect {
+        expect do
           executor.execute_stage(non_shareable_stage, user_context, input_queue, output_queue)
-        }.not_to raise_error
+        end.not_to raise_error
 
         results = []
         3.times { results << output_queue.pop }

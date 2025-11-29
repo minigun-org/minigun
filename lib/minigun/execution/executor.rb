@@ -753,9 +753,9 @@ module Minigun
 
         # Create thread fallback for non-Ractor environments
         @fallback = nil
-        unless Minigun::Platform.ractors?
-          @fallback = ThreadPoolExecutor.new(stage_ctx, max_size: max_size, pool_timeout: pool_timeout)
-        end
+        return if Minigun::Platform.ractors?
+
+        @fallback = ThreadPoolExecutor.new(stage_ctx, max_size: max_size, pool_timeout: pool_timeout)
       end
 
       def execute_stage(stage, user_context, input_queue, output_queue)
@@ -847,7 +847,7 @@ module Minigun
                 self
               end
 
-              def push(item, target: nil)
+              def push(item, target: nil) # rubocop:disable Lint/UnusedMethodArgument
                 # Routing not supported in Ractor mode - just collect
                 @results << item
               end

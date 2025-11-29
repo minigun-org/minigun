@@ -37,7 +37,7 @@ class RactorsWithIpcForks
     in_ractors(3) do
       processor :compute do |item, output|
         # Heavy computation benefits from bypassing GIL
-        result = (1..350).reduce(item.to_f) { |acc, _| Math.sqrt(acc**2 + 1) }
+        result = (1..350).reduce(item.to_f) { |acc, _| Math.sqrt((acc**2) + 1) }
         output << { id: item, computed: result.round(4) }
       end
     end

@@ -24,7 +24,7 @@ RSpec.describe 'Ractor execution', if: Minigun::Platform.ractors? do
           # but consumer below captures @mutex so will fall back to threads
           in_ractors(2) do
             processor :double do |item, output|
-              output << item * 2
+              output << (item * 2)
             end
           end
 
@@ -41,8 +41,7 @@ RSpec.describe 'Ractor execution', if: Minigun::Platform.ractors? do
     end
 
     it 'falls back to threads for non-shareable blocks' do
-      results = []
-      mutex = Mutex.new
+      Mutex.new
 
       klass = Class.new do
         include Minigun::DSL
@@ -63,7 +62,7 @@ RSpec.describe 'Ractor execution', if: Minigun::Platform.ractors? do
           # Should fall back to threads automatically
           in_ractors(2) do
             processor :double do |item, output|
-              output << item * 2
+              output << (item * 2)
             end
           end
 
@@ -158,7 +157,7 @@ RSpec.describe 'Ractor execution', if: Minigun::Platform.ractors? do
             processor :maybe_fail do |item, output|
               raise 'deliberate error' if item == 2
 
-              output << item * 10
+              output << (item * 10)
             end
           end
 
@@ -242,7 +241,7 @@ RSpec.describe 'Ractor execution', if: Minigun::Platform.ractors? do
           in_ractors(4) do
             processor :compute do |item, output|
               # Do some actual computation
-              result = (1..50).reduce(item.to_f) { |acc, _| Math.sqrt(acc**2 + 1) }
+              result = (1..50).reduce(item.to_f) { |acc, _| Math.sqrt((acc**2) + 1) }
               output << { input: item, result: result.round(4) }
             end
           end
@@ -297,7 +296,7 @@ RSpec.describe 'Ractor execution', if: Minigun::Platform.ractors? do
               processor :uses_state do |item, output|
                 # Reference captured state (makes block non-shareable)
                 _ = captured_state
-                output << item * 2
+                output << (item * 2)
               end
             end
 
@@ -353,7 +352,7 @@ RSpec.describe 'Ractor execution', if: Minigun::Platform.ractors? do
             processor :process do |item, output|
               # Small sleep to ensure measurable latency
               sleep 0.01
-              output << item * 2
+              output << (item * 2)
             end
           end
 
@@ -385,8 +384,7 @@ end
 
 RSpec.describe 'Ractor execution fallback', unless: Minigun::Platform.ractors? do
   it 'falls back to threads when Ractors not available' do
-    results = []
-    mutex = Mutex.new
+    Mutex.new
 
     klass = Class.new do
       include Minigun::DSL
@@ -405,7 +403,7 @@ RSpec.describe 'Ractor execution fallback', unless: Minigun::Platform.ractors? d
 
         in_ractors(2) do
           processor :double do |item, output|
-            output << item * 2
+            output << (item * 2)
           end
         end
 

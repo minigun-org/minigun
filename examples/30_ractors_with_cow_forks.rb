@@ -24,7 +24,7 @@ class RactorsWithCowForks
     @results = []
     @mutex = Mutex.new
     # Shared read-only data - COW forks can read this efficiently
-    @lookup_table = (0..100).map { |i| [i, "value_#{i}"] }.to_h.freeze
+    @lookup_table = (0..100).to_h { |i| [i, "value_#{i}"] }.freeze
   end
 
   pipeline do
@@ -36,7 +36,7 @@ class RactorsWithCowForks
     in_ractors(3) do
       processor :compute do |item, output|
         # Heavy computation benefits from bypassing GIL
-        result = (1..400).reduce(item.to_f) { |acc, _| Math.sqrt(acc**2 + 1) }
+        result = (1..400).reduce(item.to_f) { |acc, _| Math.sqrt((acc**2) + 1) }
         output << { id: item, computed: result.round(4) }
       end
     end

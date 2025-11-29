@@ -28,7 +28,7 @@ class MixedExecutionStrategies
     @results = []
     @mutex = Mutex.new
     # Shared read-only data for COW forks
-    @enrichment_data = (0..50).map { |i| [i, "enriched_#{i}"] }.to_h.freeze
+    @enrichment_data = (0..50).to_h { |i| [i, "enriched_#{i}"] }.freeze
   end
 
   pipeline do
@@ -40,7 +40,7 @@ class MixedExecutionStrategies
     in_ractors(2) do
       processor :cpu_compute do |item, output|
         # Heavy computation - Ractors bypass GIL
-        result = (1..200).reduce(item[:id].to_f) { |acc, _| Math.sqrt(acc**2 + 1) }
+        result = (1..200).reduce(item[:id].to_f) { |acc, _| Math.sqrt((acc**2) + 1) }
         output << item.merge(computed: result.round(4), stage: 'ractor')
       end
     end
@@ -132,6 +132,6 @@ if __FILE__ == $PROGRAM_NAME
     puts "    computed: #{r[:computed]}"
     puts "    enriched: #{r[:enriched]}"
     puts "    finalized: #{r[:finalized]}"
-    puts "    stages: produced -> ractor -> thread -> fiber -> cow_fork -> ipc_fork"
+    puts '    stages: produced -> ractor -> thread -> fiber -> cow_fork -> ipc_fork'
   end
 end
