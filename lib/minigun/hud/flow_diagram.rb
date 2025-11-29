@@ -86,7 +86,7 @@ module Minigun
 
         # Update animation (every 2 renders for half speed)
         @render_tick += 1
-        if @render_tick % 2 == 0
+        if @render_tick.even?
           @animation_frame = (@animation_frame + 1) % 24
         end
 
