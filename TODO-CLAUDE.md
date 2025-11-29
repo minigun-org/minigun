@@ -21,16 +21,18 @@ plan based on the current codebase state and TODOS.md.
 - [X] task.start ; task.join
 - [X] in_threads, in_cow_forks, in_fibers
 - [X] Sort-out pipeline inheritance (https://github.com/minigun-org/minigun/pull/4)
+- [X] Minigun.task do
+- [X] Demand (see polyphony example)
+- [ ] Demand -- consolidate registry?
 - [ ] Cleanup accumulator vs. batch
 - [ ] Hooks
 - [ ] Config
-- [ ] Minigun.task do
 - [ ] Genstage --> names required?
-- [ ] Demand (see polyphony example)
 - [ ] Ractors on Ruby 3.5
 - [ ] Minigun global configs
 - [ ] Auto-config: # forks should match # of cores
-- [ ] Remove processor alias?
+- [ ] Remove processor alias? producer_consumer alias?
+- [ ] Custom Stage?
 - [ ] Example runner context
 - [ ] Fix JRuby/Mac/etc.
 - [ ] Consider what concurrent-ruby abstractions we can use.
