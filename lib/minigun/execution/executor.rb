@@ -130,11 +130,11 @@ module Minigun
                 runtime_edges[stage_ctx.stage] ||= Set.new
                 runtime_edges[stage_ctx.stage].add(target_stage)
               else
-                warn "[Minigun] Target queue not found for routed result: #{target}"
+                Minigun.logger.warn "[Minigun] Target queue not found for routed result: #{target}"
                 output_queue << result # Fallback to default output
               end
             else
-              warn "[Minigun] Target stage not found for routed result: #{target}"
+              Minigun.logger.warn "[Minigun] Target stage not found for routed result: #{target}"
               output_queue << result # Fallback to default output
             end
           else
@@ -149,7 +149,7 @@ module Minigun
         when :serialization_error
           # Result couldn't be serialized (contains IO, Proc, etc.)
           # Log warning but continue - item is skipped
-          warn "[Minigun] Skipped non-serializable result: #{response[:error]} (type: #{response[:item_type]})"
+          Minigun.logger.warn "[Minigun] Skipped non-serializable result: #{response[:error]} (type: #{response[:item_type]})"
         when :no_result
           # Child processed but produced no output
         when :end_of_stage
@@ -163,7 +163,7 @@ module Minigun
         # Normal EOF - worker finished processing, re-raise to exit collection loop
         raise
       rescue IOError => e
-        warn "[Minigun] Error reading from pipe: #{e.message}"
+        Minigun.logger.warn "[Minigun] Error reading from pipe: #{e.message}"
         raise
       end
 
@@ -194,7 +194,7 @@ module Minigun
 
       def execute_stage(stage, user_context, input_queue, output_queue)
         unless Minigun::Platform.fork?
-          warn '[Minigun] Process forking not available, falling back to inline'
+          Minigun.logger.warn '[Minigun] Process forking not available, falling back to inline'
           return stage.execute(user_context, input_queue, output_queue, @stage_ctx.stage_stats)
         end
 
@@ -279,8 +279,8 @@ module Minigun
           rescue StandardError => e
             # Send error back to parent via IPC
             write_error_to_pipe(e, writer)
-            warn "[Minigun] Error in COW forked process: #{e.message}"
-            warn e.backtrace.join("\n")
+            Minigun.logger.error "[Minigun] Error in COW forked process: #{e.message}"
+            Minigun.logger.debug e.backtrace.join("\n")
           ensure
             writer.close
             exit! 0
@@ -290,7 +290,7 @@ module Minigun
         unless pid
           reader.close
           writer.close
-          warn '[Minigun] Failed to fork process, falling back to inline'
+          Minigun.logger.warn '[Minigun] Failed to fork process, falling back to inline'
           # Fall back to processing inline for this item
           capture_queue = Queue.new
           capture_output = Minigun::OutputQueue.new(
@@ -337,7 +337,7 @@ module Minigun
                   read_result_from_pipe(reader, output_queue, @stage_ctx)
                 end
               else
-                warn "[Minigun] COW forked process #{pid} failed with status: #{process_status.exitstatus}"
+                Minigun.logger.warn "[Minigun] COW forked process #{pid} failed with status: #{process_status.exitstatus}"
               end
             rescue EOFError, IOError
               # Normal - child closed pipe after sending results
@@ -366,7 +366,7 @@ module Minigun
 
       def execute_stage(stage, user_context, input_queue, output_queue)
         unless Minigun::Platform.fork?
-          warn '[Minigun] Process forking not available, falling back to inline'
+          Minigun.logger.warn '[Minigun] Process forking not available, falling back to inline'
           return stage.execute(user_context, input_queue, output_queue, @stage_ctx.stage_stats)
         end
 
@@ -466,7 +466,7 @@ module Minigun
           end
 
           unless pid
-            warn '[Minigun] Failed to fork worker process'
+            Minigun.logger.warn '[Minigun] Failed to fork worker process'
             parent_read.close
             parent_write.close
             child_read.close
@@ -572,9 +572,9 @@ module Minigun
               worker[:to_worker].flush
             rescue TypeError, ArgumentError => e
               # Item contains non-serializable objects - skip it
-              warn "[Minigun] Cannot serialize item for IPC worker: #{e.message}. Item type: #{item.class}. Skipping."
+              Minigun.logger.warn "[Minigun] Cannot serialize item for IPC worker: #{e.message}. Item type: #{item.class}. Skipping."
             rescue IOError, EOFError => e
-              warn "[Minigun] Lost connection to worker #{worker[:pid]}: #{e.message}"
+              Minigun.logger.warn "[Minigun] Lost connection to worker #{worker[:pid]}: #{e.message}"
               raise
             end
           end
@@ -832,7 +832,7 @@ module Minigun
         result_port = @result_port
 
         @max_size.times do |i|
-          worker = Ractor.new(stage_proc, result_port, i, name: "minigun-ractor-#{i}") do |proc, rport, _id|
+          worker = Ractor.new(stage_proc, result_port, name: "minigun-ractor-#{i}") do |proc, rport|
             # Output collector that responds to << for DSL compatibility
             # Defined inline in the Ractor block since external classes can't be passed
             output_collector = Class.new do
@@ -858,17 +858,19 @@ module Minigun
               break if msg == :shutdown
 
               begin
+                start_time = Time.now
                 item = msg[:item]
                 # Process item with the shareable proc
                 # Use an output collector object that responds to <<
                 collector = output_collector.new
                 proc.call(item, collector)
+                latency = Time.now - start_time
 
                 # Send each result back to main via result_port
                 collector.results.each { |r| rport << { type: :result, result: r } }
 
-                # Signal item completion
-                rport << { type: :item_done }
+                # Signal item completion with latency for stats tracking
+                rport << { type: :item_done, latency: latency }
               rescue StandardError => e
                 rport << { type: :error, error: e.message, backtrace: e.backtrace }
                 rport << { type: :item_done }
@@ -902,6 +904,8 @@ module Minigun
               Minigun.logger.error "[Ractor] Worker error: #{msg[:error]}"
               Minigun.logger.debug msg[:backtrace]&.join("\n") if Minigun.logger.debug?
             when :item_done
+              # Record latency if available
+              @stage_ctx.stage_stats&.record_latency(msg[:latency]) if msg[:latency]
               mutex.synchronize do
                 pending_count -= 1
                 done_cv.signal if pending_count <= 0 && all_sent
