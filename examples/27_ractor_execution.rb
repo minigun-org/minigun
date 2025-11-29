@@ -38,7 +38,7 @@ class RactorExample
       processor :compute do |item, output|
         # CPU-intensive work benefits from true parallelism
         # Each Ractor can utilize a separate CPU core
-        result = (1..1000).reduce(item.to_f) { |acc, _| Math.sqrt(acc**2 + 1) }
+        result = (1..1000).reduce(item.to_f) { |acc, _| Math.sqrt((acc**2) + 1) }
         output << { input: item, computed: result.round(4) }
       end
     end
@@ -88,13 +88,12 @@ if __FILE__ == $PROGRAM_NAME
   if Minigun::Platform.ractors?
     puts '=== Running with Ractor parallelism ==='
     puts 'Using Ractor::Port API for true parallel execution'
-    puts
   else
     puts '=== Running with thread fallback ==='
     puts 'Ractor::Port not available (requires Ruby 4.0+)'
     puts 'Falling back to thread pool execution'
-    puts
   end
+  puts
 
   puts '--- Pure function example (Ractor-compatible) ---'
   RactorExample.new.run

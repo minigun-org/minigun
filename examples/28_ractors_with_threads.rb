@@ -32,7 +32,7 @@ class RactorsWithThreads
     in_ractors(4) do
       processor :cpu_work do |item, output|
         # Simulate CPU-bound computation (runs in true parallel)
-        result = (1..500).reduce(item.to_f) { |acc, _| Math.sqrt(acc**2 + 1) }
+        result = (1..500).reduce(item.to_f) { |acc, _| Math.sqrt((acc**2) + 1) }
         output << { original: item, computed: result.round(4) }
       end
     end
@@ -68,7 +68,7 @@ if __FILE__ == $PROGRAM_NAME
   elapsed = Time.now - start
 
   puts "Processed #{example.results.size} items in #{elapsed.round(3)}s"
-  puts "Sample results:"
+  puts 'Sample results:'
   example.results.sort_by { |r| r[:original] }.first(5).each do |r|
     puts "  #{r[:original]} -> computed: #{r[:computed]}, io_done: #{r[:io_done]}"
   end

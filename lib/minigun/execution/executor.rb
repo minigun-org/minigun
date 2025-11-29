@@ -787,19 +787,22 @@ module Minigun
       end
 
       def shutdown
-        # Send shutdown signal to all workers
+        # Send shutdown signal to all workers first (parallel)
+        # rubocop:disable Style/CombinableLoops -- intentionally separate: signal all, then join all
         @workers.each do |worker|
           worker.send(:shutdown)
         rescue Ractor::ClosedError
-          # Already closed
+          # Already closed, will handle in join phase
         end
 
-        # Wait for workers to finish
+        # Then wait for all workers to finish (parallel join)
         @workers.each do |worker|
           worker.join
         rescue Ractor::RemoteError => e
           Minigun.logger.warn "[Ractor] Worker error during shutdown: #{e.cause&.message || e.message}"
         end
+        # rubocop:enable Style/CombinableLoops
+
         @workers.clear
 
         # Close the result port

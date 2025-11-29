@@ -34,7 +34,7 @@ class RactorsWithFibers
     in_ractors(3) do
       processor :compute do |item, output|
         # Heavy computation benefits from true parallelism
-        result = (1..300).reduce(item.to_f) { |acc, _| Math.sqrt(acc**2 + 1) }
+        result = (1..300).reduce(item.to_f) { |acc, _| Math.sqrt((acc**2) + 1) }
         output << { id: item, computed: result.round(4) }
       end
     end
@@ -75,7 +75,7 @@ if __FILE__ == $PROGRAM_NAME
   fiber_ids = example.results.map { |r| r[:fiber_id] }.uniq
   puts "Used #{fiber_ids.size} different fibers"
 
-  puts "Sample results:"
+  puts 'Sample results:'
   example.results.sort_by { |r| r[:id] }.first(5).each do |r|
     puts "  #{r[:id]} -> computed: #{r[:computed]}, async: #{r[:async_done]}"
   end
