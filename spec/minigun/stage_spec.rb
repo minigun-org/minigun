@@ -26,6 +26,110 @@ RSpec.describe Minigun::Stage do
       expect(executed).to be true
     end
   end
+
+  describe '#initialize' do
+    it 'creates a stage with required attributes' do
+      stage = Minigun::ConsumerStage.new(:test, pipeline, proc { |x, _output| x * 2 }, { foo: 'bar' })
+      expect(stage.name).to eq(:test)
+      expect(stage).to be_a(Minigun::ConsumerStage)
+      expect(stage.block).to be_a(Proc)
+      expect(stage.options).to eq({ foo: 'bar' })
+    end
+
+    it 'works without options' do
+      simple = Minigun::ConsumerStage.new(:simple, pipeline, proc { |_x, _output| }, {})
+      expect(simple.name).to eq(:simple)
+      expect(simple.options).to eq({})
+    end
+  end
+
+  describe '#execute' do
+    it 'executes the block with given context and item' do
+      result = nil
+      stage = Minigun::ConsumerStage.new(
+        :test,
+        pipeline,
+        proc { |item, _output| result = item * 2 },
+        {}
+      )
+
+      context = Object.new
+      input_queue = Queue.new
+      output_queue = Queue.new
+      input_queue << 5
+      input_queue << Minigun::EndOfStage.new(:test)
+
+      stage.execute(context, input_queue, output_queue, nil)
+
+      expect(result).to eq(10)
+    end
+
+    it 'has access to context instance variables' do
+      context_class = Class.new do
+        attr_reader :value
+
+        def initialize(value)
+          @value = value
+        end
+      end
+      context = context_class.new(100)
+
+      stage = Minigun::ConsumerStage.new(
+        :test,
+        pipeline,
+        proc { |item, _output| @value + item },
+        {}
+      )
+
+      input_queue = Queue.new
+      output_queue = Queue.new
+      input_queue << 23
+      input_queue << Minigun::EndOfStage.new(:test)
+
+      stage.execute(context, input_queue, output_queue, nil)
+      # NOTE: execute doesn't return values for consumers in new DSL
+      expect(context.value).to eq(100) # unchanged
+    end
+  end
+
+  describe '#to_h' do
+    it 'converts to hash representation' do
+      block = proc { |_x, _output| }
+      stage = Minigun::ConsumerStage.new(
+        :test,
+        pipeline,
+        block,
+        { opt: 'val' }
+      )
+
+      hash = stage.to_h
+
+      expect(hash[:name]).to eq(:test)
+      expect(hash[:block]).to eq(block)
+      expect(hash[:options]).to include(opt: 'val')
+    end
+  end
+
+  describe '#[]' do
+    it 'provides hash-like access to attributes' do
+      block = proc { |_x, _output| }
+      stage = Minigun::ConsumerStage.new(
+        :test,
+        pipeline,
+        block,
+        { foo: 'bar' }
+      )
+
+      expect(stage[:name]).to eq(:test)
+      expect(stage[:block]).to eq(block)
+      expect(stage[:options]).to eq({ foo: 'bar' })
+    end
+
+    it 'returns nil for unknown keys' do
+      stage = Minigun::ConsumerStage.new(:test, pipeline, proc { |_x, _output| }, {})
+      expect(stage[:unknown]).to be_nil
+    end
+  end
 end
 
 RSpec.describe Minigun::ProducerStage do
@@ -193,115 +297,5 @@ RSpec.describe Minigun::AccumulatorStage do
   it 'is a special batching stage' do
     stage = described_class.new(:test, pipeline, proc {}, {})
     expect(stage.max_size).to eq(100) # default
-  end
-end
-
-RSpec.describe 'Stage common behavior' do
-  let(:config) { { max_threads: 1, max_processes: 1 } }
-  let(:task) { Minigun::Task.new(config: config) }
-  let(:pipeline) { task.root_pipeline }
-  let(:stage) { Minigun::ConsumerStage.new(:test, pipeline, proc { |x, _output| x * 2 }, { foo: 'bar' }) }
-
-  describe '#initialize' do
-    it 'creates a stage with required attributes' do
-      expect(stage.name).to eq(:test)
-      expect(stage).to be_a(Minigun::ConsumerStage)
-      expect(stage.block).to be_a(Proc)
-      expect(stage.options).to eq({ foo: 'bar' })
-    end
-
-    it 'works without options' do
-      simple = Minigun::ConsumerStage.new(:simple, pipeline, proc { |_x, _output| }, {})
-      expect(simple.name).to eq(:simple)
-      expect(simple.options).to eq({})
-    end
-  end
-
-  describe '#execute' do
-    it 'executes the block with given context and item' do
-      result = nil
-      stage = Minigun::ConsumerStage.new(
-        :test,
-        pipeline,
-        proc { |item, _output| result = item * 2 },
-        {}
-      )
-
-      context = Object.new
-      input_queue = Queue.new
-      output_queue = Queue.new
-      input_queue << 5
-      input_queue << Minigun::EndOfStage.new(:test)
-
-      stage.execute(context, input_queue, output_queue, nil)
-
-      expect(result).to eq(10)
-    end
-
-    it 'has access to context instance variables' do
-      context_class = Class.new do
-        attr_reader :value
-
-        def initialize(value)
-          @value = value
-        end
-      end
-      context = context_class.new(100)
-
-      stage = Minigun::ConsumerStage.new(
-        :test,
-        pipeline,
-        proc { |item, _output| @value + item },
-        {}
-      )
-
-      input_queue = Queue.new
-      output_queue = Queue.new
-      input_queue << 23
-      input_queue << Minigun::EndOfStage.new(:test)
-
-      stage.execute(context, input_queue, output_queue, nil)
-      # NOTE: execute doesn't return values for consumers in new DSL
-      expect(context.value).to eq(100) # unchanged
-    end
-  end
-
-  describe '#to_h' do
-    it 'converts to hash representation' do
-      block = proc { |_x, _output| }
-      stage = Minigun::ConsumerStage.new(
-        :test,
-        pipeline,
-        block,
-        { opt: 'val' }
-      )
-
-      hash = stage.to_h
-
-      expect(hash[:name]).to eq(:test)
-      expect(hash[:block]).to eq(block)
-      expect(hash[:options]).to include(opt: 'val')
-    end
-  end
-
-  describe '#[]' do
-    it 'provides hash-like access to attributes' do
-      block = proc { |_x, _output| }
-      stage = Minigun::ConsumerStage.new(
-        :test,
-        pipeline,
-        block,
-        { foo: 'bar' }
-      )
-
-      expect(stage[:name]).to eq(:test)
-      expect(stage[:block]).to eq(block)
-      expect(stage[:options]).to eq({ foo: 'bar' })
-    end
-
-    it 'returns nil for unknown keys' do
-      stage = Minigun::ConsumerStage.new(:test, pipeline, proc { |_x, _output| }, {})
-      expect(stage[:unknown]).to be_nil
-    end
   end
 end
