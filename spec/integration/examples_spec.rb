@@ -2699,4 +2699,47 @@ RSpec.describe 'Examples Integration' do
       #   ruby examples/118_cluster_direct_mode.rb loopback
     end
   end
+
+  describe '119_cluster_shutdown_on_done.rb' do
+    it 'demonstrates shutdown_on_done option for direct mode', skip: 'Manual test - requires multiple terminals' do
+      # Demonstrates the shutdown_on_done option for direct mode cluster
+      # When shutdown_on_done: true, workers receive shutdown signal after stage completes
+      # Usage:
+      #   Terminal 1: ruby examples/119_cluster_shutdown_on_done.rb worker 9001
+      #   Terminal 2: ruby examples/119_cluster_shutdown_on_done.rb worker 9002
+      #   Terminal 3: ruby examples/119_cluster_shutdown_on_done.rb client
+      #   # After client completes, workers will automatically exit
+      #
+      # Or run loopback test (all in one process):
+      #   ruby examples/119_cluster_shutdown_on_done.rb loopback
+    end
+  end
+
+  describe '120_cluster_multi_stage_shutdown.rb' do
+    it 'demonstrates multi-stage pipeline with mixed shutdown behavior', skip: 'Manual test - requires multiple terminals' do
+      # Demonstrates pipelines with multiple cluster stages where different
+      # stages have different shutdown_on_done settings:
+      #   - Stage 1 (validate): shutdown_on_done: false - shared workers stay running
+      #   - Stage 2 (process): shutdown_on_done: true - dedicated workers shutdown
+      #
+      # Run loopback test:
+      #   ruby examples/120_cluster_multi_stage_shutdown.rb loopback
+    end
+  end
+
+  describe '121_cluster_loopback_shutdown.rb' do
+    it 'demonstrates careful shutdown handling in loopback topology', skip: 'Manual test - requires multiple terminals' do
+      # Demonstrates shutdown_on_done in a circular topology (A -> B -> C -> A)
+      # Key insight: The originator node (A) must NOT be shutdown or it
+      # cannot receive the final looped-back results.
+      #
+      # Pattern:
+      #   - Originator: shutdown_on_done: false (stays running)
+      #   - Intermediate nodes: shutdown_on_done: true (can shutdown)
+      #   - Final node: shutdown_on_done: true (originator still runs)
+      #
+      # Run loopback test:
+      #   ruby examples/121_cluster_loopback_shutdown.rb loopback
+    end
+  end
 end

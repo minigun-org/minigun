@@ -24,6 +24,7 @@ plan based on the current codebase state and TODOS.md.
 - [X] Minigun.task do
 - [X] Demand (see polyphony example)
 - [ ] Demand -- consolidate registry?
+- [ ] Cluster -- Jepsen tests, handle network partitions, etc. "At least once" vs "At most once", guaranteed delivery
 - [ ] Cleanup accumulator vs. batch
 - [ ] Hooks
 - [ ] Config

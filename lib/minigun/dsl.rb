@@ -298,6 +298,7 @@ module Minigun
       # @param worker_uris [Array<String>] Array of worker URIs for direct mode (no coordinator)
       # @param min_workers [Integer] Minimum workers required before starting (default: 1, coordinator mode only)
       # @param worker_timeout [Integer] Seconds to wait for workers to connect (default: 30)
+      # @param shutdown_on_done [Boolean] Shutdown workers when stage completes (default: false, direct mode only)
       #
       # @example Coordinator mode (coordinator auto-starts, workers connect dynamically)
       #   in_cluster(coordinator_uri: 'druby://0.0.0.0:9000') do
@@ -320,9 +321,17 @@ module Minigun
       #     end
       #   end
       #
+      # @example Direct mode with shutdown (for dedicated workers)
+      #   in_cluster(worker_uris: ['druby://w1:9001'], shutdown_on_done: true) do
+      #     processor :one_time_job do |item, output|
+      #       output << process(item)
+      #     end
+      #   end
+      #
       # NOTE: Worker nodes must have the same codebase deployed and must register
       # stage processors locally. The stage block is NOT serialized to workers.
-      def in_cluster(coordinator_uri: nil, worker_uris: nil, min_workers: 1, worker_timeout: 30, &)
+      def in_cluster(coordinator_uri: nil, worker_uris: nil, min_workers: 1, worker_timeout: 30,
+                     shutdown_on_done: false, &)
         unless coordinator_uri || worker_uris
           raise ArgumentError, 'in_cluster requires either coordinator_uri: or worker_uris:'
         end
@@ -335,7 +344,8 @@ module Minigun
           coordinator_uri: coordinator_uri,
           worker_uris: worker_uris,
           min_workers: min_workers,
-          worker_timeout: worker_timeout
+          worker_timeout: worker_timeout,
+          shutdown_on_done: shutdown_on_done
         }
         _with_execution_context(context, &)
       end

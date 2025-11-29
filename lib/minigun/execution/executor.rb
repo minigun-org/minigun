@@ -965,12 +965,13 @@ module Minigun
       attr_reader :coordinator_uri, :worker_uris, :min_workers
 
       def initialize(stage_ctx, coordinator_uri: nil, worker_uris: nil, min_workers: 1,
-                     worker_timeout: 30, pool_timeout: nil) # rubocop:disable Lint/UnusedMethodArgument
+                     worker_timeout: 30, pool_timeout: nil, shutdown_on_done: false) # rubocop:disable Lint/UnusedMethodArgument
         super(stage_ctx)
         @coordinator_uri = coordinator_uri
         @worker_uris = worker_uris
         @min_workers = min_workers
         @worker_timeout = worker_timeout
+        @shutdown_on_done = shutdown_on_done
         @coordinator = nil
         @owns_coordinator = false
         @direct_workers = [] # For direct mode
@@ -1073,8 +1074,18 @@ module Minigun
       end
 
       def shutdown_direct_mode
-        # Don't call shutdown on workers - they're standalone services
-        # Just clear our references to them
+        if @shutdown_on_done
+          # Shutdown workers (for dedicated workers that should terminate after this job)
+          @direct_workers.each do |w|
+            Thread.new do
+              Timeout.timeout(1) { w[:proxy].shutdown }
+            rescue StandardError
+              # Worker may be gone or unresponsive
+            end
+          end
+          Minigun.logger.info "[Cluster] Sent shutdown to #{@direct_workers.size} workers"
+        end
+        # Clear our references
         @direct_workers = []
       end
 

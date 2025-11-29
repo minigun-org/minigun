@@ -447,10 +447,10 @@ pipeline do
 
   # Distribute work across cluster
   in_cluster(
-    coordinator: 'druby://10.0.0.1:9000',  # or auto-detect
-    workers: ['druby://10.0.0.2:9001', 'druby://10.0.0.3:9001'],
+    coordinator_uri: 'druby://10.0.0.1:9000',  # or auto-detect
+    worker_uris: ['druby://10.0.0.2:9001', 'druby://10.0.0.3:9001'],
     # OR
-    redis: 'redis://10.0.0.1:6379',
+    redis_uri: 'redis://10.0.0.1:6379',
     # OR
     discovery: :gossip  # future
   ) do

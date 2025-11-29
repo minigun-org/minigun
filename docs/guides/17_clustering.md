@@ -247,7 +247,8 @@ in_cluster(
     'druby://worker1:9001',
     'druby://worker2:9001',
     'druby://worker3:9001'
-  ]
+  ],
+  shutdown_on_done: false                    # Shutdown workers when stage completes (default: false)
 ) do
   # stages to run on cluster
 end
@@ -263,6 +264,11 @@ end
 - **worker_uris**: Array of DRb URIs for direct worker connections (direct mode)
   - Workers must be running before pipeline starts
   - Work is distributed round-robin across workers
+
+- **shutdown_on_done**: Shutdown workers when stage completes (default: false)
+  - Only applies to direct mode
+  - Use `true` for dedicated workers that should terminate after processing
+  - Use `false` (default) for shared worker pools that serve multiple clients
 
 - **min_workers**: Minimum number of workers that must connect before processing starts
   - Default: 1
