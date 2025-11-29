@@ -219,7 +219,9 @@ module Minigun
           min_workers: exec_ctx[:min_workers],
           worker_timeout: exec_ctx[:worker_timeout],
           shutdown_on_done: exec_ctx[:shutdown_on_done],
-          pool_timeout: exec_ctx[:pool_timeout]
+          pool_timeout: exec_ctx[:pool_timeout],
+          delivery_mode: exec_ctx[:delivery_mode] || :at_most_once,
+          max_retries: exec_ctx[:max_retries] || 3
         )
       end
 

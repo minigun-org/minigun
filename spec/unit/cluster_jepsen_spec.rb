@@ -1217,4 +1217,253 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
       expect(all_results.size).to eq(60)
     end
   end
+
+  describe 'At-Least-Once Delivery Mode' do
+    it 'retries items when worker fails' do
+      workers = start_workers(2, network_sim, delivery_tracker, started_services)
+      items = (1..10).map { |i| { id: i, value: i } }
+      results = []
+      results_mutex = Mutex.new
+      tracker = DeliveryTracker.new
+
+      # First worker fails for first 3 items, then works
+      fail_counter = 0
+      fail_mutex = Mutex.new
+      workers.first[:service].define_singleton_method(:process_item) do |stage_name, item|
+        should_fail = fail_mutex.synchronize do
+          fail_counter += 1
+          fail_counter <= 3
+        end
+        raise DRb::DRbConnError, 'Worker crashed' if should_fail
+
+        @worker.process_item_sync(stage_name, item)
+      end
+
+      klass = Class.new do
+        include Minigun::DSL
+
+        def initialize(worker_uris, items, results, results_mutex, tracker)
+          @worker_uris = worker_uris
+          @items = items
+          @results = results
+          @results_mutex = results_mutex
+          @tracker = tracker
+        end
+
+        pipeline do
+          producer :generate do |output|
+            @items.each do |item|
+              @tracker.track_sent(item[:id])
+              output << item
+            end
+          end
+
+          in_cluster(worker_uris: @worker_uris, delivery_mode: :at_least_once, max_retries: 5) do
+            processor :tracked_process do |item, output|
+              output << item
+            end
+          end
+
+          consumer :collect do |item|
+            @tracker.track_received(item[:id])
+            @results_mutex.synchronize { @results << item }
+          end
+        end
+      end
+
+      pipeline = klass.new(workers.map { |w| w[:uri] }, items, results, results_mutex, tracker)
+      Timeout.timeout(15) { pipeline.run }
+
+      # All items should be delivered
+      expect(tracker.missing).to be_empty, "Missing items: #{tracker.missing}"
+      expect(results.size).to be >= 10 # At least all items (may have duplicates)
+    end
+
+    it 'delivers all items when one worker is completely unavailable' do
+      workers = start_workers(2, network_sim, delivery_tracker, started_services)
+      items = (1..15).map { |i| { id: i, value: i } }
+      results = []
+      results_mutex = Mutex.new
+      tracker = DeliveryTracker.new
+
+      # First worker always fails
+      workers.first[:service].define_singleton_method(:process_item) do |_stage_name, _item|
+        raise DRb::DRbConnError, 'Worker completely down'
+      end
+
+      klass = Class.new do
+        include Minigun::DSL
+
+        def initialize(worker_uris, items, results, results_mutex, tracker)
+          @worker_uris = worker_uris
+          @items = items
+          @results = results
+          @results_mutex = results_mutex
+          @tracker = tracker
+        end
+
+        pipeline do
+          producer :generate do |output|
+            @items.each do |item|
+              @tracker.track_sent(item[:id])
+              output << item
+            end
+          end
+
+          in_cluster(worker_uris: @worker_uris, delivery_mode: :at_least_once, max_retries: 5) do
+            processor :tracked_process do |item, output|
+              output << item
+            end
+          end
+
+          consumer :collect do |item|
+            @tracker.track_received(item[:id])
+            @results_mutex.synchronize { @results << item }
+          end
+        end
+      end
+
+      pipeline = klass.new(workers.map { |w| w[:uri] }, items, results, results_mutex, tracker)
+      Timeout.timeout(20) { pipeline.run }
+
+      # All items delivered (via the working worker)
+      expect(tracker.missing).to be_empty, "Missing items: #{tracker.missing}"
+      received_ids = results.map { |r| r[:id] }.uniq.sort
+      expect(received_ids).to eq((1..15).to_a)
+    end
+
+    it 'eventually gives up after max_retries exceeded' do
+      workers = start_workers(2, network_sim, delivery_tracker, started_services)
+      items = (1..5).map { |i| { id: i, value: i } }
+      results = []
+      results_mutex = Mutex.new
+
+      # Both workers always fail
+      workers.each do |w|
+        w[:service].define_singleton_method(:process_item) do |_stage_name, _item|
+          raise DRb::DRbConnError, 'All workers down'
+        end
+      end
+
+      klass = Class.new do
+        include Minigun::DSL
+
+        def initialize(worker_uris, items, results, results_mutex)
+          @worker_uris = worker_uris
+          @items = items
+          @results = results
+          @results_mutex = results_mutex
+        end
+
+        pipeline do
+          producer :generate do |output|
+            @items.each { |item| output << item }
+          end
+
+          in_cluster(worker_uris: @worker_uris, delivery_mode: :at_least_once, max_retries: 2) do
+            processor :tracked_process do |item, output|
+              output << item
+            end
+          end
+
+          consumer :collect do |item|
+            @results_mutex.synchronize { @results << item }
+          end
+        end
+      end
+
+      pipeline = klass.new(workers.map { |w| w[:uri] }, items, results, results_mutex)
+
+      # Should complete (not hang) even with all failures
+      Timeout.timeout(15) { pipeline.run }
+
+      # No results (all workers failed)
+      expect(results).to be_empty
+    end
+
+    it 'allows duplicates in at-least-once mode during retries' do
+      workers = start_workers(2, network_sim, delivery_tracker, started_services)
+      items = (1..10).map { |i| { id: i, value: i } }
+      results = []
+      results_mutex = Mutex.new
+
+      # First worker processes but then "crashes" before returning
+      # (simulating crash after processing but before ack)
+      process_count = 0
+      process_mutex = Mutex.new
+      workers.first[:service].define_singleton_method(:process_item) do |stage_name, item|
+        # Process item
+        result = @worker.process_item_sync(stage_name, item)
+
+        # Sometimes "crash" after processing (simulating network failure on response)
+        should_crash = process_mutex.synchronize do
+          process_count += 1
+          process_count <= 3
+        end
+        raise DRb::DRbConnError, 'Crashed after processing' if should_crash
+
+        result
+      end
+
+      klass = Class.new do
+        include Minigun::DSL
+
+        def initialize(worker_uris, items, results, results_mutex)
+          @worker_uris = worker_uris
+          @items = items
+          @results = results
+          @results_mutex = results_mutex
+        end
+
+        pipeline do
+          producer :generate do |output|
+            @items.each { |item| output << item }
+          end
+
+          # Note: In a real scenario, you'd want idempotent processing
+          in_cluster(worker_uris: @worker_uris, delivery_mode: :at_least_once, max_retries: 3) do
+            processor :tracked_process do |item, output|
+              output << item
+            end
+          end
+
+          consumer :collect do |item|
+            @results_mutex.synchronize { @results << item }
+          end
+        end
+      end
+
+      pipeline = klass.new(workers.map { |w| w[:uri] }, items, results, results_mutex)
+      Timeout.timeout(15) { pipeline.run }
+
+      # All items should be present
+      received_ids = results.map { |r| r[:id] }
+      expect(received_ids.uniq.sort).to eq((1..10).to_a)
+
+      # Due to at-least-once semantics, duplicates are expected when worker
+      # crashes after processing. This is documented behavior.
+    end
+
+    it 'validates delivery_mode parameter' do
+      # Create instance and trigger pipeline evaluation which validates delivery_mode
+      klass = Class.new do
+        include Minigun::DSL
+
+        pipeline do
+          producer :gen do |output|
+            output << 1
+          end
+
+          in_cluster(worker_uris: ['druby://localhost:9999'], delivery_mode: :invalid) do
+            consumer :sink do |_item|
+            end
+          end
+        end
+      end
+
+      instance = klass.new
+      # Trigger pipeline evaluation which should raise
+      expect { instance.run }.to raise_error(ArgumentError, /Invalid delivery_mode/)
+    end
+  end
 end

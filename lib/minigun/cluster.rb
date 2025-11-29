@@ -3,6 +3,8 @@
 require 'drb'
 require 'socket'
 require 'timeout'
+require_relative 'cluster/delivery_tracker'
+require_relative 'cluster/distributor'
 
 module Minigun
   # Distributed clustering support using DRb

@@ -952,26 +952,35 @@ module Minigun
     # 1. Coordinator mode (coordinator_uri): Workers connect to coordinator which distributes work
     # 2. Direct mode (worker_uris): Connect directly to workers, round-robin distribution
     #
+    # Delivery modes:
+    #   :at_most_once (default): Items may be lost on worker failure, but never duplicated
+    #   :at_least_once: Items are redelivered on worker failure; duplicates possible
+    #
     # Options:
     #   coordinator_uri: DRb URI of the coordinator (e.g., "druby://10.0.0.1:9000")
     #   worker_uris: Array of worker URIs for direct mode (no coordinator)
     #   min_workers: Minimum workers required before starting (default: 1, coordinator mode only)
     #   worker_timeout: Seconds to wait for workers to connect (default: 30)
     #   pool_timeout: Overall timeout for stage execution (default: nil)
+    #   delivery_mode: :at_most_once or :at_least_once (default: :at_most_once)
+    #   max_retries: Maximum retry attempts per item in at_least_once mode (default: 3)
     #
     # Note: The stage block is NOT sent to workers - workers must have the same
     # codebase deployed and register the stage processor locally.
     class ClusterPoolExecutor < Executor
-      attr_reader :coordinator_uri, :worker_uris, :min_workers
+      attr_reader :coordinator_uri, :worker_uris, :min_workers, :delivery_mode
 
       def initialize(stage_ctx, coordinator_uri: nil, worker_uris: nil, min_workers: 1,
-                     worker_timeout: 30, pool_timeout: nil, shutdown_on_done: false) # rubocop:disable Lint/UnusedMethodArgument
+                     worker_timeout: 30, pool_timeout: nil, shutdown_on_done: false, # rubocop:disable Lint/UnusedMethodArgument
+                     delivery_mode: :at_most_once, max_retries: 3)
         super(stage_ctx)
         @coordinator_uri = coordinator_uri
         @worker_uris = worker_uris
         @min_workers = min_workers
         @worker_timeout = worker_timeout
         @shutdown_on_done = shutdown_on_done
+        @delivery_mode = delivery_mode
+        @max_retries = max_retries
         @coordinator = nil
         @owns_coordinator = false
         @direct_workers = [] # For direct mode
@@ -1090,71 +1099,14 @@ module Minigun
       end
 
       def distribute_and_collect_direct(stage, input_queue, output_queue)
-        pending_count = 0
-        all_sent = false
-        mutex = Mutex.new
-        done_cv = ConditionVariable.new
-        results_queue = Queue.new
-        worker_index = 0
-
-        # Thread to collect results
-        collector_thread = Thread.new do
-          loop do
-            break if mutex.synchronize { pending_count <= 0 && all_sent }
-
-            begin
-              result = results_queue.pop(true)
-              case result[:type]
-              when :results
-                # Array of results from worker (supports fan-out)
-                result[:results].each { |r| output_queue << r }
-                @stage_ctx.stage_stats&.record_latency(result[:latency]) if result[:latency]
-              when :error
-                Minigun.logger.error "[Cluster] Worker error: #{result[:error][:message]}"
-              end
-              mutex.synchronize do
-                pending_count -= 1
-                done_cv.signal if pending_count <= 0 && all_sent
-              end
-            rescue ThreadError
-              sleep 0.01
-            end
-          end
-        end
-
-        # Distribute work items round-robin to workers
-        loop do
-          item = input_queue.pop
-
-          if item.is_a?(Minigun::EndOfStage)
-            mutex.synchronize { all_sent = true }
-            break
-          end
-
-          mutex.synchronize { pending_count += 1 }
-
-          # Round-robin worker selection
-          worker = @direct_workers[worker_index % @direct_workers.size]
-          worker_index += 1
-
-          # Submit work to worker in background thread
-          Thread.new(worker, item, stage.name, results_queue) do |w, work_item, stage_name, rq|
-            start_time = Time.now
-            begin
-              results = w[:proxy].process_item(stage_name, work_item)
-              rq << { type: :results, results: results, latency: Time.now - start_time }
-            rescue StandardError => e
-              rq << { type: :error, error: { message: e.message } }
-            end
-          end
-        end
-
-        # Wait for all pending items
-        mutex.synchronize do
-          done_cv.wait(mutex, 1) until pending_count <= 0
-        end
-
-        collector_thread.join
+        distributor = Cluster.create_distributor(
+          delivery_mode: @delivery_mode,
+          workers: @direct_workers,
+          stage_name: stage.name,
+          stage_stats: @stage_ctx.stage_stats,
+          max_retries: @max_retries
+        )
+        distributor.distribute(input_queue, output_queue)
       end
 
       def distribute_and_collect_coordinator(stage, input_queue, output_queue)

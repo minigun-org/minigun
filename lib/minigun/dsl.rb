@@ -330,13 +330,29 @@ module Minigun
       #
       # NOTE: Worker nodes must have the same codebase deployed and must register
       # stage processors locally. The stage block is NOT serialized to workers.
+      # Execute stages on remote cluster workers via DRb
+      #
+      # Delivery modes:
+      #   :at_most_once (default) - Items may be lost on worker failure, but never duplicated
+      #   :at_least_once - Items are retried on failure; duplicates possible
+      #
+      # @param coordinator_uri [String] DRb URI for coordinator-based distribution
+      # @param worker_uris [Array<String>] Direct worker URIs for round-robin distribution
+      # @param min_workers [Integer] Minimum workers required (coordinator mode only)
+      # @param worker_timeout [Integer] Seconds to wait for workers
+      # @param shutdown_on_done [Boolean] Send shutdown signal to workers when done
+      # @param delivery_mode [Symbol] :at_most_once or :at_least_once
+      # @param max_retries [Integer] Max retry attempts per item (at_least_once only)
       def in_cluster(coordinator_uri: nil, worker_uris: nil, min_workers: 1, worker_timeout: 30,
-                     shutdown_on_done: false, &)
+                     shutdown_on_done: false, delivery_mode: :at_most_once, max_retries: 3, &)
         unless coordinator_uri || worker_uris
           raise ArgumentError, 'in_cluster requires either coordinator_uri: or worker_uris:'
         end
         if coordinator_uri && worker_uris
           raise ArgumentError, 'in_cluster cannot use both coordinator_uri: and worker_uris: (pick one mode)'
+        end
+        unless %i[at_most_once at_least_once].include?(delivery_mode)
+          raise ArgumentError, "Invalid delivery_mode: #{delivery_mode}. Must be :at_most_once or :at_least_once"
         end
 
         context = {
@@ -345,7 +361,9 @@ module Minigun
           worker_uris: worker_uris,
           min_workers: min_workers,
           worker_timeout: worker_timeout,
-          shutdown_on_done: shutdown_on_done
+          shutdown_on_done: shutdown_on_done,
+          delivery_mode: delivery_mode,
+          max_retries: max_retries
         }
         _with_execution_context(context, &)
       end
