@@ -644,6 +644,15 @@ RSpec.describe Minigun::Execution::FiberPoolExecutor, skip: !Minigun::Platform.a
       default_executor = described_class.new(stage_ctx)
       expect(default_executor.max_size).to eq(5)
     end
+
+    it 'accepts pool_timeout option' do
+      timeout_executor = described_class.new(stage_ctx, max_size: 3, pool_timeout: 10)
+      expect(timeout_executor.pool_timeout).to eq(10)
+    end
+
+    it 'defaults pool_timeout to nil' do
+      expect(executor.pool_timeout).to be_nil
+    end
   end
 
   describe '#execute_stage' do
@@ -807,6 +816,71 @@ RSpec.describe Minigun::Execution::FiberPoolExecutor, skip: !Minigun::Platform.a
   describe '#shutdown' do
     it 'does nothing (fibers are cleaned up automatically)' do
       expect { executor.shutdown }.not_to raise_error
+    end
+  end
+
+  describe 'pool_timeout' do
+    let(:user_context) { {} }
+
+    it 'cancels remaining fibers when timeout expires' do
+      processed = []
+      mutex = Mutex.new
+
+      # Create a stage with very slow processing
+      slow_stage = Minigun::ConsumerStage.new(
+        :slow_test,
+        pipeline,
+        proc { |item, output|
+          sleep 0.5 # Very slow - will timeout
+          mutex.synchronize { processed << item }
+          output << item
+        },
+        {}
+      )
+
+      timeout_executor = described_class.new(stage_ctx, max_size: 5, pool_timeout: 0.1)
+
+      input_queue = Queue.new
+      output_queue = Queue.new
+      5.times { |i| input_queue << i }
+      input_queue << Minigun::EndOfStage.new(:test)
+
+      # Should not raise, but should timeout
+      expect do
+        timeout_executor.execute_stage(slow_stage, user_context, input_queue, output_queue)
+      end.not_to raise_error
+
+      # Not all items should be processed due to timeout
+      expect(processed.size).to be < 5
+    end
+
+    it 'completes normally when within timeout' do
+      processed = []
+      mutex = Mutex.new
+
+      # Create a stage with fast processing
+      fast_stage = Minigun::ConsumerStage.new(
+        :fast_test,
+        pipeline,
+        proc { |item, output|
+          sleep 0.01 # Fast
+          mutex.synchronize { processed << item }
+          output << item
+        },
+        {}
+      )
+
+      timeout_executor = described_class.new(stage_ctx, max_size: 5, pool_timeout: 5)
+
+      input_queue = Queue.new
+      output_queue = Queue.new
+      5.times { |i| input_queue << i }
+      input_queue << Minigun::EndOfStage.new(:test)
+
+      timeout_executor.execute_stage(fast_stage, user_context, input_queue, output_queue)
+
+      # All items should be processed
+      expect(processed.size).to eq(5)
     end
   end
 end

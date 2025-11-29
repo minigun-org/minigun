@@ -40,7 +40,7 @@ module Minigun
     class ThreadPoolExecutor < Executor
       attr_reader :max_size
 
-      def initialize(stage_ctx, max_size: nil)
+      def initialize(stage_ctx, max_size: nil, pool_timeout: nil) # rubocop:disable Lint/UnusedMethodArgument
         super(stage_ctx)
         @max_size = max_size || 5
         @active_threads = []
@@ -83,7 +83,7 @@ module Minigun
     class AbstractForkExecutor < Executor
       attr_reader :max_size
 
-      def initialize(stage_ctx, max_size: nil)
+      def initialize(stage_ctx, max_size: nil, pool_timeout: nil) # rubocop:disable Lint/UnusedMethodArgument
         super(stage_ctx)
         @max_size = max_size || 5
         @mutex = Mutex.new
@@ -187,7 +187,7 @@ module Minigun
     # Memory pages are shared between parent and child until modified (COW).
     # Input item is COW-shared, but results are sent via IPC pipes.
     class CowForkPoolExecutor < AbstractForkExecutor
-      def initialize(stage_ctx, max_size:)
+      def initialize(stage_ctx, max_size:, pool_timeout: nil) # rubocop:disable Lint/UnusedMethodArgument
         super
         @active_forks = {} # pid => fork_info
       end
@@ -358,7 +358,7 @@ module Minigun
     # Workers continuously pull items, process them, and send results back.
     # Data is serialized through pipes for both input and output, providing strong process isolation.
     class IpcForkPoolExecutor < AbstractForkExecutor
-      def initialize(stage_ctx, max_size:)
+      def initialize(stage_ctx, max_size:, pool_timeout: nil) # rubocop:disable Lint/UnusedMethodArgument
         super
         @workers = []
         @my_pipes = [] # Track this executor's pipes for cleanup/unregister
@@ -651,12 +651,17 @@ module Minigun
     # Fiber pool executor - uses async gem for cooperative concurrency
     # Best for I/O-bound workloads (HTTP requests, database queries, file I/O)
     # Fibers are lightweight (~4KB) and yield automatically on blocking I/O
+    #
+    # Options:
+    #   max_size: Maximum concurrent fibers (default: 5)
+    #   pool_timeout: Maximum seconds to wait for all fibers to complete (default: nil = no timeout)
     class FiberPoolExecutor < Executor
-      attr_reader :max_size
+      attr_reader :max_size, :pool_timeout
 
-      def initialize(stage_ctx, max_size: nil)
+      def initialize(stage_ctx, max_size: nil, pool_timeout: nil)
         super(stage_ctx)
         @max_size = max_size || 5
+        @pool_timeout = pool_timeout
 
         unless Minigun::Platform.async?
           raise Minigun::Error,
@@ -666,7 +671,7 @@ module Minigun
 
       def execute_stage(stage, user_context, input_queue, output_queue)
         # Run within Sync reactor (blocks until all fibers complete)
-        Sync do
+        Sync do |task|
           semaphore = Async::Semaphore.new(@max_size)
           barrier = Async::Barrier.new(parent: semaphore)
 
@@ -681,8 +686,17 @@ module Minigun
             end
           end
 
-          # Wait for all fibers to complete
-          barrier.wait
+          # Wait for all fibers to complete (with optional timeout)
+          if @pool_timeout
+            task.with_timeout(@pool_timeout) do
+              barrier.wait
+            end
+          else
+            barrier.wait
+          end
+        rescue Async::TimeoutError
+          Minigun.logger.error "[Stage:#{@stage_ctx.stage.name}] Fiber pool timeout after #{@pool_timeout}s"
+          barrier.stop # Cancel remaining fibers
         end
       end
 
@@ -710,7 +724,7 @@ module Minigun
 
     # Ractor pool executor - manages ractor execution
     class RactorPoolExecutor < Executor
-      def initialize(stage_ctx, max_size: nil)
+      def initialize(stage_ctx, max_size: nil, pool_timeout: nil) # rubocop:disable Lint/UnusedMethodArgument
         super(stage_ctx)
         @max_size = max_size || 5
         @fallback = ThreadPoolExecutor.new(stage_ctx, max_size: max_size)

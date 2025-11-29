@@ -210,8 +210,9 @@ module Minigun
 
       type = exec_ctx[:type]
       pool_size = exec_ctx[:pool_size] || exec_ctx[:max] || default_pool_size(type)
+      pool_timeout = exec_ctx[:pool_timeout]
 
-      Execution.create_executor(type, stage_ctx, max_size: pool_size)
+      Execution.create_executor(type, stage_ctx, max_size: pool_size, pool_timeout: pool_timeout)
     end
 
     # TODO: Move this elsewhere? DSL class?

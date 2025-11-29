@@ -3,6 +3,75 @@
 require 'spec_helper'
 
 RSpec.describe 'Fiber concurrency', skip: !Minigun::Platform.async? do
+  describe 'pool_timeout option' do
+    it 'cancels fibers when timeout is reached' do
+      processed = []
+      mutex = Mutex.new
+
+      pipeline_class = Class.new do
+        include Minigun::DSL
+
+        pipeline do
+          produce_each :numbers, (1..10).to_a
+
+          # Very short timeout, slow processing
+          in_fibers(5, pool_timeout: 0.1) do
+            consumer :slow_process do |n, output|
+              sleep 0.5 # Will timeout
+              mutex.synchronize { processed << n }
+              output << n
+            end
+          end
+
+          consumer :sink do |_n|
+            # Just consume
+          end
+        end
+
+        define_method(:processed) { processed }
+        define_method(:mutex) { mutex }
+      end
+
+      instance = pipeline_class.new
+      expect { instance.perform }.not_to raise_error
+      # Should have processed fewer items due to timeout
+      expect(instance.processed.size).to be < 10
+    end
+
+    it 'completes normally when within timeout' do
+      processed = []
+      mutex = Mutex.new
+
+      pipeline_class = Class.new do
+        include Minigun::DSL
+
+        pipeline do
+          produce_each :numbers, (1..5).to_a
+
+          # Long timeout, fast processing
+          in_fibers(5, pool_timeout: 10) do
+            consumer :fast_process do |n, output|
+              sleep 0.01
+              mutex.synchronize { processed << n }
+              output << n
+            end
+          end
+
+          consumer :sink do |_n|
+            # Just consume
+          end
+        end
+
+        define_method(:processed) { processed }
+        define_method(:mutex) { mutex }
+      end
+
+      instance = pipeline_class.new
+      instance.perform
+      expect(instance.processed.size).to eq(5)
+    end
+  end
+
   describe 'in_fibers execution' do
     it 'processes items concurrently with fibers' do
       results = []
