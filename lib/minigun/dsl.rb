@@ -260,8 +260,8 @@ module Minigun
       end
 
       # Execution block methods
-      def in_fibers(pool_size, &)
-        context = { type: :fiber_pool, pool_size: pool_size }
+      def in_fibers(pool_size, pool_timeout: nil, &)
+        context = { type: :fiber_pool, pool_size: pool_size, pool_timeout: pool_timeout }
         _with_execution_context(context, &)
       end
 

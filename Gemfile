@@ -4,7 +4,8 @@ source 'https://rubygems.org'
 
 gemspec
 
-# Development dependencies
+# Optional dependencies
+gem 'async', platforms: %i[ruby windows]
 gem 'msgpack'
 
 # Test dependencies

@@ -49,7 +49,7 @@ pickle-email-*.html
 .envrc
 .ruby-gemset
 .rspec_status
-.claude
+*.local*
 
 # Redis DB
 dump.rdb

@@ -1,0 +1,16 @@
+---
+description: Assess changes in git show (last commit) (project)
+---
+
+Review the changes in `git show` (last commit) holistically in the context of the recent thread.
+
+Make a plan to refactor/cleanup to:
+- Consolidate code
+- Fix implementation inconsistencies
+- Fix anything hacky/bloated/redundant
+- DRY up code / extract out a common component (do NOT go overboard)
+- Remove dead/unused/obsolete code
+- Add missing test coverage
+- (BUT do NOT go overboard here; focus on obvious problems and obvious wins.)
+
+Write and save the plan summary to the `lore` folder (NOT project root) in Markdown format, filename: "%Y%m%d-%H%M-lowercase-name.md" (include leading zero of %m/%d/%H/etc)

@@ -30,6 +30,12 @@ RSpec.describe Minigun::Execution::Executor do
       ipc_fork_executor = Minigun::Execution.create_executor(:ipc_fork, stage_ctx, max_size: 4)
       expect(ipc_fork_executor).to be_a(Minigun::Execution::IpcForkPoolExecutor)
       expect(ipc_fork_executor.max_size).to eq(4)
+
+      if Minigun::Platform.fibers?
+        fiber_executor = Minigun::Execution.create_executor(:fiber, stage_ctx, max_size: 10)
+        expect(fiber_executor).to be_a(Minigun::Execution::FiberPoolExecutor)
+        expect(fiber_executor.max_size).to eq(10)
+      end
     end
 
     it 'all executors extend Executor base class' do
@@ -613,6 +619,387 @@ RSpec.describe Minigun::Execution::IpcForkPoolExecutor, skip: !Minigun::Platform
   describe '#shutdown' do
     it 'terminates active processes' do
       expect { executor.shutdown }.not_to raise_error
+    end
+  end
+end
+
+RSpec.describe Minigun::Execution::FiberPoolExecutor, skip: !Minigun::Platform.fibers? do
+  let(:task) { Minigun::Task.new }
+  let(:pipeline) { task.root_pipeline }
+  let(:test_stage) { Minigun::ConsumerStage.new(:fiber_test, pipeline, proc { |item, output| output << item }, {}) }
+  let(:stage_stats) { Minigun::Stats.new(test_stage) }
+  let(:stage_ctx) do
+    Struct.new(:pipeline, :root_pipeline, :stage_name, :stage_stats, :dag, :stage).new(
+      pipeline, pipeline, :fiber_test, stage_stats, pipeline.dag, test_stage
+    )
+  end
+  let(:executor) { described_class.new(stage_ctx, max_size: 3) }
+
+  describe '#initialize' do
+    it 'sets max_size' do
+      expect(executor.max_size).to eq(3)
+    end
+
+    it 'defaults max_size to 5' do
+      default_executor = described_class.new(stage_ctx)
+      expect(default_executor.max_size).to eq(5)
+    end
+
+    it 'accepts pool_timeout option' do
+      timeout_executor = described_class.new(stage_ctx, max_size: 3, pool_timeout: 10)
+      expect(timeout_executor.pool_timeout).to eq(10)
+    end
+
+    it 'defaults pool_timeout to nil' do
+      expect(executor.pool_timeout).to be_nil
+    end
+  end
+
+  describe '#execute_stage' do
+    let(:user_context) { {} }
+
+    it 'executes in fiber (same thread)' do
+      calling_thread_id = Thread.current.object_id
+      execution_thread_id = nil
+
+      # Create a stage that captures thread ID
+      fiber_capture_stage = Minigun::ConsumerStage.new(
+        :fiber_capture,
+        pipeline,
+        proc { |item, output|
+          execution_thread_id = Thread.current.object_id
+          output << item
+        },
+        {}
+      )
+
+      input_queue = Queue.new
+      output_queue = Queue.new
+      input_queue << 1
+      input_queue << Minigun::EndOfStage.new(:test)
+
+      executor.execute_stage(fiber_capture_stage, user_context, input_queue, output_queue)
+      # Fibers run in same thread (cooperative concurrency)
+      expect(execution_thread_id).to eq(calling_thread_id)
+    end
+
+    it 'processes items through the stage' do
+      input_queue = Queue.new
+      output_queue = Queue.new
+      input_queue << 42
+      input_queue << Minigun::EndOfStage.new(:test)
+
+      executor.execute_stage(test_stage, user_context, input_queue, output_queue)
+
+      result = output_queue.pop
+      expect(result).to eq(42)
+    end
+
+    it 'processes multiple items concurrently' do
+      processed = []
+      mutex = Mutex.new
+
+      # Create a stage that tracks when items are processed
+      concurrent_stage = Minigun::ConsumerStage.new(
+        :concurrent_test,
+        pipeline,
+        proc { |item, output|
+          mutex.synchronize { processed << item }
+          output << item
+        },
+        {}
+      )
+
+      input_queue = Queue.new
+      output_queue = Queue.new
+      10.times { |i| input_queue << i }
+      input_queue << Minigun::EndOfStage.new(:test)
+
+      executor.execute_stage(concurrent_stage, user_context, input_queue, output_queue)
+
+      # All items should be processed
+      expect(processed.size).to eq(10)
+    end
+
+    it 'respects max_size concurrency limit' do
+      max_concurrent = 0
+      current_concurrent = 0
+      mutex = Mutex.new
+
+      # Create a stage that tracks concurrent executions
+      concurrency_stage = Minigun::ConsumerStage.new(
+        :concurrency_limit_test,
+        pipeline,
+        proc { |item, output|
+          mutex.synchronize do
+            current_concurrent += 1
+            max_concurrent = [max_concurrent, current_concurrent].max
+          end
+          # Yield to allow other fibers to run
+          sleep 0.001
+          mutex.synchronize { current_concurrent -= 1 }
+          output << item
+        },
+        {}
+      )
+
+      input_queue = Queue.new
+      output_queue = Queue.new
+      20.times { |i| input_queue << i }
+      input_queue << Minigun::EndOfStage.new(:test)
+
+      # max_size is 3, so max_concurrent should never exceed 3
+      executor.execute_stage(concurrency_stage, user_context, input_queue, output_queue)
+
+      expect(max_concurrent).to be <= 3
+    end
+
+    it 'handles errors without crashing other fibers' do
+      processed = []
+      mutex = Mutex.new
+
+      # Create a stage that raises an error on item 5
+      error_stage = Minigun::ConsumerStage.new(
+        :error_test,
+        pipeline,
+        proc { |item, output|
+          raise 'boom' if item == 5
+
+          mutex.synchronize { processed << item }
+          output << item
+        },
+        {}
+      )
+
+      input_queue = Queue.new
+      output_queue = Queue.new
+      10.times { |i| input_queue << i }
+      input_queue << Minigun::EndOfStage.new(:test)
+
+      # Should not raise - errors are caught within fibers
+      expect do
+        executor.execute_stage(error_stage, user_context, input_queue, output_queue)
+      end.not_to raise_error
+
+      # Other items should still be processed (item 5 errored)
+      expect(processed.size).to eq(9)
+      expect(processed).not_to include(5)
+    end
+
+    it 'records latency stats' do
+      stats_stage = Minigun::ConsumerStage.new(
+        :stats_test,
+        pipeline,
+        proc { |item, output|
+          sleep 0.001 # Small delay
+          output << item
+        },
+        {}
+      )
+
+      stage_ctx_with_stats = Struct.new(:pipeline, :root_pipeline, :stage_name, :stage_stats, :dag, :stage).new(
+        pipeline, pipeline, :stats_test, stage_stats, pipeline.dag, stats_stage
+      )
+      stats_executor = described_class.new(stage_ctx_with_stats, max_size: 3)
+
+      input_queue = Queue.new
+      output_queue = Queue.new
+      3.times { |i| input_queue << i }
+      input_queue << Minigun::EndOfStage.new(:test)
+
+      stats_executor.execute_stage(stats_stage, user_context, input_queue, output_queue)
+
+      # Should have recorded latencies (stored in latency_count)
+      expect(stage_stats.latency_count).to eq(3)
+    end
+  end
+
+  describe '#shutdown' do
+    it 'does nothing (fibers are cleaned up automatically)' do
+      expect { executor.shutdown }.not_to raise_error
+    end
+  end
+
+  describe 'pool_timeout' do
+    let(:user_context) { {} }
+
+    it 'cancels remaining fibers when timeout expires' do
+      processed = []
+      mutex = Mutex.new
+
+      # Create a stage with very slow processing
+      slow_stage = Minigun::ConsumerStage.new(
+        :slow_test,
+        pipeline,
+        proc { |item, output|
+          sleep 0.5 # Very slow - will timeout
+          mutex.synchronize { processed << item }
+          output << item
+        },
+        {}
+      )
+
+      timeout_executor = described_class.new(stage_ctx, max_size: 5, pool_timeout: 0.1)
+
+      input_queue = Queue.new
+      output_queue = Queue.new
+      5.times { |i| input_queue << i }
+      input_queue << Minigun::EndOfStage.new(:test)
+
+      # Should not raise, but should timeout
+      expect do
+        timeout_executor.execute_stage(slow_stage, user_context, input_queue, output_queue)
+      end.not_to raise_error
+
+      # Not all items should be processed due to timeout
+      expect(processed.size).to be < 5
+    end
+
+    it 'completes normally when within timeout' do
+      processed = []
+      mutex = Mutex.new
+
+      # Create a stage with fast processing
+      fast_stage = Minigun::ConsumerStage.new(
+        :fast_test,
+        pipeline,
+        proc { |item, output|
+          sleep 0.01 # Fast
+          mutex.synchronize { processed << item }
+          output << item
+        },
+        {}
+      )
+
+      timeout_executor = described_class.new(stage_ctx, max_size: 5, pool_timeout: 5)
+
+      input_queue = Queue.new
+      output_queue = Queue.new
+      5.times { |i| input_queue << i }
+      input_queue << Minigun::EndOfStage.new(:test)
+
+      timeout_executor.execute_stage(fast_stage, user_context, input_queue, output_queue)
+
+      # All items should be processed
+      expect(processed.size).to eq(5)
+    end
+  end
+
+  describe 'callable stages (call_with_arity path)' do
+    let(:user_context) { {} }
+
+    # Helper to create an output queue wrapper that supports to_proc for yield syntax
+    def make_output_queue(raw_queue)
+      # Create a simple wrapper with to_proc that pushes to raw queue
+      wrapper = Object.new
+      wrapper.define_singleton_method(:<<) { |item| raw_queue << item }
+      wrapper.define_singleton_method(:to_proc) do
+        proc { |item, **_kwargs| raw_queue << item }
+      end
+      wrapper
+    end
+
+    it 'processes callable stage with call method' do
+      processed = []
+      mutex = Mutex.new
+
+      # Create a callable stage class (defines #call instead of using a block)
+      # Use class_eval to define call method with yield support
+      callable_stage_class = Class.new(Minigun::ConsumerStage)
+      callable_stage_class.class_eval do
+        define_method(:processed) { processed }
+        define_method(:mutex) { mutex }
+
+        def call(item, _output)
+          mutex.synchronize { processed << item }
+          yield(item * 2)
+        end
+      end
+
+      callable_stage = callable_stage_class.new(:callable_test, pipeline, nil, {})
+
+      input_queue = Queue.new
+      raw_output = Queue.new
+      output_queue = make_output_queue(raw_output)
+      5.times { |i| input_queue << i }
+      input_queue << Minigun::EndOfStage.new(:test)
+
+      executor.execute_stage(callable_stage, user_context, input_queue, output_queue)
+
+      expect(processed.size).to eq(5)
+      expect(processed).to contain_exactly(0, 1, 2, 3, 4)
+
+      # Check output was written
+      results = []
+      5.times { results << raw_output.pop }
+      expect(results).to contain_exactly(0, 2, 4, 6, 8)
+    end
+
+    it 'handles callable stage with arity 1 (item only)' do
+      processed = []
+      mutex = Mutex.new
+
+      # Callable stage with arity 1 - only receives item
+      callable_stage_class = Class.new(Minigun::ConsumerStage)
+      callable_stage_class.class_eval do
+        define_method(:processed) { processed }
+        define_method(:mutex) { mutex }
+
+        def call(item)
+          mutex.synchronize { processed << item }
+          yield(item * 3)
+        end
+      end
+
+      callable_stage = callable_stage_class.new(:arity1_test, pipeline, nil, {})
+
+      input_queue = Queue.new
+      raw_output = Queue.new
+      output_queue = make_output_queue(raw_output)
+      3.times { |i| input_queue << (i + 1) }
+      input_queue << Minigun::EndOfStage.new(:test)
+
+      executor.execute_stage(callable_stage, user_context, input_queue, output_queue)
+
+      expect(processed).to contain_exactly(1, 2, 3)
+
+      results = []
+      3.times { results << raw_output.pop }
+      expect(results).to contain_exactly(3, 6, 9)
+    end
+
+    it 'handles errors in callable stages' do
+      processed = []
+      mutex = Mutex.new
+
+      callable_stage_class = Class.new(Minigun::ConsumerStage)
+      callable_stage_class.class_eval do
+        define_method(:processed) { processed }
+        define_method(:mutex) { mutex }
+
+        def call(item, _output)
+          raise 'callable boom' if item == 2
+
+          mutex.synchronize { processed << item }
+          yield(item)
+        end
+      end
+
+      callable_stage = callable_stage_class.new(:error_callable_test, pipeline, nil, {})
+
+      input_queue = Queue.new
+      raw_output = Queue.new
+      output_queue = make_output_queue(raw_output)
+      5.times { |i| input_queue << i }
+      input_queue << Minigun::EndOfStage.new(:test)
+
+      expect do
+        executor.execute_stage(callable_stage, user_context, input_queue, output_queue)
+      end.not_to raise_error
+
+      # Item 2 errored, others processed
+      expect(processed.size).to eq(4)
+      expect(processed).not_to include(2)
     end
   end
 end
