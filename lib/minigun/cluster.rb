@@ -51,7 +51,11 @@ module Minigun
           end
         end
         @workers.clear
-        DRb.stop_service rescue nil
+        begin
+          DRb.stop_service
+        rescue StandardError
+          nil
+        end
         Minigun.logger.info '[Cluster] Coordinator stopped'
       end
 
@@ -132,7 +136,11 @@ module Minigun
       # Internal: Collect next result
       def collect_result(timeout: nil)
         if timeout
-          @result_queue.pop(true) rescue nil
+          begin
+            @result_queue.pop(true)
+          rescue StandardError
+            nil
+          end
         else
           @result_queue.pop
         end
@@ -225,9 +233,7 @@ module Minigun
       def process_item_sync(stage_name, item)
         stage_proc = @stage_registry[stage_name.to_sym] || @stage_registry[:default]
 
-        unless stage_proc
-          raise Error, "No processor registered for stage :#{stage_name}"
-        end
+        raise Error, "No processor registered for stage :#{stage_name}" unless stage_proc
 
         results = []
         output_collector = ->(result) { results << result }
@@ -327,29 +333,35 @@ module Minigun
 
           # Submit results
           results.each do |result|
-            @coordinator.submit_result({
-              type: :result,
-              result: result,
-              worker_id: @worker_id,
-              latency: Time.now - start_time
-            })
+            @coordinator.submit_result(
+              {
+                type: :result,
+                result: result,
+                worker_id: @worker_id,
+                latency: Time.now - start_time
+              }
+            )
           end
 
           # If no results, still signal completion
           if results.empty?
-            @coordinator.submit_result({
-              type: :item_done,
-              worker_id: @worker_id,
-              latency: Time.now - start_time
-            })
+            @coordinator.submit_result(
+              {
+                type: :item_done,
+                worker_id: @worker_id,
+                latency: Time.now - start_time
+              }
+            )
           end
         rescue StandardError => e
-          @coordinator.submit_error({
-            message: e.message,
-            backtrace: e.backtrace,
-            worker_id: @worker_id,
-            item: item.inspect[0..200] # Truncated for safety
-          })
+          @coordinator.submit_error(
+            {
+              message: e.message,
+              backtrace: e.backtrace,
+              worker_id: @worker_id,
+              item: item.inspect[0..200] # Truncated for safety
+            }
+          )
         end
       end
     end

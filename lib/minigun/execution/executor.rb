@@ -1034,21 +1034,19 @@ module Minigun
       end
 
       def setup_coordinator(stage_name)
-        begin
-          DRb.start_service unless DRb.primary_server
-          @coordinator = DRbObject.new_with_uri(@coordinator_uri)
-          @coordinator.worker_count # Test connection
-          Minigun.logger.info "[Cluster] Connected to coordinator at #{@coordinator_uri}"
-        rescue DRb::DRbConnError
-          Minigun.logger.info '[Cluster] No coordinator found, starting local coordinator'
-          @coordinator = Cluster::Coordinator.new(
-            bind_address: URI.parse(@coordinator_uri).host,
-            port: URI.parse(@coordinator_uri).port,
-            stage_name: stage_name
-          )
-          @coordinator.start
-          @owns_coordinator = true
-        end
+        DRb.start_service unless DRb.primary_server
+        @coordinator = DRbObject.new_with_uri(@coordinator_uri)
+        @coordinator.worker_count # Test connection
+        Minigun.logger.info "[Cluster] Connected to coordinator at #{@coordinator_uri}"
+      rescue DRb::DRbConnError
+        Minigun.logger.info '[Cluster] No coordinator found, starting local coordinator'
+        @coordinator = Cluster::Coordinator.new(
+          bind_address: URI.parse(@coordinator_uri).host,
+          port: URI.parse(@coordinator_uri).port,
+          stage_name: stage_name
+        )
+        @coordinator.start
+        @owns_coordinator = true
       end
 
       # === Direct Mode ===
@@ -1057,17 +1055,15 @@ module Minigun
         DRb.start_service unless DRb.primary_server
 
         # Connect to all workers
-        @direct_workers = @worker_uris.map do |uri|
-          begin
-            worker = DRbObject.new_with_uri(uri)
-            worker.ping # Test connection
-            Minigun.logger.info "[Cluster] Connected to worker at #{uri}"
-            { uri: uri, proxy: worker }
-          rescue DRb::DRbConnError => e
-            Minigun.logger.warn "[Cluster] Failed to connect to worker at #{uri}: #{e.message}"
-            nil
-          end
-        end.compact
+        @direct_workers = @worker_uris.filter_map do |uri|
+          worker = DRbObject.new_with_uri(uri)
+          worker.ping # Test connection
+          Minigun.logger.info "[Cluster] Connected to worker at #{uri}"
+          { uri: uri, proxy: worker }
+        rescue DRb::DRbConnError => e
+          Minigun.logger.warn "[Cluster] Failed to connect to worker at #{uri}: #{e.message}"
+          nil
+        end
 
         if @direct_workers.empty?
           raise Cluster::Error, 'No workers available in direct mode'

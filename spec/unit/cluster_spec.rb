@@ -4,7 +4,7 @@ require 'spec_helper'
 
 RSpec.describe Minigun::Cluster do
   # Use unique ports for each test to avoid conflicts
-  let(:base_port) { 19_000 + rand(1000) }
+  let(:base_port) { rand(19_000..19_999) }
 
   describe Minigun::Cluster::Coordinator do
     let(:coordinator) { described_class.new(bind_address: '127.0.0.1', port: base_port) }
@@ -177,7 +177,7 @@ RSpec.describe Minigun::Cluster do
   end
 
   describe 'Integration: Coordinator and Worker', :integration do
-    let(:port) { 19_500 + rand(500) }
+    let(:port) { rand(19_500..19_999) }
     let(:coordinator) { Minigun::Cluster::Coordinator.new(bind_address: '127.0.0.1', port: port) }
 
     after do

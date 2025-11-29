@@ -19,7 +19,7 @@ module Minigun
         @max_retries = max_retries
         @mutex = Mutex.new
         @sequence = 0
-        @in_flight = {}         # item_id -> TrackedItem
+        @in_flight = {} # item_id -> TrackedItem
         @completed_ids = Set.new
         @retry_queue = Queue.new
       end

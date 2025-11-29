@@ -100,7 +100,7 @@ def run_worker(port)
   DRb.start_service("druby://0.0.0.0:#{port}", service)
 
   puts "Direct mode worker started at druby://0.0.0.0:#{port}"
-  puts "Press Ctrl+C to stop"
+  puts 'Press Ctrl+C to stop'
 
   # Keep running
   DRb.thread.join

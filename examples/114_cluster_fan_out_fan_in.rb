@@ -70,7 +70,7 @@ class FanOutFanInCluster
         result = {
           id: item[:id],
           type: :image,
-          result: item[:value] ** 2,
+          result: item[:value]**2,
           processor: 'GPU',
           cluster: 'A'
         }
@@ -126,7 +126,7 @@ def run_image_worker
     result = {
       id: item[:id],
       type: :image,
-      result: item[:value] ** 2,
+      result: item[:value]**2,
       processor: 'GPU',
       cluster: 'A'
     }

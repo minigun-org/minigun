@@ -114,13 +114,12 @@ class NodeAPipeline
     # (Real results come via loopback)
     consumer :forward_to_b do |item|
       # Forward to Node B via DRb
-      begin
-        node_b = DRbObject.new_with_uri("druby://127.0.0.1:#{NODE_B_PORT}")
-        node_b.enqueue_work({ stage: :transform, item: item })
-        puts "[Node A] Forwarded item #{item[:id]} to Node B"
-      rescue StandardError => e
-        puts "[Node A] ERROR forwarding to Node B: #{e.message}"
-      end
+
+      node_b = DRbObject.new_with_uri("druby://127.0.0.1:#{NODE_B_PORT}")
+      node_b.enqueue_work({ stage: :transform, item: item })
+      puts "[Node A] Forwarded item #{item[:id]} to Node B"
+    rescue StandardError => e
+      puts "[Node A] ERROR forwarding to Node B: #{e.message}"
     end
   end
 end
@@ -174,7 +173,7 @@ def run_node_b_worker
   end
 
   worker.connect
-  puts "[Node B] Worker connected!"
+  puts '[Node B] Worker connected!'
   worker.start
 end
 
@@ -217,10 +216,10 @@ def run_node_c_worker
     begin
       node_a_loopback = DRbObject.new_with_uri("druby://127.0.0.1:#{NODE_A_PORT + 100}")
       node_a_loopback.submit_result({
-        type: :result,
-        result: validated,
-        worker_id: "node-c-worker-#{Process.pid}"
-      })
+                                      type: :result,
+                                      result: validated,
+                                      worker_id: "node-c-worker-#{Process.pid}"
+                                    })
       puts "[Node C Worker] LOOPBACK: Sent item #{item[:id]} back to Node A!"
     rescue StandardError => e
       puts "[Node C Worker] ERROR in loopback to Node A: #{e.message}"
@@ -230,7 +229,7 @@ def run_node_c_worker
   end
 
   worker.connect
-  puts "[Node C] Worker connected!"
+  puts '[Node C] Worker connected!'
   worker.start
 end
 

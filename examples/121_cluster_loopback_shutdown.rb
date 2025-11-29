@@ -275,7 +275,7 @@ def run_loopback_test
                when 'final' then 'SHUTDOWN'
                end
 
-    correct = (status == expected) ? '(correct)' : '(UNEXPECTED!)'
+    correct = status == expected ? '(correct)' : '(UNEXPECTED!)'
 
     items = flag[:items] || (flag[:items_sent].to_i + flag[:items_received].to_i)
     puts "  Node #{flag[:port]} (#{role}): #{status} #{correct}, items: #{items}"

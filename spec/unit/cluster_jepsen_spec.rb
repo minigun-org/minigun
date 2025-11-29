@@ -159,7 +159,7 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
           sent: @items_sent.size,
           received: @items_received.size,
           processed: @items_processed.size,
-          duplicates: @items_received.tally.select { |_k, v| v > 1 }.size,
+          duplicates: @items_received.tally.count { |_k, v| v > 1 },
           missing: (@items_sent - @items_received).size
         }
       end
@@ -215,17 +215,23 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
   # Stop all DRb services
   def cleanup_services(services_list)
     services_list.each do |service|
-      service.stop_service rescue nil
+      service.stop_service
+    rescue StandardError
+      nil
     end
     services_list.clear
     # Give OS time to release ports
     sleep 0.05
   end
 
-  after(:each) do
+  after do
     network_sim.reset!
     cleanup_services(started_services)
-    DRb.stop_service rescue nil
+    begin
+      DRb.stop_service
+    rescue StandardError
+      nil
+    end
   end
 
   describe 'Data Integrity' do
@@ -419,7 +425,7 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
         end
       end
 
-      # Note: Current implementation doesn't retry on failure, so partitioned worker's
+      # NOTE: Current implementation doesn't retry on failure, so partitioned worker's
       # items may be lost. This test documents current behavior.
       begin
         pipeline = klass.new(workers.map { |w| w[:uri] }, items, results, results_mutex, network_sim, workers)
@@ -591,7 +597,7 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
       results_mutex = Mutex.new
       worker_uris = initial_workers.map { |w| w[:uri] }
 
-      # Note: Current direct mode doesn't support dynamic membership
+      # NOTE: Current direct mode doesn't support dynamic membership
       # This test documents that limitation and shows expected behavior
 
       klass = Class.new do
@@ -694,7 +700,7 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
   end
 
   describe 'Delivery Guarantees' do
-    # Note: Current implementation provides "at-most-once" semantics
+    # NOTE: Current implementation provides "at-most-once" semantics
     # Items may be lost on failure, but won't be duplicated
 
     it 'demonstrates at-most-once delivery (no duplicates on success)' do
@@ -1421,7 +1427,7 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
             @items.each { |item| output << item }
           end
 
-          # Note: In a real scenario, you'd want idempotent processing
+          # NOTE: In a real scenario, you'd want idempotent processing
           in_cluster(worker_uris: @worker_uris, delivery_mode: :at_least_once, max_retries: 3) do
             processor :tracked_process do |item, output|
               output << item

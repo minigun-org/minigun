@@ -47,9 +47,7 @@ class DataShard
     @data.size
   end
 
-  def shard_id
-    @shard_id
-  end
+  attr_reader :shard_id
 end
 
 class PeerToPeerPipeline
@@ -122,7 +120,7 @@ def run_worker(shard_start, worker_port)
 
     begin
       # Fetch left data (might be local or from peer)
-      left_data = if shard.keys.include?(task[:left_id])
+      left_data = if shard.key?(task[:left_id])
                     puts "    [Worker #{shard_id}] Left data #{task[:left_id]} is LOCAL"
                     shard.get(task[:left_id])
                   else
@@ -134,7 +132,7 @@ def run_worker(shard_start, worker_port)
                   end
 
       # Fetch right data (might be local or from peer)
-      right_data = if shard.keys.include?(task[:right_id])
+      right_data = if shard.key?(task[:right_id])
                      puts "    [Worker #{shard_id}] Right data #{task[:right_id]} is LOCAL"
                      shard.get(task[:right_id])
                    else
@@ -149,21 +147,21 @@ def run_worker(shard_start, worker_port)
       result_value = left_data[:value] + right_data[:value]
 
       output.call({
-        task_id: task[:task_id],
-        left_id: task[:left_id],
-        right_id: task[:right_id],
-        left_value: left_data[:value],
-        right_value: right_data[:value],
-        result: result_value,
-        worker_shard: shard_id
-      })
+                    task_id: task[:task_id],
+                    left_id: task[:left_id],
+                    right_id: task[:right_id],
+                    left_value: left_data[:value],
+                    right_value: right_data[:value],
+                    result: result_value,
+                    worker_shard: shard_id
+                  })
     rescue StandardError => e
       puts "    [Worker #{shard_id}] ERROR: #{e.message}"
       output.call({
-        task_id: task[:task_id],
-        error: e.message,
-        worker_shard: shard_id
-      })
+                    task_id: task[:task_id],
+                    error: e.message,
+                    worker_shard: shard_id
+                  })
     end
   end
 

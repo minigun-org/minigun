@@ -143,19 +143,19 @@ def run_parent_worker(child_coordinator_port)
 
       # Return aggregated result
       output.call({
-        batch_id: batch[:batch_id],
-        item_count: batch[:items].size,
-        results: child_results,
-        worker_id: Process.pid
-      })
+                    batch_id: batch[:batch_id],
+                    item_count: batch[:items].size,
+                    results: child_results,
+                    worker_id: Process.pid
+                  })
     rescue StandardError => e
       puts "  [Parent Worker #{Process.pid}] ERROR: #{e.message}"
       # Return partial result on error
       output.call({
-        batch_id: batch[:batch_id],
-        error: e.message,
-        worker_id: Process.pid
-      })
+                    batch_id: batch[:batch_id],
+                    error: e.message,
+                    worker_id: Process.pid
+                  })
     end
   end
 

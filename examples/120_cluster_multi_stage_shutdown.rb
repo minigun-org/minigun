@@ -184,11 +184,10 @@ def run_loopback_test
   puts "  Validators stayed running: #{validators_correct ? 'PASS' : 'FAIL'}"
   puts "  Processors shutdown: #{processors_correct ? 'PASS' : 'FAIL'}"
 
+  puts
   if validators_correct && processors_correct
-    puts
     puts 'SUCCESS: Mixed shutdown behavior works correctly!'
   else
-    puts
     puts 'WARNING: Unexpected shutdown behavior detected'
   end
 
@@ -232,7 +231,7 @@ def run_loopback_test
     pipeline2.run
     puts "Second batch completed with #{pipeline2.results.size} items"
   rescue Minigun::Cluster::Error => e
-    puts "Expected: Processor workers are gone (they shutdown)"
+    puts 'Expected: Processor workers are gone (they shutdown)'
     puts "  Error: #{e.message}"
     puts
     puts 'This demonstrates that:'

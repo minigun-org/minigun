@@ -30,7 +30,7 @@ RSpec.describe Minigun::Cluster::DeliveryTracker do
 
   describe '#generate_id' do
     it 'generates unique monotonic IDs' do
-      ids = 10.times.map { tracker.generate_id }
+      ids = Array.new(10) { tracker.generate_id }
       expect(ids).to eq([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
     end
 
@@ -38,7 +38,7 @@ RSpec.describe Minigun::Cluster::DeliveryTracker do
       ids = []
       mutex = Mutex.new
 
-      threads = 10.times.map do
+      threads = Array.new(10) do
         Thread.new do
           5.times do
             id = tracker.generate_id
@@ -66,7 +66,7 @@ RSpec.describe Minigun::Cluster::DeliveryTracker do
 
     it 'increments in_flight_count' do
       expect { tracker.track({ value: 1 }, worker_uri: 'druby://localhost:9000') }
-        .to change { tracker.in_flight_count }.from(0).to(1)
+        .to change(tracker, :in_flight_count).from(0).to(1)
     end
 
     it 'marks tracker as not complete' do
@@ -89,12 +89,12 @@ RSpec.describe Minigun::Cluster::DeliveryTracker do
 
     it 'decrements in_flight_count' do
       expect { tracker.complete(item_id) }
-        .to change { tracker.in_flight_count }.from(1).to(0)
+        .to change(tracker, :in_flight_count).from(1).to(0)
     end
 
     it 'increments completed_count' do
       expect { tracker.complete(item_id) }
-        .to change { tracker.completed_count }.from(0).to(1)
+        .to change(tracker, :completed_count).from(0).to(1)
     end
 
     it 'makes tracker complete when last item completed' do
@@ -250,7 +250,7 @@ RSpec.describe Minigun::Cluster::DeliveryTracker do
       mutex = Mutex.new
 
       # Track 100 items from 10 threads
-      track_threads = 10.times.map do
+      track_threads = Array.new(10) do
         Thread.new do
           10.times do |i|
             id = tracker.track({ value: i }, worker_uri: 'druby://localhost:9000')

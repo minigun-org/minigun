@@ -111,13 +111,15 @@ class DedicatedWorker
       puts "[Worker #{@port}] Processing item #{item[:id]} (total: #{@items_processed})"
 
       result = (1..1000).reduce(item[:value]) { |acc, _| Math.sqrt(acc.abs + 1) }
-      output.call({
-        id: item[:id],
-        batch_id: item[:batch_id],
-        original: item[:value],
-        computed: result.round(4),
-        worker: @port
-      })
+      output.call(
+        {
+          id: item[:id],
+          batch_id: item[:batch_id],
+          original: item[:value],
+          computed: result.round(4),
+          worker: @port
+        }
+      )
     end
 
     # Create service with shutdown tracking
@@ -135,7 +137,10 @@ class DedicatedWorker
     @shutdown_received = true
     puts "[Worker #{@port}] SHUTDOWN RECEIVED after processing #{@items_processed} items"
     # Stop DRb service to exit
-    Thread.new { sleep 0.1; DRb.stop_service }
+    Thread.new do
+      sleep 0.1
+      DRb.stop_service
+    end
   end
 end
 
@@ -180,12 +185,12 @@ def run_loopback_test
       puts "  [Worker #{port}] Processing item #{item[:id]} (count: #{shutdown_flag[:items]})"
       result = (1..500).reduce(item[:value]) { |acc, _| Math.sqrt(acc.abs + 1) }
       output.call({
-        id: item[:id],
-        batch_id: item[:batch_id],
-        original: item[:value],
-        computed: result.round(4),
-        worker: port
-      })
+                    id: item[:id],
+                    batch_id: item[:batch_id],
+                    original: item[:value],
+                    computed: result.round(4),
+                    worker: port
+                  })
     end
 
     # Create tracking service
@@ -251,7 +256,10 @@ def run_loopback_test
   puts
 
   # Reset shutdown flags
-  shutdown_flags.each { |f| f[:received] = false; f[:items] = 0 }
+  shutdown_flags.each do |f|
+    f[:received] = false
+    f[:items] = 0
+  end
 
   pipeline2 = ShutdownOnDonePipeline.new(worker_uris: worker_uris, shutdown_on_done: false)
   pipeline2.run
@@ -334,12 +342,11 @@ def run_client(shutdown_on_done)
     puts '=== Results ==='
     puts "Total: #{pipeline.results.size} items processed"
 
+    puts
     if shutdown_on_done
-      puts
       puts 'Workers should have received shutdown signal and exited.'
       puts 'Check worker terminals to confirm.'
     else
-      puts
       puts 'Workers are still running (shutdown_on_done: false).'
       puts 'They can process more work from other clients.'
     end
