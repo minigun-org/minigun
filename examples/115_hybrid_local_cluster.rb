@@ -59,7 +59,7 @@ class HybridPipeline
     end
 
     # Cluster: Parse HTML (CPU-bound, distribute across machines)
-    in_cluster(coordinator: 'druby://0.0.0.0:9000', min_workers: 2, worker_timeout: 30) do
+    in_cluster(coordinator_uri: 'druby://0.0.0.0:9000', min_workers: 2, worker_timeout: 30) do
       processor :parse_html do |item, output|
         puts "  [Parse Cluster] Parsing HTML for page #{item[:id]}..."
         sleep 0.15 # Simulate CPU-intensive parsing

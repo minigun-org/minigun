@@ -2684,4 +2684,19 @@ RSpec.describe 'Examples Integration' do
       #   Terminal 6: ruby examples/117_cluster_loopback.rb coordinator_a
     end
   end
+
+  describe '118_cluster_direct_mode.rb' do
+    it 'demonstrates direct mode cluster (no coordinator)', skip: 'Manual test - requires multiple terminals' do
+      # Direct mode connects to workers without a coordinator
+      # Work is distributed round-robin to the worker URIs
+      # Usage:
+      #   Terminal 1: ruby examples/118_cluster_direct_mode.rb worker 9001
+      #   Terminal 2: ruby examples/118_cluster_direct_mode.rb worker 9002
+      #   Terminal 3: ruby examples/118_cluster_direct_mode.rb worker 9003
+      #   Terminal 4: ruby examples/118_cluster_direct_mode.rb client
+      #
+      # Or run loopback test (all in one process):
+      #   ruby examples/118_cluster_direct_mode.rb loopback
+    end
+  end
 end

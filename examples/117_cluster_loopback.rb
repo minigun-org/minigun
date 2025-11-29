@@ -99,7 +99,7 @@ class NodeAPipeline
     end
 
     # Initial processing - sends to Node B
-    in_cluster(coordinator: "druby://0.0.0.0:#{NODE_A_PORT}", min_workers: 1, worker_timeout: 60) do
+    in_cluster(coordinator_uri: "druby://0.0.0.0:#{NODE_A_PORT}", min_workers: 1, worker_timeout: 60) do
       processor :initial_process do |item, output|
         # Add initial processing
         processed = item.merge(

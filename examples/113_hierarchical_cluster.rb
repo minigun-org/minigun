@@ -56,7 +56,7 @@ class ParentPipeline
     end
 
     # Parent cluster: splits batches into sub-tasks and delegates to child clusters
-    in_cluster(coordinator: 'druby://0.0.0.0:9000', min_workers: 1, worker_timeout: 60) do
+    in_cluster(coordinator_uri: 'druby://0.0.0.0:9000', min_workers: 1, worker_timeout: 60) do
       processor :delegate_to_children do |batch, output|
         # This runs on parent workers, which will spawn child work
         puts "  [Parent Worker] Processing batch #{batch[:batch_id]} (#{batch[:items].size} items)"

@@ -62,7 +62,7 @@ class FanOutFanInCluster
     end
 
     # Cluster A: Image processing (simulated GPU cluster)
-    in_cluster(coordinator: 'druby://0.0.0.0:9000', min_workers: 1, worker_timeout: 30) do
+    in_cluster(coordinator_uri: 'druby://0.0.0.0:9000', min_workers: 1, worker_timeout: 30) do
       processor :process_images do |item, output|
         # Simulate GPU-intensive image processing
         puts "  [Image Cluster] Processing image task #{item[:id]}..."
@@ -79,7 +79,7 @@ class FanOutFanInCluster
     end
 
     # Cluster B: Text processing (CPU cluster)
-    in_cluster(coordinator: 'druby://0.0.0.0:9001', min_workers: 1, worker_timeout: 30) do
+    in_cluster(coordinator_uri: 'druby://0.0.0.0:9001', min_workers: 1, worker_timeout: 30) do
       processor :process_text do |item, output|
         # Simulate CPU text processing
         puts "  [Text Cluster] Processing text task #{item[:id]}..."

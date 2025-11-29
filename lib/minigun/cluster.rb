@@ -218,6 +218,24 @@ module Minigun
         @running = false
       end
 
+      # Direct mode: Process a single item synchronously and return result
+      # Used when connecting directly to workers without a coordinator
+      def process_item_sync(stage_name, item)
+        stage_proc = @stage_registry[stage_name.to_sym] || @stage_registry[:default]
+
+        unless stage_proc
+          raise Error, "No processor registered for stage :#{stage_name}"
+        end
+
+        results = []
+        output_collector = ->(result) { results << result }
+
+        stage_proc.call(item, output_collector)
+
+        # Return first result (or nil if no results)
+        results.first
+      end
+
       private
 
       def generate_worker_id
@@ -334,7 +352,7 @@ module Minigun
       end
     end
 
-    # Service object exposed by worker for coordinator callbacks
+    # Service object exposed by worker for coordinator callbacks and direct mode
     class WorkerService
       def initialize(worker)
         @worker = worker
@@ -346,6 +364,12 @@ module Minigun
 
       def ping
         :pong
+      end
+
+      # Direct mode: Process a single item synchronously and return result
+      # Used when connecting directly to workers without a coordinator
+      def process_item(stage_name, item)
+        @worker.process_item_sync(stage_name, item)
       end
     end
 

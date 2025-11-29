@@ -41,7 +41,7 @@ class ClusterExample
     end
 
     # This stage runs on cluster workers
-    in_cluster(coordinator: 'druby://0.0.0.0:9000', min_workers: 1, worker_timeout: 60) do
+    in_cluster(coordinator_uri: 'druby://0.0.0.0:9000', min_workers: 1, worker_timeout: 60) do
       processor :compute do |item, output|
         # Simulate CPU-intensive work
         result = (1..10_000).reduce(item[:value]) { |acc, _| Math.sqrt(acc.abs + 1) }

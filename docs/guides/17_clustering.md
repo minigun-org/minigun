@@ -4,14 +4,22 @@ Minigun supports distributed execution across multiple machines using Ruby's DRb
 
 ## Overview
 
-The clustering model consists of:
+Minigun supports two clustering modes:
+
+### Coordinator Mode
 - **Coordinator** (Head Node): Runs the pipeline, distributes work to workers
 - **Workers** (Compute Nodes): Connect to coordinator, process work items, return results
-
-Key features:
 - Pull-based work distribution (workers request work when ready)
 - Automatic load balancing
 - Worker heartbeat monitoring
+
+### Direct Mode (No Coordinator)
+- Connect directly to a known set of workers
+- Work distributed round-robin to workers
+- Simpler setup for static worker pools
+- No coordinator process needed
+
+Key features:
 - Stage code checksum validation for safety
 - Support for multiple workers across different machines
 
@@ -51,9 +59,9 @@ Key features:
 
 ## Basic Usage
 
-### Defining a Clustered Pipeline
+### Coordinator Mode (Dynamic Workers)
 
-Use the `in_cluster` DSL method to wrap stages that should run on remote workers:
+Use `coordinator_uri:` to run a coordinator that workers connect to:
 
 ```ruby
 class DistributedPipeline
@@ -69,7 +77,7 @@ class DistributedPipeline
 
     # This stage runs on cluster workers
     in_cluster(
-      coordinator: 'druby://0.0.0.0:9000',
+      coordinator_uri: 'druby://0.0.0.0:9000',
       min_workers: 2,
       worker_timeout: 60
     ) do
@@ -81,6 +89,42 @@ class DistributedPipeline
     end
 
     # Consumer runs on coordinator
+    consumer :collect do |item|
+      puts "Result #{item[:id]}: #{item[:result]}"
+    end
+  end
+end
+```
+
+### Direct Mode (Static Workers)
+
+Use `worker_uris:` to connect directly to a known set of workers (no coordinator):
+
+```ruby
+class DirectModePipeline
+  include Minigun::DSL
+
+  pipeline do
+    producer :generate do |output|
+      1000.times do |i|
+        output << { id: i, value: rand(1000) }
+      end
+    end
+
+    # Connect directly to workers (round-robin distribution)
+    in_cluster(
+      worker_uris: [
+        'druby://192.168.1.10:9001',
+        'druby://192.168.1.11:9001',
+        'druby://192.168.1.12:9001'
+      ]
+    ) do
+      processor :compute do |item, output|
+        result = expensive_calculation(item[:value])
+        output << { id: item[:id], result: result }
+      end
+    end
+
     consumer :collect do |item|
       puts "Result #{item[:id]}: #{item[:result]}"
     end
@@ -158,7 +202,7 @@ class DistributedPipeline
       # ...
     end
 
-    in_cluster(coordinator: 'druby://0.0.0.0:9000', min_workers: 2) do
+    in_cluster(coordinator_uri: 'druby://0.0.0.0:9000', min_workers: 2) do
       processor :compute do |item, output|
         result = expensive_calculation(item[:value])
         output << { id: item[:id], result: result }
@@ -185,28 +229,50 @@ end
 
 ### `in_cluster` Parameters
 
+**Coordinator Mode:**
 ```ruby
 in_cluster(
-  coordinator: 'druby://0.0.0.0:9000',  # DRb URI for coordinator
-  min_workers: 1,                        # Minimum workers required before starting
-  worker_timeout: 30                     # Seconds to wait for minimum workers
+  coordinator_uri: 'druby://0.0.0.0:9000',  # DRb URI for coordinator
+  min_workers: 1,                            # Minimum workers required before starting
+  worker_timeout: 30                         # Seconds to wait for minimum workers
 ) do
   # stages to run on cluster
 end
 ```
 
-- **coordinator**: DRb URI where coordinator listens (required)
+**Direct Mode:**
+```ruby
+in_cluster(
+  worker_uris: [                             # Array of worker DRb URIs
+    'druby://worker1:9001',
+    'druby://worker2:9001',
+    'druby://worker3:9001'
+  ]
+) do
+  # stages to run on cluster
+end
+```
+
+**Note:** You must use either `coordinator_uri:` OR `worker_uris:`, not both.
+
+- **coordinator_uri**: DRb URI where coordinator listens (coordinator mode)
   - Use `0.0.0.0` to listen on all interfaces
   - Use `127.0.0.1` for localhost only
   - Use specific IP for specific interface
 
+- **worker_uris**: Array of DRb URIs for direct worker connections (direct mode)
+  - Workers must be running before pipeline starts
+  - Work is distributed round-robin across workers
+
 - **min_workers**: Minimum number of workers that must connect before processing starts
   - Default: 1
   - Coordinator will wait up to `worker_timeout` seconds
+  - Only applies to coordinator mode
 
 - **worker_timeout**: Maximum seconds to wait for `min_workers` to connect
   - Default: 30
   - Raises error if timeout expires
+  - Only applies to coordinator mode
 
 ### Worker Options
 
@@ -375,7 +441,7 @@ class WebScraperCluster
       end
     end
 
-    in_cluster(coordinator: 'druby://0.0.0.0:9000', min_workers: 5) do
+    in_cluster(coordinator_uri: 'druby://0.0.0.0:9000', min_workers: 5) do
       processor :scrape do |item, output|
         require 'net/http'
         html = Net::HTTP.get(URI(item[:url]))
@@ -405,7 +471,7 @@ class ImageProcessor
   pipeline do
     produce_each :images, Dir.glob('images/*.jpg')
 
-    in_cluster(coordinator: 'druby://0.0.0.0:9000', min_workers: 10) do
+    in_cluster(coordinator_uri: 'druby://0.0.0.0:9000', min_workers: 10) do
       processor :resize do |path, output|
         require 'mini_magick'
         image = MiniMagick::Image.open(path)
@@ -437,7 +503,7 @@ class WordCount
     produce_each :files, Dir.glob('docs/*.txt')
 
     # Map phase (distributed)
-    in_cluster(coordinator: 'druby://0.0.0.0:9000', min_workers: 4) do
+    in_cluster(coordinator_uri: 'druby://0.0.0.0:9000', min_workers: 4) do
       processor :map do |file, output|
         File.read(file).split.each do |word|
           output << { word: word.downcase, count: 1 }

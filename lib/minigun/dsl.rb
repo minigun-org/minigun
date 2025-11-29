@@ -290,20 +290,31 @@ module Minigun
 
       # Distributed cluster execution - distributes work across remote machines via DRb
       #
+      # Two modes available:
+      # 1. Coordinator mode: Workers connect to a coordinator which distributes work
+      # 2. Direct mode: Connect directly to workers without a coordinator
+      #
       # @param coordinator_uri [String] DRb URI of the coordinator (e.g., "druby://10.0.0.1:9000")
-      # @param workers [Array<String>] Optional array of worker URIs for static discovery
-      # @param min_workers [Integer] Minimum workers required before starting (default: 1)
+      # @param worker_uris [Array<String>] Array of worker URIs for direct mode (no coordinator)
+      # @param min_workers [Integer] Minimum workers required before starting (default: 1, coordinator mode only)
       # @param worker_timeout [Integer] Seconds to wait for workers to connect (default: 30)
       #
-      # @example Basic usage (coordinator auto-starts, workers connect)
-      #   in_cluster(coordinator: 'druby://0.0.0.0:9000') do
+      # @example Coordinator mode (coordinator auto-starts, workers connect dynamically)
+      #   in_cluster(coordinator_uri: 'druby://0.0.0.0:9000') do
       #     processor :compute do |item, output|
       #       output << expensive_computation(item)
       #     end
       #   end
       #
-      # @example With minimum workers requirement
-      #   in_cluster(coordinator: 'druby://10.0.0.1:9000', min_workers: 3, worker_timeout: 60) do
+      # @example Coordinator mode with minimum workers requirement
+      #   in_cluster(coordinator_uri: 'druby://10.0.0.1:9000', min_workers: 3, worker_timeout: 60) do
+      #     processor :distributed_work do |item, output|
+      #       output << process(item)
+      #     end
+      #   end
+      #
+      # @example Direct mode (connect to workers directly, no coordinator)
+      #   in_cluster(worker_uris: ['druby://w1:9001', 'druby://w2:9002']) do
       #     processor :distributed_work do |item, output|
       #       output << process(item)
       #     end
@@ -311,11 +322,18 @@ module Minigun
       #
       # NOTE: Worker nodes must have the same codebase deployed and must register
       # stage processors locally. The stage block is NOT serialized to workers.
-      def in_cluster(coordinator:, workers: nil, min_workers: 1, worker_timeout: 30, &)
+      def in_cluster(coordinator_uri: nil, worker_uris: nil, min_workers: 1, worker_timeout: 30, &)
+        unless coordinator_uri || worker_uris
+          raise ArgumentError, 'in_cluster requires either coordinator_uri: or worker_uris:'
+        end
+        if coordinator_uri && worker_uris
+          raise ArgumentError, 'in_cluster cannot use both coordinator_uri: and worker_uris: (pick one mode)'
+        end
+
         context = {
           type: :cluster_pool,
-          coordinator_uri: coordinator,
-          workers: workers,
+          coordinator_uri: coordinator_uri,
+          worker_uris: worker_uris,
           min_workers: min_workers,
           worker_timeout: worker_timeout
         }

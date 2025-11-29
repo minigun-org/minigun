@@ -46,7 +46,7 @@ class MultiStageCluster
     end
 
     # Stage 1: Preprocessing cluster (port 9000)
-    in_cluster(coordinator: 'druby://0.0.0.0:9000', min_workers: 1, worker_timeout: 30) do
+    in_cluster(coordinator_uri: 'druby://0.0.0.0:9000', min_workers: 1, worker_timeout: 30) do
       processor :preprocess do |item, output|
         # Simulate preprocessing (validation, normalization, etc.)
         puts "  [Preprocess] Item #{item[:id]}: validating..."
@@ -57,7 +57,7 @@ class MultiStageCluster
     end
 
     # Stage 2: Heavy computation cluster (port 9001)
-    in_cluster(coordinator: 'druby://0.0.0.0:9001', min_workers: 1, worker_timeout: 30) do
+    in_cluster(coordinator_uri: 'druby://0.0.0.0:9001', min_workers: 1, worker_timeout: 30) do
       processor :heavy_compute do |item, output|
         # Simulate expensive computation
         puts "  [Compute] Item #{item[:id]}: computing..."
@@ -68,7 +68,7 @@ class MultiStageCluster
     end
 
     # Stage 3: Postprocessing cluster (port 9002)
-    in_cluster(coordinator: 'druby://0.0.0.0:9002', min_workers: 1, worker_timeout: 30) do
+    in_cluster(coordinator_uri: 'druby://0.0.0.0:9002', min_workers: 1, worker_timeout: 30) do
       processor :postprocess do |item, output|
         # Simulate postprocessing (formatting, validation, etc.)
         puts "  [Postprocess] Item #{item[:id]}: formatting..."

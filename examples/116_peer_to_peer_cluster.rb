@@ -75,7 +75,7 @@ class PeerToPeerPipeline
     end
 
     # Cluster workers perform joins by fetching data peer-to-peer
-    in_cluster(coordinator: 'druby://0.0.0.0:9000', min_workers: 2, worker_timeout: 30) do
+    in_cluster(coordinator_uri: 'druby://0.0.0.0:9000', min_workers: 2, worker_timeout: 30) do
       processor :distributed_join do |task, output|
         # Worker will fetch data from peers if needed
         # (Implemented in worker code below)
