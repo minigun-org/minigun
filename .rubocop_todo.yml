@@ -43,14 +43,6 @@ Lint/ShadowedException:
     - 'lib/minigun/queue_wrappers.rb'
 
 # Offense count: 2
-# This cop supports safe autocorrection (--autocorrect).
-# Configuration parameters: IgnoreEmptyBlocks, AllowUnusedKeywordArguments.
-Lint/UnusedBlockArgument:
-  Exclude:
-    - 'lib/minigun/queue_wrappers.rb'
-    - 'spec/hud/flow_diagram_rendering_spec.rb'
-
-# Offense count: 2
 Lint/UselessRescue:
   Exclude:
     - 'lib/minigun/queue_wrappers.rb'
@@ -130,12 +122,6 @@ RSpec/ExpectOutput:
     - 'spec/integration/examples_spec.rb'
     - 'spec/unit/functional_dsl_spec.rb'
 
-# Offense count: 2
-# This cop supports safe autocorrection (--autocorrect).
-RSpec/IteratedExpectation:
-  Exclude:
-    - 'spec/integration/examples_spec.rb'
-
 # Offense count: 6
 RSpec/MultipleDescribes:
   Exclude:
@@ -198,20 +184,6 @@ Security/MarshalLoad:
     - 'lib/minigun/execution/executor.rb'
     - 'lib/minigun/queue_wrappers.rb'
     - 'spec/unit/routed_item_spec.rb'
-
-# Offense count: 2
-# This cop supports safe autocorrection (--autocorrect).
-Style/ComparableClamp:
-  Exclude:
-    - 'lib/minigun/hud/flow_diagram_frame.rb'
-
-# Offense count: 1
-# This cop supports safe autocorrection (--autocorrect).
-# Configuration parameters: EnforcedStyle, AllowComments.
-# SupportedStyles: empty, nil, both
-Style/EmptyElse:
-  Exclude:
-    - 'lib/minigun/hud/flow_diagram.rb'
 
 # Offense count: 1
 Style/MultilineBlockChain:

@@ -19,7 +19,7 @@ RSpec.describe 'FlowDiagram Rendering' do
     buffer = Array.new(height) { ' ' * width }
 
     terminal = double('terminal')
-    allow(terminal).to receive(:write_at) do |x, y, text, color: nil|
+    allow(terminal).to receive(:write_at) do |x, y, text, color: nil| # rubocop:disable Lint/UnusedBlockArgument
       next if y < 0 || y >= height || x < 0
 
       # Write text into buffer at position

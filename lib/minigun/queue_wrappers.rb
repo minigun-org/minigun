@@ -237,7 +237,7 @@ module Minigun
     end
 
     def to_proc
-      proc { |item, to: nil| self << item }
+      proc { |item, to: nil| self << item } # rubocop:disable Lint/UnusedBlockArgument
     end
   end
 end

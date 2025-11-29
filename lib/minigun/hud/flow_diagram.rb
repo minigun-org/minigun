@@ -517,9 +517,7 @@ module Minigun
               terminal.write_at(x_offset + x, y_offset + merge_y, char, color: color)
               distance += 1
             end
-          else
-            # Source directly above target - vertical line continues
-            # (already drawn above)
+            # else: Source directly above target - vertical line already drawn above
           end
         end
 
