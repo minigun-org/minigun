@@ -6,7 +6,7 @@ module Minigun
   class Pipeline
     attr_reader :name, :config, :stages, :hooks, :dag, :output_queues, :stats,
                 :context, :stage_hooks, :runtime_edges, :input_queues, :parent_pipeline, :task,
-                :entrance_router
+                :entrance_router, :demand_registry
 
     def initialize(name, task, parent_pipeline, config = {}, stages: nil, hooks: nil, stage_hooks: nil, dag: nil, stats: nil)
       @name = name
@@ -293,6 +293,10 @@ module Minigun
 
       # Create one input queue per stage (except producers) and register with Task
       build_stage_input_queues
+
+      # Build demand channels if demand is enabled
+      build_demand_channels if demand_enabled?
+
       @produced_count = Concurrent::AtomicFixnum.new(0)
       @stage_threads = []
 
@@ -309,6 +313,33 @@ module Minigun
 
       # Wait for all workers to finish
       @stage_threads.each(&:join)
+    ensure
+      # Close all demand channels on completion
+      @demand_registry&.close_all
+    end
+
+    # Check if demand-based backpressure is enabled
+    def demand_enabled?
+      @config[:demand] == true || Minigun.demand_enabled?
+    end
+
+    # Build demand channels for all producer-consumer edges
+    def build_demand_channels
+      @demand_registry = Demand::Registry.new
+
+      @dag.edges.each do |producer_stage, consumer_stages|
+        consumer_stages.each do |consumer_stage|
+          # Get demand config from consumer stage (downstream controls demand)
+          @demand_registry.register(
+            producer_stage,
+            consumer_stage,
+            min_demand: consumer_stage.min_demand,
+            max_demand: consumer_stage.max_demand
+          )
+        end
+      end
+
+      log_debug "[Pipeline:#{@name}] Built #{@demand_registry.size} demand channels"
     end
 
     # Build one input queue per stage (except producers) and register with Task

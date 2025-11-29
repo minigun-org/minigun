@@ -57,7 +57,16 @@ Performance/CollectionLiteralInLoop:
 RSpec/ContextWording:
   Enabled: false
 
+RSpec/DescribeClass:
+  Exclude:
+    - 'spec/hud/**/*'
+    - 'spec/integration/**/*'
+    - 'spec/unit/**/*'
+
 RSpec/ExampleLength:
+  Enabled: false
+
+RSpec/IndexedLet:
   Enabled: false
 
 RSpec/InstanceVariable:

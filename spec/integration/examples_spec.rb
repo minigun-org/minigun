@@ -767,6 +767,125 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
+  # Demand backpressure examples (29_demand_*)
+
+  describe '29_demand_basic.rb' do
+    it 'processes all items with demand enabled' do
+      load File.expand_path('../../examples/29_demand_basic.rb', __dir__)
+
+      example = DemandBasicExample.new
+      example.run
+
+      expect(example.results.size).to eq(100)
+      expect(example.results.sort).to eq((0...100).to_a)
+    end
+  end
+
+  describe '29_demand_watermarks.rb' do
+    it 'works with custom min_demand and max_demand' do
+      load File.expand_path('../../examples/29_demand_watermarks.rb', __dir__)
+
+      example = DemandWatermarksExample.new
+      example.run
+
+      expect(example.results.size).to eq(200)
+      expect(example.results.sort).to eq((0...200).map { |i| i * 2 })
+    end
+  end
+
+  describe '29_demand_multi_stage.rb' do
+    it 'propagates demand through multiple stages' do
+      load File.expand_path('../../examples/29_demand_multi_stage.rb', __dir__)
+
+      example = DemandMultiStageExample.new
+      example.run
+
+      # 50 items, filter even only = 25 items
+      expect(example.results.size).to eq(25)
+    end
+  end
+
+  describe '29_demand_diamond.rb' do
+    it 'handles demand with fan-out/fan-in pattern' do
+      load File.expand_path('../../examples/29_demand_diamond.rb', __dir__)
+
+      example = DemandDiamondExample.new
+      example.run
+
+      expect(example.results_a.size).to eq(20)
+      expect(example.results_b.size).to eq(20)
+      expect(example.merged.size).to eq(40)
+    end
+  end
+
+  describe '29_demand_slow_consumer.rb' do
+    it 'applies backpressure to fast producer' do
+      load File.expand_path('../../examples/29_demand_slow_consumer.rb', __dir__)
+
+      example = DemandSlowConsumerExample.new
+      example.run
+
+      expect(example.results.size).to eq(30)
+    end
+  end
+
+  describe '29_demand_disabled_stage.rb' do
+    it 'allows disabling demand for specific stages' do
+      load File.expand_path('../../examples/29_demand_disabled_stage.rb', __dir__)
+
+      example = DemandDisabledStageExample.new
+      example.run
+
+      expect(example.results.size).to eq(50)
+    end
+  end
+
+  describe '29_demand_with_accumulator.rb' do
+    it 'works with accumulator batching' do
+      load File.expand_path('../../examples/29_demand_with_accumulator.rb', __dir__)
+
+      example = DemandAccumulatorExample.new
+      example.run
+
+      expect(example.total_items).to eq(100)
+      expect(example.batches.size).to eq(10)
+    end
+  end
+
+  describe '29_demand_explicit_routing.rb' do
+    it 'works with explicit output.to routing' do
+      load File.expand_path('../../examples/29_demand_explicit_routing.rb', __dir__)
+
+      example = DemandExplicitRoutingExample.new
+      example.run
+
+      expect(example.high_values.size).to eq(25)
+      expect(example.low_values.size).to eq(25)
+    end
+  end
+
+  describe '29_demand_threaded.rb' do
+    it 'works with thread pools' do
+      load File.expand_path('../../examples/29_demand_threaded.rb', __dir__)
+
+      example = DemandThreadedExample.new
+      example.run
+
+      expect(example.results.size).to eq(100)
+    end
+  end
+
+  describe '29_demand_enumerator.rb' do
+    it 'works with produce_each enumerator' do
+      load File.expand_path('../../examples/29_demand_enumerator.rb', __dir__)
+
+      example = DemandEnumeratorExample.new
+      example.run
+
+      expect(example.results.size).to eq(100)
+    end
+  end
+
   describe '31_configurable_downloader.rb' do
     it 'demonstrates runtime-configurable thread pools' do
       load File.expand_path('../../examples/31_configurable_downloader.rb', __dir__)

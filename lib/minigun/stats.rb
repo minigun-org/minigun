@@ -23,6 +23,11 @@ module Minigun
       @latency_samples = []
       @latency_count = 0 # Total number of latency observations
       @mutex = Mutex.new
+
+      # Demand-based backpressure tracking
+      @demand_wait_count = Concurrent::AtomicFixnum.new(0)
+      @demand_wait_duration = 0.0
+      @demand_requests = Concurrent::AtomicFixnum.new(0)
     end
 
     # Get stage name
@@ -64,6 +69,47 @@ module Minigun
 
     def increment_failed(count = 1)
       @items_failed.increment(count)
+    end
+
+    # --- Demand backpressure metrics ---
+
+    # Record a demand wait event (producer blocked waiting for demand)
+    def record_demand_wait(duration)
+      @demand_wait_count.increment
+      @mutex.synchronize { @demand_wait_duration += duration }
+    end
+
+    # Record a demand request (consumer requested more items)
+    def increment_demand_requests(count = 1)
+      @demand_requests.increment(count)
+    end
+
+    # Number of times producer waited for demand
+    def demand_wait_count
+      @demand_wait_count.value
+    end
+
+    # Total time spent waiting for demand (seconds)
+    def demand_wait_duration
+      @mutex.synchronize { @demand_wait_duration }
+    end
+
+    # Number of demand replenishment requests sent
+    def demand_requests
+      @demand_requests.value
+    end
+
+    # Average wait time per demand wait event
+    def avg_demand_wait
+      count = demand_wait_count
+      return 0 if count.zero?
+
+      demand_wait_duration / count
+    end
+
+    # Check if demand tracking has data
+    def demand_data?
+      demand_wait_count.positive? || demand_requests.positive?
     end
 
     # Record latency for an item (in seconds) using reservoir sampling
@@ -174,6 +220,15 @@ module Minigun
             observations: @latency_count # Total items measured
           }
         end
+
+        if demand_data?
+          h[:demand] = {
+            wait_count: demand_wait_count,
+            wait_duration: demand_wait_duration.round(4),
+            avg_wait: (avg_demand_wait * 1000).round(2), # Convert to ms
+            requests: demand_requests
+          }
+        end
       end
     end
 
@@ -189,6 +244,8 @@ module Minigun
       parts << "Failed: #{items_failed} (#{(100 - success_rate).round(2)}%)" if items_failed > 0
 
       parts << "Latency P50/P90/P95: #{(p50 * 1000).round(1)}/#{(p90 * 1000).round(1)}/#{(p95 * 1000).round(1)}ms" if latency_data?
+
+      parts << "Demand waits=#{demand_wait_count} avg=#{(avg_demand_wait * 1000).round(1)}ms" if demand_data?
 
       parts.join(', ')
     end
