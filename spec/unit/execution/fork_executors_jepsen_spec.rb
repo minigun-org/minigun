@@ -446,7 +446,6 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun::Platform.f
         expected = items.map { |x| (x * 3) + 10 }.sort
         expect(results.sort).to eq(expected)
       end
-
     end
   end
 
