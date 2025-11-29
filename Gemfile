@@ -5,8 +5,8 @@ source 'https://rubygems.org'
 gemspec
 
 # Optional dependencies
-gem 'msgpack'
 gem 'async', platforms: %i[ruby windows]
+gem 'msgpack'
 
 # Test dependencies
 gem 'benchmark'
