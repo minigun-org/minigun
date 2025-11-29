@@ -12,7 +12,7 @@ puts '=' * 60
 puts 'Fiber Fan-Out/Fan-In Pattern'
 puts '=' * 60
 
-unless Minigun::Platform.async?
+unless Minigun::Platform.fibers?
   puts "\n⚠️  The 'async' gem is not installed."
   exit 1
 end

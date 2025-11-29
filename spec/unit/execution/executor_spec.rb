@@ -31,7 +31,7 @@ RSpec.describe Minigun::Execution::Executor do
       expect(ipc_fork_executor).to be_a(Minigun::Execution::IpcForkPoolExecutor)
       expect(ipc_fork_executor.max_size).to eq(4)
 
-      if Minigun::Platform.async?
+      if Minigun::Platform.fibers?
         fiber_executor = Minigun::Execution.create_executor(:fiber, stage_ctx, max_size: 10)
         expect(fiber_executor).to be_a(Minigun::Execution::FiberPoolExecutor)
         expect(fiber_executor.max_size).to eq(10)
@@ -623,7 +623,7 @@ RSpec.describe Minigun::Execution::IpcForkPoolExecutor, skip: !Minigun::Platform
   end
 end
 
-RSpec.describe Minigun::Execution::FiberPoolExecutor, skip: !Minigun::Platform.async? do
+RSpec.describe Minigun::Execution::FiberPoolExecutor, skip: !Minigun::Platform.fibers? do
   let(:task) { Minigun::Task.new }
   let(:pipeline) { task.root_pipeline }
   let(:test_stage) { Minigun::ConsumerStage.new(:fiber_test, pipeline, proc { |item, output| output << item }, {}) }

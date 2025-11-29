@@ -15,7 +15,7 @@ puts '=' * 60
 puts 'Fiber Concurrency with async gem'
 puts '=' * 60
 
-unless Minigun::Platform.async?
+unless Minigun::Platform.fibers?
   puts "\n⚠️  The 'async' gem is not installed."
   puts "   Add `gem 'async'` to your Gemfile and run `bundle install`"
   exit 1

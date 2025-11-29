@@ -2,7 +2,7 @@
 
 require 'spec_helper'
 
-RSpec.describe 'Fiber concurrency', skip: !Minigun::Platform.async? do
+RSpec.describe 'Fiber concurrency', skip: !Minigun::Platform.fibers? do
   describe 'pool_timeout option' do
     it 'cancels fibers when timeout is reached' do
       processed = []

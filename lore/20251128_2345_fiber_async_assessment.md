@@ -34,7 +34,7 @@ end
 
 **Decision:** NOT a slam-dunk to refactor. The contexts are different (COW fork needs special error handling, IPC needs pipes, fibers need barrier). Extracting a shared method would add coupling without significant benefit. The duplication is acceptable.
 
-### Platform.async? (lib/minigun/platform.rb:36-48)
+### Platform.fibers? (lib/minigun/platform.rb:36-48)
 
 **Good:**
 - Follows same memoization pattern as other platform methods

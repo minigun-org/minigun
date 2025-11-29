@@ -86,7 +86,7 @@ gem 'async', group: :development
 Add method to detect async gem availability:
 
 ```ruby
-def self.async?
+def self.fibers?
   return @async_available if defined?(@async_available)
 
   @async_available = begin
@@ -118,7 +118,7 @@ class FiberPoolExecutor < Executor
     super(stage_ctx)
     @max_size = max_size || 5
 
-    unless Minigun::Platform.async?
+    unless Minigun::Platform.fibers?
       raise Minigun::Error,
         "Fiber execution requires the 'async' gem. Add `gem 'async'` to your Gemfile."
     end
@@ -317,7 +317,7 @@ FiberCrawler.new.run
 | File | Changes |
 |------|---------|
 | `Gemfile` | Add `gem 'async'` as dev dependency |
-| `lib/minigun/platform.rb` | Add `Platform.async?` detection |
+| `lib/minigun/platform.rb` | Add `Platform.fibers?` detection |
 | `lib/minigun/execution/executor.rb` | Add `FiberPoolExecutor` class and factory case |
 
 ## Testing Strategy
@@ -382,7 +382,7 @@ FiberCrawler.new.run
 | File | Changes |
 |------|---------|
 | `Gemfile` | Added `gem 'async'` as optional dev dependency |
-| `lib/minigun/platform.rb` | Added `Platform.async?` detection method |
+| `lib/minigun/platform.rb` | Added `Platform.fibers?` detection method |
 | `lib/minigun/execution/executor.rb` | Added `FiberPoolExecutor` class and `:fiber` factory case |
 | `spec/unit/execution/executor_spec.rb` | Added 9 unit tests for `FiberPoolExecutor` |
 | `spec/integration/fiber_concurrency_spec.rb` | Added 6 integration tests |

@@ -2382,7 +2382,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '100_fiber_concurrency.rb' do
-    it 'demonstrates fiber-based concurrency with async gem', skip: !Minigun::Platform.async? do
+    it 'demonstrates fiber-based concurrency with async gem', skip: !Minigun::Platform.fibers? do
       load File.expand_path('../../examples/100_fiber_concurrency.rb', __dir__)
 
       # Both scrapers should complete successfully
@@ -2392,7 +2392,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '101_fiber_basic_pipeline.rb' do
-    it 'demonstrates basic fiber pipeline', skip: !Minigun::Platform.async? do
+    it 'demonstrates basic fiber pipeline', skip: !Minigun::Platform.fibers? do
       load File.expand_path('../../examples/101_fiber_basic_pipeline.rb', __dir__)
 
       expect(captured_output).to include('Processed: 20 items')
@@ -2402,7 +2402,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '102_fiber_multiple_pools.rb' do
-    it 'demonstrates multiple fiber pools', skip: !Minigun::Platform.async? do
+    it 'demonstrates multiple fiber pools', skip: !Minigun::Platform.fibers? do
       load File.expand_path('../../examples/102_fiber_multiple_pools.rb', __dir__)
 
       expect(captured_output).to include('Processed: 30 items')
@@ -2413,7 +2413,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '103_fiber_with_threads.rb' do
-    it 'mixes fibers with threads', skip: !Minigun::Platform.async? do
+    it 'mixes fibers with threads', skip: !Minigun::Platform.fibers? do
       load File.expand_path('../../examples/103_fiber_with_threads.rb', __dir__)
 
       expect(captured_output).to include('Processed: 20 items')
@@ -2425,7 +2425,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '104_fiber_inside_ipc_fork.rb' do
-    it 'combines IPC forks with fibers', skip: !Minigun::Platform.async? || !Minigun::Platform.fork? do
+    it 'combines IPC forks with fibers', skip: !Minigun::Platform.fibers? || !Minigun::Platform.fork? do
       load File.expand_path('../../examples/104_fiber_inside_ipc_fork.rb', __dir__)
 
       expect(captured_output).to include('Processed: 20 items')
@@ -2436,7 +2436,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '105_fiber_inside_cow_fork.rb' do
-    it 'combines COW forks with fibers', skip: !Minigun::Platform.async? || !Minigun::Platform.fork? do
+    it 'combines COW forks with fibers', skip: !Minigun::Platform.fibers? || !Minigun::Platform.fork? do
       load File.expand_path('../../examples/105_fiber_inside_cow_fork.rb', __dir__)
 
       expect(captured_output).to include('Processed: 15 items')
@@ -2446,7 +2446,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '106_fiber_to_fork_handoff.rb' do
-    it 'hands off from fibers to forks and back', skip: !Minigun::Platform.async? || !Minigun::Platform.fork? do
+    it 'hands off from fibers to forks and back', skip: !Minigun::Platform.fibers? || !Minigun::Platform.fork? do
       load File.expand_path('../../examples/106_fiber_to_fork_handoff.rb', __dir__)
 
       expect(captured_output).to include('Processed: 12 items')
@@ -2457,7 +2457,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '107_fiber_fan_out_fan_in.rb' do
-    it 'demonstrates fiber fan-out/fan-in pattern', skip: !Minigun::Platform.async? do
+    it 'demonstrates fiber fan-out/fan-in pattern', skip: !Minigun::Platform.fibers? do
       load File.expand_path('../../examples/107_fiber_fan_out_fan_in.rb', __dir__)
 
       expect(captured_output).to include('Total processed: 15 items')
@@ -2468,7 +2468,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '108_fiber_error_handling.rb' do
-    it 'handles errors gracefully in fibers', skip: !Minigun::Platform.async? do
+    it 'handles errors gracefully in fibers', skip: !Minigun::Platform.fibers? do
       load File.expand_path('../../examples/108_fiber_error_handling.rb', __dir__)
 
       expect(captured_output).to include('Successfully processed: 16 items')
@@ -2478,7 +2478,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '109_fiber_high_concurrency.rb' do
-    it 'handles high concurrency with fibers', skip: !Minigun::Platform.async? do
+    it 'handles high concurrency with fibers', skip: !Minigun::Platform.fibers? do
       load File.expand_path('../../examples/109_fiber_high_concurrency.rb', __dir__)
 
       expect(captured_output).to include('Processed: 500 items')
@@ -2488,7 +2488,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '110_fiber_batching.rb' do
-    it 'demonstrates fiber with batching', skip: !Minigun::Platform.async? do
+    it 'demonstrates fiber with batching', skip: !Minigun::Platform.fibers? do
       load File.expand_path('../../examples/110_fiber_batching.rb', __dir__)
 
       expect(captured_output).to include('Total items processed: 100')

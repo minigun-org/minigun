@@ -663,7 +663,7 @@ module Minigun
         @max_size = max_size || 5
         @pool_timeout = pool_timeout
 
-        return if Minigun::Platform.async?
+        return if Minigun::Platform.fibers?
 
         raise Minigun::Error,
               "Fiber execution requires the 'async' gem. Add `gem 'async'` to your Gemfile."

@@ -13,7 +13,7 @@ puts '=' * 60
 puts 'Fibers with COW Fork'
 puts '=' * 60
 
-unless Minigun::Platform.async?
+unless Minigun::Platform.fibers?
   puts "\n⚠️  The 'async' gem is not installed."
   exit 1
 end
