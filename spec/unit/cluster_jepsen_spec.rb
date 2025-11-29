@@ -104,7 +104,7 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
       @flag[:shutdown] = true
     end
 
-    def get_process_count
+    def process_count
       @mutex.synchronize { @process_count }
     end
   end
@@ -371,13 +371,11 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
       pipeline.run
 
       # Verify work was distributed
-      worker_counts = workers.map { |w| w[:service].get_process_count }
+      worker_counts = workers.map { |w| w[:service].process_count }
       expect(worker_counts.sum).to eq(30)
 
       # Each worker should have processed some items (round-robin)
-      worker_counts.each do |count|
-        expect(count).to be > 0, 'Worker processed no items'
-      end
+      expect(worker_counts).to all(be > 0)
     end
   end
 
@@ -634,7 +632,7 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
       expect(results.size).to eq(50)
 
       # Verify work was only on initial workers
-      initial_counts = initial_workers.map { |w| w[:service].get_process_count }
+      initial_counts = initial_workers.map { |w| w[:service].process_count }
       expect(initial_counts.sum).to eq(50)
     end
 
@@ -1128,7 +1126,7 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
       expect(results.size).to eq(30)
 
       # Verify all workers processed items
-      counts = workers.map { |w| w[:service].get_process_count }
+      counts = workers.map { |w| w[:service].process_count }
       expect(counts.sum).to eq(30)
     end
   end

@@ -271,8 +271,7 @@ def run_loopback_test
 
     expected = case role
                when 'originator' then 'RUNNING'
-               when 'intermediate' then 'SHUTDOWN'
-               when 'final' then 'SHUTDOWN'
+               when 'intermediate', 'final' then 'SHUTDOWN'
                end
 
     correct = status == expected ? '(correct)' : '(UNEXPECTED!)'

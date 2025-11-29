@@ -59,7 +59,7 @@ module Minigun
 
       # Record a failure - queues for retry if retries remaining
       # Returns :retry if queued for retry, :exhausted if max retries exceeded, :already_completed if duplicate
-      def fail(item_id, error:)
+      def fail(item_id, error: nil) # rubocop:disable Lint/UnusedMethodArgument
         @mutex.synchronize do
           return :already_completed if @completed_ids.include?(item_id)
 

@@ -50,6 +50,7 @@ class DataShard
   attr_reader :shard_id
 end
 
+# Peer-to-peer cluster pipeline with direct worker communication
 class PeerToPeerPipeline
   include Minigun::DSL
 

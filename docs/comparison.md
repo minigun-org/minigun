@@ -23,9 +23,11 @@ or mischaracterized any project, please raise a PR to improve this documentation
 | **Piperator**                              | Pipeline abstraction       | ✅        | ❌                      | ✅                       | ✅            | ✅                | ❌         | ❌                | ❌             | ❌                   | ❌                       |
 | **Trailblazer::Activity, dry-transaction** | Pipeline abstraction       | ✅        | ❌                      | ✅                       | ✅            | ❌                | ❌         | ❌                | ❌             | ❌                   | ❌                       |
 
-- `*` = Minigun clustering is an experimental feature; use at your own risk.
-- `**` = Minigun ractor support requires Ruby 4.0+.
-- `***` = Minigun fiber support is provided via the `async` gem.
+`*` = Minigun clustering is an experimental feature; use at your own risk.
+
+`**` = Minigun ractor support requires Ruby 4.0+.
+
+`***` = Minigun fiber support is provided via the async gem.
 
 ### Column Meanings
 

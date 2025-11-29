@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 module Minigun
+  # Cluster module for distributed pipeline execution
   module Cluster
     # Base class for work distribution strategies
     # Subclasses implement different delivery guarantees
@@ -87,7 +88,10 @@ module Minigun
         # Distribution loop
         loop do
           item = input_queue.pop
-          break if item.is_a?(Minigun::EndOfStage) && mutex.synchronize { all_sent = true }
+          if item.is_a?(Minigun::EndOfStage)
+            mutex.synchronize { all_sent = true }
+            break
+          end
 
           mutex.synchronize { pending_count += 1 }
           worker = next_worker

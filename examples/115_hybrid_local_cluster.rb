@@ -29,6 +29,7 @@
 
 require_relative '../lib/minigun'
 
+# Hybrid pipeline mixing local and cluster execution strategies
 class HybridPipeline
   include Minigun::DSL
 

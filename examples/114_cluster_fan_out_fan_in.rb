@@ -27,6 +27,7 @@
 
 require_relative '../lib/minigun'
 
+# Fan-out/fan-in cluster example demonstrating diamond topology
 class FanOutFanInCluster
   include Minigun::DSL
 
