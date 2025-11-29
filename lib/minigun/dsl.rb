@@ -288,6 +288,40 @@ module Minigun
         _with_execution_context(context, &)
       end
 
+      # Distributed cluster execution - distributes work across remote machines via DRb
+      #
+      # @param coordinator_uri [String] DRb URI of the coordinator (e.g., "druby://10.0.0.1:9000")
+      # @param workers [Array<String>] Optional array of worker URIs for static discovery
+      # @param min_workers [Integer] Minimum workers required before starting (default: 1)
+      # @param worker_timeout [Integer] Seconds to wait for workers to connect (default: 30)
+      #
+      # @example Basic usage (coordinator auto-starts, workers connect)
+      #   in_cluster(coordinator: 'druby://0.0.0.0:9000') do
+      #     processor :compute do |item, output|
+      #       output << expensive_computation(item)
+      #     end
+      #   end
+      #
+      # @example With minimum workers requirement
+      #   in_cluster(coordinator: 'druby://10.0.0.1:9000', min_workers: 3, worker_timeout: 60) do
+      #     processor :distributed_work do |item, output|
+      #       output << process(item)
+      #     end
+      #   end
+      #
+      # NOTE: Worker nodes must have the same codebase deployed and must register
+      # stage processors locally. The stage block is NOT serialized to workers.
+      def in_cluster(coordinator:, workers: nil, min_workers: 1, worker_timeout: 30, &)
+        context = {
+          type: :cluster_pool,
+          coordinator_uri: coordinator,
+          workers: workers,
+          min_workers: min_workers,
+          worker_timeout: worker_timeout
+        }
+        _with_execution_context(context, &)
+      end
+
       # Batching shorthand
       # TODO: clean this up
       def batch(size)

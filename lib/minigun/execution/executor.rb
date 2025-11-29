@@ -945,6 +945,150 @@ module Minigun
       end
     end
 
+    # Cluster pool executor - distributes work across remote machines using DRb
+    # This is similar to IpcForkPoolExecutor but works across network boundaries
+    #
+    # Options:
+    #   coordinator_uri: DRb URI of the coordinator (e.g., "druby://10.0.0.1:9000")
+    #   workers: Array of worker URIs (for static discovery)
+    #   min_workers: Minimum workers required before starting (default: 1)
+    #   worker_timeout: Seconds to wait for workers to connect (default: 30)
+    #   pool_timeout: Overall timeout for stage execution (default: nil)
+    #
+    # Note: The stage block is NOT sent to workers - workers must have the same
+    # codebase deployed and register the stage processor locally.
+    class ClusterPoolExecutor < Executor
+      attr_reader :coordinator_uri, :min_workers
+
+      def initialize(stage_ctx, coordinator_uri:, workers: nil, min_workers: 1,
+                     worker_timeout: 30, pool_timeout: nil) # rubocop:disable Lint/UnusedMethodArgument
+        super(stage_ctx)
+        @coordinator_uri = coordinator_uri
+        @static_workers = workers
+        @min_workers = min_workers
+        @worker_timeout = worker_timeout
+        @coordinator = nil
+        @owns_coordinator = false
+      end
+
+      def execute_stage(stage, _user_context, input_queue, output_queue)
+        # Connect to or start coordinator
+        setup_coordinator(stage.name)
+
+        # Wait for workers to connect
+        unless @coordinator.wait_for_workers(min_count: @min_workers, timeout: @worker_timeout)
+          raise Cluster::Error, "Timeout waiting for workers. Got #{@coordinator.worker_count}, need #{@min_workers}"
+        end
+
+        Minigun.logger.info "[Cluster] Starting stage :#{stage.name} with #{@coordinator.worker_count} workers"
+
+        begin
+          distribute_and_collect(stage, input_queue, output_queue)
+        ensure
+          shutdown
+        end
+      end
+
+      def shutdown
+        return unless @coordinator
+
+        @coordinator.enqueue_end_of_stage
+        # Give workers time to finish
+        sleep 0.1
+
+        if @owns_coordinator
+          @coordinator.stop
+        end
+        @coordinator = nil
+      end
+
+      private
+
+      def setup_coordinator(stage_name)
+        # Try to connect to existing coordinator
+        begin
+          DRb.start_service unless DRb.primary_server
+          @coordinator = DRbObject.new_with_uri(@coordinator_uri)
+          # Test connection
+          @coordinator.worker_count
+          Minigun.logger.info "[Cluster] Connected to coordinator at #{@coordinator_uri}"
+        rescue DRb::DRbConnError
+          # No coordinator running, start our own
+          Minigun.logger.info '[Cluster] No coordinator found, starting local coordinator'
+          @coordinator = Cluster::Coordinator.new(
+            bind_address: URI.parse(@coordinator_uri).host,
+            port: URI.parse(@coordinator_uri).port,
+            stage_name: stage_name
+          )
+          @coordinator.start
+          @owns_coordinator = true
+        end
+      end
+
+      def distribute_and_collect(stage, input_queue, output_queue)
+        pending_count = 0
+        all_sent = false
+        mutex = Mutex.new
+        done_cv = ConditionVariable.new
+
+        # Thread to collect results from coordinator
+        collector_thread = Thread.new do
+          loop do
+            break if mutex.synchronize { pending_count <= 0 && all_sent }
+
+            result = @coordinator.collect_result(timeout: 0.1)
+            next unless result
+
+            case result[:type]
+            when :result
+              output_queue << result[:result]
+              # Record latency if available
+              @stage_ctx.stage_stats&.record_latency(result[:latency]) if result[:latency]
+              mutex.synchronize do
+                pending_count -= 1
+                done_cv.signal if pending_count <= 0 && all_sent
+              end
+            when :item_done
+              @stage_ctx.stage_stats&.record_latency(result[:latency]) if result[:latency]
+              mutex.synchronize do
+                pending_count -= 1
+                done_cv.signal if pending_count <= 0 && all_sent
+              end
+            when :error
+              # Error already logged by coordinator
+              mutex.synchronize do
+                pending_count -= 1
+                done_cv.signal if pending_count <= 0 && all_sent
+              end
+            end
+          end
+        end
+
+        # Distribute work items
+        loop do
+          item = input_queue.pop
+
+          if item.is_a?(Minigun::EndOfStage)
+            mutex.synchronize { all_sent = true }
+            break
+          end
+
+          mutex.synchronize { pending_count += 1 }
+          @coordinator.enqueue_work({ stage: stage.name, item: item })
+        end
+
+        # Signal end of work
+        @coordinator.enqueue_end_of_stage
+
+        # Wait for all pending items to complete
+        mutex.synchronize do
+          done_cv.wait(mutex, 1) until pending_count <= 0
+        end
+
+        collector_thread.join
+      end
+    end
+
     # Factory for creating executors
     def self.create_executor(type, ...)
       case type
@@ -960,8 +1104,10 @@ module Minigun
         IpcForkPoolExecutor.new(...)
       when :ractor
         RactorPoolExecutor.new(...)
+      when :cluster
+        ClusterPoolExecutor.new(...)
       else
-        raise ArgumentError, "Unknown executor type: #{type}. Valid types: :inline, :thread, :fiber, :cow_fork, :ipc_fork, :ractor"
+        raise ArgumentError, "Unknown executor type: #{type}. Valid types: :inline, :thread, :fiber, :cow_fork, :ipc_fork, :ractor, :cluster"
       end
     end
   end

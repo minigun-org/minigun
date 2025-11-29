@@ -2595,4 +2595,26 @@ RSpec.describe 'Examples Integration' do
       end
     end
   end
+
+  # Cluster examples (110-111) - Manual tests requiring multi-process coordination
+
+  describe '110_cluster_coordinator.rb' do
+    it 'demonstrates cluster coordinator (requires workers)', skip: 'Manual test - requires running workers' do
+      # This example requires manually starting worker nodes
+      # See examples/111_cluster_worker.rb
+      # Usage:
+      #   1. Start coordinator: ruby examples/110_cluster_coordinator.rb
+      #   2. Start workers: ruby examples/111_cluster_worker.rb (can run multiple)
+    end
+  end
+
+  describe '111_cluster_worker.rb' do
+    it 'demonstrates cluster worker (requires coordinator)', skip: 'Manual test - requires running coordinator' do
+      # This example requires a running coordinator
+      # See examples/110_cluster_coordinator.rb
+      # Usage:
+      #   1. Start coordinator: ruby examples/110_cluster_coordinator.rb
+      #   2. Start this worker: ruby examples/111_cluster_worker.rb
+    end
+  end
 end

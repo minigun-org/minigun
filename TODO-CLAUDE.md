@@ -24,7 +24,6 @@ plan based on the current codebase state and TODOS.md.
 - [X] Minigun.task do
 - [X] Demand (see polyphony example)
 - [ ] Demand -- consolidate registry?
-- [X] Fibers support via Async gem
 - [ ] Cleanup accumulator vs. batch
 - [ ] Hooks
 - [ ] Config
