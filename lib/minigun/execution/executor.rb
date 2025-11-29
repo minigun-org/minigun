@@ -760,7 +760,7 @@ module Minigun
 
       def execute_stage(stage, user_context, input_queue, output_queue)
         if @fallback
-          warn '[Minigun] Ractors not available (requires Ruby 4.0+), falling back to thread pool'
+          Minigun.logger.warn '[Minigun] Ractors not available (requires Ruby 4.0+), falling back to thread pool'
           return @fallback.execute_stage(stage, user_context, input_queue, output_queue)
         end
 
@@ -770,7 +770,7 @@ module Minigun
         # Create shareable proc from stage block if possible
         stage_proc = create_shareable_proc(stage)
         unless stage_proc
-          warn '[Minigun] Stage block is not Ractor-shareable, falling back to threads'
+          Minigun.logger.warn '[Minigun] Stage block is not Ractor-shareable, falling back to threads'
           @fallback = ThreadPoolExecutor.new(@stage_ctx, max_size: @max_size, pool_timeout: @pool_timeout)
           return @fallback.execute_stage(stage, user_context, input_queue, output_queue)
         end
@@ -823,24 +823,9 @@ module Minigun
           Ractor.make_shareable(block.dup)
         rescue Ractor::IsolationError => e
           Minigun.logger.debug "[Ractor] Block not shareable: #{e.message}"
-          # Try to create a wrapper using shareable_proc
-          # This only works if the block doesn't actually use captured state at runtime
-          create_shareable_wrapper(block)
+          # Fall back to threads for non-shareable blocks
+          nil
         end
-      end
-
-      # Create a shareable wrapper proc that invokes the original block's code
-      # This works for simple pure functions that don't actually need their captured self
-      def create_shareable_wrapper(block)
-        return nil unless defined?(Ractor.shareable_proc)
-
-        # Get the source location to provide better debugging
-        source = block.source_location&.join(':') || 'unknown'
-
-        # We can't easily extract and re-wrap arbitrary blocks
-        # So we fall back to threads for non-shareable blocks
-        Minigun.logger.debug "[Ractor] Cannot create shareable wrapper for block at #{source}"
-        nil
       end
 
       def spawn_workers(stage_proc)
@@ -848,8 +833,8 @@ module Minigun
 
         @max_size.times do |i|
           worker = Ractor.new(stage_proc, result_port, i, name: "minigun-ractor-#{i}") do |proc, rport, _id|
-            # Simple output collector that responds to << for DSL compatibility
-            # Can't use a class here (not shareable), so use a Struct
+            # Output collector that responds to << for DSL compatibility
+            # Defined inline in the Ractor block since external classes can't be passed
             output_collector = Class.new do
               attr_reader :results
 
