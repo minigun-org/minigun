@@ -23,6 +23,7 @@ unless Minigun::Platform.fork?
   exit 1
 end
 
+# Pipeline using IPC forks for CPU work, then fibers for I/O work
 class FiberWithIpcFork
   include Minigun::DSL
 
@@ -83,7 +84,7 @@ puts "  Items per fork: #{pipeline.results.group_by { |r| r[:fork_pid] }.transfo
 puts "  All I/O done: #{pipeline.results.all? { |r| r[:io_done] }}"
 puts "  Elapsed: #{elapsed.round(3)}s"
 puts "\n✓ IPC forks for CPU parallelism (#{fork_pids.size} workers)"
-puts "✓ Fibers for I/O concurrency (10 concurrent)"
-puts "✓ Best of both worlds: parallelism + concurrency"
+puts '✓ Fibers for I/O concurrency (10 concurrent)'
+puts '✓ Best of both worlds: parallelism + concurrency'
 
 pipeline.cleanup

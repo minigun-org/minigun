@@ -16,6 +16,7 @@ unless Minigun::Platform.async?
   exit 1
 end
 
+# Pipeline using multiple fiber pools with different sizes for different stages
 class MultipleFiberPools
   include Minigun::DSL
 
@@ -41,7 +42,7 @@ class MultipleFiberPools
     in_fibers(3) do
       processor :heavy_transform do |item, output|
         sleep 0.02 # Heavier processing
-        item[:computed] = item[:value] ** 2
+        item[:computed] = item[:value]**2
         output << item
       end
     end

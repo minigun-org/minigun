@@ -29,6 +29,7 @@ SHARED_LOOKUP = {
   6 => 'six', 7 => 'seven', 8 => 'eight', 9 => 'nine', 10 => 'ten'
 }.freeze
 
+# Pipeline using COW forks for isolated processing, then fibers for I/O
 class FiberWithCowFork
   include Minigun::DSL
 
@@ -87,13 +88,13 @@ puts "  Processed: #{pipeline.results.size} items"
 cow_pids = pipeline.results.map { |r| r[:cow_pid] }.uniq
 puts "  COW fork PIDs: #{cow_pids.size} unique processes"
 puts "  All I/O done: #{pipeline.results.all? { |r| r[:io_done] }}"
-puts "  Sample results:"
+puts '  Sample results:'
 pipeline.results.take(5).each do |r|
   puts "    #{r[:value]} -> #{r[:name]} (cow_pid: #{r[:cow_pid]})"
 end
 puts "  Elapsed: #{elapsed.round(3)}s"
 puts "\n✓ COW forks for process isolation"
-puts "✓ Fibers for concurrent I/O after isolation"
-puts "✓ Shared data accessed efficiently via Copy-On-Write"
+puts '✓ Fibers for concurrent I/O after isolation'
+puts '✓ Shared data accessed efficiently via Copy-On-Write'
 
 pipeline.cleanup

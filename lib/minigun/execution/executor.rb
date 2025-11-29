@@ -187,7 +187,7 @@ module Minigun
     # Memory pages are shared between parent and child until modified (COW).
     # Input item is COW-shared, but results are sent via IPC pipes.
     class CowForkPoolExecutor < AbstractForkExecutor
-      def initialize(stage_ctx, max_size:, pool_timeout: nil) # rubocop:disable Lint/UnusedMethodArgument
+      def initialize(stage_ctx, max_size:, pool_timeout: nil)
         super
         @active_forks = {} # pid => fork_info
       end
@@ -358,7 +358,7 @@ module Minigun
     # Workers continuously pull items, process them, and send results back.
     # Data is serialized through pipes for both input and output, providing strong process isolation.
     class IpcForkPoolExecutor < AbstractForkExecutor
-      def initialize(stage_ctx, max_size:, pool_timeout: nil) # rubocop:disable Lint/UnusedMethodArgument
+      def initialize(stage_ctx, max_size:, pool_timeout: nil)
         super
         @workers = []
         @my_pipes = [] # Track this executor's pipes for cleanup/unregister
@@ -663,10 +663,10 @@ module Minigun
         @max_size = max_size || 5
         @pool_timeout = pool_timeout
 
-        unless Minigun::Platform.async?
-          raise Minigun::Error,
-                "Fiber execution requires the 'async' gem. Add `gem 'async'` to your Gemfile."
-        end
+        return if Minigun::Platform.async?
+
+        raise Minigun::Error,
+              "Fiber execution requires the 'async' gem. Add `gem 'async'` to your Gemfile."
       end
 
       def execute_stage(stage, user_context, input_queue, output_queue)

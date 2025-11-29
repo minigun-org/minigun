@@ -16,6 +16,7 @@ unless Minigun::Platform.async?
   exit 1
 end
 
+# Pipeline demonstrating isolated error handling in fibers
 class FiberErrorHandling
   include Minigun::DSL
 
@@ -70,5 +71,5 @@ puts "  Successful items: #{pipeline.results.map { |r| r[:value] }.sort.join(', 
 puts "  All post-processed: #{pipeline.results.all? { |r| r[:post_processed] }}"
 puts "  Elapsed: #{elapsed.round(3)}s"
 puts "\n✓ Errors are isolated per fiber"
-puts "✓ Other fibers continue processing"
-puts "✓ Pipeline completes despite errors"
+puts '✓ Other fibers continue processing'
+puts '✓ Pipeline completes despite errors'

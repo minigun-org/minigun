@@ -16,6 +16,7 @@ unless Minigun::Platform.async?
   exit 1
 end
 
+# Pipeline combining fiber stages with thread stages
 class FiberAndThreadMix
   include Minigun::DSL
 
@@ -45,7 +46,7 @@ class FiberAndThreadMix
       processor :cpu_work do |item, output|
         @mutex.synchronize { @thread_ids[:thread] << Thread.current.object_id }
         # Simulate CPU work
-        result = (1..1000).reduce(0) { |sum, n| sum + n }
+        result = (1..1000).sum
         item[:cpu_result] = result
         output << item
       end

@@ -76,7 +76,7 @@ puts '✓ Cooperative scheduling - yield on I/O automatically'
 puts '✓ Best for I/O-bound work (HTTP, DB, files)'
 puts '✓ All fibers run in a single thread (no GIL contention)'
 
-puts "\n" + '=' * 60
+puts "\n#{'=' * 60}"
 puts 'Comparing Fibers vs Threads'
 puts '=' * 60
 

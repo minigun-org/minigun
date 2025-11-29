@@ -86,7 +86,7 @@ RSpec.describe 'Fiber concurrency', skip: !Minigun::Platform.async? do
           in_fibers(5) do
             consumer :process do |n, output|
               mutex.synchronize { results << n }
-              output << n * 2
+              output << (n * 2)
             end
           end
 
@@ -155,6 +155,7 @@ RSpec.describe 'Fiber concurrency', skip: !Minigun::Platform.async? do
           in_fibers(5) do
             consumer :error_prone do |n, output|
               raise "boom at #{n}" if n == 5
+
               mutex.synchronize { processed << n }
               output << n
             end
@@ -188,13 +189,13 @@ RSpec.describe 'Fiber concurrency', skip: !Minigun::Platform.async? do
 
           in_fibers(3) do
             consumer :double do |n, output|
-              output << n * 2
+              output << (n * 2)
             end
           end
 
           in_fibers(3) do
             consumer :add_ten do |n, output|
-              output << n + 10
+              output << (n + 10)
             end
           end
 
@@ -226,7 +227,7 @@ RSpec.describe 'Fiber concurrency', skip: !Minigun::Platform.async? do
           in_fibers(3) do
             consumer :fiber_stage do |n, output|
               mutex.synchronize { fiber_results << n }
-              output << n * 2
+              output << (n * 2)
             end
           end
 

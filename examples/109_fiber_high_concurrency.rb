@@ -17,6 +17,7 @@ unless Minigun::Platform.async?
   exit 1
 end
 
+# Pipeline handling hundreds of concurrent operations with fibers
 class FiberHighConcurrency
   include Minigun::DSL
 
@@ -72,9 +73,9 @@ puts "  Max concurrent fibers: #{pipeline.max_concurrent}"
 puts "  Throughput: #{(pipeline.results.size / elapsed).round(1)} items/sec"
 puts "  Elapsed: #{elapsed.round(3)}s"
 puts "\n✓ 100 concurrent fibers with minimal memory"
-puts "✓ High throughput for I/O-bound workloads"
+puts '✓ High throughput for I/O-bound workloads'
 
 # Estimate memory savings
-fiber_memory = 100 * 4  # ~4KB per fiber
-thread_memory = 100 * 1024  # ~1MB per thread
+fiber_memory = 100 * 4 # ~4KB per fiber
+thread_memory = 100 * 1024 # ~1MB per thread
 puts "✓ Memory savings: ~#{thread_memory / 1024}MB (threads) vs ~#{fiber_memory / 1024}MB (fibers)"

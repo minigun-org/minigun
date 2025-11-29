@@ -17,6 +17,7 @@ unless Minigun::Platform.async?
   exit 1
 end
 
+# Pipeline broadcasting to multiple fiber pools, then merging results
 class FiberFanOutFanIn
   include Minigun::DSL
 
@@ -56,7 +57,7 @@ class FiberFanOutFanIn
       processor :path_b, await: true do |item, output|
         @mutex.synchronize { @path_b_count += 1 }
         sleep 0.015
-        output << { value: item, path: 'B', squared: item ** 2 }
+        output << { value: item, path: 'B', squared: item**2 }
       end
     end
 
@@ -65,7 +66,7 @@ class FiberFanOutFanIn
       processor :path_c, await: true do |item, output|
         @mutex.synchronize { @path_c_count += 1 }
         sleep 0.02
-        output << { value: item, path: 'C', cubed: item ** 3 }
+        output << { value: item, path: 'C', cubed: item**3 }
       end
     end
 
@@ -95,4 +96,4 @@ end
 
 puts "  Elapsed: #{elapsed.round(3)}s"
 puts "\n✓ Fan-out to multiple fiber pools"
-puts "✓ Fan-in merges all results"
+puts '✓ Fan-in merges all results'

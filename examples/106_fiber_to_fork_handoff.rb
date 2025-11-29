@@ -22,6 +22,7 @@ unless Minigun::Platform.fork?
   exit 1
 end
 
+# Pipeline where fibers handle I/O, then hand off to forks for CPU work
 class FiberToForkHandoff
   include Minigun::DSL
 
@@ -52,7 +53,7 @@ class FiberToForkHandoff
     in_ipc_forks(2) do
       processor :heavy_computation do |item, output|
         # CPU-intensive work benefits from true parallelism via forks
-        result = item[:data].map { |n| Math.sqrt(n) }.sum
+        result = item[:data].sum { |n| Math.sqrt(n) }
         item[:computed_sum] = result
         item[:computed_by_pid] = Process.pid
         output << item

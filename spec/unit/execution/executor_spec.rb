@@ -764,6 +764,7 @@ RSpec.describe Minigun::Execution::FiberPoolExecutor, skip: !Minigun::Platform.a
         pipeline,
         proc { |item, output|
           raise 'boom' if item == 5
+
           mutex.synchronize { processed << item }
           output << item
         },

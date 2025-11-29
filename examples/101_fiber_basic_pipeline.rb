@@ -17,6 +17,7 @@ unless Minigun::Platform.async?
   exit 1
 end
 
+# Basic fiber pipeline demonstrating producer -> processor -> consumer pattern
 class FiberBasicPipeline
   include Minigun::DSL
 

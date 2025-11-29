@@ -16,6 +16,7 @@ unless Minigun::Platform.async?
   exit 1
 end
 
+# Pipeline using fibers with batch processing for efficient bulk operations
 class FiberBatching
   include Minigun::DSL
 
@@ -70,5 +71,5 @@ puts "  Batch sizes: #{pipeline.batch_sizes.uniq.join(', ')}"
 puts "  All batch-processed: #{pipeline.results.all? { |r| r[:batch_processed] }}"
 puts "  Elapsed: #{elapsed.round(3)}s"
 puts "\n✓ Batching reduces number of concurrent operations"
-puts "✓ Fibers handle batch I/O efficiently"
-puts "✓ Perfect for bulk API calls, DB inserts"
+puts '✓ Fibers handle batch I/O efficiently'
+puts '✓ Perfect for bulk API calls, DB inserts'
