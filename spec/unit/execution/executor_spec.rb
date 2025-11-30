@@ -112,19 +112,6 @@ RSpec.describe Minigun::Execution::Executor do
       expect(results).to eq([42, 84])
     end
 
-    it 'passes stage_stats to stage for per-item latency tracking' do
-      executor = Minigun::Execution::InlineExecutor.new(stage_ctx)
-      input_queue = Queue.new
-      output_queue = Queue.new
-      input_queue << Minigun::EndOfStage.new(:test)
-
-      # Stage receives stage_stats and can track latency
-      executor.execute_stage(stage, user_context, input_queue, output_queue)
-
-      # Test passes if no errors occur
-      expect(output_queue.empty?).to be true
-    end
-
     it 'propagates errors from stage execution' do
       executor = Minigun::Execution::InlineExecutor.new(stage_ctx)
       input_queue = Queue.new
@@ -396,35 +383,6 @@ RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: !Minigun::Platform
         executor.execute_stage(error_stage, user_context, input_queue, output_queue)
       end.to raise_error(/COW forked process failed.*boom/)
     end
-  end
-
-  describe '#shutdown' do
-    it 'terminates active processes' do
-      expect { executor.shutdown }.not_to raise_error
-    end
-  end
-end
-
-RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: !Minigun::Platform.fork? do
-  let(:task) { Minigun::Task.new }
-  let(:pipeline) { task.root_pipeline }
-  let(:test_stage) { Minigun::ConsumerStage.new(:test, pipeline, proc { |item, output| output << item }, {}) }
-  let(:stage_stats) { Minigun::Stats.new(test_stage) }
-  let(:stage_ctx) do
-    Struct.new(:pipeline, :root_pipeline, :stage_name, :stage_stats, :dag, :stage).new(
-      pipeline, pipeline, :test, stage_stats, pipeline.dag, test_stage
-    )
-  end
-  let(:executor) { described_class.new(stage_ctx, max_size: 2) }
-
-  describe '#initialize' do
-    it 'sets max_size' do
-      expect(executor.max_size).to eq(2)
-    end
-  end
-
-  describe '#execute_stage' do
-    let(:user_context) { {} }
 
     it 'executes stage with inherited memory (COW)' do
       # Use real ConsumerStage - RSpec mocks don't work across forks
@@ -444,26 +402,6 @@ RSpec.describe Minigun::Execution::CowForkPoolExecutor, skip: !Minigun::Platform
 
       result = output_queue.pop
       expect(result).to eq(10)
-    end
-
-    it 'propagates errors from child process' do
-      # Use real ConsumerStage that raises an error
-      stage = Minigun::ConsumerStage.new(
-        :cow_error_test,
-        pipeline,
-        proc { |_item, _output| raise 'boom' },
-        {}
-      )
-
-      input_queue = Queue.new
-      output_queue = Queue.new
-      input_queue << 5
-      input_queue << Minigun::EndOfStage.new(:test)
-
-      # COW fork propagates errors from child processes
-      expect do
-        executor.execute_stage(stage, user_context, input_queue, output_queue)
-      end.to raise_error(/COW forked process failed.*boom/)
     end
 
     it 'respects max_size concurrency limit' do
