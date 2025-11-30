@@ -583,22 +583,20 @@ module Minigun
         @mutex.synchronize do
           @workers.each do |worker|
             # Non-blocking check if worker process has exited
-            begin
-              status = Process.wait2(worker[:pid], Process::WNOHANG)
-              next unless status
+            status = Process.wait2(worker[:pid], Process::WNOHANG)
+            next unless status
 
-              _pid, process_status = status
+            _pid, process_status = status
 
-              if @worker_monitor.should_restart?(process_status)
-                Minigun.logger.warn "[Minigun] Worker #{worker[:index]} (pid #{worker[:pid]}) exited: " \
-                                    "#{@worker_monitor.format_exit_status(process_status)}"
-                workers_to_respawn << worker
-              else
-                Minigun.logger.debug "[Minigun] Worker #{worker[:index]} exited normally"
-              end
-            rescue Errno::ECHILD
-              # Process already reaped
+            if @worker_monitor.should_restart?(process_status)
+              Minigun.logger.warn "[Minigun] Worker #{worker[:index]} (pid #{worker[:pid]}) exited: " \
+                                  "#{@worker_monitor.format_exit_status(process_status)}"
+              workers_to_respawn << worker
+            else
+              Minigun.logger.debug "[Minigun] Worker #{worker[:index]} exited normally"
             end
+          rescue Errno::ECHILD
+            # Process already reaped
           end
         end
 
@@ -711,7 +709,7 @@ module Minigun
                     Marshal.dump({ type: :item, item: item }, retry_worker[:to_worker])
                     retry_worker[:to_worker].flush
                   rescue IOError, EOFError, Errno::EPIPE
-                    Minigun.logger.warn "[Minigun] Failed to redistribute item after worker death"
+                    Minigun.logger.warn '[Minigun] Failed to redistribute item after worker death'
                   end
                 end
               else

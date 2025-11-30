@@ -26,13 +26,13 @@ class PermanentRestartPipeline
                  restart_window: 60) do
       processor :work do |item, output|
         # Item 5 and 10: crash with non-zero exit (restarted each time)
-        if item == 5 || item == 10
+        if [5, 10].include?(item)
           warn "[Worker #{Process.pid}] Crashing on item #{item}!"
           exit!(1)
         end
 
         warn "[Worker #{Process.pid}] Processing item #{item}"
-        output << item * 2
+        output << (item * 2)
       end
     end
 

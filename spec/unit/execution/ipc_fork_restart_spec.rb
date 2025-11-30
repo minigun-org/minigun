@@ -6,16 +6,16 @@ RSpec.describe Minigun::Execution::WorkerMonitor do
   describe '#initialize' do
     it 'accepts valid restart policies' do
       %i[never transient permanent].each do |policy|
-        expect {
+        expect do
           described_class.new(restart_policy: policy)
-        }.not_to raise_error
+        end.not_to raise_error
       end
     end
 
     it 'rejects invalid restart policies' do
-      expect {
+      expect do
         described_class.new(restart_policy: :invalid)
-      }.to raise_error(ArgumentError, /Invalid restart_policy/)
+      end.to raise_error(ArgumentError, /Invalid restart_policy/)
     end
 
     it 'converts string policies to symbols' do
@@ -191,7 +191,7 @@ RSpec.describe 'IPC Fork Worker Restart Integration', skip: !Minigun::Platform.f
   let(:pipeline) { task.root_pipeline }
 
   let(:stage) do
-    Minigun::ConsumerStage.new(:test_stage, pipeline, proc { |item, output| output << item * 2 }, {})
+    Minigun::ConsumerStage.new(:test_stage, pipeline, proc { |item, output| output << (item * 2) }, {})
   end
 
   let(:stage_stats) { Minigun::Stats.new(stage) }
@@ -223,7 +223,7 @@ RSpec.describe 'IPC Fork Worker Restart Integration', skip: !Minigun::Platform.f
           # Simulate crash - exit with error
           exit!(1)
         end
-        output << item * 2
+        output << (item * 2)
       end
       crashing_stage = Minigun::ConsumerStage.new(:crashing_stage, pipeline, crashing_proc, {})
       crashing_stats = Minigun::Stats.new(crashing_stage)
@@ -261,7 +261,7 @@ RSpec.describe 'IPC Fork Worker Restart Integration', skip: !Minigun::Platform.f
       # At minimum, items processed before crash and after restart should appear
       # Can't guarantee all items due to round-robin distribution
       expect(results.size).to be >= 5 # At least half should succeed
-      results.each { |r| expect(r).to be_even } # All results should be doubled values
+      expect(results).to all(be_even) # All results should be doubled values
     end
   end
 end

@@ -24,7 +24,7 @@ class NeverRestartPipeline
         end
 
         warn "[Worker #{Process.pid}] Processing item #{item}"
-        output << item * 2
+        output << (item * 2)
       end
     end
 
