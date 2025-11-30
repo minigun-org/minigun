@@ -28,8 +28,7 @@ Minigun::Errors::BaseError
     └── ClusterTimedOut
 ```
 
-**Note:** For backwards compatibility, all errors are also available with `Error` suffix aliases
-at the `Minigun::` level (e.g., `Minigun::StageNameConflictError`, `Minigun::InvalidOptionError`).
+**Note:** All errors are namespaced under `Minigun::Errors::` (e.g., `Minigun::Errors::StageNameConflict`).
 
 ## Base Error Class
 
