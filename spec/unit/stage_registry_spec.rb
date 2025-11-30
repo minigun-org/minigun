@@ -87,13 +87,13 @@ RSpec.describe Minigun::StageRegistry do
     end
 
     context 'duplicate names' do
-      it 'raises StageNameConflict when registering duplicate name in same pipeline' do
+      it 'raises StageNameConflictError when registering duplicate name in same pipeline' do
         create_stage(:duplicate, pipeline)
 
         # stage1 is already auto-registered, so creating stage2 with the same name will fail
         expect do
           create_stage(:duplicate, pipeline)
-        end.to raise_error(Minigun::StageNameConflict, /Stage name 'duplicate' already exists/)
+        end.to raise_error(Minigun::Errors::StageNameConflict, /Stage name 'duplicate' already exists/)
       end
 
       it 'allows same name in different pipelines' do
@@ -175,7 +175,7 @@ RSpec.describe Minigun::StageRegistry do
 
         expect do
           registry.find_by_name(:ambiguous, from_pipeline: root_pipeline)
-        end.to raise_error(Minigun::AmbiguousRoutingError, /found 2 matches in nested pipelines/)
+        end.to raise_error(Minigun::Errors::AmbiguousRouting, /ambiguous.*2 matches/)
       end
 
       it 'handles deeply nested pipelines' do
@@ -240,7 +240,7 @@ RSpec.describe Minigun::StageRegistry do
 
         expect do
           registry.find_by_name(:global_ambiguous, from_pipeline: search_pipeline)
-        end.to raise_error(Minigun::AmbiguousRoutingError, /found 2 matches globally/)
+        end.to raise_error(Minigun::Errors::AmbiguousRouting, /global_ambiguous.*2 matches/)
       end
 
       it 'returns the stage when only one global match exists' do

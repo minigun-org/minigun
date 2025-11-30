@@ -15,7 +15,7 @@ RSpec.describe Minigun::Execution::WorkerMonitor do
     it 'rejects invalid restart policies' do
       expect do
         described_class.new(restart_policy: :invalid)
-      end.to raise_error(ArgumentError, /Invalid restart_policy/)
+      end.to raise_error(Minigun::Errors::InvalidOption, /Invalid restart_policy/)
     end
 
     it 'converts string policies to symbols' do

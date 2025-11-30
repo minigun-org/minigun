@@ -1586,7 +1586,7 @@ RSpec.describe 'Examples Integration' do
       load File.expand_path('../../examples/67_stage_name_conflict.rb', __dir__)
 
       # Should not raise - the example catches the error internally
-      expect { ConflictingPipeline.new.run }.to raise_error(Minigun::StageNameConflict)
+      expect { ConflictingPipeline.new.run }.to raise_error(Minigun::Errors::StageNameConflict)
 
       # Test that scoped names work
       example = ScopedNamesExample.new
@@ -1602,7 +1602,7 @@ RSpec.describe 'Examples Integration' do
       # Test ambiguous children scenario
       example1 = AmbiguousChildrenDemo.new
       error = example1.demonstrate_ambiguity
-      expect(error).to be_a(Minigun::AmbiguousRoutingError)
+      expect(error).to be_a(Minigun::Errors::AmbiguousRouting)
       expect(error.message).to include('found 2 matches')
 
       # Test unique names scenario

@@ -46,7 +46,7 @@ RSpec.describe Minigun::Execution::Executor do
     it 'raises error for unknown type' do
       expect do
         Minigun::Execution.create_executor(:unknown, stage_ctx, max_size: 5)
-      end.to raise_error(ArgumentError, /Unknown executor type/)
+      end.to raise_error(Minigun::Errors::InvalidOption, /Invalid executor_type/)
     end
   end
 

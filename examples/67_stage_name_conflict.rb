@@ -9,11 +9,11 @@
 # Key points:
 # - Stage names must be unique within a pipeline
 # - Same name can be used in different pipelines (different scope)
-# - Conflict raises StageNameConflict error at registration time
+# - Conflict raises StageNameConflictError at registration time
 
 require_relative '../lib/minigun'
 
-# Example 1: This will FAIL with StageNameConflict
+# Example 1: This will FAIL with StageNameConflictError
 class ConflictingPipeline
   include Minigun::DSL
 
@@ -22,7 +22,7 @@ class ConflictingPipeline
       output << 1
     end
 
-    # This will raise StageNameConflict!
+    # This will raise StageNameConflictError!
     consumer :duplicated do |item|
       puts item
     end
@@ -77,7 +77,7 @@ if __FILE__ == $PROGRAM_NAME
   begin
     # Run triggers pipeline block evaluation and stage registration
     ConflictingPipeline.new.run
-  rescue Minigun::StageNameConflict => e
+  rescue Minigun::Errors::StageNameConflict => e
     conflict_caught = true
     e.message
     puts "✓ Caught expected error: #{e.class}"
@@ -85,10 +85,10 @@ if __FILE__ == $PROGRAM_NAME
   end
 
   if conflict_caught
-    puts "\n✓ SUCCESS: StageNameConflict was properly detected"
+    puts "\n✓ SUCCESS: StageNameConflictError was properly detected"
     puts '  This prevents ambiguous stage references within a pipeline'
   else
-    puts "\n✗ FAILED: Expected StageNameConflict but didn't catch it"
+    puts "\n✗ FAILED: Expected StageNameConflictError but didn't catch it"
   end
 
   puts "\n#{'=' * 70}"

@@ -7,14 +7,6 @@ require 'English'
 
 # Minigun is a high-performance data pipeline framework for Ruby
 module Minigun
-  class Error < StandardError; end
-
-  # Raised when a stage name conflicts with another at the same pipeline level
-  class StageNameConflict < Error; end
-
-  # Raised when routing cannot resolve an ambiguous stage name
-  class AmbiguousRoutingError < Error; end
-
   # Simple logger
   @logger = Logger.new($stdout)
   @logger.level = Logger::INFO
@@ -64,6 +56,7 @@ module Minigun
   end
 end
 
+require_relative 'minigun/errors'
 require_relative 'minigun/version'
 require_relative 'minigun/platform'
 require_relative 'minigun/configuration'

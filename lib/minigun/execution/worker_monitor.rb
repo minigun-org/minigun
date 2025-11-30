@@ -112,7 +112,11 @@ module Minigun
       def validate_policy(policy)
         policy = policy.to_sym
         unless RESTART_POLICIES.include?(policy)
-          raise ArgumentError.new("Invalid restart_policy: #{policy}. Valid: #{RESTART_POLICIES.join(', ')}")
+          raise Errors::InvalidOption.new(
+            option_name: :restart_policy,
+            value: policy,
+            expected: RESTART_POLICIES.join(', ')
+          )
         end
 
         policy

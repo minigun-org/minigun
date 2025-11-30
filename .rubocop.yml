@@ -122,6 +122,10 @@ Style/HashLikeCase:
 Style/ModuleFunction:
   EnforcedStyle: extend_self
 
+Style/MultilineBlockChain:
+  Exclude:
+    - 'spec/**/*'
+
 Style/NumericPredicate:
   Enabled: false
 

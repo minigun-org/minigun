@@ -16,7 +16,7 @@ RSpec.describe 'Circular Dependency Detection' do
             end
           end
         end.new.run
-      end.to raise_error(Minigun::Error, /Circular dependency/)
+      end.to raise_error(Minigun::Errors::CyclicDependency, /Circular dependency/)
     end
 
     it 'raises error for simple A->B->A cycle' do
@@ -34,7 +34,7 @@ RSpec.describe 'Circular Dependency Detection' do
             end
           end
         end.new.run
-      end.to raise_error(Minigun::Error, /Circular dependency/)
+      end.to raise_error(Minigun::Errors::CyclicDependency, /Circular dependency/)
     end
 
     it 'raises error for A->B->C->A cycle' do
@@ -56,7 +56,7 @@ RSpec.describe 'Circular Dependency Detection' do
             end
           end
         end.new.run
-      end.to raise_error(Minigun::Error, /Circular dependency/)
+      end.to raise_error(Minigun::Errors::CyclicDependency, /Circular dependency/)
     end
 
     it 'raises error with from: causing cycle' do
@@ -79,7 +79,7 @@ RSpec.describe 'Circular Dependency Detection' do
             end
           end
         end.new.run
-      end.to raise_error(Minigun::Error, /Circular dependency/)
+      end.to raise_error(Minigun::Errors::CyclicDependency, /Circular dependency/)
     end
 
     it 'allows diamond patterns (no cycle)' do
@@ -189,7 +189,7 @@ RSpec.describe 'Circular Dependency Detection' do
             end
           end
         end.new.run
-      end.to raise_error(Minigun::Error, /Circular dependency/)
+      end.to raise_error(Minigun::Errors::CyclicDependency, /Circular dependency/)
     end
 
     it 'raises error for pipeline self-loop' do
@@ -207,7 +207,7 @@ RSpec.describe 'Circular Dependency Detection' do
             end
           end
         end.new.run
-      end.to raise_error(Minigun::Error, /Circular dependency/)
+      end.to raise_error(Minigun::Errors::CyclicDependency, /Circular dependency/)
     end
 
     it 'raises error with from: causing pipeline cycle' do
@@ -238,7 +238,7 @@ RSpec.describe 'Circular Dependency Detection' do
             end
           end
         end.new.run
-      end.to raise_error(Minigun::Error, /Circular dependency/)
+      end.to raise_error(Minigun::Errors::CyclicDependency, /Circular dependency/)
     end
 
     it 'allows diamond pattern in pipelines' do

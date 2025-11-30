@@ -53,7 +53,7 @@ class AmbiguousChildrenDemo
       stage_registry.find_by_name(:processor, from_pipeline: root_pipeline)
       puts "\n✗ FAILED: Expected AmbiguousRoutingError"
       nil
-    rescue Minigun::AmbiguousRoutingError => e
+    rescue Minigun::Errors::AmbiguousRouting => e
       puts "\n✓ Caught expected error: #{e.class}"
       puts "  Message: #{e.message}"
       e

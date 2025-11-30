@@ -1468,7 +1468,7 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
 
       instance = klass.new
       # Trigger pipeline evaluation which should raise
-      expect { instance.run }.to raise_error(ArgumentError, /Invalid delivery_mode/)
+      expect { instance.run }.to raise_error(Minigun::Errors::InvalidOption, /Invalid delivery_mode/)
     end
   end
 end

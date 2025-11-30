@@ -131,7 +131,7 @@ RSpec.describe 'Ractor execution', if: Minigun::Platform.ractors? do
       end
 
       # Error is raised when run() is called (pipeline block is evaluated then)
-      expect { klass.new.run }.to raise_error(Minigun::Error, /cannot be made shareable/)
+      expect { klass.new.run }.to raise_error(Minigun::Errors::ConfigurationError, /cannot be made shareable/)
     end
   end
 

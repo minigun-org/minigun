@@ -152,7 +152,7 @@ module Minigun
       pipeline_stage = @root_pipeline.find_stage(name)
 
       if pipeline_stage
-        raise Minigun::Error.new("Stage #{name} already exists as a non-composite stage") unless pipeline_stage.run_mode == :composite
+        raise Errors::ConfigurationError.new("Stage #{name} already exists as a non-composite stage") unless pipeline_stage.run_mode == :composite
 
         pipeline = pipeline_stage.nested_pipeline
       else

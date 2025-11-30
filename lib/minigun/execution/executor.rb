@@ -806,7 +806,7 @@ module Minigun
 
         return if Minigun::Platform.fibers?
 
-        raise Minigun::Error.new("Fiber execution requires the 'async' gem. Add `gem 'async'` to your Gemfile.")
+        raise Errors::ConfigurationError.new("Fiber execution requires the 'async' gem. Add `gem 'async'` to your Gemfile.")
       end
 
       def execute_stage(stage, user_context, input_queue, output_queue)
@@ -1151,7 +1151,10 @@ module Minigun
         setup_coordinator(stage.name)
 
         unless @coordinator.wait_for_workers(min_count: @min_workers, timeout: @worker_timeout)
-          raise Cluster::Error.new("Timeout waiting for workers. Got #{@coordinator.worker_count}, need #{@min_workers}")
+          raise Cluster::TimeoutError.new(
+            operation: 'waiting for workers',
+            timeout_seconds: @worker_timeout
+          )
         end
 
         Minigun.logger.info "[Cluster] Starting stage :#{stage.name} with #{@coordinator.worker_count} workers"
@@ -1206,7 +1209,10 @@ module Minigun
         end
 
         if @direct_workers.empty?
-          raise Cluster::Error.new('No workers available in direct mode')
+          raise Cluster::ConnectionError.new(
+            'No workers available in direct mode',
+            uri: @worker_uris.join(', ')
+          )
         end
 
         Minigun.logger.info "[Cluster] Starting stage :#{stage.name} with #{@direct_workers.size} workers (direct mode)"
@@ -1327,7 +1333,11 @@ module Minigun
       when :cluster
         ClusterPoolExecutor.new(...)
       else
-        raise ArgumentError.new("Unknown executor type: #{type}. Valid types: :inline, :thread, :fiber, :cow_fork, :ipc_fork, :ractor, :cluster")
+        raise Errors::InvalidOption.new(
+          option_name: :executor_type,
+          value: type,
+          expected: 'inline, thread, fiber, cow_fork, ipc_fork, ractor, cluster'
+        )
       end
     end
   end
