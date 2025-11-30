@@ -15,7 +15,7 @@ Extract data from a source, transform it, and load it into a destination. Covers
 
 **Best for:** Data migrations, database sync, data transformation
 
-**Key concepts:** Producer, processor, accumulator, consumer, batching, error handling
+**Key concepts:** Producer, processor, batch, consumer, batching, error handling
 
 ---
 
@@ -128,7 +128,7 @@ class ComplexPipeline
               threads: 20 { ... }
 
     # Batch pattern
-    accumulator :batch, max_size: 500 { ... }
+    batch :batch, max_size: 500 { ... }
     consumer :load, threads: 4 { ... }
   end
 end

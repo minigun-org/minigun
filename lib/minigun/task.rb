@@ -11,9 +11,9 @@ module Minigun
         max_threads: 5,
         max_processes: 2,
         max_retries: 3,
-        accumulator_max_single: 2000,
-        accumulator_max_all: 4000,
-        accumulator_check_interval: 100,
+        batch_max_single: 2000,
+        batch_max_all: 4000,
+        batch_check_interval: 100,
         use_ipc: false
       }
 

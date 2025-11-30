@@ -28,11 +28,11 @@ processor :double do |number, output|
 end
 ```
 
-### 3. Accumulator
+### 3. Batch
 **Batches items** - Collects multiple items before emitting
 
 ```ruby
-accumulator :batch, max_size: 5 do |batch, output|
+batch :batch, max_size: 5 do |batch, output|
   output << batch
 end
 ```
@@ -162,12 +162,12 @@ end
 
 ## Accumulators in Detail
 
-Accumulators **batch multiple items** into groups before emitting them downstream. This is useful for bulk operations.
+Batch stages **group multiple items** into batches before emitting them downstream. This is useful for bulk operations.
 
 ### Basic Batching
 
 ```ruby
-accumulator :batch, max_size: 100 do |batch, output|
+batch :batch, max_size: 100 do |batch, output|
   output << batch
 end
 ```
@@ -182,7 +182,7 @@ pipeline do
     1000.times { |i| output << i }
   end
 
-  accumulator :batch, max_size: 50 do |batch, output|
+  batch :batch, max_size: 50 do |batch, output|
     output << batch
   end
 
@@ -362,7 +362,7 @@ class ETLPipeline
     end
 
     # BATCH: Group for efficient insertion
-    accumulator :batch, max_size: 500 do |batch, output|
+    batch :batch, max_size: 500 do |batch, output|
       output << batch
     end
 

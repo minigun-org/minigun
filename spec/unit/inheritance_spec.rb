@@ -438,11 +438,11 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
             items_to_publish.each { |item| output << item }
           end
 
-          accumulator :batch
+          batch :batch
 
           in_cow_forks(1) do
             consumer :publish do |batch|
-              # cow_fork receives batches from accumulator
+              # cow_fork receives batches from batch stage
               # Write to temp file (fork-safe)
               File.open(@temp_file.path, 'a') do |f|
                 f.flock(File::LOCK_EX)

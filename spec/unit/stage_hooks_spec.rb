@@ -123,7 +123,7 @@ RSpec.describe 'Stage-Specific Hooks' do
             3.times { |i| output << i }
           end
 
-          accumulator :batch
+          batch :batch
 
           in_cow_forks(1) do
             consumer :process do |_num|

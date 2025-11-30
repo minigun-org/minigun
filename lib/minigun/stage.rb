@@ -387,12 +387,12 @@ module Minigun
     end
   end
 
-  # Accumulator stage - batches items before passing to consumer
+  # Batch stage - batches items before passing to consumer
   # Collects N items, then emits them as a batch
-  class AccumulatorStage < ConsumerStage
+  class BatchStage < ConsumerStage
     attr_reader :max_size, :max_wait
 
-    # Positional constructor: AccumulatorStage.new(name, pipeline, block, options)
+    # Positional constructor: BatchStage.new(name, pipeline, block, options)
     def initialize(name, pipeline, block, options = {})
       super
 
@@ -426,7 +426,7 @@ module Minigun
           start_time = Time.now if stage_stats
 
           if @block
-            # Accumulator block receives |batch, output| like other stages
+            # Batch block receives |batch, output| like other stages
             context.instance_exec(buffer, output_queue, &@block)
           else
             # No block - just pass through
@@ -457,7 +457,7 @@ module Minigun
       return unless buffer && output_queue
 
       if @block
-        # Accumulator block receives |batch, output| like other stages
+        # Batch block receives |batch, output| like other stages
         context.instance_exec(buffer, output_queue, &@block)
       else
         # No block - just pass through

@@ -100,8 +100,8 @@ class ErrorHandlingExample
       end
     end
 
-    # Accumulator batches items
-    accumulator :batch, max_size: 10
+    # Batch items
+    batch :batch, max_size: 10
 
     # Consumer with error isolation
     before_fork :save_results do

@@ -106,7 +106,7 @@ module Minigun
       def determine_stage_type(stage)
         return :producer if stage.is_a?(Minigun::ProducerStage)
         return :consumer if stage.is_a?(Minigun::ConsumerStage)
-        return :accumulator if stage.is_a?(Minigun::AccumulatorStage)
+        return :batch if stage.is_a?(Minigun::BatchStage)
         return :router if stage.is_a?(Minigun::RouterStage)
         return :fork if stage.options[:execution] && %i[cow_fork ipc_fork].include?(stage.options[:execution][:type])
 

@@ -3,9 +3,9 @@
 
 require_relative '../lib/minigun'
 
-# Example: Demand with Accumulator Stage
-# Tests demand propagation through batch accumulation
-class DemandAccumulatorExample
+# Example: Demand with Batch Stage
+# Tests demand propagation through batch stage
+class DemandBatchExample
   include Minigun::DSL
 
   attr_accessor :batches, :total_items
@@ -21,8 +21,8 @@ class DemandAccumulatorExample
       100.times { |i| output << i }
     end
 
-    # Accumulator batches items before passing downstream
-    accumulator :batcher, max_size: 10
+    # Batch items before passing downstream
+    batch :batcher, max_size: 10
 
     # Consumer receives batches
     consumer :sink do |batch|
@@ -35,11 +35,11 @@ class DemandAccumulatorExample
 end
 
 if __FILE__ == $PROGRAM_NAME
-  puts "=== Demand with Accumulator Example ===\n\n"
-  puts 'Accumulator batches items before passing to downstream consumer.'
+  puts "=== Demand with Batch Example ===\n\n"
+  puts 'Batch stage batches items before passing to downstream consumer.'
   puts "Batch size: 10\n\n"
 
-  example = DemandAccumulatorExample.new
+  example = DemandBatchExample.new
   example.run
 
   puts "Total items: #{example.total_items}"

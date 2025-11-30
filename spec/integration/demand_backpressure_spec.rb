@@ -489,7 +489,7 @@ RSpec.describe 'Demand-based backpressure' do
       expect(results.sort).to eq((0...20).to_a)
     end
 
-    it 'handles accumulator with demand' do
+    it 'handles batch with demand' do
       batches = []
       mutex = Mutex.new
 
@@ -501,7 +501,7 @@ RSpec.describe 'Demand-based backpressure' do
             25.times { |i| output << i }
           end
 
-          accumulator :batcher, max_size: 5
+          batch :batcher, max_size: 5
 
           consumer :sink do |batch|
             mutex.synchronize { batches << batch.dup }

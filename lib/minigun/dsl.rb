@@ -412,10 +412,28 @@ module Minigun
         _with_execution_context(context, &)
       end
 
-      # Batching shorthand
-      # TODO: clean this up
-      def batch(size)
-        accumulator(nil, max_size: size)
+      # Batch: Collects items into batches before passing downstream
+      # @param name_or_size [Symbol, Integer] Stage name or batch size (shorthand)
+      # @param options [Hash] Stage options including :max_size, :max_wait
+      # @yield [batch, output] Block to process each batch (optional)
+      #
+      # Examples:
+      #   batch(10)                              # Shorthand: batch into groups of 10
+      #   batch(:batcher, max_size: 50)          # Named batch stage
+      #   batch(:writer, max_size: 100) do |batch, output|
+      #     BulkWriter.insert(batch)
+      #   end
+      def batch(name_or_size = nil, options = {}, &block)
+        # Handle shorthand: batch(10) means batch(nil, max_size: 10)
+        if name_or_size.is_a?(Integer)
+          options = { max_size: name_or_size }.merge(options)
+          name = nil
+        else
+          name = name_or_size
+        end
+
+        options = _apply_execution_context(options)
+        @pipeline.add_stage(:batch, name, options, &block)
       end
 
       # Named execution context definition
@@ -536,12 +554,6 @@ module Minigun
       def custom_stage(stage_class, name, options = {})
         options = _apply_execution_context(options)
         @pipeline.add_stage(stage_class, name, options)
-      end
-
-      # Accumulator is special - kept explicit
-      def accumulator(name = :accumulator, options = {}, &)
-        options = _apply_execution_context(options)
-        @pipeline.add_stage(:accumulator, name, options, &)
       end
 
       def before_run(&)

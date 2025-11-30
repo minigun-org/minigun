@@ -133,35 +133,33 @@ consumer :process, threads: 10 do |item|
 end
 ```
 
-### `accumulator(name, options = {}, &block)`
+### `batch(name_or_size, options = {}, &block)`
 
 Defines a stage that batches multiple items before emitting.
 
 **Parameters:**
-- `name` - Symbol stage name
-- `options` - Hash of options (must include `max_size`)
-- `block` - Block with two parameters: `batch, output` OR `item, output`
+- `name_or_size` - Symbol stage name OR Integer batch size (shorthand)
+- `options` - Hash of options (must include `max_size` if name provided)
+- `block` - Block with two parameters: `batch, output` (optional)
 
 **Options:**
 - `max_size` - Integer, number of items to collect before emitting
 
 **Example:**
 ```ruby
-# Automatic batching
-accumulator :batch, max_size: 100 do |batch, output|
+# Shorthand - just batch size
+batch(100)
+
+# Named batch stage
+batch :batch, max_size: 100 do |batch, output|
   output << batch
 end
 
 # Custom batching logic
-accumulator :custom_batch, max_size: 50 do |item, output|
-  @items ||= []
-  @items << item
-
-  if @items.size >= 50
-    batch = @items.dup
-    @items.clear
-    output << batch
-  end
+batch :custom_batch, max_size: 50 do |batch, output|
+  # Process the batch
+  processed = batch.map { |item| transform(item) }
+  output << processed
 end
 ```
 
@@ -581,7 +579,7 @@ class CompleteExample
     end
 
     # Accumulator
-    accumulator :batch, max_size: 50 do |batch, output|
+    batch :batch, max_size: 50 do |batch, output|
       output << batch
     end
 

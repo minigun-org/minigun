@@ -180,7 +180,7 @@ module Minigun
           '◆'
         when :consumer
           '◀'
-        when :accumulator
+        when :batch
           '⊞'
         when :router
           '◇'

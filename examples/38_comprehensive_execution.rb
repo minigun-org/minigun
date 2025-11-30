@@ -168,7 +168,7 @@ puts <<~SUMMARY
     - ractor_per_batch(max: N) do ... end
 
   ✓ Batching:
-    - batch N (creates accumulator stage)
+    - batch N (creates batch stage)
     - Multiple batch stages per pipeline
     - Runtime-configurable sizes
 

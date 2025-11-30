@@ -931,7 +931,7 @@ class ProcessDataJob < ApplicationJob
         producer :extract { dataset.records.find_each { |r| emit(r) } }
         processor :transform, threads: 10 { |r, output| output << transform(r) }
         processor :enrich, threads: 20 { |r, output| output << enrich(r) }
-        accumulator :batch, max_size: 500 { |batch| emit(batch) }
+        batch :batch, max_size: 500 { |batch| emit(batch) }
         consumer :load, threads: 4 { |batch| bulk_insert(batch) }
       end
     end
@@ -991,7 +991,7 @@ pipeline do
   processor :clean, threads: 5 { |data, output| output << clean(data) }
   processor :validate { |data, output| output << validate(data) }
   processor :enrich, threads: 20 { |data, output| output << enrich(data) }
-  accumulator :batch, max_size: 100 { |batch, output| output << batch }
+  batch :batch, max_size: 100 { |batch, output| output << batch }
   consumer :save, threads: 4 { |batch| save_batch(batch) }
 end
 ```
@@ -1007,7 +1007,7 @@ class BatchJob
   pipeline do
     producer :stream { Record.find_each(batch_size: 1000) { |r| emit(r) } }
     processor :process, execution: :cow_fork, max: 8 { |r| process(r) }
-    accumulator :batch, max_size: 500 { |batch| emit(batch) }
+    batch :batch, max_size: 500 { |batch| emit(batch) }
     consumer :save { |batch| bulk_insert(batch) }
   end
 end
@@ -1179,7 +1179,7 @@ pipeline do
   processor :clean, threads: 10 { |r, output| output << clean(r) }
   processor :validate { |r, output| output << validate(r) }
   processor :enrich, threads: 20 { |r, output| output << enrich(r) }
-  accumulator :batch, max_size: 500 { |batch| emit(batch) }
+  batch :batch, max_size: 500 { |batch| emit(batch) }
   consumer :load, threads: 4 { |batch| insert_many(batch) }
 end
 
@@ -1338,7 +1338,7 @@ class DataMigration
     producer :extract { LegacyDB.find_each { |r| emit(r) } }
     processor :clean, threads: 10 { |r, output| output << clean(r) }
     processor :transform, execution: :cow_fork, max: 8 { |r| transform(r) }
-    accumulator :batch, max_size: 500 { |batch| emit(batch) }
+    batch :batch, max_size: 500 { |batch| emit(batch) }
     consumer :load, threads: 4 { |batch| NewDB.insert_many(batch) }
   end
 end

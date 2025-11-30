@@ -114,7 +114,7 @@ class DatabasePublisher
     end
 
     # Stage 3: Publish to external service
-    # Using threaded consumer for simplicity (could use accumulator + cow_fork for COW optimization)
+    # Using threaded consumer for simplicity (could use batch + cow_fork for COW optimization)
     consumer :publish do |enriched_data|
       publish_to_service(enriched_data)
 

@@ -97,7 +97,7 @@ class FanOutFanInCluster
     end
 
     # Aggregate results from both clusters
-    accumulator :aggregate, initial: { image: [], text: [] } do |acc, item|
+    batch :aggregate, initial: { image: [], text: [] } do |acc, item|
       puts "[Aggregator] Received #{item[:type]} result from #{item[:cluster]}"
       acc[item[:type]] << item
       acc

@@ -289,7 +289,7 @@ RSpec.describe Minigun::ConsumerStage do
   end
 end
 
-RSpec.describe Minigun::AccumulatorStage do
+RSpec.describe Minigun::BatchStage do
   let(:config) { { max_threads: 1, max_processes: 1 } }
   let(:task) { Minigun::Task.new(config: config) }
   let(:pipeline) { task.root_pipeline }

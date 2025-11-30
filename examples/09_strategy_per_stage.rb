@@ -37,8 +37,8 @@ class StrategyPerStageExample
       output << num if num > 0
     end
 
-    # Accumulator batches items before spawning workers
-    accumulator :batch, max_size: 3, to: %i[heavy_save light_log]
+    # Batch items before spawning workers
+    batch :batch, max_size: 3, to: %i[heavy_save light_log]
 
     # Heavy consumer spawns forks per batch (COW fork pattern)
     in_cow_forks(2) do
@@ -72,7 +72,7 @@ end
 
 if __FILE__ == $PROGRAM_NAME
   puts "=== Strategy Per Stage Example ===\n\n"
-  puts "Producer → Validator → Batch (accumulator) → [HeavySave (cow_fork), LightLog (threads)]\n\n"
+  puts "Producer → Validator → Batch → [HeavySave (cow_fork), LightLog (threads)]\n\n"
 
   example = StrategyPerStageExample.new
   begin

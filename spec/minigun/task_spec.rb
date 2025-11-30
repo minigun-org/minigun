@@ -10,8 +10,8 @@ RSpec.describe Minigun::Task do
       expect(task.config[:max_threads]).to eq(5)
       expect(task.config[:max_processes]).to eq(2)
       expect(task.config[:max_retries]).to eq(3)
-      expect(task.config[:accumulator_max_single]).to eq(2000)
-      expect(task.config[:accumulator_max_all]).to eq(4000)
+      expect(task.config[:batch_max_single]).to eq(2000)
+      expect(task.config[:batch_max_all]).to eq(4000)
     end
 
     it 'initializes empty stages' do
@@ -62,14 +62,14 @@ RSpec.describe Minigun::Task do
       expect(stage2.name).to eq(:proc2)
     end
 
-    it 'adds accumulator stage' do
-      block = proc { 'accumulator' }
-      task.add_stage(:accumulator, :test_acc, &block)
+    it 'adds batch stage' do
+      block = proc { 'batch' }
+      task.add_stage(:batch, :test_batch, &block)
 
-      stage = task.root_pipeline.find_stage(:test_acc)
+      stage = task.root_pipeline.find_stage(:test_batch)
       expect(stage).not_to be_nil
-      expect(stage.name).to eq(:test_acc)
-      expect(stage).to be_a(Minigun::AccumulatorStage)
+      expect(stage.name).to eq(:test_batch)
+      expect(stage).to be_a(Minigun::BatchStage)
     end
 
     it 'adds consumer stage' do

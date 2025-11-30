@@ -10,7 +10,7 @@ require 'tempfile'
 # within nested pipelines using the DAG-centric architecture.
 #
 # In this example:
-# - accumulator batches items and routes to :save (nested stage)
+# - batch stage batches items and routes to :save (nested stage)
 # - :save is inside a cow_fork nested pipeline
 # - Parent DAG includes nested stages, enabling direct routing
 class RoutingToNestedStagesExample
@@ -38,8 +38,8 @@ class RoutingToNestedStagesExample
     end
 
     # Batch items and route directly to nested :save stage
-    accumulator :batch, max_size: 2, to: [:save] do |items, output|
-      puts "[Accumulator] Batched #{items.size} items: #{items.inspect}"
+    batch :batch, max_size: 2, to: [:save] do |items, output|
+      puts "[Batch] Batched #{items.size} items: #{items.inspect}"
       output << items
     end
 

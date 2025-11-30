@@ -63,7 +63,7 @@ class BatchProcessor
     end
 
     # Batch for efficient database writes
-    accumulator :batch, max_size: @batch_size do |batch, output|
+    batch :batch, max_size: @batch_size do |batch, output|
       output << batch
     end
 
@@ -192,7 +192,7 @@ end
 ### Batching
 
 ```ruby
-accumulator :batch, max_size: 500 do |batch, output|
+batch :batch, max_size: 500 do |batch, output|
   output << batch
 end
 ```
@@ -279,7 +279,7 @@ processor :route_by_priority, to: [:high, :normal, :low] do |record, output|
 end
 
 # High priority: more workers, smaller batches (faster feedback)
-accumulator :high_batch, from: :route_by_priority, max_size: 100 do |batch, output|
+batch :high_batch, from: :route_by_priority, max_size: 100 do |batch, output|
   output << { priority: :high, batch: batch }
 end
 
@@ -288,7 +288,7 @@ consumer :high_processor, threads: 10 do |data|
 end
 
 # Normal priority: balanced
-accumulator :normal_batch, from: :route_by_priority, max_size: 500 do |batch, output|
+batch :normal_batch, from: :route_by_priority, max_size: 500 do |batch, output|
   output << { priority: :normal, batch: batch }
 end
 
@@ -297,7 +297,7 @@ consumer :normal_processor, threads: 4 do |data|
 end
 
 # Low priority: larger batches, fewer workers
-accumulator :low_batch, from: :route_by_priority, max_size: 2000 do |batch, output|
+batch :low_batch, from: :route_by_priority, max_size: 2000 do |batch, output|
   output << { priority: :low, batch: batch }
 end
 
@@ -381,10 +381,10 @@ end
 
 ```ruby
 # Small batches: Faster feedback, more overhead
-accumulator :small, max_size: 50
+batch :small, max_size: 50
 
 # Large batches: Less overhead, slower feedback
-accumulator :large, max_size: 5000
+batch :large, max_size: 5000
 
 # Test and measure!
 ```

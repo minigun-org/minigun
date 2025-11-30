@@ -151,13 +151,13 @@ module Minigun
                   ConsumerStage.new(name, self, block, options)
                 when :stage
                   Stage.new(name, self, block, options)
-                when :accumulator
-                  AccumulatorStage.new(name, self, block, options)
+                when :batch
+                  BatchStage.new(name, self, block, options)
                 else
                   raise Errors::InvalidOption.new(
                     option_name: :stage_type,
                     value: actual_type,
-                    expected: ':producer, :enumerator_producer, :processor, :consumer, :stage, :accumulator'
+                    expected: ':producer, :enumerator_producer, :processor, :consumer, :stage, :batch'
                   )
                 end
               end

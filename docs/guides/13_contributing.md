@@ -89,7 +89,7 @@ minigun/
 **Core Pipeline:**
 - `lib/minigun/dsl.rb` - DSL for defining pipelines
 - `lib/minigun/pipeline.rb` - Pipeline orchestration
-- `lib/minigun/stage.rb` - Stage types (producer, processor, consumer, accumulator)
+- `lib/minigun/stage.rb` - Stage types (producer, processor, consumer, batch)
 
 **Execution:**
 - `lib/minigun/worker/` - Execution strategies (inline, threads, forks)
