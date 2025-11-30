@@ -178,9 +178,6 @@ module Minigun
             @pipe_writer
           )
           @pipe_writer.flush
-        rescue StandardError
-          # If we can't even send the error, re-raise (pipe may be broken)
-          raise
         end
       end
       self
@@ -223,9 +220,6 @@ module Minigun
             @pipe_writer
           )
           @pipe_writer.flush
-        rescue StandardError
-          # If we can't even send the error, re-raise (pipe may be broken)
-          raise
         end
       end
       self

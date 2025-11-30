@@ -529,7 +529,7 @@ module Minigun
         received_end_of_stage = nil
 
         # Get nested stages' queues for dynamic routing support
-        nested_queues = get_nested_stage_queues
+        nested_queues = nested_stage_queues
 
         # Start result collection threads for each worker
         result_threads = @workers.map do |worker|
@@ -587,7 +587,7 @@ module Minigun
       end
 
       # Get queues for nested stages (for dynamic routing support)
-      def get_nested_stage_queues
+      def nested_stage_queues
         return [] unless @stage_ctx.respond_to?(:stage)
 
         stage = @stage_ctx.stage
