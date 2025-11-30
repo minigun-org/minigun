@@ -117,6 +117,8 @@ Choose the right tool for your use case:
 
 ## Advanced Topics
 
+- [**Clustering**](guides/17_clustering.md) - Distributed execution across multiple machines
+- [**Demand-Based Backpressure**](guides/18_demand.md) - Pull-based flow control
 - [**Performance Tuning**](guides/11_performance_tuning.md) - Optimization strategies
 - [**Testing Your Pipelines**](guides/12_testing.md) - Testing patterns and best practices
 - [**Error Handling**](guides/14_error_handling.md) - Strategies for handling failures in pipelines

@@ -92,12 +92,17 @@ processor :middle, from: :source, to: :sink do |item, output|
 end
 ```
 
-## Fan-Out (Broadcasting)
+## Fan-Out and Routing Strategies
 
-Send data from one stage to **multiple** downstream stages:
+When a stage has multiple downstream targets, you can control how items are distributed using the `routing:` option.
+
+### Broadcast Routing (Default)
+
+Send each item to **ALL** downstream stages:
 
 ```ruby
 pipeline do
+  # Default: broadcast to all targets
   producer :source, to: [:stage_a, :stage_b, :stage_c] do |output|
     output << "data"
   end
@@ -116,7 +121,154 @@ pipeline do
 end
 
 # Each item goes to ALL three consumers
+# Output:
+#   A received: data
+#   B received: data
+#   C received: data
 ```
+
+### Round-Robin Routing
+
+Distribute items **evenly** across downstream stages (each item goes to one stage):
+
+```ruby
+pipeline do
+  producer :source, to: [:worker_a, :worker_b], routing: :round_robin do |output|
+    4.times { |i| output << i }
+  end
+
+  consumer :worker_a do |item|
+    puts "A got: #{item}"
+  end
+
+  consumer :worker_b do |item|
+    puts "B got: #{item}"
+  end
+end
+
+# Items alternate between workers:
+#   A got: 0
+#   B got: 1
+#   A got: 2
+#   B got: 3
+```
+
+**Use cases:**
+- Load balancing across parallel consumers
+- Distributing work evenly
+
+### Demand Routing
+
+Route items to the consumer with the **most available capacity** (highest demand or queue space):
+
+```ruby
+pipeline do
+  producer :source, to: [:fast, :slow], routing: :demand do |output|
+    20.times { |i| output << i }
+  end
+
+  consumer :fast, queue_size: 10 do |item|
+    puts "Fast got: #{item}"
+  end
+
+  consumer :slow, queue_size: 10 do |item|
+    sleep 0.1  # Slow consumer
+    puts "Slow got: #{item}"
+  end
+end
+
+# Fast consumer gets more items because it has more capacity
+```
+
+**How it works (priority order):**
+1. If demand system is enabled, routes to consumer with highest pending demand
+2. Falls back to SizedQueue capacity (routes to queue with most space)
+3. Falls back to round-robin for unbounded queues
+
+**Options:**
+- `shuffle_on_first_dispatch: true` - Randomize initial order to prevent overloading first consumer
+
+```ruby
+producer :source, to: [:a, :b, :c],
+         routing: :demand,
+         shuffle_on_first_dispatch: true do |output|
+  # ...
+end
+```
+
+**Use cases:**
+- Adaptive load balancing
+- Handling consumers with varying processing speeds
+- Backpressure-aware distribution
+
+### Partition Routing
+
+Route items based on a **hash key** for partition affinity (same key always goes to same consumer):
+
+```ruby
+pipeline do
+  producer :events, to: [:partition_a, :partition_b],
+           routing: :partition,
+           partition_key: :user_id do |output|
+    output << { user_id: 1, event: 'login' }
+    output << { user_id: 2, event: 'view' }
+    output << { user_id: 1, event: 'click' }  # Same user as first
+    output << { user_id: 2, event: 'logout' } # Same user as second
+  end
+
+  consumer :partition_a do |item|
+    puts "A: user #{item[:user_id]} - #{item[:event]}"
+  end
+
+  consumer :partition_b do |item|
+    puts "B: user #{item[:user_id]} - #{item[:event]}"
+  end
+end
+
+# All events for user_id=1 go to the same partition
+# All events for user_id=2 go to the same partition
+```
+
+**Options:**
+
+1. **Symbol partition_key** - Extract key from hash:
+```ruby
+routing: :partition, partition_key: :user_id
+# Uses item[:user_id].hash.abs % partition_count
+```
+
+2. **Proc partition_key** - Custom key extraction:
+```ruby
+routing: :partition, partition_key: ->(item) { item[:category] }
+# Uses the proc result's hash
+```
+
+3. **Custom hash function** - Full control over partition index:
+```ruby
+routing: :partition, hash: ->(item) { item[:id] % 3 }
+# Returns partition index directly (0, 1, 2)
+```
+
+4. **Filtering with :none** - Discard items:
+```ruby
+routing: :partition, hash: ->(item) { item[:valid] ? item[:id] % 2 : :none }
+# Returns :none to discard invalid items
+```
+
+**Use cases:**
+- User session affinity
+- Maintaining order for same-key items
+- Stateful processing where same keys must hit same consumer
+- Data locality for cache efficiency
+
+### Routing Strategies Summary
+
+| Strategy | Distribution | Use Case |
+|----------|--------------|----------|
+| `:broadcast` (default) | Each item to ALL consumers | Fan-out, logging, parallel paths |
+| `:round_robin` | Alternating distribution | Load balancing, even distribution |
+| `:demand` | To consumer with most capacity | Adaptive load balancing |
+| `:partition` | By hash key to same consumer | User affinity, stateful processing |
 
 ### Practical Example: Multiple Outputs
 
@@ -445,12 +597,22 @@ end
 | **Queue-based** | Priority lanes | Route by priority queue |
 | **Dynamic** | Runtime decisions | Route based on data |
 
+## Routing Strategies Summary
+
+| Strategy | Distribution | Use Case |
+|----------|--------------|----------|
+| `:broadcast` (default) | Each item to ALL consumers | Fan-out, logging, parallel paths |
+| `:round_robin` | Alternating distribution | Load balancing, even distribution |
+| `:demand` | To consumer with most capacity | Adaptive load balancing |
+| `:partition` | By hash key to same consumer | User affinity, stateful processing |
+
 ## Key Takeaways
 
 - **Sequential routing** is the default (stages in definition order)
 - **Explicit routing** uses `from:` and `to:` options
 - **Fan-out** sends one item to multiple stages
 - **Fan-in** receives items from multiple stages
+- **Routing strategies** control fan-out behavior: `:broadcast`, `:round_robin`, `:demand`, `:partition`
 - **Queue-based routing** routes to named queues
 - **Dynamic routing** makes decisions at runtime with `output.to()`
 
@@ -463,6 +625,9 @@ Now that you understand routing, let's add parallelism with concurrency.
 ---
 
 **See Also:**
+- [Demand-Based Backpressure](18_demand.md) - Pull-based flow control
 - [Execution Strategies](06_execution_strategies.md) - Combine routing with parallel execution
+- [Clustering](17_clustering.md) - Routing with distributed clusters
 - [Example: Diamond Pattern](../../examples/02_diamond_pattern.rb) - Working example
-- [Example: Complex Routing](../../examples/04_complex_routing.rb) - Advanced patterns
+- [Example: Complex Routing](../../examples/04_complex_routing.md) - Advanced patterns
+- [Example: Cluster Routing](../../examples/123_cluster_routing.rb) - Routing with clusters
