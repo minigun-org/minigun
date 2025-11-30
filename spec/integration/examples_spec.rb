@@ -2927,4 +2927,50 @@ RSpec.describe 'Examples Integration' do
       end
     end
   end
+
+  # IPC Fork Restart Policy Examples
+  describe '140_ipc_fork_restart_never.rb', skip: !Minigun::Platform.fork? do
+    it 'demonstrates restart_policy: :never' do
+      expect do
+        load File.expand_path('../../examples/140_ipc_fork_restart_never.rb', __dir__)
+      end.not_to raise_error
+
+      expect(captured_output).to include('restart_policy: :never')
+      expect(captured_output).to include('Pipeline completed')
+    end
+  end
+
+  describe '141_ipc_fork_restart_transient.rb', skip: !Minigun::Platform.fork? do
+    it 'demonstrates restart_policy: :transient' do
+      expect do
+        load File.expand_path('../../examples/141_ipc_fork_restart_transient.rb', __dir__)
+      end.not_to raise_error
+
+      expect(captured_output).to include('restart_policy: :transient')
+      expect(captured_output).to include('Pipeline completed')
+    end
+  end
+
+  describe '142_ipc_fork_restart_permanent.rb', skip: !Minigun::Platform.fork? do
+    it 'demonstrates restart_policy: :permanent' do
+      expect do
+        load File.expand_path('../../examples/142_ipc_fork_restart_permanent.rb', __dir__)
+      end.not_to raise_error
+
+      expect(captured_output).to include('restart_policy: :permanent')
+      expect(captured_output).to include('Pipeline completed')
+    end
+  end
+
+  describe '143_ipc_fork_restart_rate_limit.rb', skip: !Minigun::Platform.fork? do
+    it 'demonstrates restart rate limiting' do
+      expect do
+        load File.expand_path('../../examples/143_ipc_fork_restart_rate_limit.rb', __dir__)
+      end.not_to raise_error
+
+      expect(captured_output).to include('max_restarts: 2')
+      expect(captured_output).to include('restart_window: 10')
+      expect(captured_output).to include('Pipeline completed')
+    end
+  end
 end

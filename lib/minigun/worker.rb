@@ -228,6 +228,18 @@ module Minigun
       pool_size = exec_ctx[:pool_size] || exec_ctx[:max] || default_pool_size(type)
       pool_timeout = exec_ctx[:pool_timeout]
 
+      # IPC Fork executors have additional restart policy options
+      if type == :ipc_fork
+        return Execution.create_executor(
+          type, stage_ctx,
+          max_size: pool_size,
+          pool_timeout: pool_timeout,
+          restart_policy: exec_ctx[:restart_policy] || :never,
+          max_restarts: exec_ctx[:max_restarts] || 3,
+          restart_window: exec_ctx[:restart_window] || 60
+        )
+      end
+
       Execution.create_executor(type, stage_ctx, max_size: pool_size, pool_timeout: pool_timeout)
     end
 

@@ -29,12 +29,13 @@ plan based on the current codebase state and TODOS.md.
 - [ ] Demand -- consolidate registry?
 - [ ] demand: true/false at the pipeline level (carry to nesting)
 - [ ] Demand and custom routing
+- [X] Demand with Clustering
 - [ ] Hooks
-- [ ] Genstage --> names required?
-- [ ] Ractors on Ruby 3.5
+- [X] Genstage --> names required?
+- [X] Ractors on Ruby 3.5
 - [ ] Auto-config: # forks should match # of cores
 - [ ] Example runner context
-- [ ] Consider what concurrent-ruby abstractions we can use.
+- [X] Consider what concurrent-ruby abstractions we can use.
 - [ ] Support MINIGUN_LOG_LEVEL var
 - [ ] Naming things
   - [ ] Config
@@ -42,9 +43,13 @@ plan based on the current codebase state and TODOS.md.
   - [ ] Remove processor alias? producer_consumer alias?
   - [ ] Cleanup accumulator vs. batch
   - [ ] Custom Stage?
+  - [ ] Alias in_ipc_forks to in_processes
 - [ ] Final pass:
   - [ ] Fix JRuby/Mac/etc.
   - [ ] Rubocop
+- [ ] **Flush Timers**
+  - [ ] Time-based batch flushing
+  - [ ] Consolidate accumulator and batch logic
 
 ### 0.2 Error Handling & Reliability
 
@@ -55,15 +60,23 @@ plan based on the current codebase state and TODOS.md.
   - Handle errors in hooks properly
 
 - [ ] **Process Management**
-  - Signal trapping for graceful shutdown
-  - Child process state management
-  - Child process culling (reference Puma's implementation)
-  - Supervision tree for processes
-  - Wait for last forked process to finish properly
+  - [ ] at_least_once with COW
+  - [ ] at_least_once with IPC
+  - [ ] IPC within IPC -- register with parent level? skip routing of Parent to IPC within IPC level? kill whole tree when stopped? stats tracking?
+  - [ ] Cluster -- permanent leader, permanent followers, follower can attach new leader only if existing leader has stopped (force option to force it to attach)
+  - [ ] Cluster -- handle network partitions, split brain, re-attach to new leader
+  - [ ] Cluster -- leader (coordinator) needs to maintain topology. third-party coordinator? follower temporarily becomes coordinator--or "find coordinator" from any follower?
+  - [ ] msgpack support for IPC and cluster (transport)
+  - [ ] monitoring of cluster members
+  - [ ] Signal trapping for graceful shutdown
+  - [ ] Child process state management
+  - [ ] Child process culling (reference Puma's implementation)
+  - [ ] Cluster --> multiple in_ipc_forks stages, workers joining specific stages, leader and follower roles, RAFT algo so that cluster 
+  - [X] ~~Supervision tree for processes~~ Monitoring of IPC fork workers
+  - [ ] Wait for last forked process to finish properly
 
 ### True parallelism across process boundaries
 
-- [ ] Demand with Clustering
 - [ ] routing to inner stages of pipelines
 - [ ] routing to inner stages of cow and ipc fork via an ingress delegator
 - [ ] Transmit stats across forks
@@ -105,10 +118,6 @@ plan based on the current codebase state and TODOS.md.
   - [X] `batch` - create batches from stream
   - [X] `debatch` - flatten batches back to stream
   - [X] `rebatch` - change batch size
-
-- [ ] **Flush Timers**
-  - [ ] Time-based batch flushing
-  - [ ] Consolidate accumulator and batch logic
 
 - [X] Routing strategies (inspired by GenStage)
   - [X] DemandRouter (default): Dispatches events to the consumer with the highest outstanding demand, ensuring the busiest consumer gets priority.

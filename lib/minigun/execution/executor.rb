@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'worker_monitor'
+
 module Minigun
   # Execution strategies for running pipeline stages
   module Execution
@@ -365,11 +367,27 @@ module Minigun
     # Creates persistent worker processes that communicate via IPC pipes.
     # Workers continuously pull items, process them, and send results back.
     # Data is serialized through pipes for both input and output, providing strong process isolation.
+    #
+    # Options:
+    #   max_size: Number of worker processes to spawn (default: 5)
+    #   pool_timeout: Overall timeout for stage execution (default: nil)
+    #   restart_policy: Worker restart policy on failure (default: :never)
+    #     - :never: Don't restart failed workers (default, current behavior)
+    #     - :transient: Restart workers that exit abnormally (non-zero exit or signal)
+    #     - :permanent: Always restart workers that exit for any reason
+    #   max_restarts: Maximum restarts per worker before giving up (default: 3)
+    #   restart_window: Time window in seconds for counting restarts (default: 60)
     class IpcForkPoolExecutor < AbstractForkExecutor
-      def initialize(stage_ctx, max_size:, pool_timeout: nil)
-        super
+      def initialize(stage_ctx, max_size:, pool_timeout: nil,
+                     restart_policy: :never, max_restarts: 3, restart_window: 60)
+        super(stage_ctx, max_size: max_size, pool_timeout: pool_timeout)
         @workers = []
         @my_pipes = [] # Track this executor's pipes for cleanup/unregister
+        @worker_monitor = WorkerMonitor.new(
+          restart_policy: restart_policy,
+          max_restarts: max_restarts,
+          restart_window: restart_window
+        )
       end
 
       def execute_stage(stage, user_context, input_queue, output_queue)
@@ -395,6 +413,7 @@ module Minigun
 
       def shutdown
         @mutex.synchronize do
+          @worker_monitor.request_shutdown
           send_shutdown_signals
           sleep 0.1 # Give workers a moment to finish processing
           cleanup_workers
@@ -427,8 +446,8 @@ module Minigun
       end
 
       def cleanup_worker(worker)
-        worker[:to_worker].close rescue nil # rubocop:disable Style/RescueModifier
-        worker[:from_worker].close rescue nil # rubocop:disable Style/RescueModifier
+        safe_close(worker[:to_worker])
+        safe_close(worker[:from_worker])
         Process.wait2(worker[:pid], Process::WNOHANG)
       rescue Errno::ECHILD
         # Already reaped
@@ -441,10 +460,10 @@ module Minigun
       end
 
       def spawn_workers(stage, user_context)
-        @max_size.times { spawn_single_worker(stage, user_context) }
+        @max_size.times { |i| spawn_single_worker(stage, user_context, worker_index: i) }
       end
 
-      def spawn_single_worker(stage, user_context)
+      def spawn_single_worker(stage, user_context, worker_index: nil)
         stage_stats = @stage_ctx.stage_stats
         pipeline = @stage_ctx.root_pipeline
 
@@ -475,11 +494,116 @@ module Minigun
         child_read.close
         child_write.close
 
-        @workers << { pid: pid, to_worker: parent_write, from_worker: parent_read }
+        worker_info = {
+          pid: pid,
+          to_worker: parent_write,
+          from_worker: parent_read,
+          index: worker_index,
+          stage: stage,
+          user_context: user_context
+        }
+        @workers << worker_info
+        worker_info
       end
 
       def close_all_pipes(*pipes)
-        pipes.each { |p| p.close rescue nil } # rubocop:disable Style/RescueModifier
+        pipes.each { |p| safe_close(p) }
+      end
+
+      # Safely close an IO object, ignoring errors
+      def safe_close(io)
+        io&.close
+      rescue IOError, Errno::EPIPE, Errno::EBADF
+        nil
+      end
+
+      # Respawn a dead worker, returning the new worker info
+      def respawn_worker(dead_worker, result_threads, output_queue)
+        worker_index = dead_worker[:index]
+
+        unless @worker_monitor.restart_allowed?(worker_index)
+          Minigun.logger.error "[Minigun] Worker #{worker_index} exceeded max restarts " \
+                               "(#{@worker_monitor.max_restarts} in #{@worker_monitor.restart_window}s), not restarting"
+          return nil
+        end
+
+        @worker_monitor.record_restart(worker_index)
+        Minigun.logger.info "[Minigun] Respawning worker #{worker_index} (policy: #{@worker_monitor.restart_policy})"
+
+        # Clean up old worker pipes
+        safe_close(dead_worker[:to_worker])
+        safe_close(dead_worker[:from_worker])
+
+        # Remove dead worker from list
+        @mutex.synchronize { @workers.delete(dead_worker) }
+
+        # Spawn replacement worker
+        new_worker = spawn_single_worker(
+          dead_worker[:stage],
+          dead_worker[:user_context],
+          worker_index: worker_index
+        )
+
+        return nil unless new_worker
+
+        # Start a new result collection thread for the new worker
+        new_thread = Thread.new(new_worker, output_queue) do |worker, out_q|
+          loop do
+            read_result_from_pipe(worker[:from_worker], out_q, @stage_ctx)
+          end
+        rescue EOFError, IOError
+          # Worker closed pipe, done
+        end
+
+        result_threads << new_thread
+        new_worker
+      end
+
+      # Monitor workers for crashes and respawn if needed
+      def start_worker_monitor_thread(result_threads, output_queue)
+        return nil unless @worker_monitor.enabled?
+
+        Thread.new do
+          loop do
+            break if @worker_monitor.shutdown_requested?
+
+            # Check for dead workers and respawn if needed
+            check_and_respawn_workers(result_threads, output_queue)
+
+            # Poll every 100ms - simple and reliable
+            # Process deaths are detected via Process.wait2(WNOHANG), not pipe state
+            sleep 0.1
+          end
+        end
+      end
+
+      def check_and_respawn_workers(result_threads, output_queue)
+        workers_to_respawn = []
+
+        @mutex.synchronize do
+          @workers.each do |worker|
+            # Non-blocking check if worker process has exited
+            status = Process.wait2(worker[:pid], Process::WNOHANG)
+            next unless status
+
+            _pid, process_status = status
+
+            if @worker_monitor.should_restart?(process_status)
+              Minigun.logger.warn "[Minigun] Worker #{worker[:index]} (pid #{worker[:pid]}) exited: " \
+                                  "#{@worker_monitor.format_exit_status(process_status)}"
+              workers_to_respawn << worker
+            else
+              Minigun.logger.debug "[Minigun] Worker #{worker[:index]} exited normally"
+            end
+          rescue Errno::ECHILD
+            # Process already reaped
+          end
+        end
+
+        # Respawn outside the iteration to avoid modifying @workers while iterating
+        workers_to_respawn.each do |worker|
+          respawn_worker(worker, result_threads, output_queue)
+        end
       end
 
       def worker_loop(stage, user_context, stage_stats, from_parent, to_parent, pipeline)
@@ -529,14 +653,17 @@ module Minigun
 
         # Start result collection threads for each worker
         result_threads = @workers.map do |worker|
-          Thread.new do
+          Thread.new(worker, output_queue) do |w, out_q|
             loop do
-              read_result_from_pipe(worker[:from_worker], output_queue, @stage_ctx)
+              read_result_from_pipe(w[:from_worker], out_q, @stage_ctx)
             end
           rescue EOFError, IOError
             # Worker closed pipe, done
           end
         end
+
+        # Start worker monitor thread for respawning crashed workers
+        monitor_thread = start_worker_monitor_thread(result_threads, output_queue)
 
         # Start threads to monitor nested stages' queues and forward to workers
         nested_queue_threads = start_nested_queue_monitors(nested_queues)
@@ -569,12 +696,30 @@ module Minigun
             rescue TypeError, ArgumentError => e
               # Item contains non-serializable objects - skip it
               Minigun.logger.warn "[Minigun] Cannot serialize item for IPC worker: #{e.message}. Item type: #{item.class}. Skipping."
-            rescue IOError, EOFError => e
-              Minigun.logger.warn "[Minigun] Lost connection to worker #{worker[:pid]}: #{e.message}"
-              raise
+            rescue IOError, EOFError, Errno::EPIPE => e
+              # Worker died - if restart policy is enabled, try to redistribute
+              # Give monitor thread a chance to respawn, then retry with next worker
+              if @worker_monitor.enabled?
+                Minigun.logger.debug "[Minigun] Worker #{worker[:pid]} unavailable, waiting for respawn..."
+                sleep 0.15 # Give monitor thread time to detect and respawn
+                # Retry with a different worker
+                retry_worker = @workers[(worker_index + 1) % @workers.size]
+                if retry_worker && retry_worker != worker
+                  begin
+                    Marshal.dump({ type: :item, item: item }, retry_worker[:to_worker])
+                    retry_worker[:to_worker].flush
+                  rescue IOError, EOFError, Errno::EPIPE
+                    Minigun.logger.warn '[Minigun] Failed to redistribute item after worker death'
+                  end
+                end
+              else
+                Minigun.logger.warn "[Minigun] Lost connection to worker #{worker[:pid]}: #{e.message}"
+              end
             end
           end
         ensure
+          # Stop worker monitor thread
+          monitor_thread&.kill
           # Stop nested queue monitor threads
           nested_queue_threads&.each(&:kill)
           # Wait for all result collection threads to finish
