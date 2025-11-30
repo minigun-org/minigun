@@ -28,20 +28,22 @@ plan based on the current codebase state and TODOS.md.
 - [ ] Cluster -- test with demand
 - [ ] Demand -- consolidate registry?
 - [ ] Demand and custom routing
-- [ ] Cleanup accumulator vs. batch
 - [ ] Hooks
-- [ ] Config
 - [ ] Genstage --> names required?
 - [ ] Ractors on Ruby 3.5
-- [ ] Minigun global configs
 - [ ] Auto-config: # forks should match # of cores
-- [ ] Remove processor alias? producer_consumer alias?
-- [ ] Custom Stage?
 - [ ] Example runner context
-- [ ] Fix JRuby/Mac/etc.
 - [ ] Consider what concurrent-ruby abstractions we can use.
 - [ ] Support MINIGUN_LOG_LEVEL var
-- [ ] Rubocop final pass
+- [ ] Naming things
+  - [ ] Config
+  - [ ] Minigun global configs
+  - [ ] Remove processor alias? producer_consumer alias?
+  - [ ] Cleanup accumulator vs. batch
+  - [ ] Custom Stage?
+- [ ] Final pass:
+  - [ ] Fix JRuby/Mac/etc.
+  - [ ] Rubocop
 
 ### 0.2 Error Handling & Reliability
 
@@ -57,6 +59,13 @@ plan based on the current codebase state and TODOS.md.
   - Child process culling (reference Puma's implementation)
   - Supervision tree for processes
   - Wait for last forked process to finish properly
+
+### True parallelism across process boundaries
+
+- [ ] routing to inner stages of pipelines
+- [ ] routing to inner stages of cow and ipc fork via an ingress delegator
+- [ ] Transmit stats across forks
+- [ ] Transmit logs across forks--look at Puma
 
 ### Phase 1.0: Cross-Boundary Routing
 
@@ -75,8 +84,6 @@ plan based on the current codebase state and TODOS.md.
     - [x] cow_fork doing IPC output - COW now uses IpcOutputQueue
     - [x] ipc 2 cow, cow to ipc, ipc to master - all working
     - [x] ipc/cow fan-out/fan-in - examples 80, 81, 82, 84 working
-    - [ ] routing to inner stages of pipelines
-    - [ ] routing to inner stages of cow and ipc fork via an ingress delegator
   - Additional scenarios
     - [ ] test reroute with IPC/COW complex scenarios, inner routing, etc. - all tests passing
     - [ ] producers inside IPC/COW forks
@@ -86,8 +93,6 @@ plan based on the current codebase state and TODOS.md.
   - [ ] cleanup pipeline, etc constructor args
   - [ ] wait_for_first_item implmentation look wonky
   - [ ] make StageContext and actual class
-  - [ ] Transmit stats across forks
-  - [ ] Transmit logs across forks--look at Puma
 
 ### Phase 1.01: HUD
 
