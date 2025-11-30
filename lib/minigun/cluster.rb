@@ -10,9 +10,6 @@ module Minigun
   # Distributed clustering support using DRb
   # Enables pipeline stages to be executed across multiple machines
   module Cluster
-    class Error < Minigun::Error; end
-    class ConnectionError < Error; end
-    class WorkerNotFoundError < Error; end
 
     # Coordinator manages work distribution across cluster nodes
     # Runs on the "head" node and accepts connections from workers
@@ -197,7 +194,10 @@ module Minigun
         Minigun.logger.info "[Cluster] Worker #{@worker_id} connected to #{@coordinator_uri}"
         true
       rescue DRb::DRbConnError => e
-        raise ConnectionError.new("Failed to connect to coordinator at #{@coordinator_uri}: #{e.message}")
+        raise ConnectionError.new(
+          uri: @coordinator_uri,
+          original_error: e
+        )
       end
 
       # Start processing work
@@ -233,7 +233,12 @@ module Minigun
       def process_item_sync(stage_name, item)
         stage_proc = @stage_registry[stage_name.to_sym] || @stage_registry[:default]
 
-        raise Error.new("No processor registered for stage :#{stage_name}") unless stage_proc
+        unless stage_proc
+          raise WorkerNotFoundError.new(
+            stage_name: stage_name,
+            available_stages: @stage_registry.keys
+          )
+        end
 
         results = []
         output_collector = ->(result) { results << result }
@@ -421,7 +426,9 @@ module Minigun
         end
 
         def start
-          raise Error.new("Gossip discovery requires the 'rswim' gem") unless @available
+          unless @available
+            raise Minigun::ConfigurationError.new("Gossip discovery requires the 'rswim' gem. Add `gem 'rswim'` to your Gemfile.")
+          end
 
           if @encryption_key
             RSwim.encrypted = true

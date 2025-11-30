@@ -1586,7 +1586,7 @@ RSpec.describe 'Examples Integration' do
       load File.expand_path('../../examples/67_stage_name_conflict.rb', __dir__)
 
       # Should not raise - the example catches the error internally
-      expect { ConflictingPipeline.new.run }.to raise_error(Minigun::StageNameConflict)
+      expect { ConflictingPipeline.new.run }.to raise_error(Minigun::StageNameConflictError)
 
       # Test that scoped names work
       example = ScopedNamesExample.new

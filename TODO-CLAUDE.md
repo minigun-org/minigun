@@ -10,6 +10,29 @@ plan based on the current codebase state and TODOS.md.
 
 ### 0.1: Preview Readiness
 
+- [ ] **Comprehensive Error Handling**
+  - [ ] Standardize error classes
+  - [ ] Define error handling strategy for each executor type
+  - [ ] Implement retry mechanisms with backoff
+  - [ ] Add circuit breaker patterns for failing stages
+  - [ ] Resumability -- see lore
+  - [ ] Handle errors in hooks properly
+- [X] **Batch Operators**
+  - [X] `batch` - create batches from stream
+  - [X] `debatch` - flatten batches back to stream
+  - [X] `rebatch` - change batch size
+- [X] Routing strategies (inspired by GenStage)
+  - [X] DemandRouter (default): Dispatches events to the consumer with the highest outstanding demand, ensuring the busiest consumer gets priority.
+  - [X] PartitionRouter: Distributes events to a fixed number of consumers based on a hash function, useful for maintaining order or state per partition.
+- [X] **Fiber Support**
+  - [X] Add Fiber-based executor
+  - [X] Implement fiber pool
+  - [X] Add `fibers(n)` DSL method
+  - [X] Test fiber interop with other executors
+- [X] **Ractor Support** (Ruby 3.0+)
+  - [X] Complete ractor executor implementation
+  - [X] Add examples for ractor usage
+  - [X] Test ractor limitations and workarounds
 - [X] Docs - mine the tmp/cursor-docs-cleanup folder for more ideas.
 - [X] Docs - explain what a DAG is in fundamentals. then add DAG based explanations elsewhere
 - [ ] Docs - Cleanup examples
@@ -50,14 +73,22 @@ plan based on the current codebase state and TODOS.md.
 - [ ] **Flush Timers**
   - [ ] Time-based batch flushing
   - [ ] Consolidate accumulator and batch logic
+- [ ] **Graceful shutdown**
+  - [ ] signal trapping, child state management/killing
+  - [ ] Kill child threads/forks/ractors
+  - [ ] Ctrl+C once to start graceful shutdown (send end signals from all producers)
+  - [ ] Press Ctrl+C again to force quit.
+- [ ] QoL Improvements
+  - [ ] to_mermaid -- including at end of task, to show dynamic routing with dotted lines
+  - [ ] child culling (look at puma)
+  - [ ] supervision tree of processes
+  - [ ] Interactive examples in web docs
+  - [ ] ASCII art drawing of tree
+  - [ ] IPC batches?
+  - [ ] Acks on queued items, guaranteed delivery?
+- [ ] **Hooks** (fork, stage, nesting)
 
-### 0.2 Error Handling & Reliability
-
-- [ ] **Comprehensive Error Handling**
-  - Define error handling strategy for each executor type
-  - Implement retry mechanisms with backoff
-  - Add circuit breaker patterns for failing stages
-  - Handle errors in hooks properly
+### Phase 2: Process Management
 
 - [ ] **Process Management**
   - [ ] at_least_once with COW
@@ -74,16 +105,11 @@ plan based on the current codebase state and TODOS.md.
   - [ ] Cluster --> multiple in_ipc_forks stages, workers joining specific stages, leader and follower roles, RAFT algo so that cluster 
   - [X] ~~Supervision tree for processes~~ Monitoring of IPC fork workers
   - [ ] Wait for last forked process to finish properly
-
-### True parallelism across process boundaries
-
-- [ ] routing to inner stages of pipelines
-- [ ] routing to inner stages of cow and ipc fork via an ingress delegator
-- [ ] Transmit stats across forks
-- [ ] Transmit logs across forks--look at Puma
-
-### Phase 1.0: Cross-Boundary Routing
-
+- [ ] True parallelism across process boundaries
+  - [ ] routing to inner stages of pipelines
+  - [ ] routing to inner stages of cow and ipc fork via an ingress delegator
+  - [ ] Transmit stats across forks
+  - [ ] Transmit logs across forks--look at Puma
 - [x] **Cross-Boundary Routing** ✓ (Completed 2025-01-04)
   - [x] Remove "skip" from hanging example tests
   - [x] IPC fork getting input via `to` from various sources (IPC, COW, threads, master)
@@ -108,50 +134,16 @@ plan based on the current codebase state and TODOS.md.
   - [ ] cleanup pipeline, etc constructor args
   - [ ] wait_for_first_item implmentation look wonky
   - [ ] make StageContext and actual class
-
-### Phase 2: Features & Functionality (Medium Priority)
-
-#### 2.1 New Stage Types & Operators
-**Priority: MEDIUM**
-
-- [X] **Batch Operators**
-  - [X] `batch` - create batches from stream
-  - [X] `debatch` - flatten batches back to stream
-  - [X] `rebatch` - change batch size
-
-- [X] Routing strategies (inspired by GenStage)
-  - [X] DemandRouter (default): Dispatches events to the consumer with the highest outstanding demand, ensuring the busiest consumer gets priority.
-  - [X] PartitionRouter: Distributes events to a fixed number of consumers based on a hash function, useful for maintaining order or state per partition.
-
-### Phase 1.1: QoL Improvements
-
-- [ ] **Graceful shutdown**
-  - [ ] signal trapping, child state management/killing
-  - [ ] Kill child threads/forks/ractors
-  - [ ] Ctrl+C once to start graceful shutdown (send end signals from all producers)
-  - [ ] Press Ctrl+C again to force quit.
-
-- [ ] to_mermaid
-- [ ] child culling (look at puma)
-- [ ] supervision tree of processes
-- [ ] htop-like monitoring dashboard (CLI)
-- [ ] Interactive examples in web docs
-- [ ] ASCII art drawing of tree
-- [ ] IPC batches?
-- [ ] Acks on queued items, guaranteed delivery?
-
-- [ ] **Hooks** (fork, stage, nesting)
-
-- [ ] Add process supervision tree?
-
 - [ ] **IPC Reliability**
-  - Address potential reliability issues with IPC
-  - Add timeout handling
-  - Handle pipe failures gracefully
-  - Stats reporting back to parent process via IPC
+  - [ ] Add process supervision tree?
+  - [ ] Address potential reliability issues with IPC
+  - [ ] Add timeout handling
+  - [ ] Handle pipe failures gracefully
+  - [ ] Stats reporting back to parent process via IPC
 
-### Phase 1.01: HUD
+### Phase 3: HUD
 
+- [ ] htop-like monitoring dashboard (CLI)
 - [X] Initial HUD work:
   - [X] make a HUD inspired by htop to run as part of CLI
   - [X] two columns:
@@ -160,14 +152,11 @@ plan based on the current codebase state and TODOS.md.
   - [X] use keys to navigate the hud.
   - [X] use ascii colors
   - [X] Before doing anything, plan it all out.
-
 - [X] Running hud
   - [X] task.hud to run in IRB/Rails console
   - [ ] Test task.hud to run in rake
-
 - [ ] Add hud to all examples when running
   - [ ] Add idiomatic representation for each example
-
 - [ ] HUD UI improvement
   - [X] Introduce Hud::DiagramStage
   - [X] Re-add throughput and bottleneck icons to stages
@@ -190,29 +179,13 @@ plan based on the current codebase state and TODOS.md.
   - [ ] HUD IPC support
     - [ ] Process tree, forked routing
     - [ ] process wrappers
-
 - [ ] HUD QoL
   - [ ] % completion metrics
   - [ ] CPU / MEM / disk / processes / queues
   - [ ] tab menu?
   - [ ] Error/log stream at bottom
-
 - [ ] HUD in examples
   - [ ] Enable running hud in all examples with example wrapper
-
-#### 2.2 Execution Strategies
-**Priority: MEDIUM**
-
-- [X] **Fiber Support**
-  - [X] Add Fiber-based executor
-  - [X] Implement fiber pool
-  - [X] Add `fibers(n)` DSL method
-  - [X] Test fiber interop with other executors
-
-- [X] **Ractor Support** (Ruby 3.0+)
-  - [X] Complete ractor executor implementation
-  - [X] Add examples for ractor usage
-  - [X] Test ractor limitations and workarounds
 
 #### 2.3 Routing & Connectivity
 **Priority: MEDIUM**

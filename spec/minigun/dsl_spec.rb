@@ -526,7 +526,7 @@ RSpec.describe Minigun::DSL do
         end
       end
 
-      expect { test_class.new.run }.to raise_error(ArgumentError, /produce_each requires/)
+      expect { test_class.new.run }.to raise_error(Minigun::InvalidOptionError, /produce_each requires/)
     end
   end
 
