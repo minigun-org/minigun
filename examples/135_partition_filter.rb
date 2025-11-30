@@ -12,13 +12,14 @@ puts '=' * 40
 puts 'Custom hash returning :none discards the item.'
 puts
 
+# Demonstrates partition with filter (hash returns :none)
 class FilterPartitionDemo
   include Minigun::DSL
 
   pipeline do
     # Filter: only keep positive numbers, discard zero and negatives
     producer :source, to: %i[positive_a positive_b],
-             routing: :partition, hash: ->(item) { item > 0 ? item % 2 : :none } do |output|
+                      routing: :partition, hash: ->(item) { item > 0 ? item % 2 : :none } do |output|
       [-2, -1, 0, 1, 2, 3, 4, 5].each { |i| output << i }
     end
 

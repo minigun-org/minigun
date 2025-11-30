@@ -14,6 +14,7 @@ puts '=' * 40
 puts 'Routes to consumer with most available queue capacity.'
 puts
 
+# Demonstrates demand-based routing
 class DemandDemo
   include Minigun::DSL
 

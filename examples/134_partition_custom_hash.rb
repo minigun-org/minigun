@@ -12,25 +12,26 @@ puts '=' * 40
 puts 'Uses custom hash function for explicit routing control.'
 puts
 
+# Demonstrates partition with custom hash function
 class CustomPartitionDemo
   include Minigun::DSL
 
   pipeline do
     # Custom hash: route based on item value mod 3
-    producer :source, to: %i[bucket_0 bucket_1 bucket_2],
-             routing: :partition, hash: ->(item) { item % 3 } do |output|
+    producer :source, to: %i[bucket0 bucket1 bucket2],
+                      routing: :partition, hash: ->(item) { item % 3 } do |output|
       9.times { |i| output << i }
     end
 
-    consumer :bucket_0 do |item|
+    consumer :bucket0 do |item|
       puts "  [Bucket 0] #{item}"
     end
 
-    consumer :bucket_1 do |item|
+    consumer :bucket1 do |item|
       puts "  [Bucket 1] #{item}"
     end
 
-    consumer :bucket_2 do |item|
+    consumer :bucket2 do |item|
       puts "  [Bucket 2] #{item}"
     end
   end

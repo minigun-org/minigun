@@ -600,7 +600,7 @@ module Minigun
 
     # Override in subclasses to implement routing logic
     def route_item(_worker_ctx, _item)
-      raise NotImplementedError, "#{self.class} must implement #route_item"
+      raise NotImplementedError.new("#{self.class} must implement #route_item")
     end
 
     def handle_routed_item(worker_ctx, routed_item)
@@ -670,10 +670,10 @@ module Minigun
       @demand_registry = @pipeline.demand_enabled? ? @pipeline.demand_registry : nil
 
       # Shuffle on first dispatch to avoid overloading first consumer
-      if @shuffle_on_first && @first_dispatch
-        @target_info.shuffle!
-        @first_dispatch = false
-      end
+      return unless @shuffle_on_first && @first_dispatch
+
+      @target_info.shuffle!
+      @first_dispatch = false
     end
 
     def route_item(_worker_ctx, item)
@@ -744,10 +744,10 @@ module Minigun
         ->(item) { partition_key.call(item).hash.abs }
       elsif partition_key.is_a?(Symbol)
         # Extract key from hash/object, then hash
-        ->(item) {
+        lambda do |item|
           key = item.is_a?(Hash) ? item[partition_key] : item.send(partition_key)
           key.hash.abs
-        }
+        end
       else
         # Default: hash the entire item
         ->(item) { item.hash.abs }

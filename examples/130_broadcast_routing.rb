@@ -12,6 +12,7 @@ puts '=' * 40
 puts 'Each item is sent to ALL consumers.'
 puts
 
+# Demonstrates broadcast routing
 class BroadcastDemo
   include Minigun::DSL
 

@@ -12,12 +12,13 @@ puts '=' * 40
 puts 'Routes items with same partition key to same consumer.'
 puts
 
+# Demonstrates partition-based routing
 class PartitionDemo
   include Minigun::DSL
 
   pipeline do
     producer :source, to: %i[region_handler_a region_handler_b],
-             routing: :partition, partition_key: :region do |output|
+                      routing: :partition, partition_key: :region do |output|
       # Simulated orders from different regions
       orders = [
         { id: 1, region: 'west', product: 'laptop' },

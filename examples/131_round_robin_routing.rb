@@ -12,6 +12,7 @@ puts '=' * 40
 puts 'Items are distributed evenly across consumers in order.'
 puts
 
+# Demonstrates round-robin routing
 class RoundRobinDemo
   include Minigun::DSL
 

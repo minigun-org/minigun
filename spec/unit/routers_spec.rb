@@ -208,7 +208,7 @@ RSpec.describe 'Router Stages' do
 
           pipeline do
             producer :source, to: %i[a b], routing: :partition,
-                     partition_key: ->(item) { item[:category] } do |output|
+                              partition_key: ->(item) { item[:category] } do |output|
               output << { category: 'electronics', name: 'phone' }
               output << { category: 'clothing', name: 'shirt' }
               output << { category: 'electronics', name: 'laptop' }
@@ -259,7 +259,7 @@ RSpec.describe 'Router Stages' do
           pipeline do
             # Custom hash function that routes based on item value mod 3
             producer :source, to: %i[a b c], routing: :partition,
-                     hash: ->(item) { item % 3 } do |output|
+                              hash: ->(item) { item % 3 } do |output|
               6.times { |i| output << i }
             end
 
@@ -301,7 +301,7 @@ RSpec.describe 'Router Stages' do
           pipeline do
             # Filter out negative numbers - needs multiple targets for router to be created
             producer :source, to: %i[a b], routing: :partition,
-                     hash: ->(item) { item >= 0 ? item % 2 : :none } do |output|
+                              hash: ->(item) { item >= 0 ? item % 2 : :none } do |output|
               [-2, -1, 0, 1, 2].each { |i| output << i }
             end
 
@@ -506,7 +506,6 @@ RSpec.describe 'Router Stages' do
       expect(all_results.size).to eq(3)
 
       # Items with same id should be in same consumer
-      id1_items = all_results.select { |r| r[:id] == 1 }
       id1_in_a = instance.results[:a].count { |r| r[:id] == 1 }
       id1_in_b = instance.results[:b].count { |r| r[:id] == 1 }
       expect(id1_in_a == 2 || id1_in_b == 2).to be true

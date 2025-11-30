@@ -101,18 +101,18 @@ plan based on the current codebase state and TODOS.md.
 #### 2.1 New Stage Types & Operators
 **Priority: MEDIUM**
 
-- [ ] **Batch Operators**
-  - `batch` - create batches from stream
-  - `debatch` - flatten batches back to stream
-  - `rebatch` - change batch size
+- [X] **Batch Operators**
+  - [X] `batch` - create batches from stream
+  - [X] `debatch` - flatten batches back to stream
+  - [X] `rebatch` - change batch size
 
 - [ ] **Flush Timers**
   - Time-based batch flushing
   - Consolidate accumulator and batch logic
 
-- [ ] Routing strategies (inspired by GenStage)
-  - DemandRouter (default): Dispatches events to the consumer with the highest outstanding demand, ensuring the busiest consumer gets priority.
-  - PartitionRouter: Distributes events to a fixed number of consumers based on a hash function, useful for maintaining order or state per partition.
+- [X] Routing strategies (inspired by GenStage)
+  - [X] DemandRouter (default): Dispatches events to the consumer with the highest outstanding demand, ensuring the busiest consumer gets priority.
+  - [X] PartitionRouter: Distributes events to a fixed number of consumers based on a hash function, useful for maintaining order or state per partition.
 
 ### Phase 1.1: QoL Improvements
 
