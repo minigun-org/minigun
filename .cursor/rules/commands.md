@@ -23,6 +23,12 @@
   - If you are 95%+ confident the refactor/cleanups will be an obvious "slam-dunk" improvement, go ahead and do it automatically. Otherwise write Lore and ask me.
   - (Before Harden -> If there are uncommitted git changes, ask if I would like to commit)
   - (After Harden -> re-run tests)
+- "Harden Tests" means to:
+  - Do the Assess command: Review the recent changes in the thread holistically, and focus on test coverage.
+  - Consider edge-cases, blind-spots, unit vs. integration tests.
+  - Add missing test coverage
+  - (BUT do NOT go overboard here.)
+  - After adding tests -> re-run tests: Ruby -> `bundle exec rspec`
 - "Lint" means:
   - Ruby -> `rubocop -A` (autocorrect) then check any non-autocorrected warnings. Anything that isn't easily fixed, leave as-is then run `rubocop --auto-gen-config --exclude-limit 1000`
   - Fix all issues and all warnings in the output (do not suppress them). Focus on getting all linter and warnings fixed.
