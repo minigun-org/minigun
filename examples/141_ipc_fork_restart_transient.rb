@@ -9,6 +9,7 @@
 
 require_relative '../lib/minigun'
 
+# Pipeline demonstrating :transient restart policy (workers restarted on abnormal exits only)
 class TransientRestartPipeline
   include Minigun::DSL
 

@@ -8,6 +8,7 @@
 
 require_relative '../lib/minigun'
 
+# Pipeline demonstrating restart rate limiting with max_restarts and restart_window
 class RateLimitedRestartPipeline
   include Minigun::DSL
 

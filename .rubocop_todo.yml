@@ -117,13 +117,3 @@ RSpec/VerifiedDoubles:
   Exclude:
     - 'spec/hud/flow_diagram_rendering_spec.rb'
     - 'spec/unit/execution/ipc_fork_restart_spec.rb'
-
-# Offense count: 4
-# Configuration parameters: AllowedConstants.
-Style/Documentation:
-  Exclude:
-    - 'spec/**/*'
-    - 'examples/140_ipc_fork_restart_never.rb'
-    - 'examples/141_ipc_fork_restart_transient.rb'
-    - 'examples/142_ipc_fork_restart_permanent.rb'
-    - 'examples/143_ipc_fork_restart_rate_limit.rb'

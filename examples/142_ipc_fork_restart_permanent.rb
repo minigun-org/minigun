@@ -12,6 +12,7 @@
 
 require_relative '../lib/minigun'
 
+# Pipeline demonstrating :permanent restart policy (workers always restarted)
 class PermanentRestartPipeline
   include Minigun::DSL
 

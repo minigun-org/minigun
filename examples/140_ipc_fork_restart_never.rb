@@ -8,6 +8,7 @@
 
 require_relative '../lib/minigun'
 
+# Pipeline demonstrating :never restart policy (workers not restarted on crash)
 class NeverRestartPipeline
   include Minigun::DSL
 
