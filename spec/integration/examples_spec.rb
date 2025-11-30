@@ -2018,6 +2018,83 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
+  describe '130_broadcast_routing.rb' do
+    it 'demonstrates broadcast routing (default)' do
+      expect do
+        load File.expand_path('../../examples/130_broadcast_routing.rb', __dir__)
+      end.not_to raise_error
+
+      expect(captured_output).to include('Broadcast Routing Demo')
+      expect(captured_output).to include('[A] Received: item_0')
+      expect(captured_output).to include('[B] Received: item_0')
+    end
+  end
+
+  describe '131_round_robin_routing.rb' do
+    it 'demonstrates round-robin routing' do
+      expect do
+        load File.expand_path('../../examples/131_round_robin_routing.rb', __dir__)
+      end.not_to raise_error
+
+      expect(captured_output).to include('Round-Robin Routing Demo')
+      expect(captured_output).to include('[A] Received:')
+      expect(captured_output).to include('[B] Received:')
+    end
+  end
+
+  describe '132_demand_routing.rb' do
+    it 'demonstrates demand-based routing' do
+      expect do
+        load File.expand_path('../../examples/132_demand_routing.rb', __dir__)
+      end.not_to raise_error
+
+      expect(captured_output).to include('Demand-Based Routing Demo')
+      expect(captured_output).to include('[FAST] Received:')
+      expect(captured_output).to include('[SLOW] Received:')
+    end
+  end
+
+  describe '133_partition_routing.rb' do
+    it 'demonstrates partition-based routing' do
+      expect do
+        load File.expand_path('../../examples/133_partition_routing.rb', __dir__)
+      end.not_to raise_error
+
+      expect(captured_output).to include('Partition-Based Routing Demo')
+      expect(captured_output).to include('Order #')
+      # At least one handler should receive items (distribution depends on hash)
+      expect(captured_output).to match(/\[Handler [AB]\]/)
+    end
+  end
+
+  describe '134_partition_custom_hash.rb' do
+    it 'demonstrates partition with custom hash function' do
+      expect do
+        load File.expand_path('../../examples/134_partition_custom_hash.rb', __dir__)
+      end.not_to raise_error
+
+      expect(captured_output).to include('Partition with Custom Hash Demo')
+      expect(captured_output).to include('[Bucket 0]')
+      expect(captured_output).to include('[Bucket 1]')
+      expect(captured_output).to include('[Bucket 2]')
+    end
+  end
+
+  describe '135_partition_filter.rb' do
+    it 'demonstrates partition with filter (hash returns :none)' do
+      expect do
+        load File.expand_path('../../examples/135_partition_filter.rb', __dir__)
+      end.not_to raise_error
+
+      expect(captured_output).to include('Partition with Filter Demo')
+      expect(captured_output).to include('[Positive A]')
+      expect(captured_output).to include('[Positive B]')
+      # Verify filtering works - negative numbers and zero should not appear
+      expect(captured_output).not_to include('[-2]')
+      expect(captured_output).not_to include('[-1]')
+    end
+  end
+
   describe '92_reroute_ipc_basic.rb' do
     it 'demonstrates rerouting with IPC fork executors', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/92_reroute_ipc_basic.rb', __dir__)

@@ -27,21 +27,24 @@ plan based on the current codebase state and TODOS.md.
 - [X] Cluster -- Jepsen tests, handle network partitions, etc. "At least once" vs "At most once", guaranteed delivery
 - [ ] Cluster -- test with demand
 - [ ] Demand -- consolidate registry?
+- [ ] demand: true/false at the pipeline level (carry to nesting)
 - [ ] Demand and custom routing
-- [ ] Cleanup accumulator vs. batch
 - [ ] Hooks
-- [ ] Config
 - [ ] Genstage --> names required?
 - [ ] Ractors on Ruby 3.5
-- [ ] Minigun global configs
 - [ ] Auto-config: # forks should match # of cores
-- [ ] Remove processor alias? producer_consumer alias?
-- [ ] Custom Stage?
 - [ ] Example runner context
-- [ ] Fix JRuby/Mac/etc.
 - [ ] Consider what concurrent-ruby abstractions we can use.
 - [ ] Support MINIGUN_LOG_LEVEL var
-- [ ] Rubocop final pass
+- [ ] Naming things
+  - [ ] Config
+  - [ ] Minigun global configs
+  - [ ] Remove processor alias? producer_consumer alias?
+  - [ ] Cleanup accumulator vs. batch
+  - [ ] Custom Stage?
+- [ ] Final pass:
+  - [ ] Fix JRuby/Mac/etc.
+  - [ ] Rubocop
 
 ### 0.2 Error Handling & Reliability
 
@@ -57,6 +60,14 @@ plan based on the current codebase state and TODOS.md.
   - Child process culling (reference Puma's implementation)
   - Supervision tree for processes
   - Wait for last forked process to finish properly
+
+### True parallelism across process boundaries
+
+- [ ] Demand with Clustering
+- [ ] routing to inner stages of pipelines
+- [ ] routing to inner stages of cow and ipc fork via an ingress delegator
+- [ ] Transmit stats across forks
+- [ ] Transmit logs across forks--look at Puma
 
 ### Phase 1.0: Cross-Boundary Routing
 
@@ -75,8 +86,6 @@ plan based on the current codebase state and TODOS.md.
     - [x] cow_fork doing IPC output - COW now uses IpcOutputQueue
     - [x] ipc 2 cow, cow to ipc, ipc to master - all working
     - [x] ipc/cow fan-out/fan-in - examples 80, 81, 82, 84 working
-    - [ ] routing to inner stages of pipelines
-    - [ ] routing to inner stages of cow and ipc fork via an ingress delegator
   - Additional scenarios
     - [ ] test reroute with IPC/COW complex scenarios, inner routing, etc. - all tests passing
     - [ ] producers inside IPC/COW forks
@@ -86,8 +95,51 @@ plan based on the current codebase state and TODOS.md.
   - [ ] cleanup pipeline, etc constructor args
   - [ ] wait_for_first_item implmentation look wonky
   - [ ] make StageContext and actual class
-  - [ ] Transmit stats across forks
-  - [ ] Transmit logs across forks--look at Puma
+
+### Phase 2: Features & Functionality (Medium Priority)
+
+#### 2.1 New Stage Types & Operators
+**Priority: MEDIUM**
+
+- [X] **Batch Operators**
+  - [X] `batch` - create batches from stream
+  - [X] `debatch` - flatten batches back to stream
+  - [X] `rebatch` - change batch size
+
+- [ ] **Flush Timers**
+  - Time-based batch flushing
+  - Consolidate accumulator and batch logic
+
+- [X] Routing strategies (inspired by GenStage)
+  - [X] DemandRouter (default): Dispatches events to the consumer with the highest outstanding demand, ensuring the busiest consumer gets priority.
+  - [X] PartitionRouter: Distributes events to a fixed number of consumers based on a hash function, useful for maintaining order or state per partition.
+
+### Phase 1.1: QoL Improvements
+
+- [ ] **Graceful shutdown**
+  - [ ] signal trapping, child state management/killing
+  - [ ] Kill child threads/forks/ractors
+  - [ ] Ctrl+C once to start graceful shutdown (send end signals from all producers)
+  - [ ] Press Ctrl+C again to force quit.
+
+- [ ] to_mermaid
+- [ ] child culling (look at puma)
+- [ ] supervision tree of processes
+- [ ] htop-like monitoring dashboard (CLI)
+- [ ] Interactive examples in web docs
+- [ ] ASCII art drawing of tree
+- [ ] IPC batches?
+- [ ] Acks on queued items, guaranteed delivery?
+
+- [ ] **Hooks** (fork, stage, nesting)
+
+- [ ] Add process supervision tree?
+
+- [ ] **IPC Reliability**
+  - Address potential reliability issues with IPC
+  - Add timeout handling
+  - Handle pipe failures gracefully
+  - Stats reporting back to parent process via IPC
 
 ### Phase 1.01: HUD
 
@@ -138,52 +190,6 @@ plan based on the current codebase state and TODOS.md.
 
 - [ ] HUD in examples
   - [ ] Enable running hud in all examples with example wrapper
-
-### Phase 1.1: QoL Improvements
-
-- [ ] **Graceful shutdown**
-  - [ ] signal trapping, child state management/killing
-  - [ ] Kill child threads/forks/ractors
-  - [ ] Ctrl+C once to start graceful shutdown (send end signals from all producers)
-  - [ ] Press Ctrl+C again to force quit.
-
-- [ ] to_mermaid
-- [ ] child culling (look at puma)
-- [ ] supervision tree of processes
-- [ ] htop-like monitoring dashboard (CLI)
-- [ ] Interactive examples in web docs
-- [ ] ASCII art drawing of tree
-- [ ] IPC batches?
-- [ ] Acks on queued items, guaranteed delivery?
-
-- [ ] **Hooks** (fork, stage, nesting)
-
-- [ ] Add process supervision tree?
-
-- [ ] **IPC Reliability**
-  - Address potential reliability issues with IPC
-  - Add timeout handling
-  - Handle pipe failures gracefully
-  - Stats reporting back to parent process via IPC
-
-### Phase 2: Features & Functionality (Medium Priority)
-
-#### 2.1 New Stage Types & Operators
-**Priority: MEDIUM**
-
-- [ ] **Batch Operators**
-  - `batch` - create batches from stream
-  - `debatch` - flatten batches back to stream
-  - `rebatch` - change batch size
-
-- [ ] **Flush Timers**
-  - Time-based batch flushing
-  - Consolidate accumulator and batch logic
-
-- [ ] Routing strategies (inspired by GenStage)
-  - DemandDispatcher (default): Dispatches events to the consumer with the highest outstanding demand, ensuring the busiest consumer gets priority.
-  - BroadcastDispatcher: Sends all events to all consumers.
-  - PartitionDispatcher: Distributes events to a fixed number of consumers based on a hash function, useful for maintaining order or state per partition.
 
 #### 2.2 Execution Strategies
 **Priority: MEDIUM**
