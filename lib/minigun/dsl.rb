@@ -283,8 +283,37 @@ module Minigun
         _with_execution_context(context, &)
       end
 
-      def in_ipc_forks(pool_size, &)
-        context = { type: :ipc_fork, pool_size: pool_size }
+      # IPC Fork execution - persistent worker processes with IPC pipes
+      #
+      # @param pool_size [Integer] Number of worker processes to spawn
+      # @param restart_policy [Symbol] Worker restart policy on failure (default: :never)
+      #   - :never: Don't restart failed workers (default)
+      #   - :transient: Restart workers that exit abnormally (non-zero exit or signal)
+      #   - :permanent: Always restart workers that exit for any reason
+      # @param max_restarts [Integer] Maximum restarts per worker before giving up (default: 3)
+      # @param restart_window [Integer] Time window in seconds for counting restarts (default: 60)
+      #
+      # @example Basic usage
+      #   in_ipc_forks(4) do
+      #     processor :compute do |item, output|
+      #       output << expensive_calculation(item)
+      #     end
+      #   end
+      #
+      # @example With worker restart on failures
+      #   in_ipc_forks(4, restart_policy: :transient) do
+      #     processor :compute do |item, output|
+      #       output << risky_operation(item)
+      #     end
+      #   end
+      def in_ipc_forks(pool_size, restart_policy: :never, max_restarts: 3, restart_window: 60, &)
+        context = {
+          type: :ipc_fork,
+          pool_size: pool_size,
+          restart_policy: restart_policy,
+          max_restarts: max_restarts,
+          restart_window: restart_window
+        }
         _with_execution_context(context, &)
       end
 

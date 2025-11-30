@@ -30,11 +30,11 @@ plan based on the current codebase state and TODOS.md.
 - [ ] demand: true/false at the pipeline level (carry to nesting)
 - [ ] Demand and custom routing
 - [ ] Hooks
-- [ ] Genstage --> names required?
-- [ ] Ractors on Ruby 3.5
+- [X] Genstage --> names required?
+- [X] Ractors on Ruby 3.5
 - [ ] Auto-config: # forks should match # of cores
 - [ ] Example runner context
-- [ ] Consider what concurrent-ruby abstractions we can use.
+- [X] Consider what concurrent-ruby abstractions we can use.
 - [ ] Support MINIGUN_LOG_LEVEL var
 - [ ] Naming things
   - [ ] Config
@@ -42,9 +42,13 @@ plan based on the current codebase state and TODOS.md.
   - [ ] Remove processor alias? producer_consumer alias?
   - [ ] Cleanup accumulator vs. batch
   - [ ] Custom Stage?
+  - [ ] Alias in_ipc_forks to in_processes
 - [ ] Final pass:
   - [ ] Fix JRuby/Mac/etc.
   - [ ] Rubocop
+- [ ] **Flush Timers**
+  - [ ] Time-based batch flushing
+  - [ ] Consolidate accumulator and batch logic
 
 ### 0.2 Error Handling & Reliability
 
@@ -55,11 +59,12 @@ plan based on the current codebase state and TODOS.md.
   - Handle errors in hooks properly
 
 - [ ] **Process Management**
-  - Signal trapping for graceful shutdown
-  - Child process state management
-  - Child process culling (reference Puma's implementation)
-  - Supervision tree for processes
-  - Wait for last forked process to finish properly
+  - [ ] Signal trapping for graceful shutdown
+  - [ ] Child process state management
+  - [ ] Child process culling (reference Puma's implementation)
+  - [ ] Cluster --> multiple in_ipc_forks stages, workers joining specific stages, leader and follower roles, RAFT algo so that cluster 
+  - [X] ~~Supervision tree for processes~~ Monitoring of IPC fork workers
+  - [ ] Wait for last forked process to finish properly
 
 ### True parallelism across process boundaries
 
@@ -105,10 +110,6 @@ plan based on the current codebase state and TODOS.md.
   - [X] `batch` - create batches from stream
   - [X] `debatch` - flatten batches back to stream
   - [X] `rebatch` - change batch size
-
-- [ ] **Flush Timers**
-  - [ ] Time-based batch flushing
-  - [ ] Consolidate accumulator and batch logic
 
 - [X] Routing strategies (inspired by GenStage)
   - [X] DemandRouter (default): Dispatches events to the consumer with the highest outstanding demand, ensuring the busiest consumer gets priority.
