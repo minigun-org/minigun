@@ -27,6 +27,7 @@ plan based on the current codebase state and TODOS.md.
 - [X] Cluster -- Jepsen tests, handle network partitions, etc. "At least once" vs "At most once", guaranteed delivery
 - [ ] Cluster -- test with demand
 - [ ] Demand -- consolidate registry?
+- [ ] demand: true/false at the pipeline level (carry to nesting)
 - [ ] Demand and custom routing
 - [ ] Hooks
 - [ ] Genstage --> names required?
@@ -62,6 +63,7 @@ plan based on the current codebase state and TODOS.md.
 
 ### True parallelism across process boundaries
 
+- [ ] Demand with Clustering
 - [ ] routing to inner stages of pipelines
 - [ ] routing to inner stages of cow and ipc fork via an ingress delegator
 - [ ] Transmit stats across forks
@@ -93,6 +95,51 @@ plan based on the current codebase state and TODOS.md.
   - [ ] cleanup pipeline, etc constructor args
   - [ ] wait_for_first_item implmentation look wonky
   - [ ] make StageContext and actual class
+
+### Phase 2: Features & Functionality (Medium Priority)
+
+#### 2.1 New Stage Types & Operators
+**Priority: MEDIUM**
+
+- [ ] **Batch Operators**
+  - `batch` - create batches from stream
+  - `debatch` - flatten batches back to stream
+  - `rebatch` - change batch size
+
+- [ ] **Flush Timers**
+  - Time-based batch flushing
+  - Consolidate accumulator and batch logic
+
+- [ ] Routing strategies (inspired by GenStage)
+  - DemandRouter (default): Dispatches events to the consumer with the highest outstanding demand, ensuring the busiest consumer gets priority.
+  - PartitionRouter: Distributes events to a fixed number of consumers based on a hash function, useful for maintaining order or state per partition.
+
+### Phase 1.1: QoL Improvements
+
+- [ ] **Graceful shutdown**
+  - [ ] signal trapping, child state management/killing
+  - [ ] Kill child threads/forks/ractors
+  - [ ] Ctrl+C once to start graceful shutdown (send end signals from all producers)
+  - [ ] Press Ctrl+C again to force quit.
+
+- [ ] to_mermaid
+- [ ] child culling (look at puma)
+- [ ] supervision tree of processes
+- [ ] htop-like monitoring dashboard (CLI)
+- [ ] Interactive examples in web docs
+- [ ] ASCII art drawing of tree
+- [ ] IPC batches?
+- [ ] Acks on queued items, guaranteed delivery?
+
+- [ ] **Hooks** (fork, stage, nesting)
+
+- [ ] Add process supervision tree?
+
+- [ ] **IPC Reliability**
+  - Address potential reliability issues with IPC
+  - Add timeout handling
+  - Handle pipe failures gracefully
+  - Stats reporting back to parent process via IPC
 
 ### Phase 1.01: HUD
 
@@ -143,52 +190,6 @@ plan based on the current codebase state and TODOS.md.
 
 - [ ] HUD in examples
   - [ ] Enable running hud in all examples with example wrapper
-
-### Phase 1.1: QoL Improvements
-
-- [ ] **Graceful shutdown**
-  - [ ] signal trapping, child state management/killing
-  - [ ] Kill child threads/forks/ractors
-  - [ ] Ctrl+C once to start graceful shutdown (send end signals from all producers)
-  - [ ] Press Ctrl+C again to force quit.
-
-- [ ] to_mermaid
-- [ ] child culling (look at puma)
-- [ ] supervision tree of processes
-- [ ] htop-like monitoring dashboard (CLI)
-- [ ] Interactive examples in web docs
-- [ ] ASCII art drawing of tree
-- [ ] IPC batches?
-- [ ] Acks on queued items, guaranteed delivery?
-
-- [ ] **Hooks** (fork, stage, nesting)
-
-- [ ] Add process supervision tree?
-
-- [ ] **IPC Reliability**
-  - Address potential reliability issues with IPC
-  - Add timeout handling
-  - Handle pipe failures gracefully
-  - Stats reporting back to parent process via IPC
-
-### Phase 2: Features & Functionality (Medium Priority)
-
-#### 2.1 New Stage Types & Operators
-**Priority: MEDIUM**
-
-- [ ] **Batch Operators**
-  - `batch` - create batches from stream
-  - `debatch` - flatten batches back to stream
-  - `rebatch` - change batch size
-
-- [ ] **Flush Timers**
-  - Time-based batch flushing
-  - Consolidate accumulator and batch logic
-
-- [ ] Routing strategies (inspired by GenStage)
-  - DemandDispatcher (default): Dispatches events to the consumer with the highest outstanding demand, ensuring the busiest consumer gets priority.
-  - BroadcastDispatcher: Sends all events to all consumers.
-  - PartitionDispatcher: Distributes events to a fixed number of consumers based on a hash function, useful for maintaining order or state per partition.
 
 #### 2.2 Execution Strategies
 **Priority: MEDIUM**

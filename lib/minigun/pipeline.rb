@@ -412,10 +412,16 @@ module Minigun
 
         # Create the appropriate router subclass (pipeline-first positional style)
         router_name = :"#{stage.name}_router"
-        router_stage = if routing_strategy == :round_robin
-                         RouterRoundRobinStage.new(router_name, self, downstream.dup, {})
-                       else
-                         RouterBroadcastStage.new(router_name, self, downstream.dup, {})
+        router_options = stage.options.slice(:partition_key, :hash, :shuffle_on_first_dispatch)
+        router_stage = case routing_strategy
+                       when :round_robin
+                         RouterRoundRobinStage.new(router_name, self, downstream.dup, router_options)
+                       when :demand
+                         RouterDemandStage.new(router_name, self, downstream.dup, router_options)
+                       when :partition
+                         RouterPartitionStage.new(router_name, self, downstream.dup, router_options)
+                       else # :broadcast (default)
+                         RouterBroadcastStage.new(router_name, self, downstream.dup, router_options)
                        end
         stages_to_add << router_stage
 
@@ -626,12 +632,18 @@ module Minigun
       # Get routing strategy from parent_pipeline's config (where PipelineStage lives)
       pipeline_stage = @parent_pipeline&.stages&.find { |s| s.is_a?(PipelineStage) && s.nested_pipeline == self }
       routing_strategy = pipeline_stage&.options&.[](:routing) || :broadcast
+      router_options = (pipeline_stage&.options || {}).slice(:partition_key, :hash, :shuffle_on_first_dispatch)
 
       # Create anonymous router stage
-      @entrance_router = if routing_strategy == :round_robin
-                           RouterRoundRobinStage.new(nil, self, entry_stages.dup, {})
-                         else
-                           RouterBroadcastStage.new(nil, self, entry_stages.dup, {})
+      @entrance_router = case routing_strategy
+                         when :round_robin
+                           RouterRoundRobinStage.new(nil, self, entry_stages.dup, router_options)
+                         when :demand
+                           RouterDemandStage.new(nil, self, entry_stages.dup, router_options)
+                         when :partition
+                           RouterPartitionStage.new(nil, self, entry_stages.dup, router_options)
+                         else # :broadcast (default)
+                           RouterBroadcastStage.new(nil, self, entry_stages.dup, router_options)
                          end
 
       # Add router to pipeline

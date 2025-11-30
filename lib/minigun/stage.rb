@@ -656,6 +656,157 @@ module Minigun
     end
   end
 
+  # Demand-based router - routes items to consumer with highest demand/capacity
+  # Inspired by GenStage.DemandDispatcher
+  class RouterDemandStage < RouterStage
+    def initialize(name, pipeline, targets, options = {})
+      super
+      @shuffle_on_first = options[:shuffle_on_first_dispatch] || false
+      @first_dispatch = true
+      @round_robin_index = 0
+    end
+
+    def run_stage(worker_ctx)
+      task = worker_ctx.stage.task
+      target_info = @targets.map { |t| [t, task&.find_queue(t)] }
+
+      # Get demand registry if demand is enabled
+      demand_registry = @pipeline.demand_enabled? ? @pipeline.demand_registry : nil
+
+      # Shuffle on first dispatch to avoid overloading first consumer
+      if @shuffle_on_first && @first_dispatch
+        target_info.shuffle!
+        @first_dispatch = false
+      end
+
+      loop do
+        item = worker_ctx.input_queue.pop
+
+        if item.is_a?(EndOfSource)
+          worker_ctx.sources_expected << item.stage
+          worker_ctx.sources_done << item.stage
+          break if worker_ctx.sources_done == worker_ctx.sources_expected
+
+          next
+        end
+
+        # Handle routed items from IPC dynamic routing
+        if item.is_a?(Minigun::RoutedItem)
+          target = @targets.find { |t| t.name == item.target_stage }
+          if target
+            queue = task&.find_queue(target)
+            queue&.<< item.item
+          else
+            Minigun.logger.warn "[RouterDemand] Unknown routed target: #{item.target_stage}"
+          end
+          next
+        end
+
+        # Find target with highest demand/capacity
+        best_queue = find_best_target(target_info, demand_registry)
+        best_queue << item
+      end
+    ensure
+      send_end_signals(worker_ctx)
+    end
+
+    private
+
+    def find_best_target(target_info, demand_registry)
+      # Strategy 1: Use demand system if enabled
+      if demand_registry
+        best_target, best_queue = target_info.max_by do |target, _queue|
+          channel = demand_registry.channel_for(self, target)
+          channel&.pending_demand || 0
+        end
+        return best_queue if best_queue
+      end
+
+      # Strategy 2: Use queue capacity for SizedQueue
+      sized = target_info.select { |_, q| q.is_a?(SizedQueue) }
+      if sized.any?
+        _, best = sized.max_by { |_, q| q.max - q.size }
+        return best
+      end
+
+      # Strategy 3: Round-robin for unbounded queues
+      _, queue = target_info[@round_robin_index % target_info.size]
+      @round_robin_index += 1
+      queue
+    end
+  end
+
+  # Partition-based router - routes items based on hash function for partition affinity
+  # Inspired by GenStage.PartitionDispatcher
+  class RouterPartitionStage < RouterStage
+    def initialize(name, pipeline, targets, options = {})
+      super
+      @partition_count = targets.size
+      @hash_fn = build_hash_function(options)
+    end
+
+    def run_stage(worker_ctx)
+      task = worker_ctx.stage.task
+      target_queues = @targets.map { |t| task&.find_queue(t) }
+
+      loop do
+        item = worker_ctx.input_queue.pop
+
+        if item.is_a?(EndOfSource)
+          worker_ctx.sources_expected << item.stage
+          worker_ctx.sources_done << item.stage
+          break if worker_ctx.sources_done == worker_ctx.sources_expected
+
+          next
+        end
+
+        # Handle routed items from IPC dynamic routing
+        if item.is_a?(Minigun::RoutedItem)
+          target = @targets.find { |t| t.name == item.target_stage }
+          if target
+            queue = task&.find_queue(target)
+            queue&.<< item.item
+          else
+            Minigun.logger.warn "[RouterPartition] Unknown routed target: #{item.target_stage}"
+          end
+          next
+        end
+
+        # Hash item to partition index
+        partition = @hash_fn.call(item)
+        next if partition == :none # Discard item (like GenStage)
+
+        target_queues[partition % @partition_count] << item
+      end
+    ensure
+      send_end_signals(worker_ctx)
+    end
+
+    private
+
+    def build_hash_function(options)
+      partition_key = options[:partition_key]
+      custom_hash = options[:hash]
+
+      if custom_hash
+        # Custom hash function: ->(item) { partition_index } or :none
+        custom_hash
+      elsif partition_key.is_a?(Proc)
+        # Extract key via proc, then hash
+        ->(item) { partition_key.call(item).hash.abs }
+      elsif partition_key.is_a?(Symbol)
+        # Extract key from hash/object, then hash
+        ->(item) {
+          key = item.is_a?(Hash) ? item[partition_key] : item.send(partition_key)
+          key.hash.abs
+        }
+      else
+        # Default: hash the entire item
+        ->(item) { item.hash.abs }
+      end
+    end
+  end
+
   # Special exit stage for nested pipelines
   # Automatically created when a pipeline has output to parent
   class ExitStage < ConsumerStage
