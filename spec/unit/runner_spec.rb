@@ -177,7 +177,7 @@ RSpec.describe Minigun::Runner do
       before do
         # Add a stage that raises an error
         error_pipeline.add_stage(:producer, :error_producer) do |_output|
-          raise StandardError, 'Pipeline error'
+          raise StandardError.new('Pipeline error')
         end
       end
 
@@ -213,15 +213,17 @@ RSpec.describe Minigun::Runner do
     end
 
     it 'restores original signal handlers after cleanup' do
-      original_int = Signal.trap('INT') { puts 'custom' }
+      custom_handler = proc { puts 'custom' }
+      original_int = Signal.trap('INT', &custom_handler)
 
       runner = described_class.new(task, context)
       runner.run
 
-      Signal.trap('INT', original_int)
-      # Handler should be restored to original
+      # Get the current handler after run completes
+      current_handler = Signal.trap('INT', original_int)
 
-      Signal.trap('INT', original_int)
+      # Handler should be restored to our custom handler
+      expect(current_handler).to eq(custom_handler)
     end
   end
 

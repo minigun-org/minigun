@@ -153,7 +153,9 @@ RSpec.describe 'Await Stages' do
         instance.run
 
         if File.exist?(results_file)
-          results = File.readlines(results_file).map(&:strip).map(&:to_i).sort
+          results = File.readlines(results_file)
+          results.map! { |line| line.strip.to_i }
+          results.sort!
         end
 
         expect(results).to eq([10, 20, 30, 40])
@@ -201,7 +203,9 @@ RSpec.describe 'Await Stages' do
         instance.run
 
         if File.exist?(results_file)
-          results = File.readlines(results_file).map(&:strip).map(&:to_i).sort
+          results = File.readlines(results_file)
+          results.map! { |line| line.strip.to_i }
+          results.sort!
         end
 
         expect(results).to eq([100, 200, 300, 400])

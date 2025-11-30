@@ -149,7 +149,7 @@ RSpec.describe 'Advanced Stage Hook Behaviors' do
           end
 
           after :gen do
-            raise StandardError, 'Error in hook'
+            raise StandardError.new('Error in hook')
           rescue StandardError
             @hook_error_caught = true
           end

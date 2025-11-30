@@ -63,9 +63,9 @@ class ErrorHandlingExample
 
     processor :validate do |item, output|
       # Simulate validation that might fail
-      raise StandardError, 'Unlucky number 13!' if item[:id] == 13
+      raise StandardError.new('Unlucky number 13!') if item[:id] == 13
 
-      raise ArgumentError, 'Value cannot be negative' if item[:value] < 0
+      raise ArgumentError.new('Value cannot be negative') if item[:value] < 0
 
       output << item
     rescue StandardError => e

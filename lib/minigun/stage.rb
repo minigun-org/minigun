@@ -511,29 +511,7 @@ module Minigun
 
         begin
           start_time = Time.now if stage_stats
-
-          # Handle incoming batch (anything responding to #each)
-          if item.respond_to?(:each)
-            item.each do |element|
-              @mutex.synchronize do
-                @buffer << element
-                if @buffer.size >= @batch_size
-                  output_queue << @buffer.dup
-                  @buffer.clear
-                end
-              end
-            end
-          else
-            # Single item - add to buffer
-            @mutex.synchronize do
-              @buffer << item
-              if @buffer.size >= @batch_size
-                output_queue << @buffer.dup
-                @buffer.clear
-              end
-            end
-          end
-
+          buffer_item(item, output_queue)
           stage_stats&.record_latency(Time.now - start_time)
         rescue StandardError => e
           Minigun.logger.error "[Stage:#{name}] Error processing batch: #{e.message}"
@@ -555,6 +533,23 @@ module Minigun
       return unless buffer && output_queue
 
       output_queue << buffer
+    end
+
+    private
+
+    def buffer_item(item, output_queue)
+      items = item.respond_to?(:each) ? item.to_a : [item]
+      items.each { |element| add_to_buffer(element, output_queue) }
+    end
+
+    def add_to_buffer(element, output_queue)
+      @mutex.synchronize do
+        @buffer << element
+        return unless @buffer.size >= @batch_size
+
+        output_queue << @buffer.dup
+        @buffer.clear
+      end
     end
   end
 

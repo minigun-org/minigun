@@ -35,9 +35,8 @@ class ComplexAwaitRoutingExample
       20.times do |i|
         id = i + 1
         priority = case id % 4
-                   when 0 then :high
+                   when 0, 2 then :high
                    when 1 then :low
-                   when 2 then :high
                    else :error
                    end
         output << { id: id, priority: priority, value: id * 10 }

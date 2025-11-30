@@ -65,11 +65,11 @@ module Minigun
       # Resolve target to Stage object if it's a name
       # Use StageRegistry for cross-pipeline lookup
       target_stage = task.stage_registry.find(target, from_pipeline: pipeline)
-      raise ArgumentError, "Unknown target stage: #{target}" unless target_stage
+      raise ArgumentError.new("Unknown target stage: #{target}") unless target_stage
 
       # Look up queue by Stage object using Task's queue registry
       target_queue = task.find_queue(target_stage)
-      raise ArgumentError, "Unknown target stage: #{target} (resolved to #{target_stage.name})" unless target_queue
+      raise ArgumentError.new("Unknown target stage: #{target} (resolved to #{target_stage.name})") unless target_queue
 
       # Track this as a runtime edge for END signal handling
       # Ensure the entry exists before adding to it (important for fork contexts)
@@ -125,7 +125,7 @@ module Minigun
 
       # Read from IPC pipe
       loop do
-        message = Marshal.load(@pipe_reader)
+        message = Marshal.load(@pipe_reader) # rubocop:disable Security/MarshalLoad
 
         case message[:type]
         when :item
@@ -178,8 +178,6 @@ module Minigun
             @pipe_writer
           )
           @pipe_writer.flush
-        rescue StandardError
-          raise
         end
       end
       self
@@ -222,9 +220,6 @@ module Minigun
             @pipe_writer
           )
           @pipe_writer.flush
-        rescue StandardError
-          # If we can't even send the error, pipe is broken
-          raise
         end
       end
       self
@@ -237,7 +232,7 @@ module Minigun
     end
 
     def to_proc
-      proc { |item, to: nil| self << item }
+      proc { |item, to: nil| self << item } # rubocop:disable Lint/UnusedBlockArgument
     end
   end
 end

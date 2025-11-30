@@ -1953,14 +1953,16 @@ RSpec.describe 'Examples Integration' do
       expect(example.results.all? { |r| r[:stage] == 'aggregated' }).to be true
 
       # Should have passed through all stages
-      example.results.each do |result|
-        expect(result).to have_key(:validator_thread)
-        expect(result).to have_key(:compute_pid)
-        expect(result).to have_key(:transform_pid)
-        expect(result).to have_key(:aggregator_thread)
-        expect(result).to have_key(:computed_value)
-        expect(result).to have_key(:transformed_value)
-      end
+      expect(example.results).to all(
+        include(
+          validator_thread: anything,
+          compute_pid: anything,
+          transform_pid: anything,
+          aggregator_thread: anything,
+          computed_value: anything,
+          transformed_value: anything
+        )
+      )
     end
   end
 
@@ -2541,12 +2543,14 @@ RSpec.describe 'Examples Integration' do
       example.run
 
       expect(example.results.size).to eq(12)
-      example.results.each do |r|
-        expect(r).to have_key(:id)
-        expect(r).to have_key(:computed)
-        expect(r).to have_key(:enriched)
-        expect(r).to have_key(:pid)
-      end
+      expect(example.results).to all(
+        include(
+          id: anything,
+          computed: anything,
+          enriched: anything,
+          pid: anything
+        )
+      )
       # Should have used multiple fork processes
       pids = example.results.map { |r| r[:pid] }.uniq
       expect(pids.size).to be >= 1

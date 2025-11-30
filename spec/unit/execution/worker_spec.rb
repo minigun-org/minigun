@@ -128,15 +128,39 @@ RSpec.describe Minigun::Worker do
   end
 
   describe 'disconnected stage handling' do
-    it 'warns and waits with default 5s timeout if no upstream sources' do
-      # Create a stage with no await option (will use default 5s timeout)
+    it 'warns with default timeout when no upstream sources and await not specified' do
+      # Create a stage with no await option (will trigger warning about default 5s timeout)
+      # But also set a short timeout via the stage options for testing
       disconnected_stage = Minigun::ConsumerStage.new(:disconnected, pipeline, proc { |item, output| output << item }, {})
+
+      # Register a queue for the stage so wait_for_first_item can poll it
+      ensure_queue(disconnected_stage)
+
+      worker = described_class.new(pipeline, disconnected_stage, config)
+
+      allow(Minigun.logger).to receive(:debug).and_call_original
+      # Expect the warning about default timeout
+      expect(Minigun.logger).to receive(:warn).with(/Stage has no DAG upstream connections, using default 5s await timeout/)
+
+      worker.start
+      # Don't wait for full 5s - just verify warning was logged then kill thread
+      sleep 0.1
+      worker.thread.kill
+    end
+
+    it 'awaits with explicit timeout and logs debug message' do
+      # Create a stage with short explicit timeout
+      disconnected_stage = Minigun::ConsumerStage.new(:disconnected_timeout, pipeline, proc { |item, output| output << item }, { await: 0.1 })
+
+      # Register a queue for the stage so wait_for_first_item can poll it
+      ensure_queue(disconnected_stage)
 
       worker = described_class.new(pipeline, disconnected_stage, config)
 
       allow(Minigun.logger).to receive(:warn).and_call_original
       allow(Minigun.logger).to receive(:debug).and_call_original
-      expect(Minigun.logger).to receive(:warn).with(/Stage has no DAG upstream connections, using default 5s await timeout/)
+      # With explicit await: 0.1, debug message is logged (not warning)
+      expect(Minigun.logger).to receive(:debug).with(/Awaiting items with 0\.1s timeout/)
 
       worker.start
       worker.join
@@ -150,12 +174,15 @@ RSpec.describe Minigun::Worker do
       # Manually add edge to DAG
       dag.add_edge(timeout_stage, downstream_stage)
 
+      # Register queues for both stages
+      ensure_queue(timeout_stage)
+      downstream_queue = ensure_queue(downstream_stage)
+
       worker = described_class.new(pipeline, timeout_stage, config)
       worker.start
       worker.join
 
       # Should have sent END signal to downstream after timeout
-      downstream_queue = task.find_queue(downstream_stage)
       msg = begin
         downstream_queue.pop(true)
       rescue StandardError
@@ -204,6 +231,9 @@ RSpec.describe Minigun::Worker do
       # Create stage with await: true
       await_stage = Minigun::ConsumerStage.new(:await_test, pipeline, proc { |item, output| output << item }, { await: true })
 
+      # Register a queue so the stage can run
+      input_queue = ensure_queue(await_stage)
+
       worker = described_class.new(pipeline, await_stage, config)
 
       allow(Minigun.logger).to receive(:debug).and_call_original
@@ -213,10 +243,11 @@ RSpec.describe Minigun::Worker do
 
       # Start worker in background
       worker.start
-      sleep 0.2 # Give it time to start
+      sleep 0.1 # Give it time to start
 
-      # Clean up
-      Thread.kill(worker.thread) if worker.thread&.alive?
+      # Send an EndOfSource to unblock the worker so it can exit cleanly
+      input_queue << Minigun::EndOfSource.new(await_stage)
+      worker.join
     end
   end
 
@@ -270,7 +301,7 @@ RSpec.describe Minigun::Worker do
       error_stage = Minigun::ConsumerStage.new(
         :error_stage,
         pipeline,
-        proc { |_item, _output| raise StandardError, 'Test error' },
+        proc { |_item, _output| raise StandardError.new('Test error') },
         {}
       )
 

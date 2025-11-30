@@ -459,11 +459,11 @@ RSpec.describe 'Class Inheritance with Minigun DSL' do
         end
 
         def items_to_publish
-          raise NotImplementedError, 'Subclass must implement'
+          raise NotImplementedError.new('Subclass must implement')
         end
 
-        def publish_item(item)
-          raise NotImplementedError, 'Subclass must implement'
+        def publish_item(_item)
+          raise NotImplementedError.new('Subclass must implement')
         end
 
         def disconnect_db

@@ -28,7 +28,7 @@ RSpec.configure do |config|
   # Add timeout to all examples to prevent deadlocks
   # Use longer timeout in CI environments where fork-based tests may be slower
   config.around do |example|
-    timeout_seconds = example.metadata[:timeout] || ENV['CI'] ? 10 : 3
+    timeout_seconds = example.metadata[:timeout] || (ENV['CI'] ? 30 : 10)
 
     begin
       Timeout.timeout(timeout_seconds) do
@@ -47,7 +47,7 @@ RSpec.configure do |config|
       puts "#{'=' * 80}\n"
 
       # Re-raise with more context
-      raise Timeout::Error, "Test timed out after #{timeout_seconds}s: #{description} (#{location})"
+      raise Timeout::Error.new("Test timed out after #{timeout_seconds}s: #{description} (#{location})")
     end
   end
 end

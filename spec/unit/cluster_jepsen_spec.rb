@@ -83,7 +83,7 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
     end
 
     def ping
-      raise DRb::DRbConnError, 'Network partition' unless @network_sim.can_communicate?(@worker_id)
+      raise DRb::DRbConnError.new('Network partition') unless @network_sim.can_communicate?(@worker_id)
 
       delay = @network_sim.get_delay(@worker_id)
       sleep(delay / 1000.0) if delay.positive?
@@ -91,7 +91,7 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
     end
 
     def process_item(stage_name, item)
-      raise DRb::DRbConnError, 'Network partition' unless @network_sim.can_communicate?(@worker_id)
+      raise DRb::DRbConnError.new('Network partition') unless @network_sim.can_communicate?(@worker_id)
 
       delay = @network_sim.get_delay(@worker_id)
       sleep(delay / 1000.0) if delay.positive?
@@ -500,7 +500,7 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
       original_process = workers.first[:service].method(:process_item)
       workers.first[:service].define_singleton_method(:process_item) do |stage_name, item|
         fail_mutex.synchronize { fail_counter += 1 }
-        raise DRb::DRbConnError, 'Worker crashed' if fail_counter > 5
+        raise DRb::DRbConnError.new('Worker crashed') if fail_counter > 5
 
         original_process.call(stage_name, item)
       end
@@ -652,7 +652,7 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
 
         if items_processed > 5
           # Simulate worker going away
-          raise DRb::DRbConnError, 'Worker unavailable'
+          raise DRb::DRbConnError.new('Worker unavailable')
         end
 
         @worker.process_item_sync(stage_name, item)
@@ -765,7 +765,7 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
 
       workers.first[:service].define_singleton_method(:process_item) do |stage_name, item|
         fail_mutex.synchronize { fail_counter += 1 }
-        raise DRb::DRbConnError, 'Connection lost' if fail_counter > 3
+        raise DRb::DRbConnError.new('Connection lost') if fail_counter > 3
 
         @worker.process_item_sync(stage_name, item)
       end
@@ -1239,7 +1239,7 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
           fail_counter += 1
           fail_counter <= 3
         end
-        raise DRb::DRbConnError, 'Worker crashed' if should_fail
+        raise DRb::DRbConnError.new('Worker crashed') if should_fail
 
         @worker.process_item_sync(stage_name, item)
       end
@@ -1293,7 +1293,7 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
 
       # First worker always fails
       workers.first[:service].define_singleton_method(:process_item) do |_stage_name, _item|
-        raise DRb::DRbConnError, 'Worker completely down'
+        raise DRb::DRbConnError.new('Worker completely down')
       end
 
       klass = Class.new do
@@ -1346,7 +1346,7 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
       # Both workers always fail
       workers.each do |w|
         w[:service].define_singleton_method(:process_item) do |_stage_name, _item|
-          raise DRb::DRbConnError, 'All workers down'
+          raise DRb::DRbConnError.new('All workers down')
         end
       end
 
@@ -1405,7 +1405,7 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
           process_count += 1
           process_count <= 3
         end
-        raise DRb::DRbConnError, 'Crashed after processing' if should_crash
+        raise DRb::DRbConnError.new('Crashed after processing') if should_crash
 
         result
       end

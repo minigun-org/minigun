@@ -235,7 +235,7 @@ class ErrorExample
 
     in_threads(2) do
       processor :process do |item, output|
-        raise StandardError, "Error on item #{item}" if item == 2
+        raise StandardError.new("Error on item #{item}") if item == 2
 
         output << (item * 2)
       end

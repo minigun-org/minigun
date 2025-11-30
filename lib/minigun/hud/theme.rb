@@ -147,12 +147,13 @@ module Minigun
         # - If drained: gray static (drained)
         # - If active OR draining: cyan animated (flowing/draining)
         # - Otherwise: gray static (idle/not started)
+        # TODO: "Already drained" needs to be static gray, not an animation
         frames = if drained
                    DRAIN_ANIMATION[char_type]
                  elsif active || draining
                    FLOW_ANIMATION[char_type]
-                 else
-                   DRAIN_ANIMATION[char_type] # Gray for idle state
+                 else # rubocop:disable Lint/DuplicateBranch
+                   DRAIN_ANIMATION[char_type]
                  end
 
         return [static_char_for_type(char_type), muted] unless frames

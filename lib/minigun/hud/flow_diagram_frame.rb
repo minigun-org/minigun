@@ -155,8 +155,8 @@ module Minigun
         max_pan_y = [max_pan_y, min_pan_y].max
 
         # Apply clamping
-        @pan_x = [[@pan_x, min_pan_x].max, max_pan_x].min
-        @pan_y = [[@pan_y, min_pan_y].max, max_pan_y].min
+        @pan_x = @pan_x.clamp(min_pan_x, max_pan_x)
+        @pan_y = @pan_y.clamp(min_pan_y, max_pan_y)
       end
     end
   end

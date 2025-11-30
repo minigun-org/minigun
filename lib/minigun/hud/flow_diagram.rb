@@ -86,7 +86,7 @@ module Minigun
 
         # Update animation (every 2 renders for half speed)
         @render_tick += 1
-        if @render_tick % 2 == 0
+        if @render_tick.even?
           @animation_frame = (@animation_frame + 1) % 24
         end
 
@@ -478,7 +478,8 @@ module Minigun
             x: pos[:x] + (pos[:width] / 2),
             y: pos[:y] + pos[:height]
           }
-        end.sort_by { |s| s[:x] }
+        end
+        source_data.sort_by! { |s| s[:x] }
 
         # Draw lines from each source down to merge level, then turn inward
         source_data.each do |source|
@@ -517,9 +518,7 @@ module Minigun
               terminal.write_at(x_offset + x, y_offset + merge_y, char, color: color)
               distance += 1
             end
-          else
-            # Source directly above target - vertical line continues
-            # (already drawn above)
+            # else: Source directly above target - vertical line already drawn above
           end
         end
 

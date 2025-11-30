@@ -20,37 +20,7 @@ module Minigun
         bottleneck_stage = stats.bottleneck
 
         # Collect stage data
-        stages_data = stats.stages_in_order.map do |stage_stats|
-          # Determine if stage is finished (has end_time)
-          is_finished = !stage_stats.end_time.nil?
-
-          {
-            stage_name: stage_stats.stage_name,
-            type: determine_stage_type(stage_stats.stage),
-            runtime: stage_stats.runtime,
-            items_produced: stage_stats.items_produced,
-            items_consumed: stage_stats.items_consumed,
-            items_failed: stage_stats.items_failed,
-            total_items: stage_stats.total_items,
-            throughput: stage_stats.throughput,
-            time_per_item: stage_stats.time_per_item,
-            success_rate: stage_stats.success_rate,
-            is_bottleneck: stage_stats == bottleneck_stage,
-            start_time: stage_stats.start_time,
-            end_time: stage_stats.end_time,
-            status: is_finished ? :finished : :running,
-            # Convert to ms
-            latency: if stage_stats.latency_data?
-                       {
-                         p50: stage_stats.p50 * 1000, # Convert to ms
-                         p90: stage_stats.p90 * 1000,
-                         p95: stage_stats.p95 * 1000,
-                         p99: stage_stats.p99 * 1000,
-                         samples: stage_stats.latency_samples.size
-                       }
-                     end
-          }
-        end
+        stages_data = stats.stages_in_order.map { |s| build_stage_data(s, bottleneck_stage) }
 
         # Get DAG structure
         dag_info = extract_dag_info
@@ -75,6 +45,40 @@ module Minigun
       end
 
       private
+
+      def build_stage_data(stage_stats, bottleneck_stage)
+        is_finished = !stage_stats.end_time.nil?
+
+        {
+          stage_name: stage_stats.stage_name,
+          type: determine_stage_type(stage_stats.stage),
+          runtime: stage_stats.runtime,
+          items_produced: stage_stats.items_produced,
+          items_consumed: stage_stats.items_consumed,
+          items_failed: stage_stats.items_failed,
+          total_items: stage_stats.total_items,
+          throughput: stage_stats.throughput,
+          time_per_item: stage_stats.time_per_item,
+          success_rate: stage_stats.success_rate,
+          is_bottleneck: stage_stats == bottleneck_stage,
+          start_time: stage_stats.start_time,
+          end_time: stage_stats.end_time,
+          status: is_finished ? :finished : :running,
+          latency: build_latency_data(stage_stats)
+        }
+      end
+
+      def build_latency_data(stage_stats)
+        return nil unless stage_stats.latency_data?
+
+        {
+          p50: stage_stats.p50 * 1000, # Convert to ms
+          p90: stage_stats.p90 * 1000,
+          p95: stage_stats.p95 * 1000,
+          p99: stage_stats.p99 * 1000,
+          samples: stage_stats.latency_samples.size
+        }
+      end
 
       def extract_dag_info
         dag = @pipeline.dag

@@ -97,6 +97,11 @@ RSpec/NestedGroups:
 RSpec/SubjectStub:
   Enabled: false
 
+Security/MarshalLoad:
+  Exclude:
+    - 'examples/**/*'
+    - 'spec/**/*'
+
 Style/Alias:
   EnforcedStyle: prefer_alias_method
 
@@ -107,6 +112,10 @@ Style/Documentation:
 Style/ExplicitBlockArgument:
   Enabled: false
 
+# TODO: Re-enable when https://github.com/rubocop/rubocop/issues/14657 is resolved
+Style/IfUnlessModifier:
+  Enabled: false
+
 Style/HashLikeCase:
   Enabled: false
 
@@ -115,3 +124,12 @@ Style/ModuleFunction:
 
 Style/NumericPredicate:
   Enabled: false
+
+Style/RaiseArgs:
+  EnforcedStyle: compact
+
+# TODO: This is intentionally disabled due to a JRuby issue.
+Style/SymbolProc:
+  Exclude:
+    - 'lib/minigun/runner.rb'
+    - 'lib/minigun/stats.rb'

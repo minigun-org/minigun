@@ -19,6 +19,7 @@ module Minigun
     attr_reader :stage
 
     def initialize(stage)
+      super()
       @stage = stage
     end
 
@@ -33,6 +34,7 @@ module Minigun
     attr_reader :stage
 
     def initialize(stage)
+      super()
       @stage = stage
     end
 

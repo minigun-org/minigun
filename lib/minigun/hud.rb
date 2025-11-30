@@ -57,10 +57,10 @@ module Minigun
                  elsif task_instance.respond_to?(:root_pipeline)
                    task_instance.root_pipeline
                  else
-                   raise ArgumentError, 'Task must have a pipeline accessible via _minigun_task, pipelines, pipeline, or root_pipeline'
+                   raise ArgumentError.new('Task must have a pipeline accessible via _minigun_task, pipelines, pipeline, or root_pipeline')
                  end
 
-      raise ArgumentError, 'No pipeline found in task' unless pipeline
+      raise ArgumentError.new('No pipeline found in task') unless pipeline
 
       # Flag to track if user quit via HUD
       user_quit = false

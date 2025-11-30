@@ -15,8 +15,8 @@ module Minigun
       end
 
       # Main distribution loop - reads from input_queue, writes to output_queue
-      def distribute(input_queue, output_queue)
-        raise NotImplementedError, 'Subclasses must implement #distribute'
+      def distribute(_input_queue, _output_queue)
+        raise NotImplementedError.new('Subclasses must implement #distribute')
       end
 
       protected
@@ -253,7 +253,7 @@ module Minigun
           workers: workers, stage_name: stage_name, stage_stats: stage_stats, max_retries: max_retries
         )
       else
-        raise ArgumentError, "Unknown delivery_mode: #{delivery_mode}"
+        raise ArgumentError.new("Unknown delivery_mode: #{delivery_mode}")
       end
     end
   end

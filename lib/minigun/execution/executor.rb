@@ -19,8 +19,8 @@ module Minigun
       # @param user_context [Object] User context for instance_exec
       # @param input_queue [Queue] Input queue for items
       # @param output_queue [Queue] Output queue for results
-      def execute_stage(stage, user_context, input_queue, output_queue)
-        raise NotImplementedError, "#{self.class}#execute_stage must be implemented"
+      def execute_stage(_stage, _user_context, _input_queue, _output_queue)
+        raise NotImplementedError.new("#{self.class}#execute_stage must be implemented")
       end
 
       # Shutdown and cleanup resources
@@ -103,7 +103,7 @@ module Minigun
 
       # Read result from child via IPC pipe
       def read_result_from_pipe(reader, output_queue, stage_ctx = nil)
-        response = Marshal.load(reader)
+        response = Marshal.load(reader) # rubocop:disable Security/MarshalLoad
         case response[:type]
         when :result
           result = response[:result]
@@ -115,31 +115,7 @@ module Minigun
           end
         when :routed_result
           # Handle explicitly routed result from IPC worker
-          target = response[:target]
-          result = response[:result]
-          if stage_ctx && target
-            # Route to specific target stage
-            task = stage_ctx.stage.task
-            target_stage = task.stage_registry.find(target, from_pipeline: stage_ctx.stage.pipeline)
-            if target_stage
-              target_queue = task.find_queue(target_stage)
-              if target_queue
-                target_queue << result
-                # Track runtime edge for END signal handling
-                runtime_edges = stage_ctx.runtime_edges
-                runtime_edges[stage_ctx.stage] ||= Set.new
-                runtime_edges[stage_ctx.stage].add(target_stage)
-              else
-                Minigun.logger.warn "[Minigun] Target queue not found for routed result: #{target}"
-                output_queue << result # Fallback to default output
-              end
-            else
-              Minigun.logger.warn "[Minigun] Target stage not found for routed result: #{target}"
-              output_queue << result # Fallback to default output
-            end
-          else
-            output_queue << result # Fallback if no routing context
-          end
+          handle_routed_result(response, stage_ctx, output_queue)
         when :error
           error_msg = response[:error] || 'Unknown error in forked process'
           backtrace = response[:backtrace]
@@ -178,6 +154,38 @@ module Minigun
           writer
         )
         writer.flush
+      end
+
+      # Handle routed result from IPC worker - routes to target stage or falls back to output_queue
+      def handle_routed_result(response, stage_ctx, output_queue)
+        target = response[:target]
+        result = response[:result]
+
+        unless stage_ctx && target
+          output_queue << result
+          return
+        end
+
+        task = stage_ctx.stage.task
+        target_stage = task.stage_registry.find(target, from_pipeline: stage_ctx.stage.pipeline)
+        unless target_stage
+          Minigun.logger.warn "[Minigun] Target stage not found for routed result: #{target}"
+          output_queue << result
+          return
+        end
+
+        target_queue = task.find_queue(target_stage)
+        unless target_queue
+          Minigun.logger.warn "[Minigun] Target queue not found for routed result: #{target}"
+          output_queue << result
+          return
+        end
+
+        target_queue << result
+        # Track runtime edge for END signal handling
+        runtime_edges = stage_ctx.runtime_edges
+        runtime_edges[stage_ctx.stage] ||= Set.new
+        runtime_edges[stage_ctx.stage].add(target_stage)
       end
     end
 
@@ -387,45 +395,9 @@ module Minigun
 
       def shutdown
         @mutex.synchronize do
-          @workers.each do |worker|
-            # Send shutdown signal (as end_of_stage so IpcInputQueue handles it)
-            Marshal.dump({ type: :end_of_stage }, worker[:to_worker])
-            worker[:to_worker].flush
-          rescue IOError, EOFError, Errno::EPIPE
-            # Worker already closed or pipe broken, ignore
-          end
-
-          # Give workers a moment to finish processing
-          sleep 0.1
-
-          @workers.each do |worker|
-            # Close pipes
-            begin
-              worker[:to_worker].close
-            rescue StandardError
-              nil
-            end
-
-            begin
-              worker[:from_worker].close
-            rescue StandardError
-              nil
-            end
-
-            # Wait for worker to exit (non-blocking)
-            begin
-              Process.wait2(worker[:pid], Process::WNOHANG)
-            rescue Errno::ECHILD
-              # Already reaped
-            end
-          rescue StandardError
-            # Force kill if graceful shutdown fails
-            begin
-              Process.kill('TERM', worker[:pid])
-            rescue StandardError
-              nil
-            end
-          end
+          send_shutdown_signals
+          sleep 0.1 # Give workers a moment to finish processing
+          cleanup_workers
           @workers.clear
 
           # Unregister pipes from task tracking
@@ -437,53 +409,77 @@ module Minigun
 
       private
 
+      def send_shutdown_signals
+        @workers.each do |worker|
+          Marshal.dump({ type: :end_of_stage }, worker[:to_worker])
+          worker[:to_worker].flush
+        rescue IOError, EOFError, Errno::EPIPE
+          # Worker already closed or pipe broken, ignore
+        end
+      end
+
+      def cleanup_workers
+        @workers.each do |worker|
+          cleanup_worker(worker)
+        rescue StandardError
+          force_kill_worker(worker[:pid])
+        end
+      end
+
+      def cleanup_worker(worker)
+        worker[:to_worker].close rescue nil # rubocop:disable Style/RescueModifier
+        worker[:from_worker].close rescue nil # rubocop:disable Style/RescueModifier
+        Process.wait2(worker[:pid], Process::WNOHANG)
+      rescue Errno::ECHILD
+        # Already reaped
+      end
+
+      def force_kill_worker(pid)
+        Process.kill('TERM', pid)
+      rescue StandardError
+        nil
+      end
+
       def spawn_workers(stage, user_context)
+        @max_size.times { spawn_single_worker(stage, user_context) }
+      end
+
+      def spawn_single_worker(stage, user_context)
         stage_stats = @stage_ctx.stage_stats
         pipeline = @stage_ctx.root_pipeline
 
-        @max_size.times do
-          # Create bidirectional pipes for IPC
-          parent_read, child_write = IO.pipe
-          child_read, parent_write = IO.pipe
+        # Create bidirectional pipes for IPC
+        parent_read, child_write = IO.pipe
+        child_read, parent_write = IO.pipe
 
-          # Register pipes with task to track across all IPC stages
-          # This prevents FD leaks when multiple IPC stages run concurrently
-          task = stage.task
-          pipes = [parent_read, child_write, child_read, parent_write]
-          task.register_ipc_pipes(pipes)
-          @my_pipes.concat(pipes)
+        # Register pipes with task to track across all IPC stages
+        task = stage.task
+        pipes = [parent_read, child_write, child_read, parent_write]
+        task.register_ipc_pipes(pipes)
+        @my_pipes.concat(pipes)
 
-          pid = fork do
-            # Worker process - close parent ends
-            parent_read.close
-            parent_write.close
-
-            # Close ALL IPC pipes from ALL stages EXCEPT our own pipes
-            # This prevents FD leaks when multiple IPC stages run concurrently
-            task.close_all_ipc_pipes_except([child_read, child_write])
-
-            worker_loop(stage, user_context, stage_stats, child_read, child_write, pipeline)
-          end
-
-          unless pid
-            Minigun.logger.warn '[Minigun] Failed to fork worker process'
-            parent_read.close
-            parent_write.close
-            child_read.close
-            child_write.close
-            next
-          end
-
-          # Parent process - close child ends
-          child_read.close
-          child_write.close
-
-          @workers << {
-            pid: pid,
-            to_worker: parent_write,
-            from_worker: parent_read
-          }
+        pid = fork do
+          parent_read.close
+          parent_write.close
+          task.close_all_ipc_pipes_except([child_read, child_write])
+          worker_loop(stage, user_context, stage_stats, child_read, child_write, pipeline)
         end
+
+        unless pid
+          Minigun.logger.warn '[Minigun] Failed to fork worker process'
+          close_all_pipes(parent_read, parent_write, child_read, child_write)
+          return
+        end
+
+        # Parent process - close child ends
+        child_read.close
+        child_write.close
+
+        @workers << { pid: pid, to_worker: parent_write, from_worker: parent_read }
+      end
+
+      def close_all_pipes(*pipes)
+        pipes.each { |p| p.close rescue nil } # rubocop:disable Style/RescueModifier
       end
 
       def worker_loop(stage, user_context, stage_stats, from_parent, to_parent, pipeline)
@@ -529,7 +525,7 @@ module Minigun
         received_end_of_stage = nil
 
         # Get nested stages' queues for dynamic routing support
-        nested_queues = get_nested_stage_queues
+        nested_queues = nested_stage_queues
 
         # Start result collection threads for each worker
         result_threads = @workers.map do |worker|
@@ -587,7 +583,7 @@ module Minigun
       end
 
       # Get queues for nested stages (for dynamic routing support)
-      def get_nested_stage_queues
+      def nested_stage_queues
         return [] unless @stage_ctx.respond_to?(:stage)
 
         stage = @stage_ctx.stage
@@ -665,8 +661,7 @@ module Minigun
 
         return if Minigun::Platform.fibers?
 
-        raise Minigun::Error,
-              "Fiber execution requires the 'async' gem. Add `gem 'async'` to your Gemfile."
+        raise Minigun::Error.new("Fiber execution requires the 'async' gem. Add `gem 'async'` to your Gemfile.")
       end
 
       def execute_stage(stage, user_context, input_queue, output_queue)
@@ -1011,7 +1006,7 @@ module Minigun
         setup_coordinator(stage.name)
 
         unless @coordinator.wait_for_workers(min_count: @min_workers, timeout: @worker_timeout)
-          raise Cluster::Error, "Timeout waiting for workers. Got #{@coordinator.worker_count}, need #{@min_workers}"
+          raise Cluster::Error.new("Timeout waiting for workers. Got #{@coordinator.worker_count}, need #{@min_workers}")
         end
 
         Minigun.logger.info "[Cluster] Starting stage :#{stage.name} with #{@coordinator.worker_count} workers"
@@ -1066,7 +1061,7 @@ module Minigun
         end
 
         if @direct_workers.empty?
-          raise Cluster::Error, 'No workers available in direct mode'
+          raise Cluster::Error.new('No workers available in direct mode')
         end
 
         Minigun.logger.info "[Cluster] Starting stage :#{stage.name} with #{@direct_workers.size} workers (direct mode)"
@@ -1187,7 +1182,7 @@ module Minigun
       when :cluster
         ClusterPoolExecutor.new(...)
       else
-        raise ArgumentError, "Unknown executor type: #{type}. Valid types: :inline, :thread, :fiber, :cow_fork, :ipc_fork, :ractor, :cluster"
+        raise ArgumentError.new("Unknown executor type: #{type}. Valid types: :inline, :thread, :fiber, :cow_fork, :ipc_fork, :ractor, :cluster")
       end
     end
   end
