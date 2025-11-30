@@ -698,9 +698,25 @@ module Minigun
             rescue TypeError, ArgumentError => e
               # Item contains non-serializable objects - skip it
               Minigun.logger.warn "[Minigun] Cannot serialize item for IPC worker: #{e.message}. Item type: #{item.class}. Skipping."
-            rescue IOError, EOFError => e
-              Minigun.logger.warn "[Minigun] Lost connection to worker #{worker[:pid]}: #{e.message}"
-              raise
+            rescue IOError, EOFError, Errno::EPIPE => e
+              # Worker died - if restart policy is enabled, try to redistribute
+              # Give monitor thread a chance to respawn, then retry with next worker
+              if @worker_monitor.enabled?
+                Minigun.logger.debug "[Minigun] Worker #{worker[:pid]} unavailable, waiting for respawn..."
+                sleep 0.15 # Give monitor thread time to detect and respawn
+                # Retry with a different worker
+                retry_worker = @workers[(worker_index + 1) % @workers.size]
+                if retry_worker && retry_worker != worker
+                  begin
+                    Marshal.dump({ type: :item, item: item }, retry_worker[:to_worker])
+                    retry_worker[:to_worker].flush
+                  rescue IOError, EOFError, Errno::EPIPE
+                    Minigun.logger.warn "[Minigun] Failed to redistribute item after worker death"
+                  end
+                end
+              else
+                Minigun.logger.warn "[Minigun] Lost connection to worker #{worker[:pid]}: #{e.message}"
+              end
             end
           end
         ensure
@@ -710,8 +726,6 @@ module Minigun
           nested_queue_threads&.each(&:kill)
           # Wait for all result collection threads to finish
           result_threads.each(&:join)
-          # Clear output queue reference
-          @current_output_queue = nil
         end
       end
 
