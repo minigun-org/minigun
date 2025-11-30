@@ -2823,4 +2823,108 @@ RSpec.describe 'Examples Integration' do
       #   ruby examples/121_cluster_loopback_shutdown.rb loopback
     end
   end
+
+  describe '122_cluster_demand.rb' do
+    it 'demonstrates cluster with demand-based backpressure' do
+      load File.expand_path('../../examples/122_cluster_demand.rb', __dir__)
+
+      # Test runs in loopback mode with workers started in-process
+      # Run the same loopback test that the example runs
+      started_services = []
+      worker_uris = []
+
+      [19_201, 19_202].each do |port|
+        worker = Minigun::Cluster::Worker.new(
+          coordinator_uri: nil,
+          worker_id: "demand-test-worker-#{port}"
+        )
+
+        worker.register_stage(:compute) do |item, output|
+          result = (1..100).reduce(item[:value]) { |acc, _| Math.sqrt(acc.abs + 1) }
+          output.call({ id: item[:id], original: item[:value], computed: result.round(4), worker: port })
+        end
+
+        worker.register_stage(:transform) do |item, output|
+          output.call({ value: item * 2, stage: :transform, worker: port })
+        end
+
+        service = Minigun::Cluster::WorkerService.new(worker)
+        uri = "druby://127.0.0.1:#{port}"
+        DRb.start_service(uri, service)
+        started_services << service
+        worker_uris << uri
+      end
+
+      begin
+        # Test ClusterDemandPipeline
+        pipeline = ClusterDemandPipeline.new(worker_uris: worker_uris)
+        pipeline.run
+
+        # Verify all items processed
+        expect(pipeline.results.size).to eq(50)
+
+        # Verify work distributed to workers
+        worker_counts = pipeline.results.group_by { |r| r[:worker] }.transform_values(&:size)
+        expect(worker_counts.values.sum).to eq(50)
+      ensure
+        DRb.stop_service
+        sleep 0.05
+      end
+    end
+  end
+
+  describe '123_cluster_routing.rb' do
+    it 'demonstrates cluster with routing strategies' do
+      load File.expand_path('../../examples/123_cluster_routing.rb', __dir__)
+
+      port = 19_301
+      worker = Minigun::Cluster::Worker.new(coordinator_uri: nil, worker_id: "routing-test-worker-#{port}")
+
+      # Register stage processors
+      worker.register_stage(:transform) { |item, output| output.call(item.merge(transformed: true)) }
+      worker.register_stage(:process) { |item, output| output.call(item.merge(processed: true)) }
+      worker.register_stage(:classify) { |item, output| output.call(item.merge(classified: true)) }
+      worker.register_stage(:enrich) { |item, output| output.call(item.merge(enriched: true, timestamp: Time.now.to_i)) }
+      worker.register_stage(:route) { |item, output| output.call(item.merge(routed: true)) }
+
+      service = Minigun::Cluster::WorkerService.new(worker)
+      uri = "druby://127.0.0.1:#{port}"
+      DRb.start_service(uri, service)
+
+      begin
+        # Test broadcast routing
+        broadcast = BroadcastRoutingPipeline.new(worker_uri: uri)
+        broadcast.run
+        expect(broadcast.results_a.size).to eq(5)
+        expect(broadcast.results_b.size).to eq(5)
+
+        # Test round-robin routing
+        round_robin = RoundRobinRoutingPipeline.new(worker_uri: uri)
+        round_robin.run
+        expect(round_robin.results_a.size).to eq(5)
+        expect(round_robin.results_b.size).to eq(5)
+
+        # Test partition routing
+        partition = PartitionRoutingPipeline.new(worker_uri: uri)
+        partition.run
+        all_results = partition.results_a + partition.results_b
+        expect(all_results.size).to eq(7)
+
+        # Verify user affinity - all events for user_id=1 should be in same consumer
+        user1_in_a = partition.results_a.count { |r| r[:user_id] == 1 }
+        user1_in_b = partition.results_b.count { |r| r[:user_id] == 1 }
+        expect(user1_in_a == 3 || user1_in_b == 3).to be true
+
+        # Test custom hash routing
+        custom = CustomHashRoutingPipeline.new(worker_uri: uri)
+        custom.run
+        expect(custom.results[:priority_high].map { |r| r[:id] }.sort).to eq([0, 3, 6, 9])
+        expect(custom.results[:priority_medium].map { |r| r[:id] }.sort).to eq([1, 4, 7, 10])
+        expect(custom.results[:priority_low].map { |r| r[:id] }.sort).to eq([2, 5, 8, 11])
+      ensure
+        DRb.stop_service
+        sleep 0.05
+      end
+    end
+  end
 end
