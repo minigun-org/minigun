@@ -10,7 +10,6 @@ module Minigun
   # Distributed clustering support using DRb
   # Enables pipeline stages to be executed across multiple machines
   module Cluster
-
     # Coordinator manages work distribution across cluster nodes
     # Runs on the "head" node and accepts connections from workers
     class Coordinator

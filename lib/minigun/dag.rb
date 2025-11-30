@@ -84,13 +84,13 @@ module Minigun
       # First check that all edges point to existing nodes
       @edges.each_value do |targets|
         targets.each do |target|
-          unless @nodes.include?(target)
-            raise Errors::UnresolvedReference.new(
-              "Stage '#{target}' referenced but not found in DAG",
-              reference: target,
-              available_stages: @nodes
-            )
-          end
+          next if @nodes.include?(target)
+
+          raise Errors::UnresolvedReference.new(
+            "Stage '#{target}' referenced but not found in DAG",
+            reference: target,
+            available_stages: @nodes
+          )
         end
       end
 

@@ -563,14 +563,14 @@ module Minigun
     def validate_stages_exist!
       @dag.nodes.each do |node|
         # After normalization, all nodes should be Stage objects
-        unless node.is_a?(Stage)
-          raise Errors::UnresolvedReference.new(
-            "DAG node '#{node}' is not a valid Stage object",
-            reference: node,
-            pipeline_name: @name,
-            available_stages: @stages.map(&:name)
-          )
-        end
+        next if node.is_a?(Stage)
+
+        raise Errors::UnresolvedReference.new(
+          "DAG node '#{node}' is not a valid Stage object",
+          reference: node,
+          pipeline_name: @name,
+          available_stages: @stages.map(&:name)
+        )
       end
     end
 

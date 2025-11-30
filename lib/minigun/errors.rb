@@ -158,7 +158,7 @@ module Minigun
       # @param context [Hash] Additional context
       def initialize(message = nil, pipeline_name: nil, **context)
         @pipeline_name = pipeline_name
-        super(message, pipeline_name: pipeline_name, **context)
+        super
       end
     end
 
@@ -266,7 +266,7 @@ module Minigun
       # @param context [Hash] Additional context
       def initialize(message = nil, stage_name: nil, **context)
         @stage_name = stage_name
-        super(message, stage_name: stage_name, **context)
+        super
       end
     end
 
