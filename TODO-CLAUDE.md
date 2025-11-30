@@ -53,23 +53,19 @@ plan based on the current codebase state and TODOS.md.
 - [ ] demand: true/false at the pipeline level (carry to nesting)
 - [ ] Demand and custom routing
 - [X] Demand with Clustering
-- [ ] Hooks
 - [X] Genstage --> names required?
 - [X] Ractors on Ruby 3.5
-- [ ] Auto-config: # forks should match # of cores
-- [ ] Example runner context
+- [ ] Example runner context ???
 - [X] Consider what concurrent-ruby abstractions we can use.
-- [ ] Support MINIGUN_LOG_LEVEL var
 - [ ] Naming things
   - [ ] Config
+  - [ ] Auto-config: # forks should match # of cores
   - [ ] Minigun global configs
   - [ ] Remove processor alias? producer_consumer alias?
   - [ ] Cleanup accumulator vs. batch
   - [ ] Custom Stage?
   - [ ] Alias in_ipc_forks to in_processes
-- [ ] Final pass:
-  - [ ] Fix JRuby/Mac/etc.
-  - [ ] Rubocop
+  - [ ] Support MINIGUN_LOG_LEVEL var
 - [ ] **Flush Timers**
   - [ ] Time-based batch flushing
   - [ ] Consolidate accumulator and batch logic
@@ -87,6 +83,10 @@ plan based on the current codebase state and TODOS.md.
   - [ ] IPC batches?
   - [ ] Acks on queued items, guaranteed delivery?
 - [ ] **Hooks** (fork, stage, nesting)
+- [ ] Final pass:
+  - [ ] Fix JRuby/Mac/etc.
+  - [ ] Rubocop
+  - [ ] Errors -- InvalidOption and UnresolveReference need better structure.
 
 ### Phase 2: Process Management
 
