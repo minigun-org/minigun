@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'worker_monitor'
+
 module Minigun
   # Execution strategies for running pipeline stages
   module Execution
@@ -376,32 +378,17 @@ module Minigun
     #   max_restarts: Maximum restarts per worker before giving up (default: 3)
     #   restart_window: Time window in seconds for counting restarts (default: 60)
     class IpcForkPoolExecutor < AbstractForkExecutor
-      RESTART_POLICIES = %i[never transient permanent].freeze
-
       def initialize(stage_ctx, max_size:, pool_timeout: nil,
                      restart_policy: :never, max_restarts: 3, restart_window: 60)
         super(stage_ctx, max_size: max_size, pool_timeout: pool_timeout)
         @workers = []
         @my_pipes = [] # Track this executor's pipes for cleanup/unregister
-        @restart_policy = validate_restart_policy(restart_policy)
-        @max_restarts = max_restarts
-        @restart_window = restart_window
-        @worker_restarts = {} # worker_index => [restart_timestamps]
-        @restart_mutex = Mutex.new
-        @shutdown_requested = false
+        @worker_monitor = WorkerMonitor.new(
+          restart_policy: restart_policy,
+          max_restarts: max_restarts,
+          restart_window: restart_window
+        )
       end
-
-      private
-
-      def validate_restart_policy(policy)
-        policy = policy.to_sym
-        unless RESTART_POLICIES.include?(policy)
-          raise ArgumentError.new("Invalid restart_policy: #{policy}. Valid: #{RESTART_POLICIES.join(', ')}")
-        end
-        policy
-      end
-
-      public
 
       def execute_stage(stage, user_context, input_queue, output_queue)
         unless Minigun::Platform.fork?
@@ -426,7 +413,7 @@ module Minigun
 
       def shutdown
         @mutex.synchronize do
-          @shutdown_requested = true
+          @worker_monitor.request_shutdown
           send_shutdown_signals
           sleep 0.1 # Give workers a moment to finish processing
           cleanup_workers
@@ -523,51 +510,18 @@ module Minigun
         pipes.each { |p| p.close rescue nil } # rubocop:disable Style/RescueModifier
       end
 
-      # Check if a worker should be restarted based on exit status and policy
-      def should_restart_worker?(process_status)
-        return false if @restart_policy == :never
-        return true if @restart_policy == :permanent
-
-        # :transient - restart only on abnormal exit
-        return true if process_status.signaled? # Killed by signal
-        return true if process_status.exitstatus && process_status.exitstatus != 0 # Non-zero exit
-
-        false
-      end
-
-      # Check if we've exceeded the restart limit for a worker
-      def restart_allowed?(worker_index)
-        @restart_mutex.synchronize do
-          now = Time.now
-          @worker_restarts[worker_index] ||= []
-
-          # Remove restarts outside the window
-          @worker_restarts[worker_index].reject! { |t| now - t > @restart_window }
-
-          # Check if we're under the limit
-          @worker_restarts[worker_index].size < @max_restarts
-        end
-      end
-
-      # Record a restart for rate limiting
-      def record_restart(worker_index)
-        @restart_mutex.synchronize do
-          @worker_restarts[worker_index] ||= []
-          @worker_restarts[worker_index] << Time.now
-        end
-      end
-
       # Respawn a dead worker, returning the new worker info
       def respawn_worker(dead_worker, result_threads)
         worker_index = dead_worker[:index]
 
-        unless restart_allowed?(worker_index)
-          Minigun.logger.error "[Minigun] Worker #{worker_index} exceeded max restarts (#{@max_restarts} in #{@restart_window}s), not restarting"
+        unless @worker_monitor.restart_allowed?(worker_index)
+          Minigun.logger.error "[Minigun] Worker #{worker_index} exceeded max restarts " \
+                               "(#{@worker_monitor.max_restarts} in #{@worker_monitor.restart_window}s), not restarting"
           return nil
         end
 
-        record_restart(worker_index)
-        Minigun.logger.info "[Minigun] Respawning worker #{worker_index} (policy: #{@restart_policy})"
+        @worker_monitor.record_restart(worker_index)
+        Minigun.logger.info "[Minigun] Respawning worker #{worker_index} (policy: #{@worker_monitor.restart_policy})"
 
         # Clean up old worker pipes
         dead_worker[:to_worker].close rescue nil # rubocop:disable Style/RescueModifier
@@ -599,12 +553,12 @@ module Minigun
       end
 
       # Monitor workers for crashes and respawn if needed
-      def start_worker_monitor(result_threads)
-        return nil if @restart_policy == :never
+      def start_worker_monitor_thread(result_threads)
+        return nil unless @worker_monitor.enabled?
 
         Thread.new do
           loop do
-            break if @shutdown_requested
+            break if @worker_monitor.shutdown_requested?
 
             @mutex.synchronize do
               @workers.each do |worker|
@@ -615,8 +569,9 @@ module Minigun
 
                   _pid, process_status = status
 
-                  if should_restart_worker?(process_status)
-                    Minigun.logger.warn "[Minigun] Worker #{worker[:index]} (pid #{worker[:pid]}) exited: #{format_exit_status(process_status)}"
+                  if @worker_monitor.should_restart?(process_status)
+                    Minigun.logger.warn "[Minigun] Worker #{worker[:index]} (pid #{worker[:pid]}) exited: " \
+                                        "#{@worker_monitor.format_exit_status(process_status)}"
                     respawn_worker(worker, result_threads)
                   else
                     Minigun.logger.debug "[Minigun] Worker #{worker[:index]} exited normally"
@@ -629,16 +584,6 @@ module Minigun
 
             sleep 0.1 # Check every 100ms
           end
-        end
-      end
-
-      def format_exit_status(status)
-        if status.signaled?
-          "signal #{status.termsig}"
-        elsif status.exitstatus
-          "exit code #{status.exitstatus}"
-        else
-          'unknown'
         end
       end
 
@@ -702,7 +647,7 @@ module Minigun
         end
 
         # Start worker monitor thread for respawning crashed workers
-        monitor_thread = start_worker_monitor(result_threads)
+        monitor_thread = start_worker_monitor_thread(result_threads)
 
         # Start threads to monitor nested stages' queues and forward to workers
         nested_queue_threads = start_nested_queue_monitors(nested_queues)

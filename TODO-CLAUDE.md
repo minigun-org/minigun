@@ -29,6 +29,7 @@ plan based on the current codebase state and TODOS.md.
 - [ ] Demand -- consolidate registry?
 - [ ] demand: true/false at the pipeline level (carry to nesting)
 - [ ] Demand and custom routing
+- [X] Demand with Clustering
 - [ ] Hooks
 - [X] Genstage --> names required?
 - [X] Ractors on Ruby 3.5
@@ -59,6 +60,10 @@ plan based on the current codebase state and TODOS.md.
   - Handle errors in hooks properly
 
 - [ ] **Process Management**
+  - [ ] at_least_once with COW
+  - [ ] at_least_once with IPC
+  - [ ] msgpack support for IPC and cluster (transport)
+  - [ ] monitoring of cluster members
   - [ ] Signal trapping for graceful shutdown
   - [ ] Child process state management
   - [ ] Child process culling (reference Puma's implementation)
@@ -68,7 +73,6 @@ plan based on the current codebase state and TODOS.md.
 
 ### True parallelism across process boundaries
 
-- [ ] Demand with Clustering
 - [ ] routing to inner stages of pipelines
 - [ ] routing to inner stages of cow and ipc fork via an ingress delegator
 - [ ] Transmit stats across forks

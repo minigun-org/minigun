@@ -2,7 +2,191 @@
 
 require 'spec_helper'
 
-RSpec.describe 'IPC Fork Worker Restart', skip: !Minigun::Platform.fork? do
+RSpec.describe Minigun::Execution::WorkerMonitor do
+  describe '#initialize' do
+    it 'accepts valid restart policies' do
+      %i[never transient permanent].each do |policy|
+        expect {
+          described_class.new(restart_policy: policy)
+        }.not_to raise_error
+      end
+    end
+
+    it 'rejects invalid restart policies' do
+      expect {
+        described_class.new(restart_policy: :invalid)
+      }.to raise_error(ArgumentError, /Invalid restart_policy/)
+    end
+
+    it 'converts string policies to symbols' do
+      monitor = described_class.new(restart_policy: 'transient')
+      expect(monitor.restart_policy).to eq(:transient)
+    end
+
+    it 'sets default values' do
+      monitor = described_class.new
+      expect(monitor.restart_policy).to eq(:never)
+      expect(monitor.max_restarts).to eq(3)
+      expect(monitor.restart_window).to eq(60)
+    end
+  end
+
+  describe '#enabled?' do
+    it 'returns false for :never policy' do
+      monitor = described_class.new(restart_policy: :never)
+      expect(monitor.enabled?).to be false
+    end
+
+    it 'returns true for :transient policy' do
+      monitor = described_class.new(restart_policy: :transient)
+      expect(monitor.enabled?).to be true
+    end
+
+    it 'returns true for :permanent policy' do
+      monitor = described_class.new(restart_policy: :permanent)
+      expect(monitor.enabled?).to be true
+    end
+  end
+
+  describe '#should_restart?' do
+    context 'with :never policy' do
+      let(:monitor) { described_class.new(restart_policy: :never) }
+
+      it 'never restarts' do
+        status = double('process_status', signaled?: true, exitstatus: nil)
+        expect(monitor.should_restart?(status)).to be false
+      end
+    end
+
+    context 'with :transient policy' do
+      let(:monitor) { described_class.new(restart_policy: :transient) }
+
+      it 'restarts workers killed by signal' do
+        status = double('process_status', signaled?: true, exitstatus: nil)
+        expect(monitor.should_restart?(status)).to be true
+      end
+
+      it 'restarts workers with non-zero exit' do
+        status = double('process_status', signaled?: false, exitstatus: 1)
+        expect(monitor.should_restart?(status)).to be true
+      end
+
+      it 'does not restart workers with zero exit' do
+        status = double('process_status', signaled?: false, exitstatus: 0)
+        expect(monitor.should_restart?(status)).to be false
+      end
+    end
+
+    context 'with :permanent policy' do
+      let(:monitor) { described_class.new(restart_policy: :permanent) }
+
+      it 'restarts workers killed by signal' do
+        status = double('process_status', signaled?: true, exitstatus: nil)
+        expect(monitor.should_restart?(status)).to be true
+      end
+
+      it 'restarts workers with non-zero exit' do
+        status = double('process_status', signaled?: false, exitstatus: 1)
+        expect(monitor.should_restart?(status)).to be true
+      end
+
+      it 'restarts workers with zero exit' do
+        status = double('process_status', signaled?: false, exitstatus: 0)
+        expect(monitor.should_restart?(status)).to be true
+      end
+    end
+  end
+
+  describe '#restart_allowed? and #record_restart' do
+    let(:monitor) do
+      described_class.new(
+        restart_policy: :transient,
+        max_restarts: 3,
+        restart_window: 60
+      )
+    end
+
+    it 'allows restarts within limit' do
+      worker_index = 0
+
+      # First 3 restarts should be allowed
+      3.times do
+        expect(monitor.restart_allowed?(worker_index)).to be true
+        monitor.record_restart(worker_index)
+      end
+
+      # 4th restart should be denied
+      expect(monitor.restart_allowed?(worker_index)).to be false
+    end
+
+    it 'tracks restarts per worker independently' do
+      # Worker 0 exhausts restarts
+      3.times { monitor.record_restart(0) }
+      expect(monitor.restart_allowed?(0)).to be false
+
+      # Worker 1 should still be allowed
+      expect(monitor.restart_allowed?(1)).to be true
+    end
+  end
+
+  describe '#restart_count' do
+    let(:monitor) do
+      described_class.new(
+        restart_policy: :transient,
+        max_restarts: 5,
+        restart_window: 60
+      )
+    end
+
+    it 'counts restarts for a worker' do
+      expect(monitor.restart_count(0)).to eq(0)
+
+      2.times { monitor.record_restart(0) }
+      expect(monitor.restart_count(0)).to eq(2)
+
+      3.times { monitor.record_restart(0) }
+      expect(monitor.restart_count(0)).to eq(5)
+    end
+
+    it 'returns 0 for unknown worker' do
+      expect(monitor.restart_count(99)).to eq(0)
+    end
+  end
+
+  describe '#request_shutdown and #shutdown_requested?' do
+    let(:monitor) { described_class.new(restart_policy: :transient) }
+
+    it 'starts not shutdown' do
+      expect(monitor.shutdown_requested?).to be false
+    end
+
+    it 'can be shutdown' do
+      monitor.request_shutdown
+      expect(monitor.shutdown_requested?).to be true
+    end
+  end
+
+  describe '#format_exit_status' do
+    let(:monitor) { described_class.new }
+
+    it 'formats signal deaths' do
+      status = double('process_status', signaled?: true, termsig: 9, exitstatus: nil)
+      expect(monitor.format_exit_status(status)).to eq('signal 9')
+    end
+
+    it 'formats exit codes' do
+      status = double('process_status', signaled?: false, exitstatus: 42)
+      expect(monitor.format_exit_status(status)).to eq('exit code 42')
+    end
+
+    it 'handles unknown status' do
+      status = double('process_status', signaled?: false, exitstatus: nil)
+      expect(monitor.format_exit_status(status)).to eq('unknown')
+    end
+  end
+end
+
+RSpec.describe 'IPC Fork Worker Restart Integration', skip: !Minigun::Platform.fork? do
   let(:task) { Minigun::Task.new }
   let(:pipeline) { task.root_pipeline }
 
@@ -18,181 +202,20 @@ RSpec.describe 'IPC Fork Worker Restart', skip: !Minigun::Platform.fork? do
     )
   end
 
-  describe 'restart_policy validation' do
-    it 'accepts valid restart policies' do
-      %i[never transient permanent].each do |policy|
-        expect {
-          Minigun::Execution::IpcForkPoolExecutor.new(
-            stage_ctx,
-            max_size: 2,
-            restart_policy: policy
-          )
-        }.not_to raise_error
-      end
-    end
-
-    it 'rejects invalid restart policies' do
-      expect {
-        Minigun::Execution::IpcForkPoolExecutor.new(
-          stage_ctx,
-          max_size: 2,
-          restart_policy: :invalid
-        )
-      }.to raise_error(ArgumentError, /Invalid restart_policy/)
-    end
-
-    it 'converts string policies to symbols' do
+  describe 'IpcForkPoolExecutor with restart policy' do
+    it 'accepts restart policy options' do
       executor = Minigun::Execution::IpcForkPoolExecutor.new(
         stage_ctx,
         max_size: 2,
-        restart_policy: 'transient'
+        restart_policy: :transient,
+        max_restarts: 5,
+        restart_window: 30
       )
-      # Should not raise - string converted to symbol
       expect(executor).to be_a(Minigun::Execution::IpcForkPoolExecutor)
     end
   end
 
-  describe 'restart policy :never (default)' do
-    let(:executor) do
-      Minigun::Execution::IpcForkPoolExecutor.new(
-        stage_ctx,
-        max_size: 2,
-        restart_policy: :never
-      )
-    end
-
-    it 'does not restart workers by default' do
-      # With :never policy, worker deaths are not restarted
-      # We can verify this by checking the should_restart_worker? method
-      status = double('process_status', signaled?: true, exitstatus: nil)
-      expect(executor.send(:should_restart_worker?, status)).to be false
-    end
-  end
-
-  describe 'restart policy :transient' do
-    let(:executor) do
-      Minigun::Execution::IpcForkPoolExecutor.new(
-        stage_ctx,
-        max_size: 2,
-        restart_policy: :transient
-      )
-    end
-
-    it 'restarts workers killed by signal' do
-      status = double('process_status', signaled?: true, exitstatus: nil)
-      expect(executor.send(:should_restart_worker?, status)).to be true
-    end
-
-    it 'restarts workers with non-zero exit' do
-      status = double('process_status', signaled?: false, exitstatus: 1)
-      expect(executor.send(:should_restart_worker?, status)).to be true
-    end
-
-    it 'does not restart workers with zero exit' do
-      status = double('process_status', signaled?: false, exitstatus: 0)
-      expect(executor.send(:should_restart_worker?, status)).to be false
-    end
-  end
-
-  describe 'restart policy :permanent' do
-    let(:executor) do
-      Minigun::Execution::IpcForkPoolExecutor.new(
-        stage_ctx,
-        max_size: 2,
-        restart_policy: :permanent
-      )
-    end
-
-    it 'restarts workers regardless of exit status' do
-      # Killed by signal
-      status1 = double('process_status', signaled?: true, exitstatus: nil)
-      expect(executor.send(:should_restart_worker?, status1)).to be true
-
-      # Non-zero exit
-      status2 = double('process_status', signaled?: false, exitstatus: 1)
-      expect(executor.send(:should_restart_worker?, status2)).to be true
-
-      # Zero exit (normal)
-      status3 = double('process_status', signaled?: false, exitstatus: 0)
-      expect(executor.send(:should_restart_worker?, status3)).to be true
-    end
-  end
-
-  describe 'restart rate limiting' do
-    let(:executor) do
-      Minigun::Execution::IpcForkPoolExecutor.new(
-        stage_ctx,
-        max_size: 2,
-        restart_policy: :transient,
-        max_restarts: 3,
-        restart_window: 60
-      )
-    end
-
-    it 'allows restarts within limit' do
-      worker_index = 0
-
-      # First 3 restarts should be allowed
-      3.times do
-        expect(executor.send(:restart_allowed?, worker_index)).to be true
-        executor.send(:record_restart, worker_index)
-      end
-
-      # 4th restart should be denied
-      expect(executor.send(:restart_allowed?, worker_index)).to be false
-    end
-
-    it 'allows restarts after window expires' do
-      worker_index = 0
-
-      # Record max restarts
-      3.times { executor.send(:record_restart, worker_index) }
-      expect(executor.send(:restart_allowed?, worker_index)).to be false
-
-      # Simulate time passing by clearing old restarts
-      executor.instance_variable_get(:@worker_restarts)[worker_index] = []
-
-      # Should allow restarts again
-      expect(executor.send(:restart_allowed?, worker_index)).to be true
-    end
-
-    it 'tracks restarts per worker independently' do
-      # Worker 0 exhausts restarts
-      3.times { executor.send(:record_restart, 0) }
-      expect(executor.send(:restart_allowed?, 0)).to be false
-
-      # Worker 1 should still be allowed
-      expect(executor.send(:restart_allowed?, 1)).to be true
-    end
-  end
-
-  describe 'format_exit_status helper' do
-    let(:executor) do
-      Minigun::Execution::IpcForkPoolExecutor.new(
-        stage_ctx,
-        max_size: 2,
-        restart_policy: :transient
-      )
-    end
-
-    it 'formats signal deaths' do
-      status = double('process_status', signaled?: true, termsig: 9, exitstatus: nil)
-      expect(executor.send(:format_exit_status, status)).to eq('signal 9')
-    end
-
-    it 'formats exit codes' do
-      status = double('process_status', signaled?: false, exitstatus: 42)
-      expect(executor.send(:format_exit_status, status)).to eq('exit code 42')
-    end
-
-    it 'handles unknown status' do
-      status = double('process_status', signaled?: false, exitstatus: nil)
-      expect(executor.send(:format_exit_status, status)).to eq('unknown')
-    end
-  end
-
   describe 'end-to-end restart behavior', :slow do
-    # This test actually forks processes to verify restart behavior
     it 'completes processing even when workers crash' do
       # Create a stage that crashes on certain items
       crashing_proc = proc do |item, output|
