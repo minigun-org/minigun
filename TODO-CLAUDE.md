@@ -107,8 +107,8 @@ plan based on the current codebase state and TODOS.md.
   - [X] `rebatch` - change batch size
 
 - [ ] **Flush Timers**
-  - Time-based batch flushing
-  - Consolidate accumulator and batch logic
+  - [ ] Time-based batch flushing
+  - [ ] Consolidate accumulator and batch logic
 
 - [X] Routing strategies (inspired by GenStage)
   - [X] DemandRouter (default): Dispatches events to the consumer with the highest outstanding demand, ensuring the busiest consumer gets priority.
