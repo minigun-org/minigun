@@ -97,7 +97,7 @@ end
 
 - **Producer** - Generates data (no input, only output)
 - **Processor** - Transforms data (input and output)
-- **Accumulator** - Batches items
+- **Batch** - Batches items
 - **Consumer** - Final processing (input, no output)
 
 Each stage type has semantics that match its purpose:
@@ -108,7 +108,7 @@ producer :generate do |output|
   1000.times { |i| output << i }
 end
 
-accumulator :batch, max_size: 100 do |batch, output|
+batch :batch, max_size: 100 do |batch, output|
   # Automatically collects 100 items before emitting
   output << batch
 end

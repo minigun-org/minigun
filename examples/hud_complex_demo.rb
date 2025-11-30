@@ -148,8 +148,8 @@ class HudComplexDemoTask
       output << item
     end
 
-    # Stage 16: Accumulator - batch for efficient output
-    accumulator :batcher, max_size: 20 do |batch, output|
+    # Stage 16: Batch - batch for efficient output
+    batch :batcher, max_size: 20 do |batch, output|
       output << batch
     end
 

@@ -16,7 +16,7 @@ processor :compute, execution: :cow_fork, max: 8  # For 8-core machine
 processor :fetch, threads: 50  # Network I/O can handle many threads
 
 # 3. Use batching for database operations
-accumulator :batch, max_size: 500  # Bulk inserts
+batch :batch, max_size: 500  # Bulk inserts
 consumer :save { |batch| DB.insert_many(batch) }
 
 # 4. Monitor with HUD
@@ -268,8 +268,8 @@ processor :no_leak do |item, output|
   output << result  # Process and release
 end
 
-# ✅ Use accumulator for intentional batching
-accumulator :batch, max_size: 500 do |batch, output|
+# ✅ Use batch for intentional batching
+batch :batch, max_size: 500 do |batch, output|
   output << batch  # Batch released after processing
 end
 ```
@@ -305,7 +305,7 @@ consumer :save do |item|
 end
 
 # ✅ Fast: Batched (1000 items = 2 queries for batch size 500)
-accumulator :batch, max_size: 500 do |batch, output|
+batch :batch, max_size: 500 do |batch, output|
   output << batch
 end
 
@@ -523,7 +523,7 @@ class FastETL
     end
 
     # Batch inserts
-    accumulator :batch, max_size: 500 do |batch, output|
+    batch :batch, max_size: 500 do |batch, output|
       output << batch
     end
 
@@ -576,7 +576,7 @@ class FastScraper
     end
 
     # Batched saves
-    accumulator :batch, max_size: 100 do |batch, output|
+    batch :batch, max_size: 100 do |batch, output|
       output << batch
     end
 
@@ -637,7 +637,7 @@ class FastImageProcessor
     end
 
     # Batched saves
-    accumulator :batch, max_size: 100 do |batch, output|
+    batch :batch, max_size: 100 do |batch, output|
       output << batch
     end
 

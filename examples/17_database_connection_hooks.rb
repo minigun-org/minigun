@@ -71,8 +71,8 @@ class DatabaseConnectionExample
       (1..10).each { |id| output << id }
     end
 
-    # Accumulator batches items
-    accumulator :batch, max_size: 5
+    # Batch items
+    batch :batch, max_size: 5
 
     # Use cow_fork to process batches
     in_cow_forks(2) do

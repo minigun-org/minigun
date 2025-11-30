@@ -33,7 +33,7 @@ class FiberBatching
     produce_each :items, (1..100).to_a
 
     # Batch items into groups of 10
-    accumulator :batch, max_size: 10
+    batch :batch, max_size: 10
 
     # Process batches concurrently with fibers
     in_fibers(5) do

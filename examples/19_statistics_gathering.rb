@@ -96,8 +96,8 @@ class StatisticsGatheringExample
       output << item.merge(transformed: true, doubled: item[:value] * 2)
     end
 
-    # Accumulator batches items
-    accumulator :batch, max_size: 25
+    # Batch items
+    batch :batch, max_size: 25
 
     # Track consumer statistics and forks
     before :save_results do

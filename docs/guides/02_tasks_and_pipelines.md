@@ -28,7 +28,7 @@ MyTask.new.run
 
 - **Task**: A Ruby class that includes `Minigun::DSL`. It holds configuration and one or more pipelines.
 - **Pipeline**: A collection of stages that process data. Defined with `pipeline do ... end`.
-- **Stage**: A single processing unit (producer, processor, consumer, accumulator).
+- **Stage**: A single processing unit (producer, processor, consumer, batch).
 
 ```
 Task

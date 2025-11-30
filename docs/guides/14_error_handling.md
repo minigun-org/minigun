@@ -671,7 +671,7 @@ class RobustETLPipeline
       end
     end
 
-    accumulator :batch, max_size: 500 do |batch, output|
+    batch :batch, max_size: 500 do |batch, output|
       output << batch
     end
 

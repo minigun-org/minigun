@@ -11,7 +11,9 @@ plan based on the current codebase state and TODOS.md.
 ### 0.1: Preview Readiness
 
 - [ ] **Comprehensive Error Handling**
-  - [ ] Standardize error classes
+  - [X] Standardize error classes
+  - [ ] Lore: [20251130-1207-comprehensive-error-handling-plan.md](lore/20251130-1207-comprehensive-error-handling-plan.md)
+  - [ ] Lore: [20251130-1216-resumability-analysis.md](lore/20251130-1216-resumability-analysis.md)'
   - [ ] Define error handling strategy for each executor type
   - [ ] Implement retry mechanisms with backoff
   - [ ] Add circuit breaker patterns for failing stages
@@ -50,25 +52,24 @@ plan based on the current codebase state and TODOS.md.
 - [X] Cluster -- Jepsen tests, handle network partitions, etc. "At least once" vs "At most once", guaranteed delivery
 - [ ] Cluster -- test with demand
 - [ ] Demand -- consolidate registry?
-- [ ] demand: true/false at the pipeline level (carry to nesting)
+- [ ] demand: true/false at the pipeline level (carry to nesting), e.g. a nested `pipeline(demand: true) do` macro
 - [ ] Demand and custom routing
 - [X] Demand with Clustering
 - [X] Genstage --> names required?
 - [X] Ractors on Ruby 3.5
-- [ ] Example runner context ???
+- [ ] Example runner context ??? forget what this means
 - [X] Consider what concurrent-ruby abstractions we can use.
 - [ ] Naming things
+  - [X] Cleanup accumulator vs. batch (consolidated to "batch")
   - [ ] Config
   - [ ] Auto-config: # forks should match # of cores
   - [ ] Minigun global configs
   - [ ] Remove processor alias? producer_consumer alias?
-  - [ ] Cleanup accumulator vs. batch
   - [ ] Custom Stage?
   - [ ] Alias in_ipc_forks to in_processes
   - [ ] Support MINIGUN_LOG_LEVEL var
 - [ ] **Flush Timers**
   - [ ] Time-based batch flushing
-  - [ ] Consolidate accumulator and batch logic
 - [ ] **Graceful shutdown**
   - [ ] signal trapping, child state management/killing
   - [ ] Kill child threads/forks/ractors

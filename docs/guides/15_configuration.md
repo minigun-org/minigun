@@ -305,7 +305,7 @@ class ConfigurablePipeline
       output << transform(item)
     end
 
-    accumulator :batch, max_size: @config[:batch_size] do |batch, output|
+    batch :batch, max_size: @config[:batch_size] do |batch, output|
       output << batch
     end
   end

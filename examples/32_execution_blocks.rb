@@ -355,7 +355,7 @@ puts <<~SUMMARY
   7. Nesting:
      - Contexts can nest naturally
      - Inner contexts override outer contexts
-     - Batch creates accumulator stage
+     - Batch creates batch stage
      - Clean, composable design
 
   Benefits:

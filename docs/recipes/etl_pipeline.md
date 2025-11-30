@@ -74,7 +74,7 @@ class ETLPipeline
     end
 
     # BATCH: Group for efficient insertion
-    accumulator :batch, max_size: 500 do |batch, output|
+    batch :batch, max_size: 500 do |batch, output|
       output << batch
     end
 
@@ -172,7 +172,7 @@ end
 ### Batching
 
 ```ruby
-accumulator :batch, max_size: 500 do |batch, output|
+batch :batch, max_size: 500 do |batch, output|
   output << batch
 end
 ```
@@ -288,10 +288,10 @@ end
 
 ```ruby
 # Smaller batches (faster feedback, more roundtrips)
-accumulator :batch, max_size: 100
+batch :batch, max_size: 100
 
 # Larger batches (fewer roundtrips, less frequent updates)
-accumulator :batch, max_size: 2000
+batch :batch, max_size: 2000
 ```
 
 ### Use Fork for CPU-Intensive Transform

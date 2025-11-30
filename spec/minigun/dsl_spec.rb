@@ -37,9 +37,9 @@ RSpec.describe Minigun::DSL do
       end.to raise_error(NoMethodError, /undefined method/)
     end
 
-    it 'raises error when defining an accumulator without pipeline do' do
+    it 'raises error when defining a batch without pipeline do' do
       expect do
-        test_class.accumulator(:test_accumulator) { 'accumulator code' }
+        test_class.batch(:test_batch) { 'batch code' }
       end.to raise_error(NoMethodError, /undefined method/)
     end
 
@@ -213,7 +213,7 @@ RSpec.describe Minigun::DSL do
 
       expect(gen_stage).to be_a(Minigun::ProducerStage)
       expect(double_stage).to be_a(Minigun::ConsumerStage)
-      expect(double_stage).not_to be_a(Minigun::AccumulatorStage)
+      expect(double_stage).not_to be_a(Minigun::BatchStage)
       expect(collect_stage).to be_a(Minigun::ConsumerStage)
 
       # Verify we have 3 stages total

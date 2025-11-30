@@ -98,7 +98,7 @@ The **business logic units** that process data.
 Stage (base class)
 ├── ProducerStage     (run_mode: :autonomous)
 ├── ConsumerStage     (run_mode: :streaming)
-│   └── AccumulatorStage
+│   └── BatchStage
 ├── RouterStage       (run_mode: :streaming)
 │   ├── RouterBroadcastStage
 │   └── RouterRoundRobinStage

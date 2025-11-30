@@ -66,8 +66,8 @@ class ResourceCleanupExample
       output << enriched
     end
 
-    # Accumulator batches records
-    accumulator :batch, max_size: 5
+    # Batch records
+    batch :batch, max_size: 5
 
     in_cow_forks(2) do
       # Close connections before forking

@@ -842,11 +842,11 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
-  describe '29_demand_with_accumulator.rb' do
-    it 'works with accumulator batching' do
-      load File.expand_path('../../examples/29_demand_with_accumulator.rb', __dir__)
+  describe '29_demand_with_batch.rb' do
+    it 'works with batch stage' do
+      load File.expand_path('../../examples/29_demand_with_batch.rb', __dir__)
 
-      example = DemandAccumulatorExample.new
+      example = DemandBatchExample.new
       example.run
 
       expect(example.total_items).to eq(100)

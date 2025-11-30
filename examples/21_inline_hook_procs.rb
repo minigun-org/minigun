@@ -67,8 +67,8 @@ class InlineHookExample
       output << (num * 2)
     end
 
-    # Accumulator batches items
-    accumulator :batch, max_size: 5
+    # Batch items
+    batch :batch, max_size: 5
 
     # Inline fork hooks for consumers
     in_cow_forks(2) do

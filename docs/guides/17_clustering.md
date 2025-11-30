@@ -517,8 +517,8 @@ class WordCount
       end
     end
 
-    # Reduce phase (local accumulator)
-    accumulator :reduce, initial: Hash.new(0) do |acc, item|
+    # Reduce phase (local batch)
+    batch :reduce, initial: Hash.new(0) do |acc, item|
       acc[item[:word]] += item[:count]
       acc
     end

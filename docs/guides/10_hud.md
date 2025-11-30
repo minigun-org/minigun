@@ -86,7 +86,7 @@ Shows your pipeline stages as boxes with animated connections:
 - `▶` Producer (generates data)
 - `◆` Processor (transforms data)
 - `◀` Consumer (consumes data)
-- `⊞` Accumulator (batches items)
+- `⊞` Batch (batches items)
 - `◇` Router (distributes to multiple stages)
 - `⑂` Fork (IPC/COW process)
 

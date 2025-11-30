@@ -9,7 +9,7 @@ Quick lookup for common Minigun patterns, API, and architecture.
 | **Producer** | `:autonomous` | ✗ | ✓ | None | `producer :gen do \|output\|` |
 | **Processor** | `:streaming` | ✓ | ✓ | Thread/Fork | `processor :xform do \|x, output\|` |
 | **Consumer** | `:streaming` | ✓ | ✗ | Thread/Fork | `consumer :save do \|x\|` |
-| **Accumulator** | `:streaming` | ✓ | ✓ | Thread/Fork | Batches N items before emit |
+| **Batch** | `:streaming` | ✓ | ✓ | Thread/Fork | Batches N items before emit |
 | **Router** | `:streaming` | ✓ | ✓ | None | Auto-inserted for fan-out |
 | **Pipeline** | `:composite` | ✓ | ✓ | Special | Wraps nested pipeline |
 
@@ -76,7 +76,7 @@ producer :source do |output|
   items.each { |item| output << item }
 end
 
-accumulator :batch, max_size: 100 do |batch, output|
+batch :batch, max_size: 100 do |batch, output|
   output << batch
 end
 
@@ -116,8 +116,8 @@ consumer :name, from: :prev_stage do |item|
   save(item)
 end
 
-# Accumulator (batching)
-accumulator :name, max_size: 100 do |batch, output|
+# Batch (batching)
+batch :name, max_size: 100 do |batch, output|
   output << batch
 end
 ```

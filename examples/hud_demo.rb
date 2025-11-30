@@ -42,8 +42,8 @@ class HudDemoTask
       output << result
     end
 
-    # Accumulator - batch items
-    accumulator :batcher, max_size: 10 do |batch, output|
+    # Batch - batch items
+    batch :batcher, max_size: 10 do |batch, output|
       output << batch
     end
 
