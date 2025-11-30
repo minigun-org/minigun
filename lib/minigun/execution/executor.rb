@@ -446,8 +446,8 @@ module Minigun
       end
 
       def cleanup_worker(worker)
-        worker[:to_worker].close rescue nil # rubocop:disable Style/RescueModifier
-        worker[:from_worker].close rescue nil # rubocop:disable Style/RescueModifier
+        safe_close(worker[:to_worker])
+        safe_close(worker[:from_worker])
         Process.wait2(worker[:pid], Process::WNOHANG)
       rescue Errno::ECHILD
         # Already reaped
@@ -507,11 +507,18 @@ module Minigun
       end
 
       def close_all_pipes(*pipes)
-        pipes.each { |p| p.close rescue nil } # rubocop:disable Style/RescueModifier
+        pipes.each { |p| safe_close(p) }
+      end
+
+      # Safely close an IO object, ignoring errors
+      def safe_close(io)
+        io&.close
+      rescue IOError, Errno::EPIPE, Errno::EBADF
+        nil
       end
 
       # Respawn a dead worker, returning the new worker info
-      def respawn_worker(dead_worker, result_threads)
+      def respawn_worker(dead_worker, result_threads, output_queue)
         worker_index = dead_worker[:index]
 
         unless @worker_monitor.restart_allowed?(worker_index)
@@ -524,8 +531,8 @@ module Minigun
         Minigun.logger.info "[Minigun] Respawning worker #{worker_index} (policy: #{@worker_monitor.restart_policy})"
 
         # Clean up old worker pipes
-        dead_worker[:to_worker].close rescue nil # rubocop:disable Style/RescueModifier
-        dead_worker[:from_worker].close rescue nil # rubocop:disable Style/RescueModifier
+        safe_close(dead_worker[:to_worker])
+        safe_close(dead_worker[:from_worker])
 
         # Remove dead worker from list
         @mutex.synchronize { @workers.delete(dead_worker) }
@@ -540,9 +547,9 @@ module Minigun
         return nil unless new_worker
 
         # Start a new result collection thread for the new worker
-        new_thread = Thread.new(new_worker) do |worker|
+        new_thread = Thread.new(new_worker, output_queue) do |worker, out_q|
           loop do
-            read_result_from_pipe(worker[:from_worker], @current_output_queue, @stage_ctx)
+            read_result_from_pipe(worker[:from_worker], out_q, @stage_ctx)
           end
         rescue EOFError, IOError
           # Worker closed pipe, done
@@ -553,37 +560,51 @@ module Minigun
       end
 
       # Monitor workers for crashes and respawn if needed
-      def start_worker_monitor_thread(result_threads)
+      def start_worker_monitor_thread(result_threads, output_queue)
         return nil unless @worker_monitor.enabled?
 
         Thread.new do
           loop do
             break if @worker_monitor.shutdown_requested?
 
-            @mutex.synchronize do
-              @workers.each do |worker|
-                # Non-blocking check if worker process has exited
-                begin
-                  status = Process.wait2(worker[:pid], Process::WNOHANG)
-                  next unless status
+            # Check for dead workers and respawn if needed
+            check_and_respawn_workers(result_threads, output_queue)
 
-                  _pid, process_status = status
-
-                  if @worker_monitor.should_restart?(process_status)
-                    Minigun.logger.warn "[Minigun] Worker #{worker[:index]} (pid #{worker[:pid]}) exited: " \
-                                        "#{@worker_monitor.format_exit_status(process_status)}"
-                    respawn_worker(worker, result_threads)
-                  else
-                    Minigun.logger.debug "[Minigun] Worker #{worker[:index]} exited normally"
-                  end
-                rescue Errno::ECHILD
-                  # Process already reaped
-                end
-              end
-            end
-
-            sleep 0.1 # Check every 100ms
+            # Poll every 100ms - simple and reliable
+            # Process deaths are detected via Process.wait2(WNOHANG), not pipe state
+            sleep 0.1
           end
+        end
+      end
+
+      def check_and_respawn_workers(result_threads, output_queue)
+        workers_to_respawn = []
+
+        @mutex.synchronize do
+          @workers.each do |worker|
+            # Non-blocking check if worker process has exited
+            begin
+              status = Process.wait2(worker[:pid], Process::WNOHANG)
+              next unless status
+
+              _pid, process_status = status
+
+              if @worker_monitor.should_restart?(process_status)
+                Minigun.logger.warn "[Minigun] Worker #{worker[:index]} (pid #{worker[:pid]}) exited: " \
+                                    "#{@worker_monitor.format_exit_status(process_status)}"
+                workers_to_respawn << worker
+              else
+                Minigun.logger.debug "[Minigun] Worker #{worker[:index]} exited normally"
+              end
+            rescue Errno::ECHILD
+              # Process already reaped
+            end
+          end
+        end
+
+        # Respawn outside the iteration to avoid modifying @workers while iterating
+        workers_to_respawn.each do |worker|
+          respawn_worker(worker, result_threads, output_queue)
         end
       end
 
@@ -629,17 +650,14 @@ module Minigun
         worker_index = 0
         received_end_of_stage = nil
 
-        # Store output queue for respawn thread to use
-        @current_output_queue = output_queue
-
         # Get nested stages' queues for dynamic routing support
         nested_queues = nested_stage_queues
 
         # Start result collection threads for each worker
         result_threads = @workers.map do |worker|
-          Thread.new do
+          Thread.new(worker, output_queue) do |w, out_q|
             loop do
-              read_result_from_pipe(worker[:from_worker], output_queue, @stage_ctx)
+              read_result_from_pipe(w[:from_worker], out_q, @stage_ctx)
             end
           rescue EOFError, IOError
             # Worker closed pipe, done
@@ -647,7 +665,7 @@ module Minigun
         end
 
         # Start worker monitor thread for respawning crashed workers
-        monitor_thread = start_worker_monitor_thread(result_threads)
+        monitor_thread = start_worker_monitor_thread(result_threads, output_queue)
 
         # Start threads to monitor nested stages' queues and forward to workers
         nested_queue_threads = start_nested_queue_monitors(nested_queues)
