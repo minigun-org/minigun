@@ -36,7 +36,7 @@ module Minigun
 
       # Check for circular dependencies
       if would_create_cycle?(from, to)
-        raise CyclicDependencyError.new(from_stage: from, to_stage: to)
+        raise Errors::CyclicDependency.new(from_stage: from, to_stage: to)
       end
 
       @edges[from] << to unless @edges[from].include?(to)
@@ -85,7 +85,7 @@ module Minigun
       @edges.each_value do |targets|
         targets.each do |target|
           unless @nodes.include?(target)
-            raise UnresolvedReferenceError.new(
+            raise Errors::UnresolvedReference.new(
               reference: target,
               available_stages: @nodes
             )
@@ -97,7 +97,7 @@ module Minigun
       begin
         tsort # This will raise TSort::Cyclic if there's a cycle
       rescue TSort::Cyclic => e
-        raise CyclicDependencyError.new("Pipeline contains a cycle: #{e.message}")
+        raise Errors::CyclicDependency.new("Pipeline contains a cycle: #{e.message}")
       end
     end
 

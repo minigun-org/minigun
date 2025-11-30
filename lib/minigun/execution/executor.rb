@@ -806,7 +806,7 @@ module Minigun
 
         return if Minigun::Platform.fibers?
 
-        raise ConfigurationError.new("Fiber execution requires the 'async' gem. Add `gem 'async'` to your Gemfile.")
+        raise Errors::ConfigurationError.new("Fiber execution requires the 'async' gem. Add `gem 'async'` to your Gemfile.")
       end
 
       def execute_stage(stage, user_context, input_queue, output_queue)
@@ -1333,7 +1333,7 @@ module Minigun
       when :cluster
         ClusterPoolExecutor.new(...)
       else
-        raise InvalidOptionError.new(
+        raise Errors::InvalidOption.new(
           option_name: :executor_type,
           value: type,
           expected: 'inline, thread, fiber, cow_fork, ipc_fork, ractor, cluster'

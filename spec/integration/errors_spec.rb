@@ -58,16 +58,16 @@ RSpec.describe 'Error Handling' do
       end
     end
 
-    it 'raises UnresolvedReferenceError for non-existent stage' do
+    it 'raises UnresolvedReference for non-existent stage' do
       pipeline = pipeline_class.new
 
-      expect { pipeline.run }.to raise_error(Minigun::UnresolvedReferenceError) do |error|
+      expect { pipeline.run }.to raise_error(Minigun::Errors::UnresolvedReference) do |error|
         expect(error.reference).to eq(:nonexistent)
       end
     end
   end
 
-  describe 'StageNameConflictError' do
+  describe 'Errors::StageNameConflict' do
     it 'is raised when defining duplicate stage names in same pipeline' do
       klass = Class.new do
         include Minigun::DSL
@@ -89,13 +89,13 @@ RSpec.describe 'Error Handling' do
 
       expect do
         klass.new.run
-      end.to raise_error(Minigun::StageNameConflictError) do |error|
+      end.to raise_error(Minigun::Errors::StageNameConflict) do |error|
         expect(error.stage_name).to eq(:duplicate)
       end
     end
   end
 
-  describe 'AmbiguousRoutingError' do
+  describe 'Errors::AmbiguousRouting' do
     it 'is raised when resolving ambiguous stage name in registry' do
       # Test StageRegistry directly with mock objects
       registry = Minigun::StageRegistry.new
@@ -115,14 +115,14 @@ RSpec.describe 'Error Handling' do
       # When looking globally, should find ambiguous match
       expect do
         registry.find_by_name(:transform, from_pipeline: parent_pipeline)
-      end.to raise_error(Minigun::AmbiguousRoutingError) do |error|
+      end.to raise_error(Minigun::Errors::AmbiguousRouting) do |error|
         expect(error.stage_name).to eq(:transform)
         expect(error.candidates.size).to eq(2)
       end
     end
   end
 
-  describe 'CyclicDependencyError' do
+  describe 'Errors::CyclicDependency' do
     it 'is raised when adding an edge that creates a cycle' do
       dag = Minigun::DAG.new
 
@@ -135,21 +135,21 @@ RSpec.describe 'Error Handling' do
 
       expect do
         dag.add_edge(stage_c, stage_a)
-      end.to raise_error(Minigun::CyclicDependencyError) do |error|
+      end.to raise_error(Minigun::Errors::CyclicDependency) do |error|
         expect(error.from_stage).to eq(stage_c)
         expect(error.to_stage).to eq(stage_a)
       end
     end
   end
 
-  describe 'InvalidOptionError' do
+  describe 'Errors::InvalidOption' do
     it 'is raised for invalid stage type' do
       task = Minigun::Task.new
       pipeline = task.root_pipeline
 
       expect do
         pipeline.add_stage(:invalid_type, :test_stage)
-      end.to raise_error(Minigun::InvalidOptionError) do |error|
+      end.to raise_error(Minigun::Errors::InvalidOption) do |error|
         expect(error.option_name).to eq(:stage_type)
         expect(error.value).to eq(:invalid_type)
       end
@@ -162,7 +162,7 @@ RSpec.describe 'Error Handling' do
           max_restarts: 3,
           restart_window: 60
         )
-      end.to raise_error(Minigun::InvalidOptionError) do |error|
+      end.to raise_error(Minigun::Errors::InvalidOption) do |error|
         expect(error.option_name).to eq(:restart_policy)
         expect(error.value).to eq(:invalid_policy)
       end
@@ -183,7 +183,7 @@ RSpec.describe 'Error Handling' do
 
       expect do
         klass.new.run
-      end.to raise_error(Minigun::InvalidOptionError) do |error|
+      end.to raise_error(Minigun::Errors::InvalidOption) do |error|
         expect(error.option_name).to eq(:delivery_mode)
         expect(error.value).to eq(:invalid)
       end
@@ -204,7 +204,7 @@ RSpec.describe 'Error Handling' do
 
       expect do
         klass.new.run
-      end.to raise_error(Minigun::InvalidOptionError) do |error|
+      end.to raise_error(Minigun::Errors::InvalidOption) do |error|
         expect(error.option_name).to eq(:in_cluster)
       end
     end
@@ -224,7 +224,7 @@ RSpec.describe 'Error Handling' do
 
       expect do
         klass.new.run
-      end.to raise_error(Minigun::InvalidOptionError) do |error|
+      end.to raise_error(Minigun::Errors::InvalidOption) do |error|
         expect(error.option_name).to eq(:in_cluster)
       end
     end
@@ -240,19 +240,19 @@ RSpec.describe 'Error Handling' do
 
       expect do
         klass.new.run
-      end.to raise_error(Minigun::InvalidOptionError) do |error|
+      end.to raise_error(Minigun::Errors::InvalidOption) do |error|
         expect(error.option_name).to eq(:source)
       end
     end
   end
 
-  describe 'InvalidOptionError for executor type' do
+  describe 'Errors::InvalidOption for executor type' do
     it 'is raised for unknown executor type' do
       stage_ctx = double('stage_ctx')
 
       expect do
         Minigun::Execution.create_executor(:unknown_executor, stage_ctx)
-      end.to raise_error(Minigun::InvalidOptionError) do |error|
+      end.to raise_error(Minigun::Errors::InvalidOption) do |error|
         expect(error.option_name).to eq(:executor_type)
         expect(error.value).to eq(:unknown_executor)
       end
@@ -260,7 +260,7 @@ RSpec.describe 'Error Handling' do
   end
 
   describe 'Cluster errors' do
-    describe 'Minigun::Cluster::WorkerNotFoundError' do
+    describe 'Minigun::Errors::ClusterWorkerNotFound' do
       it 'is raised when worker has no processor for stage' do
         worker = Minigun::Cluster::Worker.new(
           coordinator_uri: 'druby://localhost:9000',
@@ -269,7 +269,7 @@ RSpec.describe 'Error Handling' do
 
         expect do
           worker.process_item_sync(:missing_stage, { id: 1 })
-        end.to raise_error(Minigun::Cluster::WorkerNotFoundError) do |error|
+        end.to raise_error(Minigun::Errors::ClusterWorkerNotFound) do |error|
           expect(error.stage_name).to eq(:missing_stage)
         end
       end

@@ -8,10 +8,6 @@ RSpec.describe 'Minigun::Errors' do
       expect(Minigun::Errors::BaseError.superclass).to eq(StandardError)
     end
 
-    it 'is aliased as Minigun::Error' do
-      expect(Minigun::Error).to eq(Minigun::Errors::BaseError)
-    end
-
     it 'accepts a message' do
       error = Minigun::Errors::BaseError.new('test message')
       expect(error.message).to eq('test message')
@@ -39,19 +35,11 @@ RSpec.describe 'Minigun::Errors' do
       it 'inherits from BaseError' do
         expect(Minigun::Errors::ConfigurationError.superclass).to eq(Minigun::Errors::BaseError)
       end
-
-      it 'is aliased as Minigun::ConfigurationError' do
-        expect(Minigun::ConfigurationError).to eq(Minigun::Errors::ConfigurationError)
-      end
     end
 
     describe Minigun::Errors::StageNameConflict do
       it 'inherits from ConfigurationError' do
         expect(Minigun::Errors::StageNameConflict.superclass).to eq(Minigun::Errors::ConfigurationError)
-      end
-
-      it 'is aliased as Minigun::StageNameConflictError' do
-        expect(Minigun::StageNameConflictError).to eq(Minigun::Errors::StageNameConflict)
       end
 
       it 'provides stage_name and pipeline_name attributes' do
@@ -83,10 +71,6 @@ RSpec.describe 'Minigun::Errors' do
         expect(Minigun::Errors::AmbiguousRouting.superclass).to eq(Minigun::Errors::ConfigurationError)
       end
 
-      it 'is aliased as Minigun::AmbiguousRoutingError' do
-        expect(Minigun::AmbiguousRoutingError).to eq(Minigun::Errors::AmbiguousRouting)
-      end
-
       it 'provides stage_name and candidates attributes' do
         error = Minigun::Errors::AmbiguousRouting.new(
           stage_name: :transform,
@@ -111,10 +95,6 @@ RSpec.describe 'Minigun::Errors' do
         expect(Minigun::Errors::InvalidOption.superclass).to eq(Minigun::Errors::ConfigurationError)
       end
 
-      it 'is aliased as Minigun::InvalidOptionError' do
-        expect(Minigun::InvalidOptionError).to eq(Minigun::Errors::InvalidOption)
-      end
-
       it 'provides option_name, value, and expected attributes' do
         error = Minigun::Errors::InvalidOption.new(
           option_name: :restart_policy,
@@ -134,10 +114,6 @@ RSpec.describe 'Minigun::Errors' do
         expect(Minigun::Errors::PipelineError.superclass).to eq(Minigun::Errors::BaseError)
       end
 
-      it 'is aliased as Minigun::PipelineError' do
-        expect(Minigun::PipelineError).to eq(Minigun::Errors::PipelineError)
-      end
-
       it 'provides pipeline_name attribute' do
         error = Minigun::Errors::PipelineError.new('test', pipeline_name: 'main')
         expect(error.pipeline_name).to eq('main')
@@ -147,10 +123,6 @@ RSpec.describe 'Minigun::Errors' do
     describe Minigun::Errors::CyclicDependency do
       it 'inherits from PipelineError' do
         expect(Minigun::Errors::CyclicDependency.superclass).to eq(Minigun::Errors::PipelineError)
-      end
-
-      it 'is aliased as Minigun::CyclicDependencyError' do
-        expect(Minigun::CyclicDependencyError).to eq(Minigun::Errors::CyclicDependency)
       end
 
       it 'provides from_stage and to_stage attributes' do
@@ -178,10 +150,6 @@ RSpec.describe 'Minigun::Errors' do
         expect(Minigun::Errors::UnresolvedReference.superclass).to eq(Minigun::Errors::PipelineError)
       end
 
-      it 'is aliased as Minigun::UnresolvedReferenceError' do
-        expect(Minigun::UnresolvedReferenceError).to eq(Minigun::Errors::UnresolvedReference)
-      end
-
       it 'provides reference and available_stages attributes' do
         error = Minigun::Errors::UnresolvedReference.new(
           pipeline_name: 'main',
@@ -196,10 +164,6 @@ RSpec.describe 'Minigun::Errors' do
     describe Minigun::Errors::SerializationFailed do
       it 'inherits from PipelineError' do
         expect(Minigun::Errors::SerializationFailed.superclass).to eq(Minigun::Errors::PipelineError)
-      end
-
-      it 'is aliased as Minigun::SerializationError' do
-        expect(Minigun::SerializationError).to eq(Minigun::Errors::SerializationFailed)
       end
 
       it 'provides item_class and original_error attributes' do
@@ -219,19 +183,11 @@ RSpec.describe 'Minigun::Errors' do
       it 'inherits from BaseError' do
         expect(Minigun::Errors::ExecutionError.superclass).to eq(Minigun::Errors::BaseError)
       end
-
-      it 'is aliased as Minigun::ExecutionError' do
-        expect(Minigun::ExecutionError).to eq(Minigun::Errors::ExecutionError)
-      end
     end
 
     describe Minigun::Errors::StageError do
       it 'inherits from ExecutionError' do
         expect(Minigun::Errors::StageError.superclass).to eq(Minigun::Errors::ExecutionError)
-      end
-
-      it 'is aliased as Minigun::StageError' do
-        expect(Minigun::StageError).to eq(Minigun::Errors::StageError)
       end
 
       it 'provides stage_name attribute' do
@@ -243,10 +199,6 @@ RSpec.describe 'Minigun::Errors' do
     describe Minigun::Errors::ItemProcessingFailed do
       it 'inherits from StageError' do
         expect(Minigun::Errors::ItemProcessingFailed.superclass).to eq(Minigun::Errors::StageError)
-      end
-
-      it 'is aliased as Minigun::ItemProcessingError' do
-        expect(Minigun::ItemProcessingError).to eq(Minigun::Errors::ItemProcessingFailed)
       end
 
       it 'provides item and original_error attributes' do
@@ -278,10 +230,6 @@ RSpec.describe 'Minigun::Errors' do
         expect(Minigun::Errors::RetryExhausted.superclass).to eq(Minigun::Errors::StageError)
       end
 
-      it 'is aliased as Minigun::RetryExhaustedError' do
-        expect(Minigun::RetryExhaustedError).to eq(Minigun::Errors::RetryExhausted)
-      end
-
       it 'provides attempts and original_error attributes' do
         original = RuntimeError.new('network error')
         error = Minigun::Errors::RetryExhausted.new(
@@ -307,10 +255,6 @@ RSpec.describe 'Minigun::Errors' do
     describe Minigun::Errors::HookFailed do
       it 'inherits from ExecutionError' do
         expect(Minigun::Errors::HookFailed.superclass).to eq(Minigun::Errors::ExecutionError)
-      end
-
-      it 'is aliased as Minigun::HookError' do
-        expect(Minigun::HookError).to eq(Minigun::Errors::HookFailed)
       end
 
       it 'provides hook_type, stage_name, and original_error attributes' do
@@ -353,10 +297,6 @@ RSpec.describe 'Minigun::Errors' do
         expect(Minigun::Errors::CircuitBreakerOpen.superclass).to eq(Minigun::Errors::ExecutionError)
       end
 
-      it 'is aliased as Minigun::CircuitBreakerOpenError' do
-        expect(Minigun::CircuitBreakerOpenError).to eq(Minigun::Errors::CircuitBreakerOpen)
-      end
-
       it 'provides circuit_name and retry_after attributes' do
         error = Minigun::Errors::CircuitBreakerOpen.new(
           circuit_name: :api,
@@ -382,27 +322,11 @@ RSpec.describe 'Minigun::Errors' do
       it 'inherits from BaseError' do
         expect(Minigun::Errors::ClusterError.superclass).to eq(Minigun::Errors::BaseError)
       end
-
-      it 'is aliased as Minigun::ClusterError' do
-        expect(Minigun::ClusterError).to eq(Minigun::Errors::ClusterError)
-      end
-
-      it 'is aliased as Minigun::Cluster::Error' do
-        expect(Minigun::Cluster::Error).to eq(Minigun::Errors::ClusterError)
-      end
     end
 
     describe Minigun::Errors::ClusterConnectionFailed do
       it 'inherits from ClusterError' do
         expect(Minigun::Errors::ClusterConnectionFailed.superclass).to eq(Minigun::Errors::ClusterError)
-      end
-
-      it 'is aliased as Minigun::ClusterConnectionError' do
-        expect(Minigun::ClusterConnectionError).to eq(Minigun::Errors::ClusterConnectionFailed)
-      end
-
-      it 'is aliased as Minigun::Cluster::ConnectionError' do
-        expect(Minigun::Cluster::ConnectionError).to eq(Minigun::Errors::ClusterConnectionFailed)
       end
 
       it 'provides uri and original_error attributes' do
@@ -431,14 +355,6 @@ RSpec.describe 'Minigun::Errors' do
         expect(Minigun::Errors::ClusterWorkerNotFound.superclass).to eq(Minigun::Errors::ClusterError)
       end
 
-      it 'is aliased as Minigun::ClusterWorkerNotFoundError' do
-        expect(Minigun::ClusterWorkerNotFoundError).to eq(Minigun::Errors::ClusterWorkerNotFound)
-      end
-
-      it 'is aliased as Minigun::Cluster::WorkerNotFoundError' do
-        expect(Minigun::Cluster::WorkerNotFoundError).to eq(Minigun::Errors::ClusterWorkerNotFound)
-      end
-
       it 'provides stage_name and available_stages attributes' do
         error = Minigun::Errors::ClusterWorkerNotFound.new(
           stage_name: :missing,
@@ -452,14 +368,6 @@ RSpec.describe 'Minigun::Errors' do
     describe Minigun::Errors::ClusterDeliveryFailed do
       it 'inherits from ClusterError' do
         expect(Minigun::Errors::ClusterDeliveryFailed.superclass).to eq(Minigun::Errors::ClusterError)
-      end
-
-      it 'is aliased as Minigun::ClusterDeliveryError' do
-        expect(Minigun::ClusterDeliveryError).to eq(Minigun::Errors::ClusterDeliveryFailed)
-      end
-
-      it 'is aliased as Minigun::Cluster::DeliveryError' do
-        expect(Minigun::Cluster::DeliveryError).to eq(Minigun::Errors::ClusterDeliveryFailed)
       end
 
       it 'provides item_id, attempts, and last_error attributes' do
@@ -487,14 +395,6 @@ RSpec.describe 'Minigun::Errors' do
     describe Minigun::Errors::ClusterTimedOut do
       it 'inherits from ClusterError' do
         expect(Minigun::Errors::ClusterTimedOut.superclass).to eq(Minigun::Errors::ClusterError)
-      end
-
-      it 'is aliased as Minigun::ClusterTimeoutError' do
-        expect(Minigun::ClusterTimeoutError).to eq(Minigun::Errors::ClusterTimedOut)
-      end
-
-      it 'is aliased as Minigun::Cluster::TimeoutError' do
-        expect(Minigun::Cluster::TimeoutError).to eq(Minigun::Errors::ClusterTimedOut)
       end
 
       it 'provides operation and timeout_seconds attributes' do

@@ -104,7 +104,7 @@ RSpec.describe Minigun::DAG do
       dag.add_node(:a)
       dag.edges[:a] << :nonexistent
 
-      expect { dag.validate! }.to raise_error(Minigun::Error, /nonexistent/)
+      expect { dag.validate! }.to raise_error(Minigun::Errors::UnresolvedReference, /nonexistent/)
     end
 
     it 'detects cycles' do
@@ -112,7 +112,7 @@ RSpec.describe Minigun::DAG do
       dag.add_edge(:b, :c)
 
       # Adding c->a creates a cycle and should raise immediately
-      expect { dag.add_edge(:c, :a) }.to raise_error(Minigun::Error, /Circular dependency/)
+      expect { dag.add_edge(:c, :a) }.to raise_error(Minigun::Errors::CyclicDependency, /Circular dependency/)
     end
   end
 

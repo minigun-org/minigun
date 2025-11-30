@@ -77,7 +77,7 @@ if __FILE__ == $PROGRAM_NAME
   begin
     # Run triggers pipeline block evaluation and stage registration
     ConflictingPipeline.new.run
-  rescue Minigun::StageNameConflictError => e
+  rescue Minigun::Errors::StageNameConflict => e
     conflict_caught = true
     e.message
     puts "✓ Caught expected error: #{e.class}"

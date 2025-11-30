@@ -179,7 +179,7 @@ module Minigun
     def _extend_named_pipeline(name, entry)
       pipeline_stage = @_minigun_task.root_pipeline.find_stage(name)
       unless pipeline_stage
-        raise UnresolvedReferenceError.new(
+        raise Errors::UnresolvedReference.new(
           "Pipeline #{name} not found for extension",
           reference: name
         )
@@ -380,21 +380,21 @@ module Minigun
       def in_cluster(coordinator_uri: nil, worker_uris: nil, min_workers: 1, worker_timeout: 30,
                      shutdown_on_done: false, delivery_mode: :at_most_once, max_retries: 3, &)
         unless coordinator_uri || worker_uris
-          raise InvalidOptionError.new(
+          raise Errors::InvalidOption.new(
             'in_cluster requires either coordinator_uri: or worker_uris:',
             option_name: :in_cluster,
             expected: 'coordinator_uri: or worker_uris:'
           )
         end
         if coordinator_uri && worker_uris
-          raise InvalidOptionError.new(
+          raise Errors::InvalidOption.new(
             'in_cluster cannot use both coordinator_uri: and worker_uris: (pick one mode)',
             option_name: :in_cluster,
             expected: 'only one of coordinator_uri: or worker_uris:'
           )
         end
         unless %i[at_most_once at_least_once].include?(delivery_mode)
-          raise InvalidOptionError.new(
+          raise Errors::InvalidOption.new(
             option_name: :delivery_mode,
             value: delivery_mode,
             expected: ':at_most_once or :at_least_once'
@@ -474,7 +474,7 @@ module Minigun
         end
 
         unless source && (source.respond_to?(:each) || source.respond_to?(:call) || source.is_a?(Symbol))
-          raise InvalidOptionError.new(
+          raise Errors::InvalidOption.new(
             'produce_each requires an enumerable, proc, method name, or block',
             option_name: :source,
             value: source,
@@ -617,7 +617,7 @@ module Minigun
                       end
 
           unless named_ctx
-            raise InvalidOptionError.new(
+            raise Errors::InvalidOption.new(
               option_name: :execution_context,
               value: context_name,
               expected: 'a defined named context'

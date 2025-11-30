@@ -475,47 +475,4 @@ module Minigun
       end
     end
   end
-
-  # ============================================
-  # Backwards-compatible aliases at Minigun:: level
-  # ============================================
-
-  # Base error alias
-  Error = Errors::BaseError
-
-  # Configuration errors
-  ConfigurationError = Errors::ConfigurationError
-  StageNameConflictError = Errors::StageNameConflict
-  AmbiguousRoutingError = Errors::AmbiguousRouting
-  InvalidOptionError = Errors::InvalidOption
-
-  # Pipeline errors
-  PipelineError = Errors::PipelineError
-  CyclicDependencyError = Errors::CyclicDependency
-  UnresolvedReferenceError = Errors::UnresolvedReference
-  SerializationError = Errors::SerializationFailed
-
-  # Execution errors
-  ExecutionError = Errors::ExecutionError
-  StageError = Errors::StageError
-  ItemProcessingError = Errors::ItemProcessingFailed
-  RetryExhaustedError = Errors::RetryExhausted
-  HookError = Errors::HookFailed
-  CircuitBreakerOpenError = Errors::CircuitBreakerOpen
-
-  # Cluster errors
-  ClusterError = Errors::ClusterError
-  ClusterConnectionError = Errors::ClusterConnectionFailed
-  ClusterWorkerNotFoundError = Errors::ClusterWorkerNotFound
-  ClusterDeliveryError = Errors::ClusterDeliveryFailed
-  ClusterTimeoutError = Errors::ClusterTimedOut
-
-  # Legacy Cluster module aliases
-  module Cluster
-    Error = Errors::ClusterError
-    ConnectionError = Errors::ClusterConnectionFailed
-    WorkerNotFoundError = Errors::ClusterWorkerNotFound
-    DeliveryError = Errors::ClusterDeliveryFailed
-    TimeoutError = Errors::ClusterTimedOut
-  end
 end

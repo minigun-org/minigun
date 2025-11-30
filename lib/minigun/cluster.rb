@@ -194,7 +194,7 @@ module Minigun
         Minigun.logger.info "[Cluster] Worker #{@worker_id} connected to #{@coordinator_uri}"
         true
       rescue DRb::DRbConnError => e
-        raise ConnectionError.new(
+        raise Errors::ClusterConnectionFailed.new(
           uri: @coordinator_uri,
           original_error: e
         )
@@ -234,7 +234,7 @@ module Minigun
         stage_proc = @stage_registry[stage_name.to_sym] || @stage_registry[:default]
 
         unless stage_proc
-          raise WorkerNotFoundError.new(
+          raise Errors::ClusterWorkerNotFound.new(
             stage_name: stage_name,
             available_stages: @stage_registry.keys
           )
@@ -427,7 +427,7 @@ module Minigun
 
         def start
           unless @available
-            raise Minigun::ConfigurationError.new("Gossip discovery requires the 'rswim' gem. Add `gem 'rswim'` to your Gemfile.")
+            raise Errors::ConfigurationError.new("Gossip discovery requires the 'rswim' gem. Add `gem 'rswim'` to your Gemfile.")
           end
 
           if @encryption_key

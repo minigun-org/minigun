@@ -124,7 +124,7 @@ module Minigun
           block = Ractor.shareable_proc(&block)
         rescue ArgumentError, Ractor::IsolationError => e
           # Explicit shareable: true - raise error
-          raise ConfigurationError.new("Stage :#{name} block cannot be made shareable: #{e.message}") if shareable_explicit
+          raise Errors::ConfigurationError.new("Stage :#{name} block cannot be made shareable: #{e.message}") if shareable_explicit
 
           # Automatic from in_ractors - warn and fall back to threads
           Minigun.logger.warn "[Pipeline:#{@name}] Stage :#{name} block cannot be made Ractor-shareable, falling back to threads: #{e.message}"
@@ -154,7 +154,7 @@ module Minigun
                 when :accumulator
                   AccumulatorStage.new(name, self, block, options)
                 else
-                  raise InvalidOptionError.new(
+                  raise Errors::InvalidOption.new(
                     option_name: :stage_type,
                     value: actual_type,
                     expected: ':producer, :enumerator_producer, :processor, :consumer, :stage, :accumulator'
@@ -164,7 +164,7 @@ module Minigun
 
       # Check for name collision LOCALLY (within this pipeline only)
       if @stages.any? { |s| s.name == name }
-        raise StageNameConflictError.new(stage_name: name, pipeline_name: @name)
+        raise Errors::StageNameConflict.new(stage_name: name, pipeline_name: @name)
       end
 
       # Store stage in array
@@ -224,7 +224,7 @@ module Minigun
       # Resolve from_stage to object
       from_obj = find_stage(from_stage)
       unless from_obj
-        raise UnresolvedReferenceError.new(
+        raise Errors::UnresolvedReference.new(
           pipeline_name: @name,
           reference: from_stage,
           available_stages: @stages.map(&:name)
@@ -242,7 +242,7 @@ module Minigun
       Array(to).each do |target|
         target_obj = find_stage(target)
         unless target_obj
-          raise UnresolvedReferenceError.new(
+          raise Errors::UnresolvedReference.new(
             pipeline_name: @name,
             reference: target,
             available_stages: @stages.map(&:name)
@@ -505,7 +505,7 @@ module Minigun
       # Check for unresolved forward references (edges)
       unless @deferred_edges.empty?
         unresolved_refs = @deferred_edges.map { |e| e[:to] }
-        raise UnresolvedReferenceError.new(
+        raise Errors::UnresolvedReference.new(
           "Unresolved routing references: #{unresolved_refs.join(', ')}",
           pipeline_name: @name,
           reference: unresolved_refs.first,
@@ -562,7 +562,7 @@ module Minigun
       @dag.nodes.each do |node|
         # After normalization, all nodes should be Stage objects
         unless node.is_a?(Stage)
-          raise UnresolvedReferenceError.new(
+          raise Errors::UnresolvedReference.new(
             pipeline_name: @name,
             reference: node,
             available_stages: @stages.map(&:name)

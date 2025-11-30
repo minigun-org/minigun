@@ -34,7 +34,7 @@ module Minigun
           if pipeline
             @pipeline_stages[pipeline] ||= {}
             if @pipeline_stages[pipeline].key?(name_str)
-              raise StageNameConflictError.new(
+              raise Errors::StageNameConflict.new(
                 stage_name: name,
                 pipeline_name: pipeline.name
               )
@@ -63,7 +63,7 @@ module Minigun
       # Level 2: Children (stages in nested pipelines)
       children_stages = find_in_children(from_pipeline, name_str)
       if children_stages.size > 1
-        raise AmbiguousRoutingError.new(
+        raise Errors::AmbiguousRouting.new(
           stage_name: name,
           candidates: children_stages.map { |s| s.name.to_s }
         )
@@ -73,7 +73,7 @@ module Minigun
       # Level 3: Global (any stage anywhere)
       global_stages = @global_names[name_str]
       if global_stages.size > 1
-        raise AmbiguousRoutingError.new(
+        raise Errors::AmbiguousRouting.new(
           stage_name: name,
           candidates: global_stages.map { |s| s.name.to_s }
         )
