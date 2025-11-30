@@ -225,8 +225,9 @@ module Minigun
       from_obj = find_stage(from_stage)
       unless from_obj
         raise Errors::UnresolvedReference.new(
-          pipeline_name: @name,
+          "Stage '#{from_stage}' not found for rerouting",
           reference: from_stage,
+          pipeline_name: @name,
           available_stages: @stages.map(&:name)
         )
       end
@@ -243,8 +244,9 @@ module Minigun
         target_obj = find_stage(target)
         unless target_obj
           raise Errors::UnresolvedReference.new(
-            pipeline_name: @name,
+            "Target stage '#{target}' not found for rerouting",
             reference: target,
+            pipeline_name: @name,
             available_stages: @stages.map(&:name)
           )
         end
@@ -507,8 +509,8 @@ module Minigun
         unresolved_refs = @deferred_edges.map { |e| e[:to] }
         raise Errors::UnresolvedReference.new(
           "Unresolved routing references: #{unresolved_refs.join(', ')}",
-          pipeline_name: @name,
           reference: unresolved_refs.first,
+          pipeline_name: @name,
           available_stages: @stages.map(&:name)
         )
       end
@@ -563,8 +565,9 @@ module Minigun
         # After normalization, all nodes should be Stage objects
         unless node.is_a?(Stage)
           raise Errors::UnresolvedReference.new(
-            pipeline_name: @name,
+            "DAG node '#{node}' is not a valid Stage object",
             reference: node,
+            pipeline_name: @name,
             available_stages: @stages.map(&:name)
           )
         end

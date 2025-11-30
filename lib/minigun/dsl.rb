@@ -180,7 +180,7 @@ module Minigun
       pipeline_stage = @_minigun_task.root_pipeline.find_stage(name)
       unless pipeline_stage
         raise Errors::UnresolvedReference.new(
-          "Pipeline #{name} not found for extension",
+          "Pipeline '#{name}' not found for extension",
           reference: name
         )
       end
@@ -381,16 +381,14 @@ module Minigun
                      shutdown_on_done: false, delivery_mode: :at_most_once, max_retries: 3, &)
         unless coordinator_uri || worker_uris
           raise Errors::InvalidOption.new(
-            'in_cluster requires either coordinator_uri: or worker_uris:',
             option_name: :in_cluster,
-            expected: 'coordinator_uri: or worker_uris:'
+            expected: 'either coordinator_uri: or worker_uris:'
           )
         end
         if coordinator_uri && worker_uris
           raise Errors::InvalidOption.new(
-            'in_cluster cannot use both coordinator_uri: and worker_uris: (pick one mode)',
             option_name: :in_cluster,
-            expected: 'only one of coordinator_uri: or worker_uris:'
+            expected: 'only one of coordinator_uri: or worker_uris: (not both)'
           )
         end
         unless %i[at_most_once at_least_once].include?(delivery_mode)
@@ -475,10 +473,9 @@ module Minigun
 
         unless source && (source.respond_to?(:each) || source.respond_to?(:call) || source.is_a?(Symbol))
           raise Errors::InvalidOption.new(
-            'produce_each requires an enumerable, proc, method name, or block',
             option_name: :source,
             value: source,
-            expected: 'enumerable, proc, method name, or block'
+            expected: 'enumerable, proc, method name, or block for produce_each'
           )
         end
 

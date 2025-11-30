@@ -51,18 +51,13 @@ RSpec.describe 'Minigun::Errors' do
         expect(error.pipeline_name).to eq('main')
       end
 
-      it 'generates a default message from attributes' do
+      it 'generates a message from attributes' do
         error = Minigun::Errors::StageNameConflict.new(
           stage_name: :processor,
           pipeline_name: 'main'
         )
         expect(error.message).to include('processor')
         expect(error.message).to include('main')
-      end
-
-      it 'accepts a custom message' do
-        error = Minigun::Errors::StageNameConflict.new('custom message')
-        expect(error.message).to eq('custom message')
       end
     end
 
@@ -150,12 +145,14 @@ RSpec.describe 'Minigun::Errors' do
         expect(Minigun::Errors::UnresolvedReference.superclass).to eq(Minigun::Errors::PipelineError)
       end
 
-      it 'provides reference and available_stages attributes' do
+      it 'requires a message and provides reference and available_stages attributes' do
         error = Minigun::Errors::UnresolvedReference.new(
-          pipeline_name: 'main',
+          "Stage 'missing' not found",
           reference: :missing,
+          pipeline_name: 'main',
           available_stages: %i[a b c]
         )
+        expect(error.message).to eq("Stage 'missing' not found")
         expect(error.reference).to eq(:missing)
         expect(error.available_stages).to eq(%i[a b c])
       end

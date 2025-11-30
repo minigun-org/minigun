@@ -86,6 +86,7 @@ module Minigun
         targets.each do |target|
           unless @nodes.include?(target)
             raise Errors::UnresolvedReference.new(
+              "Stage '#{target}' referenced but not found in DAG",
               reference: target,
               available_stages: @nodes
             )
