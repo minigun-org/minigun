@@ -62,6 +62,10 @@ plan based on the current codebase state and TODOS.md.
 - [ ] **Process Management**
   - [ ] at_least_once with COW
   - [ ] at_least_once with IPC
+  - [ ] IPC within IPC -- register with parent level? skip routing of Parent to IPC within IPC level? kill whole tree when stopped? stats tracking?
+  - [ ] Cluster -- permanent leader, permanent followers, follower can attach new leader only if existing leader has stopped (force option to force it to attach)
+  - [ ] Cluster -- handle network partitions, split brain, re-attach to new leader
+  - [ ] Cluster -- leader (coordinator) needs to maintain topology. third-party coordinator? follower temporarily becomes coordinator--or "find coordinator" from any follower?
   - [ ] msgpack support for IPC and cluster (transport)
   - [ ] monitoring of cluster members
   - [ ] Signal trapping for graceful shutdown
