@@ -554,7 +554,7 @@ module Minigun
   end
 
   # Router stages for fan-out patterns
-  # Base functionality for all routers
+  # Base class implements Template Method pattern - subclasses only override route_item
   class RouterStage < Stage
     attr_accessor :targets
 
@@ -564,10 +564,57 @@ module Minigun
       @targets = targets || []
     end
 
+    # Template method - common routing loop for all router types
+    def run_stage(worker_ctx)
+      setup_routing(worker_ctx)
+
+      loop do
+        item = worker_ctx.input_queue.pop
+
+        # Common: Handle EndOfSource signals
+        if item.is_a?(EndOfSource)
+          worker_ctx.sources_expected << item.stage
+          worker_ctx.sources_done << item.stage
+          break if worker_ctx.sources_done == worker_ctx.sources_expected
+
+          next
+        end
+
+        # Common: Handle RoutedItem from IPC dynamic routing
+        if item.is_a?(Minigun::RoutedItem)
+          handle_routed_item(worker_ctx, item)
+          next
+        end
+
+        # Subclass-specific routing logic
+        route_item(worker_ctx, item)
+      end
+    ensure
+      send_end_signals(worker_ctx)
+    end
+
     protected
 
+    # Override in subclasses to initialize routing state
+    def setup_routing(worker_ctx); end
+
+    # Override in subclasses to implement routing logic
+    def route_item(_worker_ctx, _item)
+      raise NotImplementedError, "#{self.class} must implement #route_item"
+    end
+
+    def handle_routed_item(worker_ctx, routed_item)
+      target = @targets.find { |t| t.name == routed_item.target_stage }
+      if target
+        queue = worker_ctx.stage.task&.find_queue(target)
+        queue&.<< routed_item.item
+      else
+        router_name = self.class.name.split('::').last.sub('Stage', '')
+        Minigun.logger.warn "[#{router_name}] Unknown routed target: #{routed_item.target_stage}"
+      end
+    end
+
     def send_end_signals(worker_ctx)
-      # Broadcast EndOfSource to ALL router targets
       task = worker_ctx.stage.task
       @targets.each do |target|
         queue = task&.find_queue(target)
@@ -578,81 +625,30 @@ module Minigun
 
   # Broadcast router - sends each item to ALL downstream stages
   class RouterBroadcastStage < RouterStage
-    def run_stage(worker_ctx)
+    protected
+
+    def route_item(worker_ctx, item)
       task = worker_ctx.stage.task
-
-      loop do
-        item = worker_ctx.input_queue.pop
-
-        if item.is_a?(EndOfSource)
-          worker_ctx.sources_expected << item.stage
-          worker_ctx.sources_done << item.stage
-          break if worker_ctx.sources_done == worker_ctx.sources_expected
-
-          next
-        end
-
-        # Handle routed items from IPC dynamic routing
-        if item.is_a?(Minigun::RoutedItem)
-          # Route to specific target stage only
-          target = @targets.find { |t| t.name == item.target_stage }
-          if target
-            queue = task&.find_queue(target)
-            queue&.<< item.item
-          else
-            Minigun.logger.warn "[RouterBroadcast] Unknown routed target: #{item.target_stage}"
-          end
-          next
-        end
-
-        # Broadcast to all downstream stages (fan-out semantics)
-        @targets.each do |target|
-          queue = task&.find_queue(target)
-          queue&.<< item
-        end
+      @targets.each do |target|
+        queue = task&.find_queue(target)
+        queue&.<< item
       end
-    ensure
-      send_end_signals(worker_ctx)
     end
   end
 
   # Round-robin router - distributes items across downstream stages
   class RouterRoundRobinStage < RouterStage
-    def run_stage(worker_ctx)
+    protected
+
+    def setup_routing(worker_ctx)
       task = worker_ctx.stage.task
-      target_queues = @targets.filter_map { |target| task&.find_queue(target) }
-      round_robin_index = 0
+      @target_queues = @targets.filter_map { |target| task&.find_queue(target) }
+      @round_robin_index = 0
+    end
 
-      loop do
-        item = worker_ctx.input_queue.pop
-
-        if item.is_a?(EndOfSource)
-          worker_ctx.sources_expected << item.stage
-          worker_ctx.sources_done << item.stage
-          break if worker_ctx.sources_done == worker_ctx.sources_expected
-
-          next
-        end
-
-        # Handle routed items from IPC dynamic routing
-        if item.is_a?(Minigun::RoutedItem)
-          # Route to specific target stage only
-          target = @targets.find { |t| t.name == item.target_stage }
-          if target
-            queue = task&.find_queue(target)
-            queue&.<< item.item
-          else
-            Minigun.logger.warn "[RouterRoundRobin] Unknown routed target: #{item.target_stage}"
-          end
-          next
-        end
-
-        # Round-robin to downstream stages
-        target_queues[round_robin_index] << item
-        round_robin_index = (round_robin_index + 1) % target_queues.size
-      end
-    ensure
-      send_end_signals(worker_ctx)
+    def route_item(_worker_ctx, item)
+      @target_queues[@round_robin_index] << item
+      @round_robin_index = (@round_robin_index + 1) % @target_queues.size
     end
   end
 
@@ -666,71 +662,46 @@ module Minigun
       @round_robin_index = 0
     end
 
-    def run_stage(worker_ctx)
-      task = worker_ctx.stage.task
-      target_info = @targets.map { |t| [t, task&.find_queue(t)] }
+    protected
 
-      # Get demand registry if demand is enabled
-      demand_registry = @pipeline.demand_enabled? ? @pipeline.demand_registry : nil
+    def setup_routing(worker_ctx)
+      task = worker_ctx.stage.task
+      @target_info = @targets.map { |t| [t, task&.find_queue(t)] }
+      @demand_registry = @pipeline.demand_enabled? ? @pipeline.demand_registry : nil
 
       # Shuffle on first dispatch to avoid overloading first consumer
       if @shuffle_on_first && @first_dispatch
-        target_info.shuffle!
+        @target_info.shuffle!
         @first_dispatch = false
       end
+    end
 
-      loop do
-        item = worker_ctx.input_queue.pop
-
-        if item.is_a?(EndOfSource)
-          worker_ctx.sources_expected << item.stage
-          worker_ctx.sources_done << item.stage
-          break if worker_ctx.sources_done == worker_ctx.sources_expected
-
-          next
-        end
-
-        # Handle routed items from IPC dynamic routing
-        if item.is_a?(Minigun::RoutedItem)
-          target = @targets.find { |t| t.name == item.target_stage }
-          if target
-            queue = task&.find_queue(target)
-            queue&.<< item.item
-          else
-            Minigun.logger.warn "[RouterDemand] Unknown routed target: #{item.target_stage}"
-          end
-          next
-        end
-
-        # Find target with highest demand/capacity
-        best_queue = find_best_target(target_info, demand_registry)
-        best_queue << item
-      end
-    ensure
-      send_end_signals(worker_ctx)
+    def route_item(_worker_ctx, item)
+      best_queue = find_best_target
+      best_queue << item
     end
 
     private
 
-    def find_best_target(target_info, demand_registry)
+    def find_best_target
       # Strategy 1: Use demand system if enabled
-      if demand_registry
-        best_target, best_queue = target_info.max_by do |target, _queue|
-          channel = demand_registry.channel_for(self, target)
+      if @demand_registry
+        _best_target, best_queue = @target_info.max_by do |target, _queue|
+          channel = @demand_registry.channel_for(self, target)
           channel&.pending_demand || 0
         end
         return best_queue if best_queue
       end
 
       # Strategy 2: Use queue capacity for SizedQueue
-      sized = target_info.select { |_, q| q.is_a?(SizedQueue) }
+      sized = @target_info.select { |_, q| q.is_a?(SizedQueue) }
       if sized.any?
         _, best = sized.max_by { |_, q| q.max - q.size }
         return best
       end
 
       # Strategy 3: Round-robin for unbounded queues
-      _, queue = target_info[@round_robin_index % target_info.size]
+      _, queue = @target_info[@round_robin_index % @target_info.size]
       @round_robin_index += 1
       queue
     end
@@ -745,41 +716,18 @@ module Minigun
       @hash_fn = build_hash_function(options)
     end
 
-    def run_stage(worker_ctx)
+    protected
+
+    def setup_routing(worker_ctx)
       task = worker_ctx.stage.task
-      target_queues = @targets.map { |t| task&.find_queue(t) }
+      @target_queues = @targets.map { |t| task&.find_queue(t) }
+    end
 
-      loop do
-        item = worker_ctx.input_queue.pop
+    def route_item(_worker_ctx, item)
+      partition = @hash_fn.call(item)
+      return if partition == :none # Discard item (like GenStage)
 
-        if item.is_a?(EndOfSource)
-          worker_ctx.sources_expected << item.stage
-          worker_ctx.sources_done << item.stage
-          break if worker_ctx.sources_done == worker_ctx.sources_expected
-
-          next
-        end
-
-        # Handle routed items from IPC dynamic routing
-        if item.is_a?(Minigun::RoutedItem)
-          target = @targets.find { |t| t.name == item.target_stage }
-          if target
-            queue = task&.find_queue(target)
-            queue&.<< item.item
-          else
-            Minigun.logger.warn "[RouterPartition] Unknown routed target: #{item.target_stage}"
-          end
-          next
-        end
-
-        # Hash item to partition index
-        partition = @hash_fn.call(item)
-        next if partition == :none # Discard item (like GenStage)
-
-        target_queues[partition % @partition_count] << item
-      end
-    ensure
-      send_end_signals(worker_ctx)
+      @target_queues[partition % @partition_count] << item
     end
 
     private
