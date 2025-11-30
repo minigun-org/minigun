@@ -89,7 +89,7 @@ This structure ensures your pipeline is valid and allows Minigun to determine th
 
 1. **Producer** - Generates data (no input, only output)
 2. **Processor** - Transforms data (input and output)
-3. **Accumulator** - Batches multiple items into groups
+3. **Batch** - Batches multiple items into groups
 4. **Consumer** - Final processing (input, no output)
 
 ### Execution Strategies

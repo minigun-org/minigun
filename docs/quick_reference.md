@@ -9,7 +9,7 @@ Quick lookup for common Minigun patterns, API, and architecture.
 | **Producer** | `:autonomous` | ✗ | ✓ | None | `producer :gen do \|output\|` |
 | **Processor** | `:streaming` | ✓ | ✓ | Thread/Fork | `processor :xform do \|x, output\|` |
 | **Consumer** | `:streaming` | ✓ | ✗ | Thread/Fork | `consumer :save do \|x\|` |
-| **Accumulator** | `:streaming` | ✓ | ✓ | Thread/Fork | Batches N items before emit |
+| **Batch** | `:streaming` | ✓ | ✓ | Thread/Fork | Batches N items before emit |
 | **Router** | `:streaming` | ✓ | ✓ | None | Auto-inserted for fan-out |
 | **Pipeline** | `:composite` | ✓ | ✓ | Special | Wraps nested pipeline |
 

@@ -423,7 +423,7 @@ module Minigun
       #   batch(:writer, max_size: 100) do |batch, output|
       #     BulkWriter.insert(batch)
       #   end
-      def batch(name_or_size = nil, options = {}, &block)
+      def batch(name_or_size = nil, options = {}, &)
         # Handle shorthand: batch(10) means batch(nil, max_size: 10)
         if name_or_size.is_a?(Integer)
           options = { max_size: name_or_size }.merge(options)
@@ -433,7 +433,7 @@ module Minigun
         end
 
         options = _apply_execution_context(options)
-        @pipeline.add_stage(:batch, name, options, &block)
+        @pipeline.add_stage(:batch, name, options, &)
       end
 
       # Named execution context definition

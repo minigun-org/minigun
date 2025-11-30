@@ -97,7 +97,7 @@ end
 
 - **Producer** - Generates data (no input, only output)
 - **Processor** - Transforms data (input and output)
-- **Accumulator** - Batches items
+- **Batch** - Batches items
 - **Consumer** - Final processing (input, no output)
 
 Each stage type has semantics that match its purpose:

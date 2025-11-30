@@ -578,7 +578,7 @@ class CompleteExample
       output << process_normal(data)
     end
 
-    # Accumulator
+    # Batch
     batch :batch, max_size: 50 do |batch, output|
       output << batch
     end

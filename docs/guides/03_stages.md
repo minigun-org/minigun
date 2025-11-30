@@ -160,7 +160,7 @@ processor :validate do |record, output|
 end
 ```
 
-## Accumulators in Detail
+## Batch Stages in Detail
 
 Batch stages **group multiple items** into batches before emitting them downstream. This is useful for bulk operations.
 
@@ -379,7 +379,7 @@ end
 
 - **Producers** generate data and start the pipeline
 - **Processors** transform data in the middle of the pipeline
-- **Accumulators** batch multiple items together
+- **Batch stages** batch multiple items together
 - **Consumers** perform final processing at the end
 - All stages can be parallelized with `threads:` or `processes:`
 - Stages run concurrently, processing items as they arrive
