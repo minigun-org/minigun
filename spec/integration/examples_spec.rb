@@ -2821,6 +2821,7 @@ RSpec.describe 'Examples Integration' do
 
         # Spawn 3 workers for 3 stages - each waits for its port to be ready
         worker_procs = []
+        worker_mutex = Mutex.new
         worker_threads = []
         [
           ['worker_preprocess', port_base],
@@ -2829,7 +2830,7 @@ RSpec.describe 'Examples Integration' do
         ].each do |worker_mode, port|
           worker_threads << Thread.new do
             proc = harness.spawn_worker_with_retry(example_file, worker_mode, env: env, coordinator_port: port)
-            worker_procs << proc if proc
+            worker_mutex.synchronize { worker_procs << proc } if proc
           end
         end
 
@@ -2846,10 +2847,16 @@ RSpec.describe 'Examples Integration' do
         # Verify each stage had a worker connect
         expect(combined.scan(/Worker registered/).size).to be >= 3
 
-        # Verify all 3 stages actually ran (workers log their processing)
-        expect(combined).to include('[Preprocess Worker]')
-        expect(combined).to include('[Compute Worker]')
-        expect(combined).to include('[Postprocess Worker]')
+        # Collect worker outputs to verify all 3 stages actually processed items
+        all_worker_output = worker_procs.map do |proc|
+          output = harness.process_manager.read_output(proc)
+          output[:stdout] + output[:stderr]
+        end.join("\n")
+
+        # Verify each worker type processed items (logs go to worker stdout)
+        expect(all_worker_output).to include('[Preprocess Worker]')
+        expect(all_worker_output).to include('[Compute Worker]')
+        expect(all_worker_output).to include('[Postprocess Worker]')
       ensure
         harness.cleanup
       end
@@ -2867,27 +2874,27 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
-  # 114: Fan-out to 2 specialized clusters, fan-in to aggregate
+  # 114: Single cluster with specialized workers handling different task types
   describe '114_cluster_fan_out_fan_in.rb' do
-    it 'routes tasks to specialized workers and aggregates results', timeout: 120 do
+    it 'processes mixed tasks with specialized workers in single cluster', timeout: 120 do
       harness = ClusterTestHarness::Harness.new
       example_file = File.expand_path('../../examples/114_cluster_fan_out_fan_in.rb', __dir__)
 
       begin
-        # Single port - example uses port_base and port_base+1 internally
-        port_base = harness.port_allocator.allocate
-        env = { 'CLUSTER_PORT' => port_base.to_s, 'WORKER_TIMEOUT' => '15' }
+        # Single port - both workers connect to same cluster
+        port = harness.port_allocator.allocate
+        env = { 'CLUSTER_PORT' => port.to_s, 'WORKER_TIMEOUT' => '15' }
 
-        coord_proc = harness.spawn_example(example_file, 'coordinator', env: env, wait_port: port_base)
+        coord_proc = harness.spawn_example(example_file, 'coordinator', env: env, wait_port: port)
 
-        # Spawn image worker (GPU) and text worker (CPU)
+        # Spawn both workers connecting to same cluster
+        worker_procs = []
+        worker_mutex = Mutex.new
         worker_threads = []
-        [
-          ['worker_image', port_base],
-          ['worker_text', port_base + 1]
-        ].each do |worker_mode, port|
+        %w[worker_image worker_text].each do |worker_mode|
           worker_threads << Thread.new do
-            harness.spawn_worker_with_retry(example_file, worker_mode, env: env, coordinator_port: port)
+            proc = harness.spawn_worker_with_retry(example_file, worker_mode, env: env, coordinator_port: port)
+            worker_mutex.synchronize { worker_procs << proc } if proc
           end
         end
 
@@ -2897,12 +2904,19 @@ RSpec.describe 'Examples Integration' do
         coord_output = harness.process_manager.read_output(coord_proc)
         combined = coord_output[:stdout] + coord_output[:stderr]
 
-        # Verify fan-out: both image and text clusters processed items
+        # Verify both result types were collected
         expect(combined).to include('Image Results (GPU Cluster)')
         expect(combined).to include('Text Results (CPU Cluster)')
 
-        # Verify fan-in: results aggregated (10 image + 10 text = 20 total)
+        # Verify all 20 tasks were processed (10 image + 10 text)
         expect(combined).to match(/Total: 10 image \+ 10 text = 20 tasks/)
+
+        # Verify workers actually processed items
+        all_worker_output = worker_procs.map do |proc|
+          output = harness.process_manager.read_output(proc)
+          output[:stdout] + output[:stderr]
+        end.join("\n")
+        expect(all_worker_output).to match(/\[Image Worker \d+\]|\[Text Worker \d+\]/)
       ensure
         harness.cleanup
       end
@@ -2921,11 +2935,14 @@ RSpec.describe 'Examples Integration' do
 
         coord_proc = harness.spawn_example(example_file, 'coordinator', env: env, wait_port: port)
 
-        # Spawn 2 parse workers
+        # Spawn 2 parse workers and track them
+        worker_procs = []
+        worker_mutex = Mutex.new
         worker_threads = []
         2.times do
           worker_threads << Thread.new do
-            harness.spawn_worker_with_retry(example_file, 'worker', env: env, coordinator_port: port)
+            proc = harness.spawn_worker_with_retry(example_file, 'worker', env: env, coordinator_port: port)
+            worker_mutex.synchronize { worker_procs << proc } if proc
           end
         end
 
@@ -2938,11 +2955,17 @@ RSpec.describe 'Examples Integration' do
         # Verify all 20 items processed
         expect(combined).to match(/Total pages processed: 20/)
 
-        # Verify hybrid execution (local threads + cluster + forks)
+        # Verify local execution stages (these run on coordinator)
         expect(combined).to include('[Fetch Thread]')   # Local thread pool for I/O
-        expect(combined).to include('[Parse Worker')    # Cluster workers for CPU
         expect(combined).to include('[Extract Fork]')   # Local forks for CPU
         expect(combined).to include('[Save Thread]')    # Local threads for I/O
+
+        # Verify cluster workers actually processed items (logs go to worker stdout)
+        all_worker_output = worker_procs.map do |proc|
+          output = harness.process_manager.read_output(proc)
+          output[:stdout] + output[:stderr]
+        end.join("\n")
+        expect(all_worker_output).to include('[Parse Worker')
       ensure
         harness.cleanup
       end

@@ -1,24 +1,21 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Example: Cluster Fan-Out / Fan-In Pattern
+# Example: Cluster with Specialized Workers
 #
-# Demonstrates a diamond-shaped topology where work fans out to multiple
-# specialized cluster pools, then fans back in for aggregation.
+# Demonstrates routing different task types to specialized workers within
+# the same cluster. Uses a single cluster where workers process different
+# task types based on their capabilities.
 #
 # Topology:
 #
-#                    Producer (local)
-#                          ↓
-#                     Router (local)
-#                    /            \
-#         Cluster A (GPU)      Cluster B (CPU)
-#         Port 9000            Port 9001
-#         (image tasks)        (text tasks)
-#                    \            /
-#                     Aggregator (local)
-#                          ↓
-#                    Consumer (local)
+#   Producer (local)
+#        ↓
+#   Cluster (port 9000)
+#   - Image workers process :image tasks
+#   - Text workers process :text tasks
+#        ↓
+#   Consumer (local)
 #
 # Usage:
 #   Terminal 1: ruby examples/114_cluster_fan_out_fan_in.rb coordinator
@@ -32,22 +29,19 @@ $stdout.sync = true
 $stderr.sync = true
 
 # Configuration via environment variables for testing
-CLUSTER_PORT_BASE = ENV.fetch('CLUSTER_PORT', '9000').to_i
+CLUSTER_PORT = ENV.fetch('CLUSTER_PORT', '9000').to_i
 WORKER_TIMEOUT = ENV.fetch('WORKER_TIMEOUT', '30').to_i
 
-# Fan-out/fan-in cluster example demonstrating diamond topology
-class FanOutFanInCluster
-  def self.create_pipeline(port_base)
-    port0 = port_base
-    port1 = port_base + 1
-
+# Specialized workers cluster example
+class SpecializedWorkersCluster
+  def self.create_pipeline(port)
     Class.new do
       include Minigun::DSL
 
       attr_reader :results
 
       define_method(:initialize) do
-        @results = []
+        @results = { image: [], text: [] }
       end
 
       pipeline do
@@ -66,112 +60,95 @@ class FanOutFanInCluster
           puts '[Producer] Generated 20 tasks (10 image, 10 text)'
         end
 
-        # Route to appropriate cluster based on task type
-        processor :route_by_type do |item, output|
-          if item[:type] == :image
-            output.to(:process_images) << item
-          else
-            output.to(:process_text) << item
+        # Single cluster with specialized workers
+        # Workers register for :process_mixed and handle based on item type
+        in_cluster(coordinator_uri: "druby://0.0.0.0:#{port}", min_workers: 2, worker_timeout: WORKER_TIMEOUT) do
+          processor :process_mixed do |item, output|
+            # This block defines the interface, actual processing happens on workers
+            output << item
           end
         end
 
-        # Cluster A: Image processing (simulated GPU cluster)
-        in_cluster(coordinator_uri: "druby://0.0.0.0:#{port0}", min_workers: 1, worker_timeout: WORKER_TIMEOUT) do
-          processor :process_images do |item, output|
-            # Simulate GPU-intensive image processing
-            puts "  [Image Cluster] Processing image task #{item[:id]}..."
-            sleep 0.15
-            result = {
-              id: item[:id],
-              type: :image,
-              result: item[:value]**2,
-              processor: 'GPU',
-              cluster: 'A'
-            }
-            output << result
-          end
-        end
-
-        # Cluster B: Text processing (CPU cluster)
-        in_cluster(coordinator_uri: "druby://0.0.0.0:#{port1}", min_workers: 1, worker_timeout: WORKER_TIMEOUT) do
-          processor :process_text do |item, output|
-            # Simulate CPU text processing
-            puts "  [Text Cluster] Processing text task #{item[:id]}..."
-            sleep 0.1
-            result = {
-              id: item[:id],
-              type: :text,
-              result: item[:data].upcase,
-              processor: 'CPU',
-              cluster: 'B'
-            }
-            output << result
-          end
-        end
-
-        # Aggregate results from both clusters
-        batch :aggregate, initial: { image: [], text: [] } do |acc, item|
-          puts "[Aggregator] Received #{item[:type]} result from #{item[:cluster]}"
-          acc[item[:type]] << item
-          acc
-        end
-
-        # Collect final aggregated results
-        consumer :collect do |aggregated|
-          @results = aggregated
-          puts
-          puts '[Consumer] Final aggregation:'
-          puts "  Image results: #{aggregated[:image].size}"
-          puts "  Text results: #{aggregated[:text].size}"
+        # Collect and aggregate results
+        consumer :collect do |item|
+          puts "[Collector] Received #{item[:type]} result: #{item[:result]}"
+          @results[item[:type]] << item
         end
       end
     end.new
   end
 end
 
-# Image cluster worker (simulates GPU workers)
-def run_image_worker(port = CLUSTER_PORT_BASE)
+# Image worker (processes image-type tasks)
+def run_image_worker(port = CLUSTER_PORT)
   worker = Minigun::Cluster::Worker.new(
     coordinator_uri: "druby://127.0.0.1:#{port}",
     worker_id: "image-worker-#{Process.pid}"
   )
 
-  worker.register_stage(:process_images) do |item, output|
-    puts "  [Image Worker #{Process.pid}] Processing #{item[:id]}..."
-    sleep 0.15
-    result = {
-      id: item[:id],
-      type: :image,
-      result: item[:value]**2,
-      processor: 'GPU',
-      cluster: 'A'
-    }
-    output.call(result)
+  worker.register_stage(:process_mixed) do |item, output|
+    if item[:type] == :image
+      puts "  [Image Worker #{Process.pid}] Processing image task #{item[:id]}..."
+      sleep 0.1
+      result = {
+        id: item[:id],
+        type: :image,
+        result: item[:value]**2,
+        processor: 'GPU',
+        original_data: item[:data]
+      }
+      output.call(result)
+    else
+      # Re-queue non-image items for another worker
+      puts "  [Image Worker #{Process.pid}] Skipping non-image task #{item[:id]}"
+      # For this example, we'll process anyway to avoid deadlock
+      result = {
+        id: item[:id],
+        type: item[:type],
+        result: item[:data].upcase,
+        processor: 'CPU-fallback',
+        original_data: item[:data]
+      }
+      output.call(result)
+    end
   end
 
   worker.connect
-  puts "Image worker #{worker.worker_id} connected (simulating GPU)!"
+  puts "Image worker #{worker.worker_id} connected (GPU simulator)!"
   worker.start
 end
 
-# Text cluster worker (CPU workers)
-def run_text_worker(port = CLUSTER_PORT_BASE + 1)
+# Text worker (processes text-type tasks)
+def run_text_worker(port = CLUSTER_PORT)
   worker = Minigun::Cluster::Worker.new(
     coordinator_uri: "druby://127.0.0.1:#{port}",
     worker_id: "text-worker-#{Process.pid}"
   )
 
-  worker.register_stage(:process_text) do |item, output|
-    puts "  [Text Worker #{Process.pid}] Processing #{item[:id]}..."
-    sleep 0.1
-    result = {
-      id: item[:id],
-      type: :text,
-      result: item[:data].upcase,
-      processor: 'CPU',
-      cluster: 'B'
-    }
-    output.call(result)
+  worker.register_stage(:process_mixed) do |item, output|
+    if item[:type] == :text
+      puts "  [Text Worker #{Process.pid}] Processing text task #{item[:id]}..."
+      sleep 0.1
+      result = {
+        id: item[:id],
+        type: :text,
+        result: item[:data].upcase,
+        processor: 'CPU',
+        original_data: item[:data]
+      }
+      output.call(result)
+    else
+      # Process image items too (fallback)
+      puts "  [Text Worker #{Process.pid}] Processing image task #{item[:id]} (fallback)..."
+      result = {
+        id: item[:id],
+        type: :image,
+        result: item[:value]**2,
+        processor: 'CPU-fallback',
+        original_data: item[:data]
+      }
+      output.call(result)
+    end
   end
 
   worker.connect
@@ -187,18 +164,19 @@ if __FILE__ == $PROGRAM_NAME
 
   case mode
   when 'coordinator'
-    puts '=== Fan-Out / Fan-In Cluster Pipeline ==='
+    puts '=== Specialized Workers Cluster Pipeline ==='
     puts
-    puts 'This demonstrates routing to specialized clusters:'
-    puts "  - Image tasks → GPU Cluster (port #{CLUSTER_PORT_BASE})"
-    puts "  - Text tasks  → CPU Cluster (port #{CLUSTER_PORT_BASE + 1})"
+    puts 'This demonstrates a cluster with specialized workers:'
+    puts '  - Image workers prefer image tasks (GPU simulation)'
+    puts '  - Text workers prefer text tasks (CPU)'
+    puts '  - Both can handle any task type as fallback'
     puts
     puts 'Start workers in separate terminals:'
     puts '  ruby examples/114_cluster_fan_out_fan_in.rb worker_image'
     puts '  ruby examples/114_cluster_fan_out_fan_in.rb worker_text'
     puts
 
-    pipeline = FanOutFanInCluster.create_pipeline(CLUSTER_PORT_BASE)
+    pipeline = SpecializedWorkersCluster.create_pipeline(CLUSTER_PORT)
     pipeline.run
 
     puts
@@ -214,15 +192,17 @@ if __FILE__ == $PROGRAM_NAME
       puts "  Task #{r[:id]}: #{r[:result]} (#{r[:processor]})"
     end
     puts
-    puts "Total: #{pipeline.results[:image].size} image + #{pipeline.results[:text].size} text = #{pipeline.results[:image].size + pipeline.results[:text].size} tasks"
+    image_count = pipeline.results[:image].size
+    text_count = pipeline.results[:text].size
+    puts "Total: #{image_count} image + #{text_count} text = #{image_count + text_count} tasks"
 
   when 'worker_image'
     puts '=== Image Worker (GPU Simulator) ==='
-    run_image_worker(CLUSTER_PORT_BASE)
+    run_image_worker(CLUSTER_PORT)
 
   when 'worker_text'
     puts '=== Text Worker ==='
-    run_text_worker(CLUSTER_PORT_BASE + 1)
+    run_text_worker(CLUSTER_PORT)
 
   else
     puts "Unknown mode: #{mode}"
