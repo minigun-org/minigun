@@ -51,6 +51,10 @@ class DataShard
     @data.keys
   end
 
+  def key?(id)
+    @data.key?(id)
+  end
+
   def size
     @data.size
   end

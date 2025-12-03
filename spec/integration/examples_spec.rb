@@ -2762,10 +2762,10 @@ RSpec.describe 'Examples Integration' do
     count >= expected_count
   end
 
-  # 110 + 111: Coordinator waits for workers to connect
-  # Tests '110_cluster_coordinator.rb' and '111_cluster_worker.rb' together
+  # 110 + 111: Coordinator distributes work to worker process
+  # Tests real multi-process cluster execution with DRb communication
   describe '110_cluster_coordinator.rb and 111_cluster_worker.rb' do
-    it 'runs multi-process coordinator with worker', timeout: 60 do
+    it 'processes all items through coordinator-worker pipeline', timeout: 90 do
       harness = ClusterTestHarness::Harness.new
       coordinator_file = File.expand_path('../../examples/110_cluster_coordinator.rb', __dir__)
       worker_file = File.expand_path('../../examples/111_cluster_worker.rb', __dir__)
@@ -2774,53 +2774,53 @@ RSpec.describe 'Examples Integration' do
         port = harness.port_allocator.allocate
         env = { 'CLUSTER_PORT' => port.to_s, 'WORKER_TIMEOUT' => '15' }
 
-        # Start coordinator
+        # Start coordinator (waits for worker before processing)
         coord_proc = harness.spawn_example(coordinator_file, 'coordinator', env: env, wait_port: port)
 
-        # Start worker
-        harness.spawn_example(worker_file, env: env)
+        # Start worker in separate process
+        worker_proc = harness.spawn_example(worker_file, env: env)
 
-        # Wait for coordinator to complete (output is now unbuffered)
+        # Wait for pipeline to complete
         harness.wait_for_output(coord_proc, 'Total results:', timeout: 60)
 
-        output = harness.process_manager.read_output(coord_proc)
-        combined = output[:stdout] + output[:stderr]
+        coord_output = harness.process_manager.read_output(coord_proc)
+        worker_output = harness.process_manager.read_output(worker_proc)
 
-        expect(combined).to include('Generating work items')
-        expect(combined).to include('Total results:')
+        # Verify coordinator processed items
+        expect(coord_output[:stdout]).to include('10 work items generated')
+        expect(coord_output[:stdout]).to match(/Total results: 10/)
+
+        # Verify worker actually processed items (not just connected)
+        expect(worker_output[:stdout]).to include('Processed item')
+        processed_count = worker_output[:stdout].scan(/Processed item \d+/).size
+        expect(processed_count).to eq(10)
+
+        # Verify worker registered with coordinator
+        expect(coord_output[:stdout] + coord_output[:stderr]).to include('Worker registered')
       ensure
         harness.cleanup
       end
     end
   end
 
-  describe '111_cluster_worker.rb' do
-    it 'compiles and defines expected worker structure' do
-      example_file = File.expand_path('../../examples/111_cluster_worker.rb', __dir__)
-      code = File.read(example_file)
-      expect { RubyVM::InstructionSequence.compile(code) }.not_to raise_error
-      expect(code).to include('Cluster::Worker.new')
-      expect(code).to include('register_stage')
-    end
-  end
+  # 111 standalone is tested above with 110 - no separate test needed
 
+  # 112: Multi-stage pipeline with 3 cluster stages in sequence
   describe '112_multi_stage_cluster.rb' do
-    it 'runs multi-stage cluster pipeline', timeout: 120 do
+    it 'processes items through 3 sequential cluster stages', timeout: 120 do
       harness = ClusterTestHarness::Harness.new
       example_file = File.expand_path('../../examples/112_multi_stage_cluster.rb', __dir__)
 
       begin
-        # Allocate 3 ports for 3 cluster stages
+        # Single port allocation - example uses port_base, port_base+1, port_base+2 internally
         port_base = harness.port_allocator.allocate
-        harness.port_allocator.allocate # port_base + 1
-        harness.port_allocator.allocate # port_base + 2
         env = { 'CLUSTER_PORT' => port_base.to_s, 'WORKER_TIMEOUT' => '15' }
 
-        # Start coordinator (it will start listening on ports sequentially as pipeline executes)
+        # Start coordinator
         coord_proc = harness.spawn_example(example_file, 'coordinator', env: env, wait_port: port_base)
 
-        # Spawn workers in background threads - each waits for its port to be available
-        # This handles the sequential nature of multi-stage pipelines
+        # Spawn 3 workers for 3 stages - each waits for its port to be ready
+        worker_procs = []
         worker_threads = []
         [
           ['worker_preprocess', port_base],
@@ -2828,59 +2828,59 @@ RSpec.describe 'Examples Integration' do
           ['worker_postprocess', port_base + 2]
         ].each do |worker_mode, port|
           worker_threads << Thread.new do
-            harness.spawn_worker_with_retry(example_file, worker_mode, env: env, coordinator_port: port)
+            proc = harness.spawn_worker_with_retry(example_file, worker_mode, env: env, coordinator_port: port)
+            worker_procs << proc if proc
           end
         end
 
-        # Wait for coordinator to complete (output is now unbuffered)
+        # Wait for pipeline to complete
         harness.wait_for_output(coord_proc, 'items processed', timeout: 90)
-
-        # Clean up worker threads
         worker_threads.each(&:join)
 
-        output = harness.process_manager.read_output(coord_proc)
-        combined = output[:stdout] + output[:stderr]
+        coord_output = harness.process_manager.read_output(coord_proc)
+        combined = coord_output[:stdout] + coord_output[:stderr]
 
-        expect(combined).to include('Multi-Stage')
-        expect(combined).to include('Total:')
-        expect(combined).to include('items processed')
+        # Verify all 10 items processed through all 3 stages
+        expect(combined).to match(/Total: 10 items processed/)
+
+        # Verify each stage had a worker connect
+        expect(combined.scan(/Worker registered/).size).to be >= 3
+
+        # Verify all 3 stages actually ran (workers log their processing)
+        expect(combined).to include('[Preprocess Worker]')
+        expect(combined).to include('[Compute Worker]')
+        expect(combined).to include('[Postprocess Worker]')
       ensure
         harness.cleanup
       end
     end
   end
 
+  # 113: Complex hierarchical topology - too complex for automated test (7 processes)
+  # Just verify the example compiles and defines expected structure
   describe '113_hierarchical_cluster.rb' do
-    it 'defines expected classes for hierarchical topology' do
-      # This is a very complex multi-process example (7 terminals)
-      # Test by loading and verifying the class structure
+    it 'compiles and defines hierarchical pipeline classes' do
       example_file = File.expand_path('../../examples/113_hierarchical_cluster.rb', __dir__)
-
-      code = File.read(example_file)
-      expect { RubyVM::InstructionSequence.compile(code) }.not_to raise_error
-
-      load example_file
+      expect { load example_file }.not_to raise_error
       expect(defined?(ParentPipeline)).to eq('constant')
       expect(defined?(ChildPipeline)).to eq('constant')
     end
   end
 
+  # 114: Fan-out to 2 specialized clusters, fan-in to aggregate
   describe '114_cluster_fan_out_fan_in.rb' do
-    it 'runs fan-out/fan-in cluster topology', timeout: 120 do
+    it 'routes tasks to specialized workers and aggregates results', timeout: 120 do
       harness = ClusterTestHarness::Harness.new
       example_file = File.expand_path('../../examples/114_cluster_fan_out_fan_in.rb', __dir__)
 
       begin
-        # Allocate 2 ports for 2 cluster stages (image and text processing)
+        # Single port - example uses port_base and port_base+1 internally
         port_base = harness.port_allocator.allocate
-        harness.port_allocator.allocate # port_base + 1
         env = { 'CLUSTER_PORT' => port_base.to_s, 'WORKER_TIMEOUT' => '15' }
 
-        # Start coordinator (it will listen on port_base and port_base+1)
         coord_proc = harness.spawn_example(example_file, 'coordinator', env: env, wait_port: port_base)
 
-        # Spawn workers in background threads - each waits for its port
-        # Both clusters start simultaneously in fan-out pattern
+        # Spawn image worker (GPU) and text worker (CPU)
         worker_threads = []
         [
           ['worker_image', port_base],
@@ -2891,24 +2891,27 @@ RSpec.describe 'Examples Integration' do
           end
         end
 
-        # Wait for coordinator to complete (output is now unbuffered)
         harness.wait_for_output(coord_proc, 'Results Summary', timeout: 90)
-
         worker_threads.each(&:join)
 
-        output = harness.process_manager.read_output(coord_proc)
-        combined = output[:stdout] + output[:stderr]
+        coord_output = harness.process_manager.read_output(coord_proc)
+        combined = coord_output[:stdout] + coord_output[:stderr]
 
-        expect(combined).to include('Fan-Out')
-        expect(combined).to include('Results Summary')
+        # Verify fan-out: both image and text clusters processed items
+        expect(combined).to include('Image Results (GPU Cluster)')
+        expect(combined).to include('Text Results (CPU Cluster)')
+
+        # Verify fan-in: results aggregated (10 image + 10 text = 20 total)
+        expect(combined).to match(/Total: 10 image \+ 10 text = 20 tasks/)
       ensure
         harness.cleanup
       end
     end
   end
 
+  # 115: Hybrid pipeline mixing local threads/forks with cluster
   describe '115_hybrid_local_cluster.rb' do
-    it 'runs hybrid local + cluster execution', timeout: 120 do
+    it 'mixes local execution with cluster distribution', timeout: 120 do
       harness = ClusterTestHarness::Harness.new
       example_file = File.expand_path('../../examples/115_hybrid_local_cluster.rb', __dir__)
 
@@ -2916,10 +2919,9 @@ RSpec.describe 'Examples Integration' do
         port = harness.port_allocator.allocate
         env = { 'CLUSTER_PORT' => port.to_s, 'WORKER_TIMEOUT' => '15' }
 
-        # Start coordinator
         coord_proc = harness.spawn_example(example_file, 'coordinator', env: env, wait_port: port)
 
-        # Spawn 2 parse workers (both connect to same coordinator port)
+        # Spawn 2 parse workers
         worker_threads = []
         2.times do
           worker_threads << Thread.new do
@@ -2927,46 +2929,45 @@ RSpec.describe 'Examples Integration' do
           end
         end
 
-        # Wait for coordinator to complete (output is now unbuffered)
         harness.wait_for_output(coord_proc, 'Results Summary', timeout: 90)
-
         worker_threads.each(&:join)
 
-        output = harness.process_manager.read_output(coord_proc)
-        combined = output[:stdout] + output[:stderr]
+        coord_output = harness.process_manager.read_output(coord_proc)
+        combined = coord_output[:stdout] + coord_output[:stderr]
 
-        expect(combined).to include('Hybrid')
-        expect(combined).to include('Results Summary')
+        # Verify all 20 items processed
+        expect(combined).to match(/Total pages processed: 20/)
+
+        # Verify hybrid execution (local threads + cluster + forks)
+        expect(combined).to include('[Fetch Thread]')   # Local thread pool for I/O
+        expect(combined).to include('[Parse Worker')    # Cluster workers for CPU
+        expect(combined).to include('[Extract Fork]')   # Local forks for CPU
+        expect(combined).to include('[Save Thread]')    # Local threads for I/O
       ensure
         harness.cleanup
       end
     end
   end
 
+  # 116: Workers communicate peer-to-peer, not just through coordinator
   describe '116_peer_to_peer_cluster.rb' do
-    it 'runs peer-to-peer worker communication', timeout: 120 do
+    it 'enables direct worker-to-worker data sharing', timeout: 120 do
       harness = ClusterTestHarness::Harness.new
       example_file = File.expand_path('../../examples/116_peer_to_peer_cluster.rb', __dir__)
 
       begin
-        # Allocate ports: coordinator (port_base), peer workers (port_base+10, port_base+11)
+        # Coordinator port - workers use port_base+10 and port_base+11 for peer DRb
         port_base = harness.port_allocator.allocate
-        # Allocate peer ports
-        10.times { harness.port_allocator.allocate } # Reserve port_base+1 through port_base+9
-        peer_port_0 = harness.port_allocator.allocate # port_base + 10
-        peer_port_1 = harness.port_allocator.allocate # port_base + 11
-
         env = { 'CLUSTER_PORT' => port_base.to_s, 'WORKER_TIMEOUT' => '15' }
 
-        # Start coordinator
         coord_proc = harness.spawn_example(example_file, 'coordinator', env: env, wait_port: port_base)
 
-        # Spawn 2 workers with shards in background threads
-        # Workers also start their own DRb servers for peer-to-peer communication
+        # Spawn 2 workers with different shards
+        # Worker args: shard_start, worker_port (for peer DRb server)
+        # The example calculates peer ports as port_base+10 and port_base+11
         worker_threads = []
-        [[0, peer_port_0], [5, peer_port_1]].each do |shard_start, worker_port|
+        [[0, port_base + 10], [5, port_base + 11]].each do |shard_start, worker_port|
           worker_threads << Thread.new do
-            # Wait for coordinator to be ready, then spawn worker
             harness.spawn_worker_with_retry(
               example_file, 'worker', shard_start.to_s, worker_port.to_s,
               env: env, coordinator_port: port_base
@@ -2974,16 +2975,18 @@ RSpec.describe 'Examples Integration' do
           end
         end
 
-        # Wait for coordinator to complete (output is now unbuffered)
         harness.wait_for_output(coord_proc, 'Results Summary', timeout: 90)
-
         worker_threads.each(&:join)
 
-        output = harness.process_manager.read_output(coord_proc)
-        combined = output[:stdout] + output[:stderr]
+        coord_output = harness.process_manager.read_output(coord_proc)
+        combined = coord_output[:stdout] + coord_output[:stderr]
 
+        # Verify successful joins
+        expect(combined).to match(/Successful: 10/)
+
+        # Verify peer-to-peer communication happened (workers fetched from each other)
+        # This is the key differentiator - workers talk directly, not through coordinator
         expect(combined).to include('Peer-to-Peer')
-        expect(combined).to include('Results Summary')
       ensure
         harness.cleanup
       end
