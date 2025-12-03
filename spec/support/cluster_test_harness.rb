@@ -226,10 +226,10 @@ module ClusterTestHarness
 
     # Spawn a worker that retries connecting to coordinator until success or timeout
     # This is useful when coordinator ports open sequentially during pipeline execution
-    def spawn_worker_with_retry(example_file, *args, env: {}, coordinator_port:, retry_interval: 2, max_retries: 30)
+    def spawn_worker_with_retry(example_file, *args, env: {}, coordinator_port:, retry_interval: 0.2, max_retries: 150)
       # Wait for coordinator port to be available before spawning worker
       deadline = Time.now + (retry_interval * max_retries)
-      until wait_for_port(coordinator_port, timeout: 1)
+      until wait_for_port(coordinator_port, timeout: 0.1)
         return nil if Time.now > deadline
         sleep retry_interval
       end
@@ -264,6 +264,8 @@ module ClusterTestHarness
     end
 
     # Wait for output to contain expected text
+    # NOTE: Due to Ruby's I/O buffering when redirected to files, this may not see
+    # output until the process exits. Use wait_for_process_exit for reliable results.
     def wait_for_output(proc_info, pattern, timeout: 30)
       deadline = Time.now + timeout
       loop do
@@ -277,6 +279,22 @@ module ClusterTestHarness
           return true if combined.include?(pattern)
         end
 
+        # Check if process has exited
+        return false unless @process_manager.process_alive?(proc_info)
+        return false if Time.now > deadline
+        sleep 0.1
+      end
+    end
+
+    # Wait for process to exit (output is fully buffered until exit)
+    def wait_for_process_exit(proc_info, timeout: 30)
+      deadline = Time.now + timeout
+      loop do
+        unless @process_manager.process_alive?(proc_info)
+          # Reap the process to avoid zombies
+          Process.waitpid(proc_info[:pid], Process::WNOHANG) rescue nil
+          return true
+        end
         return false if Time.now > deadline
         sleep 0.1
       end

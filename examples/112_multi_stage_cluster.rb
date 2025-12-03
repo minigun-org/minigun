@@ -25,8 +25,13 @@
 
 require_relative '../lib/minigun'
 
+# Force unbuffered output for test harness compatibility
+$stdout.sync = true
+$stderr.sync = true
+
 # Configuration via environment variables for testing
 CLUSTER_PORT_BASE = ENV.fetch('CLUSTER_PORT', '9000').to_i
+WORKER_TIMEOUT = ENV.fetch('WORKER_TIMEOUT', '30').to_i
 
 # Pipeline definition - uses factory to allow dynamic port configuration
 class MultiStageCluster
@@ -55,7 +60,7 @@ class MultiStageCluster
         end
 
         # Stage 1: Preprocessing cluster
-        in_cluster(coordinator_uri: "druby://0.0.0.0:#{port0}", min_workers: 1, worker_timeout: 30) do
+        in_cluster(coordinator_uri: "druby://0.0.0.0:#{port0}", min_workers: 1, worker_timeout: WORKER_TIMEOUT) do
           processor :preprocess do |item, output|
             # Simulate preprocessing (validation, normalization, etc.)
             puts "  [Preprocess] Item #{item[:id]}: validating..."
@@ -66,7 +71,7 @@ class MultiStageCluster
         end
 
         # Stage 2: Heavy computation cluster
-        in_cluster(coordinator_uri: "druby://0.0.0.0:#{port1}", min_workers: 1, worker_timeout: 30) do
+        in_cluster(coordinator_uri: "druby://0.0.0.0:#{port1}", min_workers: 1, worker_timeout: WORKER_TIMEOUT) do
           processor :heavy_compute do |item, output|
             # Simulate expensive computation
             puts "  [Compute] Item #{item[:id]}: computing..."
@@ -77,7 +82,7 @@ class MultiStageCluster
         end
 
         # Stage 3: Postprocessing cluster
-        in_cluster(coordinator_uri: "druby://0.0.0.0:#{port2}", min_workers: 1, worker_timeout: 30) do
+        in_cluster(coordinator_uri: "druby://0.0.0.0:#{port2}", min_workers: 1, worker_timeout: WORKER_TIMEOUT) do
           processor :postprocess do |item, output|
             # Simulate postprocessing (formatting, validation, etc.)
             puts "  [Postprocess] Item #{item[:id]}: formatting..."

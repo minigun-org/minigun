@@ -29,8 +29,13 @@
 
 require_relative '../lib/minigun'
 
+# Force unbuffered output for test harness compatibility
+$stdout.sync = true
+$stderr.sync = true
+
 # Configuration via environment variables for testing
 CLUSTER_PORT = ENV.fetch('CLUSTER_PORT', '9000').to_i
+WORKER_TIMEOUT = ENV.fetch('WORKER_TIMEOUT', '30').to_i
 
 # Hybrid pipeline mixing local and cluster execution strategies
 class HybridPipeline
@@ -65,7 +70,7 @@ class HybridPipeline
         end
 
         # Cluster: Parse HTML (CPU-bound, distribute across machines)
-        in_cluster(coordinator_uri: "druby://0.0.0.0:#{port}", min_workers: 2, worker_timeout: 30) do
+        in_cluster(coordinator_uri: "druby://0.0.0.0:#{port}", min_workers: 2, worker_timeout: WORKER_TIMEOUT) do
           processor :parse_html do |item, output|
             puts "  [Parse Cluster] Parsing HTML for page #{item[:id]}..."
             sleep 0.15 # Simulate CPU-intensive parsing

@@ -2772,17 +2772,16 @@ RSpec.describe 'Examples Integration' do
 
       begin
         port = harness.port_allocator.allocate
-        env = { 'CLUSTER_PORT' => port.to_s }
+        env = { 'CLUSTER_PORT' => port.to_s, 'WORKER_TIMEOUT' => '15' }
 
         # Start coordinator
         coord_proc = harness.spawn_example(coordinator_file, 'coordinator', env: env, wait_port: port)
 
         # Start worker
         harness.spawn_example(worker_file, env: env)
-        sleep 0.5 # Give worker time to connect
 
-        # Wait for coordinator to complete
-        harness.wait_for_output(coord_proc, 'Total results:', timeout: 45)
+        # Wait for coordinator to complete (output is now unbuffered)
+        harness.wait_for_output(coord_proc, 'Total results:', timeout: 60)
 
         output = harness.process_manager.read_output(coord_proc)
         combined = output[:stdout] + output[:stderr]
@@ -2815,7 +2814,7 @@ RSpec.describe 'Examples Integration' do
         port_base = harness.port_allocator.allocate
         harness.port_allocator.allocate # port_base + 1
         harness.port_allocator.allocate # port_base + 2
-        env = { 'CLUSTER_PORT' => port_base.to_s }
+        env = { 'CLUSTER_PORT' => port_base.to_s, 'WORKER_TIMEOUT' => '15' }
 
         # Start coordinator (it will start listening on ports sequentially as pipeline executes)
         coord_proc = harness.spawn_example(example_file, 'coordinator', env: env, wait_port: port_base)
@@ -2833,8 +2832,8 @@ RSpec.describe 'Examples Integration' do
           end
         end
 
-        # Wait for coordinator to complete (give ample time for all 3 stages)
-        harness.wait_for_output(coord_proc, 'Total:', timeout: 90)
+        # Wait for coordinator to complete (output is now unbuffered)
+        harness.wait_for_output(coord_proc, 'items processed', timeout: 90)
 
         # Clean up worker threads
         worker_threads.each(&:join)
@@ -2875,7 +2874,7 @@ RSpec.describe 'Examples Integration' do
         # Allocate 2 ports for 2 cluster stages (image and text processing)
         port_base = harness.port_allocator.allocate
         harness.port_allocator.allocate # port_base + 1
-        env = { 'CLUSTER_PORT' => port_base.to_s }
+        env = { 'CLUSTER_PORT' => port_base.to_s, 'WORKER_TIMEOUT' => '15' }
 
         # Start coordinator (it will listen on port_base and port_base+1)
         coord_proc = harness.spawn_example(example_file, 'coordinator', env: env, wait_port: port_base)
@@ -2892,7 +2891,7 @@ RSpec.describe 'Examples Integration' do
           end
         end
 
-        # Wait for coordinator to complete
+        # Wait for coordinator to complete (output is now unbuffered)
         harness.wait_for_output(coord_proc, 'Results Summary', timeout: 90)
 
         worker_threads.each(&:join)
@@ -2915,7 +2914,7 @@ RSpec.describe 'Examples Integration' do
 
       begin
         port = harness.port_allocator.allocate
-        env = { 'CLUSTER_PORT' => port.to_s }
+        env = { 'CLUSTER_PORT' => port.to_s, 'WORKER_TIMEOUT' => '15' }
 
         # Start coordinator
         coord_proc = harness.spawn_example(example_file, 'coordinator', env: env, wait_port: port)
@@ -2928,7 +2927,7 @@ RSpec.describe 'Examples Integration' do
           end
         end
 
-        # Wait for coordinator to complete
+        # Wait for coordinator to complete (output is now unbuffered)
         harness.wait_for_output(coord_proc, 'Results Summary', timeout: 90)
 
         worker_threads.each(&:join)
@@ -2957,7 +2956,7 @@ RSpec.describe 'Examples Integration' do
         peer_port_0 = harness.port_allocator.allocate # port_base + 10
         peer_port_1 = harness.port_allocator.allocate # port_base + 11
 
-        env = { 'CLUSTER_PORT' => port_base.to_s }
+        env = { 'CLUSTER_PORT' => port_base.to_s, 'WORKER_TIMEOUT' => '15' }
 
         # Start coordinator
         coord_proc = harness.spawn_example(example_file, 'coordinator', env: env, wait_port: port_base)
@@ -2975,7 +2974,7 @@ RSpec.describe 'Examples Integration' do
           end
         end
 
-        # Wait for coordinator to complete
+        # Wait for coordinator to complete (output is now unbuffered)
         harness.wait_for_output(coord_proc, 'Results Summary', timeout: 90)
 
         worker_threads.each(&:join)

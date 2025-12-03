@@ -24,8 +24,13 @@
 require_relative '../lib/minigun'
 require 'drb'
 
+# Force unbuffered output for test harness compatibility
+$stdout.sync = true
+$stderr.sync = true
+
 # Configuration via environment variables for testing
 CLUSTER_PORT_BASE = ENV.fetch('CLUSTER_PORT', '9000').to_i
+WORKER_TIMEOUT = ENV.fetch('WORKER_TIMEOUT', '30').to_i
 
 # Shared data store accessible via DRb
 class DataShard
@@ -79,7 +84,7 @@ class PeerToPeerPipeline
         end
 
         # Cluster workers perform joins by fetching data peer-to-peer
-        in_cluster(coordinator_uri: "druby://0.0.0.0:#{coordinator_port}", min_workers: 2, worker_timeout: 30) do
+        in_cluster(coordinator_uri: "druby://0.0.0.0:#{coordinator_port}", min_workers: 2, worker_timeout: WORKER_TIMEOUT) do
           processor :distributed_join do |task, output|
             # Worker will fetch data from peers if needed
             # (Implemented in worker code below)

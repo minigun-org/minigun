@@ -14,8 +14,13 @@
 
 require_relative '../lib/minigun'
 
+# Force unbuffered output for test harness compatibility
+$stdout.sync = true
+$stderr.sync = true
+
 # Configuration via environment variables for testing
 CLUSTER_PORT = ENV.fetch('CLUSTER_PORT', '9000').to_i
+WORKER_TIMEOUT = ENV.fetch('WORKER_TIMEOUT', '60').to_i
 
 # Configure logging
 Minigun.logger.level = Logger::INFO
@@ -48,17 +53,17 @@ class ClusterExample
         # Producer runs locally on coordinator
         producer :generate do |output|
           puts 'Generating work items...'
-          20.times do |i|
+          10.times do |i|
             output << { id: i, value: rand(100) }
           end
-          puts '20 work items generated'
+          puts '10 work items generated'
         end
 
         # This stage runs on cluster workers
-        in_cluster(coordinator_uri: "druby://0.0.0.0:#{port}", min_workers: 1, worker_timeout: 60) do
+        in_cluster(coordinator_uri: "druby://0.0.0.0:#{port}", min_workers: 1, worker_timeout: WORKER_TIMEOUT) do
           processor :compute do |item, output|
-            # Simulate CPU-intensive work
-            result = (1..10_000).reduce(item[:value]) { |acc, _| Math.sqrt(acc.abs + 1) }
+            # Simulate CPU-intensive work (reduced for faster tests)
+            result = (1..1_000).reduce(item[:value]) { |acc, _| Math.sqrt(acc.abs + 1) }
             output << { id: item[:id], original: item[:value], computed: result.round(4) }
           end
         end

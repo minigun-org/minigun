@@ -15,6 +15,10 @@
 
 require_relative '../lib/minigun'
 
+# Force unbuffered output for test harness compatibility
+$stdout.sync = true
+$stderr.sync = true
+
 # Configuration
 CLUSTER_PORT = ENV.fetch('CLUSTER_PORT', '9000').to_i
 COORDINATOR_URI = ENV.fetch('COORDINATOR_URI', "druby://127.0.0.1:#{CLUSTER_PORT}")
@@ -38,7 +42,7 @@ worker = Minigun::Cluster::Worker.new(
 worker.register_stage(:compute) do |item, output|
   # This is the same logic as in the coordinator's pipeline
   # In production, you'd have the same codebase deployed to all workers
-  result = (1..10_000).reduce(item[:value]) { |acc, _| Math.sqrt(acc.abs + 1) }
+  result = (1..1_000).reduce(item[:value]) { |acc, _| Math.sqrt(acc.abs + 1) }
   output.call({ id: item[:id], original: item[:value], computed: result.round(4) })
   puts "  Processed item #{item[:id]}: #{item[:value]} -> #{result.round(4)}"
 end

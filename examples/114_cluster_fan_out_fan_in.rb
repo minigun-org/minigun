@@ -27,8 +27,13 @@
 
 require_relative '../lib/minigun'
 
+# Force unbuffered output for test harness compatibility
+$stdout.sync = true
+$stderr.sync = true
+
 # Configuration via environment variables for testing
 CLUSTER_PORT_BASE = ENV.fetch('CLUSTER_PORT', '9000').to_i
+WORKER_TIMEOUT = ENV.fetch('WORKER_TIMEOUT', '30').to_i
 
 # Fan-out/fan-in cluster example demonstrating diamond topology
 class FanOutFanInCluster
@@ -71,7 +76,7 @@ class FanOutFanInCluster
         end
 
         # Cluster A: Image processing (simulated GPU cluster)
-        in_cluster(coordinator_uri: "druby://0.0.0.0:#{port0}", min_workers: 1, worker_timeout: 30) do
+        in_cluster(coordinator_uri: "druby://0.0.0.0:#{port0}", min_workers: 1, worker_timeout: WORKER_TIMEOUT) do
           processor :process_images do |item, output|
             # Simulate GPU-intensive image processing
             puts "  [Image Cluster] Processing image task #{item[:id]}..."
@@ -88,7 +93,7 @@ class FanOutFanInCluster
         end
 
         # Cluster B: Text processing (CPU cluster)
-        in_cluster(coordinator_uri: "druby://0.0.0.0:#{port1}", min_workers: 1, worker_timeout: 30) do
+        in_cluster(coordinator_uri: "druby://0.0.0.0:#{port1}", min_workers: 1, worker_timeout: WORKER_TIMEOUT) do
           processor :process_text do |item, output|
             # Simulate CPU text processing
             puts "  [Text Cluster] Processing text task #{item[:id]}..."
