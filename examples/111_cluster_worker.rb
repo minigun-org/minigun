@@ -16,7 +16,8 @@
 require_relative '../lib/minigun'
 
 # Configuration
-COORDINATOR_URI = ENV.fetch('COORDINATOR_URI', 'druby://127.0.0.1:9000')
+CLUSTER_PORT = ENV.fetch('CLUSTER_PORT', '9000').to_i
+COORDINATOR_URI = ENV.fetch('COORDINATOR_URI', "druby://127.0.0.1:#{CLUSTER_PORT}")
 WORKER_ID = ENV.fetch('WORKER_ID', nil) # Auto-generate if not specified
 
 # Configure logging
@@ -58,7 +59,7 @@ begin
 
   # Start processing work
   worker.start
-rescue Minigun::Cluster::ConnectionError => e
+rescue Minigun::Errors::ClusterConnectionFailed => e
   puts "Failed to connect: #{e.message}"
   puts 'Make sure the coordinator is running!'
   exit 1

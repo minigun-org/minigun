@@ -428,7 +428,7 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
       begin
         pipeline = klass.new(workers.map { |w| w[:uri] }, items, results, results_mutex, network_sim, workers)
         Timeout.timeout(10) { pipeline.run }
-      rescue Minigun::Cluster::Error, DRb::DRbConnError
+      rescue Minigun::Errors::ClusterError, DRb::DRbConnError
         # Expected when partition causes connection errors
       end
 
@@ -535,7 +535,7 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
       begin
         pipeline = klass.new(workers.map { |w| w[:uri] }, items, results, results_mutex)
         Timeout.timeout(15) { pipeline.run }
-      rescue Minigun::Cluster::Error
+      rescue Minigun::Errors::ClusterError
         # Expected - worker failure
       end
 
@@ -688,7 +688,7 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
       begin
         pipeline = klass.new(workers.map { |w| w[:uri] }, items, results, results_mutex)
         Timeout.timeout(10) { pipeline.run }
-      rescue Minigun::Cluster::Error
+      rescue Minigun::Errors::ClusterError
         # Expected when worker fails
       end
 
@@ -805,7 +805,7 @@ RSpec.describe 'Cluster Executor - Jepsen-style Tests' do
       begin
         pipeline = klass.new(workers.map { |w| w[:uri] }, items, results, results_mutex, tracker)
         Timeout.timeout(10) { pipeline.run }
-      rescue Minigun::Cluster::Error
+      rescue Minigun::Errors::ClusterError
         # Expected
       end
 

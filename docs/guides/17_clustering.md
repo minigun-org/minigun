@@ -388,7 +388,7 @@ begin
   pipeline.run
 rescue Minigun::Cluster::ConnectionError => e
   puts "Failed to connect to coordinator: #{e.message}"
-rescue Minigun::Cluster::Error => e
+rescue Minigun::Errors::ClusterError => e
   puts "Cluster error: #{e.message}"
 end
 ```

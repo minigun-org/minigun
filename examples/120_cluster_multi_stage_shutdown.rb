@@ -230,7 +230,7 @@ def run_loopback_test
   begin
     pipeline2.run
     puts "Second batch completed with #{pipeline2.results.size} items"
-  rescue Minigun::Cluster::Error => e
+  rescue Minigun::Errors::ClusterError => e
     puts 'Expected: Processor workers are gone (they shutdown)'
     puts "  Error: #{e.message}"
     puts

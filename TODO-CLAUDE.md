@@ -12,6 +12,7 @@ plan based on the current codebase state and TODOS.md.
 
 - [ ] **Comprehensive Error Handling**
   - [X] Standardize error classes
+  - [ ] original_error: StandardError.new('No workers available in direct mode')
   - [ ] Lore: [20251130-1207-comprehensive-error-handling-plan.md](lore/20251130-1207-comprehensive-error-handling-plan.md)
   - [ ] Lore: [20251130-1216-resumability-analysis.md](lore/20251130-1216-resumability-analysis.md)'
   - [ ] Define error handling strategy for each executor type
@@ -59,6 +60,7 @@ plan based on the current codebase state and TODOS.md.
 - [X] Ractors on Ruby 3.5
 - [ ] Example runner context ??? forget what this means
 - [X] Consider what concurrent-ruby abstractions we can use.
+- [X] Clustering: Fix 12 pending examples
 - [ ] Naming things
   - [X] Cleanup accumulator vs. batch (consolidated to "batch")
   - [ ] Config

@@ -2677,150 +2677,398 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
-  # Cluster examples (110-111) - Manual tests requiring multi-process coordination
+  # Cluster examples - spawn separate processes for proper testing
+  # Uses ClusterTestHarness for multi-process cluster testing
 
-  describe '110_cluster_coordinator.rb' do
-    it 'demonstrates cluster coordinator (requires workers)', skip: 'Manual test - requires running workers' do
-      # This example requires manually starting worker nodes
-      # See examples/111_cluster_worker.rb
-      # Usage:
-      #   1. Start coordinator: ruby examples/110_cluster_coordinator.rb
-      #   2. Start workers: ruby examples/111_cluster_worker.rb (can run multiple)
+  require_relative '../support/cluster_test_harness'
+
+  # Helper to find an available port
+  def find_available_port
+    server = TCPServer.new('127.0.0.1', 0)
+    port = server.addr[1]
+    server.close
+    port
+  end
+
+  # Helper to wait for a port to be listening
+  def wait_for_port(port, timeout: 10)
+    deadline = Time.now + timeout
+    loop do
+      begin
+        TCPSocket.new('127.0.0.1', port).close
+        return true
+      rescue Errno::ECONNREFUSED
+        return false if Time.now > deadline
+
+        sleep 0.1
+      end
+    end
+  end
+
+  # Helper to spawn a cluster worker process
+  def spawn_cluster_worker(example_file, mode, *args, port: nil)
+    cmd = ['bundle', 'exec', 'ruby', example_file, mode, *args.map(&:to_s)]
+    pid = Process.spawn(*cmd, %i[out err] => '/dev/null')
+
+    if port
+      unless wait_for_port(port, timeout: 15)
+        Process.kill('TERM', pid) rescue nil
+        raise "Worker on port #{port} failed to start"
+      end
+    else
+      sleep 0.5 # Give process time to initialize
+    end
+    pid
+  end
+
+  # Helper to spawn coordinator and wait for it to be ready
+  def spawn_coordinator(example_file, mode, *args, port:)
+    rd, wr = IO.pipe
+    cmd = ['bundle', 'exec', 'ruby', example_file]
+    cmd << mode unless mode.nil? || mode.empty?
+    cmd += args.map(&:to_s)
+    pid = Process.spawn(*cmd, out: wr, err: wr)
+    wr.close
+
+    unless wait_for_port(port, timeout: 15)
+      Process.kill('TERM', pid) rescue nil
+      output = rd.read rescue ''
+      raise "Coordinator on port #{port} failed to start. Output: #{output[0..500]}"
+    end
+    [pid, rd]
+  end
+
+  # Helper to wait for workers to register with coordinator by watching output
+  def wait_for_worker_registrations(coord_output_io, expected_count:, timeout: 30)
+    buffer = ''
+    count = 0
+    deadline = Time.now + timeout
+
+    # Set non-blocking reads
+    coord_output_io.fcntl(Fcntl::F_SETFL, Fcntl::O_NONBLOCK)
+
+    while Time.now < deadline && count < expected_count
+      begin
+        chunk = coord_output_io.read_nonblock(4096)
+        buffer += chunk
+        count = buffer.scan(/Worker registered/).size
+      rescue IO::WaitReadable
+        sleep 0.1
+      rescue EOFError
+        break
+      end
+    end
+
+    count >= expected_count
+  end
+
+  # 110 + 111: Coordinator waits for workers to connect
+  # Tests '110_cluster_coordinator.rb' and '111_cluster_worker.rb' together
+  describe '110_cluster_coordinator.rb and 111_cluster_worker.rb' do
+    it 'runs multi-process coordinator with worker', timeout: 60 do
+      harness = ClusterTestHarness::Harness.new
+      coordinator_file = File.expand_path('../../examples/110_cluster_coordinator.rb', __dir__)
+      worker_file = File.expand_path('../../examples/111_cluster_worker.rb', __dir__)
+
+      begin
+        port = harness.port_allocator.allocate
+        env = { 'CLUSTER_PORT' => port.to_s }
+
+        # Start coordinator
+        coord_proc = harness.spawn_example(coordinator_file, 'coordinator', env: env, wait_port: port)
+
+        # Start worker
+        harness.spawn_example(worker_file, env: env)
+        sleep 0.5 # Give worker time to connect
+
+        # Wait for coordinator to complete
+        harness.wait_for_output(coord_proc, 'Total results:', timeout: 45)
+
+        output = harness.process_manager.read_output(coord_proc)
+        combined = output[:stdout] + output[:stderr]
+
+        expect(combined).to include('Generating work items')
+        expect(combined).to include('Total results:')
+      ensure
+        harness.cleanup
+      end
     end
   end
 
   describe '111_cluster_worker.rb' do
-    it 'demonstrates cluster worker (requires coordinator)', skip: 'Manual test - requires running coordinator' do
-      # This example requires a running coordinator
-      # See examples/110_cluster_coordinator.rb
-      # Usage:
-      #   1. Start coordinator: ruby examples/110_cluster_coordinator.rb
-      #   2. Start this worker: ruby examples/111_cluster_worker.rb
+    it 'compiles and defines expected worker structure' do
+      example_file = File.expand_path('../../examples/111_cluster_worker.rb', __dir__)
+      code = File.read(example_file)
+      expect { RubyVM::InstructionSequence.compile(code) }.not_to raise_error
+      expect(code).to include('Cluster::Worker.new')
+      expect(code).to include('register_stage')
     end
   end
 
   describe '112_multi_stage_cluster.rb' do
-    it 'demonstrates multi-stage cluster pipeline', skip: 'Manual test - requires multiple terminals' do
-      # Multi-stage cluster with sequential processing through 3 clusters
-      # Usage:
-      #   Terminal 1: ruby examples/112_multi_stage_cluster.rb coordinator
-      #   Terminal 2: ruby examples/112_multi_stage_cluster.rb worker_preprocess
-      #   Terminal 3: ruby examples/112_multi_stage_cluster.rb worker_compute
-      #   Terminal 4: ruby examples/112_multi_stage_cluster.rb worker_postprocess
+    it 'runs multi-stage cluster pipeline', timeout: 120 do
+      harness = ClusterTestHarness::Harness.new
+      example_file = File.expand_path('../../examples/112_multi_stage_cluster.rb', __dir__)
+
+      begin
+        # Allocate 3 ports for 3 cluster stages
+        port_base = harness.port_allocator.allocate
+        harness.port_allocator.allocate # port_base + 1
+        harness.port_allocator.allocate # port_base + 2
+        env = { 'CLUSTER_PORT' => port_base.to_s }
+
+        # Start coordinator (it will start listening on ports sequentially as pipeline executes)
+        coord_proc = harness.spawn_example(example_file, 'coordinator', env: env, wait_port: port_base)
+
+        # Spawn workers in background threads - each waits for its port to be available
+        # This handles the sequential nature of multi-stage pipelines
+        worker_threads = []
+        [
+          ['worker_preprocess', port_base],
+          ['worker_compute', port_base + 1],
+          ['worker_postprocess', port_base + 2]
+        ].each do |worker_mode, port|
+          worker_threads << Thread.new do
+            harness.spawn_worker_with_retry(example_file, worker_mode, env: env, coordinator_port: port)
+          end
+        end
+
+        # Wait for coordinator to complete (give ample time for all 3 stages)
+        harness.wait_for_output(coord_proc, 'Total:', timeout: 90)
+
+        # Clean up worker threads
+        worker_threads.each(&:join)
+
+        output = harness.process_manager.read_output(coord_proc)
+        combined = output[:stdout] + output[:stderr]
+
+        expect(combined).to include('Multi-Stage')
+        expect(combined).to include('Total:')
+        expect(combined).to include('items processed')
+      ensure
+        harness.cleanup
+      end
     end
   end
 
   describe '113_hierarchical_cluster.rb' do
-    it 'demonstrates hierarchical cluster topology', skip: 'Manual test - requires multiple terminals' do
-      # Hierarchical clusters with parent workers delegating to child clusters
-      # Usage:
-      #   Terminal 1: ruby examples/113_hierarchical_cluster.rb child_coordinator 9100
-      #   Terminal 2: ruby examples/113_hierarchical_cluster.rb child_coordinator 9101
-      #   Terminal 3: ruby examples/113_hierarchical_cluster.rb child_worker 9100
-      #   Terminal 4: ruby examples/113_hierarchical_cluster.rb child_worker 9101
-      #   Terminal 5: ruby examples/113_hierarchical_cluster.rb parent_worker 9100
-      #   Terminal 6: ruby examples/113_hierarchical_cluster.rb parent_worker 9101
-      #   Terminal 7: ruby examples/113_hierarchical_cluster.rb parent_coordinator
+    it 'defines expected classes for hierarchical topology' do
+      # This is a very complex multi-process example (7 terminals)
+      # Test by loading and verifying the class structure
+      example_file = File.expand_path('../../examples/113_hierarchical_cluster.rb', __dir__)
+
+      code = File.read(example_file)
+      expect { RubyVM::InstructionSequence.compile(code) }.not_to raise_error
+
+      load example_file
+      expect(defined?(ParentPipeline)).to eq('constant')
+      expect(defined?(ChildPipeline)).to eq('constant')
     end
   end
 
   describe '114_cluster_fan_out_fan_in.rb' do
-    it 'demonstrates fan-out/fan-in cluster topology', skip: 'Manual test - requires multiple terminals' do
-      # Diamond topology routing to specialized GPU/CPU clusters
-      # Usage:
-      #   Terminal 1: ruby examples/114_cluster_fan_out_fan_in.rb coordinator
-      #   Terminal 2: ruby examples/114_cluster_fan_out_fan_in.rb worker_image
-      #   Terminal 3: ruby examples/114_cluster_fan_out_fan_in.rb worker_text
+    it 'runs fan-out/fan-in cluster topology', timeout: 120 do
+      harness = ClusterTestHarness::Harness.new
+      example_file = File.expand_path('../../examples/114_cluster_fan_out_fan_in.rb', __dir__)
+
+      begin
+        # Allocate 2 ports for 2 cluster stages (image and text processing)
+        port_base = harness.port_allocator.allocate
+        harness.port_allocator.allocate # port_base + 1
+        env = { 'CLUSTER_PORT' => port_base.to_s }
+
+        # Start coordinator (it will listen on port_base and port_base+1)
+        coord_proc = harness.spawn_example(example_file, 'coordinator', env: env, wait_port: port_base)
+
+        # Spawn workers in background threads - each waits for its port
+        # Both clusters start simultaneously in fan-out pattern
+        worker_threads = []
+        [
+          ['worker_image', port_base],
+          ['worker_text', port_base + 1]
+        ].each do |worker_mode, port|
+          worker_threads << Thread.new do
+            harness.spawn_worker_with_retry(example_file, worker_mode, env: env, coordinator_port: port)
+          end
+        end
+
+        # Wait for coordinator to complete
+        harness.wait_for_output(coord_proc, 'Results Summary', timeout: 90)
+
+        worker_threads.each(&:join)
+
+        output = harness.process_manager.read_output(coord_proc)
+        combined = output[:stdout] + output[:stderr]
+
+        expect(combined).to include('Fan-Out')
+        expect(combined).to include('Results Summary')
+      ensure
+        harness.cleanup
+      end
     end
   end
 
   describe '115_hybrid_local_cluster.rb' do
-    it 'demonstrates hybrid local + cluster execution', skip: 'Manual test - requires worker terminals' do
-      # Mix of local threads, forks, and cluster execution
-      # Usage:
-      #   Terminal 1: ruby examples/115_hybrid_local_cluster.rb coordinator
-      #   Terminal 2-N: ruby examples/115_hybrid_local_cluster.rb worker
+    it 'runs hybrid local + cluster execution', timeout: 120 do
+      harness = ClusterTestHarness::Harness.new
+      example_file = File.expand_path('../../examples/115_hybrid_local_cluster.rb', __dir__)
+
+      begin
+        port = harness.port_allocator.allocate
+        env = { 'CLUSTER_PORT' => port.to_s }
+
+        # Start coordinator
+        coord_proc = harness.spawn_example(example_file, 'coordinator', env: env, wait_port: port)
+
+        # Spawn 2 parse workers (both connect to same coordinator port)
+        worker_threads = []
+        2.times do
+          worker_threads << Thread.new do
+            harness.spawn_worker_with_retry(example_file, 'worker', env: env, coordinator_port: port)
+          end
+        end
+
+        # Wait for coordinator to complete
+        harness.wait_for_output(coord_proc, 'Results Summary', timeout: 90)
+
+        worker_threads.each(&:join)
+
+        output = harness.process_manager.read_output(coord_proc)
+        combined = output[:stdout] + output[:stderr]
+
+        expect(combined).to include('Hybrid')
+        expect(combined).to include('Results Summary')
+      ensure
+        harness.cleanup
+      end
     end
   end
 
   describe '116_peer_to_peer_cluster.rb' do
-    it 'demonstrates peer-to-peer worker communication', skip: 'Manual test - requires multiple workers' do
-      # Workers communicate directly for distributed joins
-      # Usage:
-      #   Terminal 1: ruby examples/116_peer_to_peer_cluster.rb coordinator
-      #   Terminal 2: ruby examples/116_peer_to_peer_cluster.rb worker 0 9010
-      #   Terminal 3: ruby examples/116_peer_to_peer_cluster.rb worker 5 9011
+    it 'runs peer-to-peer worker communication', timeout: 120 do
+      harness = ClusterTestHarness::Harness.new
+      example_file = File.expand_path('../../examples/116_peer_to_peer_cluster.rb', __dir__)
+
+      begin
+        # Allocate ports: coordinator (port_base), peer workers (port_base+10, port_base+11)
+        port_base = harness.port_allocator.allocate
+        # Allocate peer ports
+        10.times { harness.port_allocator.allocate } # Reserve port_base+1 through port_base+9
+        peer_port_0 = harness.port_allocator.allocate # port_base + 10
+        peer_port_1 = harness.port_allocator.allocate # port_base + 11
+
+        env = { 'CLUSTER_PORT' => port_base.to_s }
+
+        # Start coordinator
+        coord_proc = harness.spawn_example(example_file, 'coordinator', env: env, wait_port: port_base)
+
+        # Spawn 2 workers with shards in background threads
+        # Workers also start their own DRb servers for peer-to-peer communication
+        worker_threads = []
+        [[0, peer_port_0], [5, peer_port_1]].each do |shard_start, worker_port|
+          worker_threads << Thread.new do
+            # Wait for coordinator to be ready, then spawn worker
+            harness.spawn_worker_with_retry(
+              example_file, 'worker', shard_start.to_s, worker_port.to_s,
+              env: env, coordinator_port: port_base
+            )
+          end
+        end
+
+        # Wait for coordinator to complete
+        harness.wait_for_output(coord_proc, 'Results Summary', timeout: 90)
+
+        worker_threads.each(&:join)
+
+        output = harness.process_manager.read_output(coord_proc)
+        combined = output[:stdout] + output[:stderr]
+
+        expect(combined).to include('Peer-to-Peer')
+        expect(combined).to include('Results Summary')
+      ensure
+        harness.cleanup
+      end
     end
   end
 
   describe '117_cluster_loopback.rb' do
-    it 'demonstrates circular cluster topology (A→B→C→A)', skip: 'Manual test - requires multiple terminals' do
-      # Circular topology where Node C sends back to Node A
-      # Usage (start in this order):
-      #   Terminal 1: ruby examples/117_cluster_loopback.rb coordinator_b
-      #   Terminal 2: ruby examples/117_cluster_loopback.rb coordinator_c
-      #   Terminal 3: ruby examples/117_cluster_loopback.rb worker_b
-      #   Terminal 4: ruby examples/117_cluster_loopback.rb worker_c
-      #   Terminal 5: ruby examples/117_cluster_loopback.rb worker_a
-      #   Terminal 6: ruby examples/117_cluster_loopback.rb coordinator_a
+    it 'demonstrates circular cluster topology (A→B→C→A)', timeout: 30 do
+      example_file = File.expand_path('../../examples/117_cluster_loopback.rb', __dir__)
+
+      # Verify help output shows circular topology
+      output = `timeout 15 bundle exec ruby #{example_file} --help 2>&1`
+      expect(output).to include('Loopback')
+      expect(output).to include('A → B → C → A')
     end
   end
 
   describe '118_cluster_direct_mode.rb' do
-    it 'demonstrates direct mode cluster (no coordinator)', skip: 'Manual test - requires multiple terminals' do
-      # Direct mode connects to workers without a coordinator
-      # Work is distributed round-robin to the worker URIs
-      # Usage:
-      #   Terminal 1: ruby examples/118_cluster_direct_mode.rb worker 9001
-      #   Terminal 2: ruby examples/118_cluster_direct_mode.rb worker 9002
-      #   Terminal 3: ruby examples/118_cluster_direct_mode.rb worker 9003
-      #   Terminal 4: ruby examples/118_cluster_direct_mode.rb client
-      #
-      # Or run loopback test (all in one process):
-      #   ruby examples/118_cluster_direct_mode.rb loopback
+    it 'runs direct mode cluster via loopback' do
+      example_file = File.expand_path('../../examples/118_cluster_direct_mode.rb', __dir__)
+
+      # Run loopback test - workers + client in one process
+      output = `bundle exec ruby #{example_file} loopback 2>&1`
+
+      # Verify direct mode worked
+      expect(output).to include('Loopback Test')
+      expect(output).to include('Worker started at')
+      expect(output).to include('Total:')
+      expect(output).to include('items processed')
     end
   end
 
   describe '119_cluster_shutdown_on_done.rb' do
-    it 'demonstrates shutdown_on_done option for direct mode', skip: 'Manual test - requires multiple terminals' do
-      # Demonstrates the shutdown_on_done option for direct mode cluster
-      # When shutdown_on_done: true, workers receive shutdown signal after stage completes
-      # Usage:
-      #   Terminal 1: ruby examples/119_cluster_shutdown_on_done.rb worker 9001
-      #   Terminal 2: ruby examples/119_cluster_shutdown_on_done.rb worker 9002
-      #   Terminal 3: ruby examples/119_cluster_shutdown_on_done.rb client
-      #   # After client completes, workers will automatically exit
-      #
-      # Or run loopback test (all in one process):
-      #   ruby examples/119_cluster_shutdown_on_done.rb loopback
+    it 'runs shutdown_on_done via loopback' do
+      example_file = File.expand_path('../../examples/119_cluster_shutdown_on_done.rb', __dir__)
+
+      # Run loopback test
+      output = `bundle exec ruby #{example_file} loopback 2>&1`
+
+      # Verify shutdown_on_done worked
+      expect(output).to include('Loopback Test')
+      expect(output).to include('shutdown_on_done')
+      expect(output).to include('SHUTDOWN signal received')
+      expect(output).to include('SUCCESS')
     end
   end
 
   describe '120_cluster_multi_stage_shutdown.rb' do
-    it 'demonstrates multi-stage pipeline with mixed shutdown behavior', skip: 'Manual test - requires multiple terminals' do
-      # Demonstrates pipelines with multiple cluster stages where different
-      # stages have different shutdown_on_done settings:
-      #   - Stage 1 (validate): shutdown_on_done: false - shared workers stay running
-      #   - Stage 2 (process): shutdown_on_done: true - dedicated workers shutdown
-      #
-      # Run loopback test:
-      #   ruby examples/120_cluster_multi_stage_shutdown.rb loopback
+    it 'demonstrates multi-stage pipeline with mixed shutdown behavior' do
+      example_file = File.expand_path('../../examples/120_cluster_multi_stage_shutdown.rb', __dir__)
+
+      # This example has loopback mode that spawns workers internally
+      output = `bundle exec ruby #{example_file} loopback 2>&1`
+
+      # Verify multi-stage processing worked
+      expect(output).to include('Multi-Stage Shutdown Test')
+      expect(output).to include('Producer')
+      expect(output).to include('Consumer')
+
+      # Verify shutdown behavior: processors should have received shutdown
+      expect(output).to include('Sent shutdown to 3 workers') # processors
+      expect(output).to include('Sent shutdown to 0 workers') # validators (none shutdown)
+
+      # Verify items were processed
+      expect(output).to match(/completed with 12 items/)
     end
   end
 
   describe '121_cluster_loopback_shutdown.rb' do
-    it 'demonstrates careful shutdown handling in loopback topology', skip: 'Manual test - requires multiple terminals' do
-      # Demonstrates shutdown_on_done in a circular topology (A -> B -> C -> A)
-      # Key insight: The originator node (A) must NOT be shutdown or it
-      # cannot receive the final looped-back results.
-      #
-      # Pattern:
-      #   - Originator: shutdown_on_done: false (stays running)
-      #   - Intermediate nodes: shutdown_on_done: true (can shutdown)
-      #   - Final node: shutdown_on_done: true (originator still runs)
-      #
-      # Run loopback test:
-      #   ruby examples/121_cluster_loopback_shutdown.rb loopback
+    it 'demonstrates careful shutdown handling in loopback topology' do
+      example_file = File.expand_path('../../examples/121_cluster_loopback_shutdown.rb', __dir__)
+
+      # This example has loopback mode that spawns workers internally
+      output = `bundle exec ruby #{example_file} loopback 2>&1`
+
+      # Verify loopback topology was set up
+      expect(output).to include('Loopback Topology')
+      expect(output).to include('A -> B -> C -> A')
+
+      # Verify shutdown verification passed
+      expect(output).to include('Node A (originator) stayed running: PASS')
+      expect(output).to include('Node B (intermediate) shutdown: PASS')
+      expect(output).to include('Node C (final) shutdown: PASS')
+      expect(output).to include('SUCCESS')
     end
   end
 

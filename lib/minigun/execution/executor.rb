@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'uri'
 require_relative 'worker_monitor'
 
 module Minigun
@@ -1209,9 +1210,9 @@ module Minigun
         end
 
         if @direct_workers.empty?
-          raise Cluster::ConnectionError.new(
-            'No workers available in direct mode',
-            uri: @worker_uris.join(', ')
+          raise Errors::ClusterConnectionFailed.new(
+            uri: @worker_uris.join(', '),
+            original_error: StandardError.new('No workers available in direct mode')
           )
         end
 

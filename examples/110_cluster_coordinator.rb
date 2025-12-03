@@ -14,6 +14,9 @@
 
 require_relative '../lib/minigun'
 
+# Configuration via environment variables for testing
+CLUSTER_PORT = ENV.fetch('CLUSTER_PORT', '9000').to_i
+
 # Configure logging
 Minigun.logger.level = Logger::INFO
 
@@ -26,41 +29,54 @@ class ClusterExample
 
   attr_reader :results
 
-  def initialize
+  def initialize(port: CLUSTER_PORT)
     @results = []
+    @port = port
   end
 
-  pipeline do
-    # Producer runs locally on coordinator
-    producer :generate do |output|
-      puts 'Generating work items...'
-      20.times do |i|
-        output << { id: i, value: rand(100) }
-      end
-      puts '20 work items generated'
-    end
+  def self.create_pipeline(port)
+    Class.new do
+      include Minigun::DSL
 
-    # This stage runs on cluster workers
-    in_cluster(coordinator_uri: 'druby://0.0.0.0:9000', min_workers: 1, worker_timeout: 60) do
-      processor :compute do |item, output|
-        # Simulate CPU-intensive work
-        result = (1..10_000).reduce(item[:value]) { |acc, _| Math.sqrt(acc.abs + 1) }
-        output << { id: item[:id], original: item[:value], computed: result.round(4) }
-      end
-    end
+      attr_reader :results
 
-    # Consumer runs locally on coordinator
-    consumer :collect do |item|
-      @results << item
-    end
+      define_method(:initialize) do
+        @results = []
+      end
+
+      pipeline do
+        # Producer runs locally on coordinator
+        producer :generate do |output|
+          puts 'Generating work items...'
+          20.times do |i|
+            output << { id: i, value: rand(100) }
+          end
+          puts '20 work items generated'
+        end
+
+        # This stage runs on cluster workers
+        in_cluster(coordinator_uri: "druby://0.0.0.0:#{port}", min_workers: 1, worker_timeout: 60) do
+          processor :compute do |item, output|
+            # Simulate CPU-intensive work
+            result = (1..10_000).reduce(item[:value]) { |acc, _| Math.sqrt(acc.abs + 1) }
+            output << { id: item[:id], original: item[:value], computed: result.round(4) }
+          end
+        end
+
+        # Consumer runs locally on coordinator
+        consumer :collect do |item|
+          @results << item
+        end
+      end
+    end.new
   end
 end
 
-puts 'Waiting for workers to connect to druby://0.0.0.0:9000 ...'
-puts '(Start workers with: ruby examples/102_cluster_worker.rb)'
+puts "Waiting for workers to connect to druby://0.0.0.0:#{CLUSTER_PORT} ..."
+puts '(Start workers with: ruby examples/111_cluster_worker.rb)'
 puts
 
-example = ClusterExample.new
+example = ClusterExample.create_pipeline(CLUSTER_PORT)
 
 begin
   example.run
@@ -71,7 +87,7 @@ begin
   end
   puts
   puts "Total results: #{example.results.size}"
-rescue Minigun::Cluster::Error => e
+rescue Minigun::Errors::ClusterError => e
   puts "Cluster error: #{e.message}"
   puts 'Make sure at least 1 worker is running!'
 end
