@@ -137,7 +137,7 @@ def run_worker(shard_start, worker_port, coordinator_port: CLUSTER_PORT_BASE, pe
 
     begin
       # Fetch left data (might be local or from peer)
-      left_data = if shard.keys.include?(task[:left_id])
+      left_data = if shard.key?(task[:left_id])
                     puts "    [Worker #{shard_id}] Left data #{task[:left_id]} is LOCAL"
                     shard.get(task[:left_id])
                   else
@@ -149,7 +149,7 @@ def run_worker(shard_start, worker_port, coordinator_port: CLUSTER_PORT_BASE, pe
                   end
 
       # Fetch right data (might be local or from peer)
-      right_data = if shard.keys.include?(task[:right_id])
+      right_data = if shard.key?(task[:right_id])
                      puts "    [Worker #{shard_id}] Right data #{task[:right_id]} is LOCAL"
                      shard.get(task[:right_id])
                    else

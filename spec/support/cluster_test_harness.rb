@@ -2,7 +2,6 @@
 
 require 'socket'
 require 'timeout'
-require 'fileutils'
 require 'tempfile'
 
 # Test harness for multi-process cluster tests
@@ -18,7 +17,6 @@ module ClusterTestHarness
     end
 
     def spawn_process(cmd, env: {}, label: nil)
-      # Create temp files for output capture
       stdout_file = Tempfile.new(['cluster_test_stdout', '.log'])
       stderr_file = Tempfile.new(['cluster_test_stderr', '.log'])
 
@@ -44,9 +42,7 @@ module ClusterTestHarness
 
     def kill_all
       @mutex.synchronize do
-        @processes.each do |proc_info|
-          kill_process(proc_info)
-        end
+        @processes.each { |proc_info| kill_process(proc_info) }
         @processes.clear
       end
     end
@@ -54,14 +50,11 @@ module ClusterTestHarness
     def kill_process(proc_info)
       pid = proc_info[:pid]
       begin
-        # First try SIGTERM for graceful shutdown
         Process.kill('TERM', pid)
-        # Wait briefly for graceful shutdown
         Timeout.timeout(2) { Process.waitpid(pid) }
       rescue Errno::ESRCH
         # Process already gone
       rescue Timeout::Error
-        # Force kill if still running
         begin
           Process.kill('KILL', pid)
           Process.waitpid(pid)
@@ -71,17 +64,32 @@ module ClusterTestHarness
       rescue Errno::ECHILD
         # Already reaped
       ensure
-        # Clean up temp files
         proc_info[:stdout_file]&.close
-        proc_info[:stdout_file]&.unlink rescue nil
+        begin
+          proc_info[:stdout_file]&.unlink
+        rescue StandardError
+          nil
+        end
         proc_info[:stderr_file]&.close
-        proc_info[:stderr_file]&.unlink rescue nil
+        begin
+          proc_info[:stderr_file]&.unlink
+        rescue StandardError
+          nil
+        end
       end
     end
 
     def read_output(proc_info)
-      stdout = File.read(proc_info[:stdout_file].path) rescue ''
-      stderr = File.read(proc_info[:stderr_file].path) rescue ''
+      stdout = begin
+        File.read(proc_info[:stdout_file].path)
+      rescue StandardError
+        ''
+      end
+      stderr = begin
+        File.read(proc_info[:stderr_file].path)
+      rescue StandardError
+        ''
+      end
       { stdout: stdout, stderr: stderr }
     end
 
@@ -93,22 +101,16 @@ module ClusterTestHarness
     end
   end
 
-  # Port management for avoiding conflicts
-  # Uses OS-assigned ephemeral ports to guarantee no conflicts
+  # Port allocation using OS-assigned ephemeral ports
   class PortAllocator
-    def initialize(base_port: nil) # base_port ignored, kept for compatibility
+    def initialize
       @allocated = []
       @mutex = Mutex.new
     end
 
     def allocate(count = 1)
       @mutex.synchronize do
-        ports = []
-        count.times do
-          port = find_available_port
-          @allocated << port
-          ports << port
-        end
+        ports = count.times.map { find_available_port.tap { |p| @allocated << p } }
         count == 1 ? ports.first : ports
       end
     end
@@ -120,7 +122,6 @@ module ClusterTestHarness
     private
 
     def find_available_port
-      # Let the OS assign an available port by binding to port 0
       server = TCPServer.new('127.0.0.1', 0)
       port = server.addr[1]
       server.close
@@ -141,131 +142,41 @@ module ClusterTestHarness
     def wait_for_port(port, timeout: 15)
       deadline = Time.now + timeout
       loop do
-        begin
-          socket = TCPSocket.new('127.0.0.1', port)
-          socket.close
-          return true
-        rescue Errno::ECONNREFUSED, Errno::ECONNRESET
-          return false if Time.now > deadline
-          sleep 0.05
-        end
+        socket = TCPSocket.new('127.0.0.1', port)
+        socket.close
+        return true
+      rescue Errno::ECONNREFUSED, Errno::ECONNRESET
+        return false if Time.now > deadline
+
+        sleep 0.05
       end
-    end
-
-    # Wait for a port to be closed (process stopped listening)
-    def wait_for_port_closed(port, timeout: 10)
-      deadline = Time.now + timeout
-      loop do
-        begin
-          socket = TCPSocket.new('127.0.0.1', port)
-          socket.close
-          return false if Time.now > deadline
-          sleep 0.05
-        rescue Errno::ECONNREFUSED
-          return true
-        end
-      end
-    end
-
-    # Spawn a coordinator process
-    def spawn_coordinator(example_file, mode: 'coordinator', port: nil, env: {}, wait: true)
-      port ||= @port_allocator.allocate
-
-      # Set environment variable to override default port
-      full_env = env.merge('CLUSTER_PORT' => port.to_s)
-
-      cmd = ['bundle', 'exec', 'ruby', example_file, mode]
-      proc_info = @process_manager.spawn_process(cmd, env: full_env, label: "coordinator:#{port}")
-      proc_info[:port] = port
-
-      if wait
-        unless wait_for_port(port, timeout: 15)
-          output = @process_manager.read_output(proc_info)
-          raise "Coordinator failed to start on port #{port}.\nStdout: #{output[:stdout]}\nStderr: #{output[:stderr]}"
-        end
-      end
-
-      proc_info
-    end
-
-    # Spawn a worker process
-    def spawn_worker(example_file, mode:, coordinator_port: nil, env: {}, wait_port: nil)
-      full_env = env.dup
-      full_env['CLUSTER_PORT'] = coordinator_port.to_s if coordinator_port
-
-      cmd = ['bundle', 'exec', 'ruby', example_file, mode]
-      proc_info = @process_manager.spawn_process(cmd, env: full_env, label: "worker:#{mode}")
-
-      if wait_port
-        unless wait_for_port(wait_port, timeout: 15)
-          output = @process_manager.read_output(proc_info)
-          raise "Worker failed to start listening on port #{wait_port}.\nStdout: #{output[:stdout]}\nStderr: #{output[:stderr]}"
-        end
-      else
-        # Brief delay to let worker initialize
-        sleep 0.3
-      end
-
-      proc_info
     end
 
     # Spawn a generic ruby subprocess with the example file
-    def spawn_example(example_file, *args, env: {}, wait_port: nil, timeout: 30)
+    def spawn_example(example_file, *args, env: {}, wait_port: nil)
       cmd = ['bundle', 'exec', 'ruby', example_file, *args.map(&:to_s)]
       proc_info = @process_manager.spawn_process(cmd, env: env, label: File.basename(example_file))
 
-      if wait_port
-        unless wait_for_port(wait_port, timeout: 15)
-          output = @process_manager.read_output(proc_info)
-          raise "Process failed to start on port #{wait_port}.\nStdout: #{output[:stdout]}\nStderr: #{output[:stderr]}"
-        end
+      if wait_port && !wait_for_port(wait_port, timeout: 15)
+        output = @process_manager.read_output(proc_info)
+        raise "Process failed to start on port #{wait_port}.\nStdout: #{output[:stdout]}\nStderr: #{output[:stderr]}"
       end
 
       proc_info
     end
 
-    # Spawn a worker that retries connecting to coordinator until success or timeout
-    # This is useful when coordinator ports open sequentially during pipeline execution
-    def spawn_worker_with_retry(example_file, *args, env: {}, coordinator_port:, retry_interval: 0.2, max_retries: 150)
-      # Wait for coordinator port to be available before spawning worker
+    # Spawn a worker that waits for coordinator port before starting
+    def spawn_worker_with_retry(example_file, *, coordinator_port:, env: {}, retry_interval: 0.2, max_retries: 150)
       deadline = Time.now + (retry_interval * max_retries)
       until wait_for_port(coordinator_port, timeout: 0.1)
         return nil if Time.now > deadline
+
         sleep retry_interval
       end
-
-      # Now spawn the worker
-      spawn_example(example_file, *args, env: env)
-    end
-
-    # Run an example and wait for it to complete
-    def run_example_to_completion(example_file, *args, env: {}, timeout: 45)
-      cmd = ['bundle', 'exec', 'ruby', example_file, *args.map(&:to_s)]
-      proc_info = @process_manager.spawn_process(cmd, env: env, label: File.basename(example_file))
-
-      # Wait for process to complete
-      begin
-        Timeout.timeout(timeout) do
-          Process.waitpid(proc_info[:pid])
-        end
-      rescue Timeout::Error
-        @process_manager.kill_process(proc_info)
-        output = @process_manager.read_output(proc_info)
-        raise "Example timed out after #{timeout}s.\nStdout: #{output[:stdout]}\nStderr: #{output[:stderr]}"
-      end
-
-      output = @process_manager.read_output(proc_info)
-      {
-        stdout: output[:stdout],
-        stderr: output[:stderr],
-        success: $?.success?,
-        exit_status: $?.exitstatus
-      }
+      spawn_example(example_file, *, env: env)
     end
 
     # Wait for output to contain expected text
-    # NOTE: Due to Ruby's I/O buffering when redirected to files, this may not see
-    # output until the process exits. Use wait_for_process_exit for reliable results.
     def wait_for_output(proc_info, pattern, timeout: 30)
       deadline = Time.now + timeout
       loop do
@@ -279,39 +190,9 @@ module ClusterTestHarness
           return true if combined.include?(pattern)
         end
 
-        # Check if process has exited
         return false unless @process_manager.process_alive?(proc_info)
         return false if Time.now > deadline
-        sleep 0.1
-      end
-    end
 
-    # Wait for process to exit (output is fully buffered until exit)
-    def wait_for_process_exit(proc_info, timeout: 30)
-      deadline = Time.now + timeout
-      loop do
-        unless @process_manager.process_alive?(proc_info)
-          # Reap the process to avoid zombies
-          Process.waitpid(proc_info[:pid], Process::WNOHANG) rescue nil
-          return true
-        end
-        return false if Time.now > deadline
-        sleep 0.1
-      end
-    end
-
-    # Wait for worker registration by checking coordinator output
-    def wait_for_workers(coordinator_proc, count:, timeout: 30)
-      pattern = /Worker registered.*/ # Match worker registration messages
-      deadline = Time.now + timeout
-
-      loop do
-        output = @process_manager.read_output(coordinator_proc)
-        combined = output[:stdout] + output[:stderr]
-        registered_count = combined.scan(/Worker registered/).size
-
-        return true if registered_count >= count
-        return false if Time.now > deadline
         sleep 0.1
       end
     end
