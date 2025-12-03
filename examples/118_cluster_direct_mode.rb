@@ -220,7 +220,7 @@ if __FILE__ == $PROGRAM_NAME
       end
       puts
       puts "Total: #{pipeline.results.size} items processed"
-    rescue Minigun::Cluster::Error => e
+    rescue Minigun::Errors::ClusterError => e
       puts "Cluster error: #{e.message}"
       puts 'Make sure all workers are running!'
     end

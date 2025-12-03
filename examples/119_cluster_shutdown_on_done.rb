@@ -350,7 +350,7 @@ def run_client(shutdown_on_done)
       puts 'Workers are still running (shutdown_on_done: false).'
       puts 'They can process more work from other clients.'
     end
-  rescue Minigun::Cluster::Error => e
+  rescue Minigun::Errors::ClusterError => e
     puts "Cluster error: #{e.message}"
     puts 'Make sure workers are running!'
   end
