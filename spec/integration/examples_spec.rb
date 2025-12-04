@@ -2863,14 +2863,98 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
-  # 113: Complex hierarchical topology - too complex for automated test (7 processes)
-  # Just verify the example compiles and defines expected structure
+  # 113: Hierarchical cluster - parent workers delegate to child clusters
+  # True multi-process test with 7 processes
   describe '113_hierarchical_cluster.rb' do
-    it 'compiles and defines hierarchical pipeline classes' do
+    it 'processes batches through hierarchical parent-child cluster topology', timeout: 180 do
+      harness = ClusterTestHarness::Harness.new
       example_file = File.expand_path('../../examples/113_hierarchical_cluster.rb', __dir__)
-      expect { load example_file }.not_to raise_error
-      expect(defined?(ParentPipeline)).to eq('constant')
-      expect(defined?(ChildPipeline)).to eq('constant')
+
+      begin
+        # Allocate ports for all coordinators
+        parent_port = harness.port_allocator.allocate
+        child_port_a = harness.port_allocator.allocate
+        child_port_b = harness.port_allocator.allocate
+
+        env_parent = {
+          'CLUSTER_PORT' => parent_port.to_s,
+          'CHILD_PORT' => child_port_a.to_s # Not used by parent_coordinator but needed for ENV
+        }
+        env_child_a = { 'CLUSTER_PORT' => child_port_a.to_s }
+        env_child_b = { 'CLUSTER_PORT' => child_port_b.to_s }
+
+        # 1. Start child coordinators first (they need to be ready before parent workers)
+        child_coord_a = harness.spawn_example(example_file, 'child_coordinator', child_port_a,
+                                              env: env_child_a, wait_port: child_port_a)
+        child_coord_b = harness.spawn_example(example_file, 'child_coordinator', child_port_b,
+                                              env: env_child_b, wait_port: child_port_b)
+
+        # 2. Start child workers (connect to child coordinators)
+        child_workers = []
+        child_worker_threads = []
+        child_worker_mutex = Mutex.new
+
+        # Child worker for cluster A
+        child_worker_threads << Thread.new do
+          proc = harness.spawn_worker_with_retry(example_file, 'child_worker', child_port_a,
+                                                 env: env_child_a, coordinator_port: child_port_a)
+          child_worker_mutex.synchronize { child_workers << proc } if proc
+        end
+
+        # Child worker for cluster B
+        child_worker_threads << Thread.new do
+          proc = harness.spawn_worker_with_retry(example_file, 'child_worker', child_port_b,
+                                                 env: env_child_b, coordinator_port: child_port_b)
+          child_worker_mutex.synchronize { child_workers << proc } if proc
+        end
+
+        child_worker_threads.each(&:join)
+        expect(child_workers.size).to eq(2), 'Both child workers should connect'
+
+        # 3. Start parent coordinator (runs the pipeline, creates coordinator on parent_port)
+        # This will wait for parent workers before producing work
+        parent_coord = harness.spawn_example(example_file, 'parent_coordinator',
+                                             env: env_parent, wait_port: parent_port)
+
+        # 4. Start parent workers (connect to parent coordinator, delegate to child clusters)
+        parent_workers = []
+        parent_worker_threads = []
+        parent_worker_mutex = Mutex.new
+
+        # Parent worker delegating to child cluster A
+        parent_worker_threads << Thread.new do
+          env_pw_a = env_parent.merge('CLUSTER_PORT' => parent_port.to_s)
+          proc = harness.spawn_worker_with_retry(example_file, 'parent_worker', child_port_a,
+                                                 env: env_pw_a, coordinator_port: parent_port)
+          parent_worker_mutex.synchronize { parent_workers << proc } if proc
+        end
+
+        # Parent worker delegating to child cluster B
+        parent_worker_threads << Thread.new do
+          env_pw_b = env_parent.merge('CLUSTER_PORT' => parent_port.to_s)
+          proc = harness.spawn_worker_with_retry(example_file, 'parent_worker', child_port_b,
+                                                 env: env_pw_b, coordinator_port: parent_port)
+          parent_worker_mutex.synchronize { parent_workers << proc } if proc
+        end
+
+        parent_worker_threads.each(&:join)
+        expect(parent_workers.size).to eq(2), 'Both parent workers should connect'
+
+        # 5. Wait for parent coordinator to complete (it runs the pipeline)
+        harness.wait_for_output(parent_coord, 'Total batches:', timeout: 120)
+
+        parent_output = harness.process_manager.read_output(parent_coord)
+        combined = parent_output[:stdout] + parent_output[:stderr]
+
+        # Verify results - should process 5 batches
+        expect(combined).to include('Total batches: 5')
+        expect(combined).to include('[Parent Consumer] Collected batch')
+
+        # Verify hierarchical processing happened
+        expect(combined).to match(/Batch \d+: 10 items, \d+ results/)
+      ensure
+        harness.cleanup
+      end
     end
   end
 
