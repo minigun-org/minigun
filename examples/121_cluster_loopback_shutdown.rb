@@ -532,14 +532,14 @@ def run_client(node_a_port, node_b_port, node_c_port)
   wait_for_shutdown = lambda do |uri, timeout: 10|
     deadline = Time.now + timeout
     loop do
-      begin
-        node = DRbObject.new_with_uri(uri)
-        node.ping
-        return false if Time.now > deadline # Still running after timeout
-        sleep 0.05
-      rescue DRb::DRbConnError
-        return true # Shutdown confirmed
-      end
+      node = DRbObject.new_with_uri(uri)
+      node.ping
+      # Still running after timeout
+      break false if Time.now > deadline
+
+      sleep 0.05
+    rescue DRb::DRbConnError
+      break true # Shutdown confirmed
     end
   end
 

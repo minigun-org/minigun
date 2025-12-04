@@ -433,7 +433,7 @@ if __FILE__ == $PROGRAM_NAME
     10.times do |i|
       item = {
         id: i,
-        value: (rand(100) + 1) * 2, # Pre-doubled like Node A would
+        value: rand(1..100) * 2, # Pre-doubled like Node A would
         iteration: 0,
         history: %w[generated node_a_initial]
       }
@@ -445,9 +445,7 @@ if __FILE__ == $PROGRAM_NAME
     puts
     puts 'Waiting for loopback results...'
     deadline = Time.now + 15
-    while results_mutex.synchronize { results.size } < 10 && Time.now < deadline
-      sleep 0.1
-    end
+    sleep 0.1 while results_mutex.synchronize { results.size } < 10 && Time.now < deadline
 
     # Signal completion and cleanup
     node_b_coordinator.enqueue_end_of_stage

@@ -97,7 +97,6 @@ def run_image_worker(port = CLUSTER_PORT)
         processor: 'GPU',
         original_data: item[:data]
       }
-      output.call(result)
     else
       # Re-queue non-image items for another worker
       puts "  [Image Worker #{Process.pid}] Skipping non-image task #{item[:id]}"
@@ -109,8 +108,8 @@ def run_image_worker(port = CLUSTER_PORT)
         processor: 'CPU-fallback',
         original_data: item[:data]
       }
-      output.call(result)
     end
+    output.call(result)
   end
 
   worker.connect
@@ -136,7 +135,6 @@ def run_text_worker(port = CLUSTER_PORT)
         processor: 'CPU',
         original_data: item[:data]
       }
-      output.call(result)
     else
       # Process image items too (fallback)
       puts "  [Text Worker #{Process.pid}] Processing image task #{item[:id]} (fallback)..."
@@ -147,8 +145,8 @@ def run_text_worker(port = CLUSTER_PORT)
         processor: 'CPU-fallback',
         original_data: item[:data]
       }
-      output.call(result)
     end
+    output.call(result)
   end
 
   worker.connect

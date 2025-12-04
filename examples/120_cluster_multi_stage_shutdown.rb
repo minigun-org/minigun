@@ -253,9 +253,9 @@ ensure
 end
 
 # Run a worker for multi-process mode
-def run_worker(port, stage_name, &block)
+def run_worker(port, stage_name, &)
   worker = Minigun::Cluster::Worker.new(coordinator_uri: nil, worker_id: "worker-#{stage_name}-#{port}")
-  worker.register_stage(stage_name, &block)
+  worker.register_stage(stage_name, &)
 
   service = Minigun::Cluster::WorkerService.new(worker)
   DRb.start_service("druby://0.0.0.0:#{port}", service)
