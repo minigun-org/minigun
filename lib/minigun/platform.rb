@@ -5,35 +5,49 @@ module Minigun
   module Platform
     extend self
 
-    # Check if running on Windows
+    # Returns true if running on Linux
+    def linux?
+      return @linux if defined?(@linux)
+
+      @linux = RUBY_PLATFORM.include?('linux')
+    end
+
+    # Returns true if running on macOS
+    def macos?
+      return @macos if defined?(@macos)
+
+      @macos = RUBY_PLATFORM.include?('darwin')
+    end
+
+    # Returns true if running on Windows
     def windows?
       return @windows if defined?(@windows)
 
       @windows = Gem.win_platform?
     end
 
-    # Check if running on JRuby
+    # Returns true if running on JRuby
     def jruby?
       return @jruby if defined?(@jruby)
 
       @jruby = RUBY_ENGINE == 'jruby'
     end
 
-    # Check if running on TruffleRuby
+    # Returns true if running on TruffleRuby
     def truffleruby?
       return @truffleruby if defined?(@truffleruby)
 
       @truffleruby = RUBY_ENGINE == 'truffleruby'
     end
 
-    # Check if platform supports forking
+    # Returns true if platform supports forking
     def fork?
       return @fork if defined?(@fork)
 
       @fork = Process.respond_to?(:fork) && !truffleruby?
     end
 
-    # Check if async gem is available for fiber-based concurrency
+    # Returns true if async gem is available for fiber-based concurrency
     def fibers?
       return @fibers if defined?(@fibers)
 
