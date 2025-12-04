@@ -11,7 +11,7 @@ require 'timeout'
 # - Edge cases and chaos scenarios
 # - Resource cleanup
 
-RSpec.describe 'Fork Executors - Jepsen-style Tests' do
+RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun::Platform.fork? do
   # Create real Task and Pipeline objects for proper testing
   let(:task) { Minigun::Task.new }
   let(:pipeline) { task.root_pipeline }
@@ -449,7 +449,7 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests' do
     end
   end
 
-  describe 'COW Fork Pool Executor', skip: !Minigun::Platform.fork? do
+  describe 'COW Fork Pool Executor' do
     it_behaves_like 'fork executor correctness', :cow_fork
 
     describe 'COW-specific behavior' do
@@ -551,7 +551,7 @@ RSpec.describe 'Fork Executors - Jepsen-style Tests' do
     end
   end
 
-  describe 'IPC Fork Pool Executor', skip: !Minigun::Platform.fork? do
+  describe 'IPC Fork Pool Executor' do
     it_behaves_like 'fork executor correctness', :ipc_fork
 
     describe 'IPC-specific behavior' do

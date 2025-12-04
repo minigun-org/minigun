@@ -1621,7 +1621,7 @@ RSpec.describe 'Examples Integration' do
   # Note: Fork-based examples are skipped on Windows (fork not supported)
 
   describe '70_thread_to_ipc_fork.rb' do
-    it 'routes from thread pool to IPC fork (terminal consumer)' do
+    it 'routes from thread pool to IPC fork (terminal consumer)', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/70_thread_to_ipc_fork.rb', __dir__)
 
       example = ThreadToIpcForkExample.new
@@ -1656,7 +1656,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '72_thread_to_cow_fork.rb' do
-    it 'routes from thread pool to COW fork (terminal consumer)' do
+    it 'routes from thread pool to COW fork (terminal consumer)', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/72_thread_to_cow_fork.rb', __dir__)
 
       example = ThreadToCowForkExample.new
@@ -1756,7 +1756,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '78_master_to_ipc_via_to.rb' do
-    it 'routes from master to IPC fork via output.to()' do
+    it 'routes from master to IPC fork via output.to()', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/78_master_to_ipc_via_to.rb', __dir__)
 
       example = MasterToIpcViaToExample.new
@@ -1773,7 +1773,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '79_master_to_cow_via_to.rb' do
-    it 'routes from master to COW fork via output.to()' do
+    it 'routes from master to COW fork via output.to()', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/79_master_to_cow_via_to.rb', __dir__)
 
       example = MasterToCowViaToExample.new
@@ -1792,7 +1792,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '80_ipc_fan_out.rb' do
-    it 'demonstrates IPC fork fan-out pattern' do
+    it 'demonstrates IPC fork fan-out pattern', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/80_ipc_fan_out.rb', __dir__)
 
       example = IpcFanOutExample.new
@@ -1810,7 +1810,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '81_ipc_fan_in.rb' do
-    it 'demonstrates IPC fork fan-in pattern' do
+    it 'demonstrates IPC fork fan-in pattern', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/81_ipc_fan_in.rb', __dir__)
 
       example = IpcFanInExample.new
@@ -1827,7 +1827,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '82_cow_fan_out.rb' do
-    it 'demonstrates COW fork fan-out pattern' do
+    it 'demonstrates COW fork fan-out pattern', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/82_cow_fan_out.rb', __dir__)
 
       example = CowFanOutExample.new
@@ -1846,8 +1846,8 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
-  describe '83_cow_fan_in.rb', skip: !Minigun::Platform.fork? do
-    it 'demonstrates COW fork fan-in pattern' do
+  describe '83_cow_fan_in.rb' do
+    it 'demonstrates COW fork fan-in pattern', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/83_cow_fan_in.rb', __dir__)
 
       example = CowFanInExample.new
@@ -1865,8 +1865,8 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
-  describe '84_mixed_ipc_cow_fan_out.rb', skip: !Minigun::Platform.fork? do
-    it 'demonstrates mixed IPC/COW fork fan-out' do
+  describe '84_mixed_ipc_cow_fan_out.rb' do
+    it 'demonstrates mixed IPC/COW fork fan-out', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/84_mixed_ipc_cow_fan_out.rb', __dir__)
 
       example = MixedIpcCowFanOutExample.new
@@ -1903,7 +1903,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '86_ipc_spawns_nested_cow.rb' do
-    it 'demonstrates IPC workers spawning nested COW forks' do
+    it 'demonstrates IPC workers spawning nested COW forks', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/86_ipc_spawns_nested_cow.rb', __dir__)
 
       example = IpcSpawnsNestedCowExample.new
@@ -1922,8 +1922,8 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
-  describe '87_cow_spawns_nested_ipc.rb', skip: !Minigun::Platform.fork? do
-    it 'demonstrates COW forks spawning nested IPC workers' do
+  describe '87_cow_spawns_nested_ipc.rb' do
+    it 'demonstrates COW forks spawning nested IPC workers', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/87_cow_spawns_nested_ipc.rb', __dir__)
 
       example = CowSpawnsNestedIpcExample.new
@@ -2096,7 +2096,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '92_reroute_ipc_basic.rb' do
-    it 'demonstrates rerouting with IPC fork executors' do
+    it 'demonstrates rerouting with IPC fork executors', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/92_reroute_ipc_basic.rb', __dir__)
 
       # All three test cases should pass
@@ -2118,7 +2118,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '93_reroute_cow_basic.rb' do
-    it 'demonstrates rerouting with COW fork executors' do
+    it 'demonstrates rerouting with COW fork executors', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/93_reroute_cow_basic.rb', __dir__)
 
       base = RerouteCowBasicExample.new
@@ -2139,7 +2139,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '94_reroute_mixed_executors.rb' do
-    it 'demonstrates rerouting across different executor types' do
+    it 'demonstrates rerouting across different executor types', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/94_reroute_mixed_executors.rb', __dir__)
 
       base = RerouteMixedExecutorsExample.new
@@ -2155,7 +2155,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '95_reroute_to_inner_fork_stages.rb' do
-    it 'demonstrates rerouting to stages inside fork blocks' do
+    it 'demonstrates rerouting to stages inside fork blocks', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/95_reroute_to_inner_fork_stages.rb', __dir__)
 
       base = RerouteToInnerIpcStagesExample.new
@@ -2181,7 +2181,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '96_reroute_fork_fan_patterns.rb' do
-    it 'demonstrates rerouting with fork-based fan-out/fan-in' do
+    it 'demonstrates rerouting with fork-based fan-out/fan-in', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/96_reroute_fork_fan_patterns.rb', __dir__)
 
       # Fan-out patterns should work with rerouting
@@ -2201,7 +2201,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '97_dynamic_routing_to_inner_fork_stages.rb' do
-    it 'demonstrates dynamic routing to stages inside fork blocks' do
+    it 'demonstrates dynamic routing to stages inside fork blocks', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/97_dynamic_routing_to_inner_fork_stages.rb', __dir__)
 
       # Routing from thread to inner IPC/COW stages
@@ -2226,7 +2226,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   describe '98_await_stages_complex_routing.rb' do
-    it 'demonstrates complex multi-level routing with await stages' do
+    it 'demonstrates complex multi-level routing with await stages', skip: !Minigun::Platform.fork? do
       load File.expand_path('../../examples/98_await_stages_complex_routing.rb', __dir__)
 
       # Test 1: Multi-level routing
@@ -3485,7 +3485,7 @@ RSpec.describe 'Examples Integration' do
   end
 
   # IPC Fork Restart Policy Examples
-  describe '140_ipc_fork_restart_never.rb' do
+  describe '140_ipc_fork_restart_never.rb', skip: !Minigun::Platform.fork? do
     it 'demonstrates restart_policy: :never' do
       expect do
         load File.expand_path('../../examples/140_ipc_fork_restart_never.rb', __dir__)
@@ -3496,7 +3496,7 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
-  describe '141_ipc_fork_restart_transient.rb' do
+  describe '141_ipc_fork_restart_transient.rb', skip: !Minigun::Platform.fork? do
     it 'demonstrates restart_policy: :transient' do
       expect do
         load File.expand_path('../../examples/141_ipc_fork_restart_transient.rb', __dir__)
@@ -3507,7 +3507,7 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
-  describe '142_ipc_fork_restart_permanent.rb' do
+  describe '142_ipc_fork_restart_permanent.rb', skip: !Minigun::Platform.fork? do
     it 'demonstrates restart_policy: :permanent' do
       expect do
         load File.expand_path('../../examples/142_ipc_fork_restart_permanent.rb', __dir__)
@@ -3518,7 +3518,7 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
-  describe '143_ipc_fork_restart_rate_limit.rb' do
+  describe '143_ipc_fork_restart_rate_limit.rb', skip: !Minigun::Platform.fork? do
     it 'demonstrates restart rate limiting' do
       expect do
         load File.expand_path('../../examples/143_ipc_fork_restart_rate_limit.rb', __dir__)

@@ -186,7 +186,7 @@ RSpec.describe Minigun::Execution::WorkerMonitor do
   end
 end
 
-RSpec.describe 'IPC Fork Worker Restart Integration' do
+RSpec.describe 'IPC Fork Worker Restart Integration', skip: !Minigun::Platform.fork? do
   let(:task) { Minigun::Task.new }
   let(:pipeline) { task.root_pipeline }
 
