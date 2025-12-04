@@ -142,7 +142,10 @@ module ClusterTestHarness
 
     def release_all
       @mutex.synchronize do
-        @servers.each { |s| s&.close rescue nil }
+        @servers.each do |s|
+          s&.close
+        rescue StandardError # rubocop:disable Lint/SuppressedException
+        end
         @servers.clear
         @allocated.clear
       end
