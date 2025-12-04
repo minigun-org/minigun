@@ -55,6 +55,7 @@ plan based on the current codebase state and TODOS.md.
 - [ ] Demand -- consolidate registry?
 - [ ] demand: true/false at the pipeline level (carry to nesting), e.g. a nested `pipeline(demand: true) do` macro
 - [ ] Demand and custom routing
+- [ ] If fork not supported, IPC should spawn new ruby processes
 - [X] Demand with Clustering
 - [X] Genstage --> names required?
 - [X] Ractors on Ruby 3.5
