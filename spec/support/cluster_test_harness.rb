@@ -50,15 +50,20 @@ module ClusterTestHarness
     def kill_process(proc_info)
       pid = proc_info[:pid]
       begin
-        Process.kill('TERM', pid)
-        Timeout.timeout(2) { Process.waitpid(pid) }
-      rescue Errno::ESRCH
-        # Process already gone
+        # Windows doesn't support TERM signal, use KILL directly
+        if Gem.win_platform?
+          Process.kill('KILL', pid)
+        else
+          Process.kill('TERM', pid)
+          Timeout.timeout(2) { Process.waitpid(pid) }
+        end
+      rescue Errno::ESRCH, Errno::EINVAL
+        # Process already gone (ESRCH on Unix, EINVAL can occur on Windows)
       rescue Timeout::Error
         begin
           Process.kill('KILL', pid)
           Process.waitpid(pid)
-        rescue Errno::ESRCH, Errno::ECHILD
+        rescue Errno::ESRCH, Errno::ECHILD, Errno::EINVAL
           # Process gone
         end
       rescue Errno::ECHILD

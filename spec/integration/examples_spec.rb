@@ -1846,7 +1846,7 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
-  describe '83_cow_fan_in.rb' do
+  describe '83_cow_fan_in.rb', skip: !Minigun::Platform.fork? do
     it 'demonstrates COW fork fan-in pattern' do
       load File.expand_path('../../examples/83_cow_fan_in.rb', __dir__)
 
@@ -1865,7 +1865,7 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
-  describe '84_mixed_ipc_cow_fan_out.rb' do
+  describe '84_mixed_ipc_cow_fan_out.rb', skip: !Minigun::Platform.fork? do
     it 'demonstrates mixed IPC/COW fork fan-out' do
       load File.expand_path('../../examples/84_mixed_ipc_cow_fan_out.rb', __dir__)
 
@@ -1922,7 +1922,7 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
-  describe '87_cow_spawns_nested_ipc.rb' do
+  describe '87_cow_spawns_nested_ipc.rb', skip: !Minigun::Platform.fork? do
     it 'demonstrates COW forks spawning nested IPC workers' do
       load File.expand_path('../../examples/87_cow_spawns_nested_ipc.rb', __dir__)
 
