@@ -107,30 +107,45 @@ module ClusterTestHarness
   end
 
   # Port allocation using OS-assigned ephemeral ports
+  # Keeps sockets open until release to prevent race conditions
   class PortAllocator
     def initialize
       @allocated = []
+      @servers = []
       @mutex = Mutex.new
     end
 
     def allocate(count = 1)
       @mutex.synchronize do
-        ports = count.times.map { find_available_port.tap { |p| @allocated << p } }
+        ports = count.times.map do
+          server = TCPServer.new('127.0.0.1', 0)
+          port = server.addr[1]
+          @servers << server
+          @allocated << port
+          port
+        end
         count == 1 ? ports.first : ports
       end
     end
 
-    def release_all
-      @mutex.synchronize { @allocated.clear }
+    # Release a specific port (close its socket so subprocess can bind)
+    def release(port)
+      @mutex.synchronize do
+        idx = @allocated.index(port)
+        return unless idx
+
+        @servers[idx]&.close
+        @servers.delete_at(idx)
+        @allocated.delete_at(idx)
+      end
     end
 
-    private
-
-    def find_available_port
-      server = TCPServer.new('127.0.0.1', 0)
-      port = server.addr[1]
-      server.close
-      port
+    def release_all
+      @mutex.synchronize do
+        @servers.each { |s| s&.close rescue nil }
+        @servers.clear
+        @allocated.clear
+      end
     end
   end
 
@@ -159,6 +174,9 @@ module ClusterTestHarness
 
     # Spawn a generic ruby subprocess with the example file
     def spawn_example(example_file, *args, env: {}, wait_port: nil)
+      # Release the port just before spawning so subprocess can bind
+      @port_allocator.release(wait_port) if wait_port
+
       cmd = ['bundle', 'exec', 'ruby', example_file, *args.map(&:to_s)]
       proc_info = @process_manager.spawn_process(cmd, env: env, label: File.basename(example_file))
 
