@@ -11,7 +11,7 @@ require 'timeout'
 # - Edge cases and chaos scenarios
 # - Resource cleanup
 
-RSpec.describe 'Fork Executors - Jepsen-style Tests', skip: !Minigun::Platform.fork? do
+RSpec.describe 'Fork Executors - Jepsen-style Tests' do
   # Create real Task and Pipeline objects for proper testing
   let(:task) { Minigun::Task.new }
   let(:pipeline) { task.root_pipeline }

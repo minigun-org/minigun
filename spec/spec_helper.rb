@@ -25,6 +25,14 @@ RSpec.configure do |config|
   config.order = :random
   Kernel.srand config.seed
 
+  # Skip tests where fork not implemented
+  config.around do |example|
+    example.run
+  rescue NotImplementedError => e
+    skip if e.message.start_with?('fork() function')
+    raise(e)
+  end
+
   # Add timeout to all examples to prevent deadlocks
   # Use longer timeout in CI environments where fork-based tests may be slower
   config.around do |example|
