@@ -3016,14 +3016,34 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
+  # 117: Complex loopback topology A→B→C→A
+  # Uses loopback mode to run all nodes (3 coordinators, 2 workers) in one process
   describe '117_cluster_loopback.rb' do
-    it 'demonstrates circular cluster topology (A→B→C→A)', timeout: 30 do
+    it 'runs circular cluster topology via loopback mode' do
       example_file = File.expand_path('../../examples/117_cluster_loopback.rb', __dir__)
 
-      # Verify help output shows circular topology
-      output = `timeout 15 bundle exec ruby #{example_file} --help 2>&1`
-      expect(output).to include('Loopback')
-      expect(output).to include('A → B → C → A')
+      # Run loopback test - all nodes in one process
+      output = `timeout 30 bundle exec ruby #{example_file} loopback 2>&1`
+
+      # Verify all nodes started
+      expect(output).to include('Node B] Coordinator started on port')
+      expect(output).to include('Node C] Coordinator started on port')
+      expect(output).to include('Node A] Loopback receiver started on port')
+
+      # Verify workers connected
+      expect(output).to include('Worker B] Connected')
+      expect(output).to include('Worker C] Connected')
+
+      # Verify work was sent and results received
+      expect(output).to include('Sending initial work to Node B')
+      expect(output).to include('Received loopback result: item')
+
+      # Verify all 10 items completed the A → B → C → A loop
+      expect(output).to include('Total loopback results: 10')
+      expect(output).to include('SUCCESS: All 10 items completed A → B → C → A loopback')
+
+      # Verify history shows full traversal
+      expect(output).to include('generated → node_a_initial → node_b_transform → node_c_validate')
     end
   end
 
@@ -3097,107 +3117,68 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
+  # 122: Cluster with demand-based backpressure
+  # Runs loopback mode in separate process - spawns workers internally
   describe '122_cluster_demand.rb' do
-    it 'demonstrates cluster with demand-based backpressure' do
-      load File.expand_path('../../examples/122_cluster_demand.rb', __dir__)
+    it 'demonstrates cluster with demand-based backpressure', timeout: 60 do
+      example_file = File.expand_path('../../examples/122_cluster_demand.rb', __dir__)
 
-      # Test runs in loopback mode with workers started in-process
-      # Run the same loopback test that the example runs
-      started_services = []
-      worker_uris = []
+      # Run loopback test as separate process
+      output = `timeout 45 bundle exec ruby #{example_file} loopback 2>&1`
 
-      [19_201, 19_202].each do |port|
-        worker = Minigun::Cluster::Worker.new(
-          coordinator_uri: nil,
-          worker_id: "demand-test-worker-#{port}"
-        )
+      # Verify workers started
+      expect(output).to include('Worker started at')
 
-        worker.register_stage(:compute) do |item, output|
-          result = (1..100).reduce(item[:value]) { |acc, _| Math.sqrt(acc.abs + 1) }
-          output.call({ id: item[:id], original: item[:value], computed: result.round(4), worker: port })
-        end
+      # Verify demand pipeline processed all items
+      expect(output).to include('Processed 50 items with demand backpressure')
 
-        worker.register_stage(:transform) do |item, output|
-          output.call({ value: item * 2, stage: :transform, worker: port })
-        end
+      # Verify work was distributed to multiple workers
+      expect(output).to include('Work distribution:')
+      expect(output).to match(/Worker \d+: \d+ items/)
 
-        service = Minigun::Cluster::WorkerService.new(worker)
-        uri = "druby://127.0.0.1:#{port}"
-        DRb.start_service(uri, service)
-        started_services << service
-        worker_uris << uri
-      end
+      # Verify multi-stage demand pipeline also ran
+      expect(output).to include('Multi-stage processed')
+      expect(output).to include('All items enriched: true')
 
-      begin
-        # Test ClusterDemandPipeline
-        pipeline = ClusterDemandPipeline.new(worker_uris: worker_uris)
-        pipeline.run
-
-        # Verify all items processed
-        expect(pipeline.results.size).to eq(50)
-
-        # Verify work distributed to workers
-        worker_counts = pipeline.results.group_by { |r| r[:worker] }.transform_values(&:size)
-        expect(worker_counts.values.sum).to eq(50)
-      ensure
-        DRb.stop_service
-        sleep 0.05
-      end
+      # Verify test completed successfully
+      expect(output).to include('Test Complete')
     end
   end
 
+  # 123: Cluster with different routing strategies
+  # Runs loopback mode in separate process - spawns worker internally
   describe '123_cluster_routing.rb' do
-    it 'demonstrates cluster with routing strategies' do
-      load File.expand_path('../../examples/123_cluster_routing.rb', __dir__)
+    it 'demonstrates cluster with routing strategies', timeout: 60 do
+      example_file = File.expand_path('../../examples/123_cluster_routing.rb', __dir__)
 
-      port = 19_301
-      worker = Minigun::Cluster::Worker.new(coordinator_uri: nil, worker_id: "routing-test-worker-#{port}")
+      # Run loopback test as separate process
+      output = `timeout 45 bundle exec ruby #{example_file} loopback 2>&1`
 
-      # Register stage processors
-      worker.register_stage(:transform) { |item, output| output.call(item.merge(transformed: true)) }
-      worker.register_stage(:process) { |item, output| output.call(item.merge(processed: true)) }
-      worker.register_stage(:classify) { |item, output| output.call(item.merge(classified: true)) }
-      worker.register_stage(:enrich) { |item, output| output.call(item.merge(enriched: true, timestamp: Time.now.to_i)) }
-      worker.register_stage(:route) { |item, output| output.call(item.merge(routed: true)) }
+      # Verify worker started
+      expect(output).to include('Worker started at')
 
-      service = Minigun::Cluster::WorkerService.new(worker)
-      uri = "druby://127.0.0.1:#{port}"
-      DRb.start_service(uri, service)
+      # Verify broadcast routing worked (each item to BOTH consumers)
+      expect(output).to include('Test 1: Broadcast Routing')
+      expect(output).to include('Broadcast verification: each item in BOTH consumers = true')
 
-      begin
-        # Test broadcast routing
-        broadcast = BroadcastRoutingPipeline.new(worker_uri: uri)
-        broadcast.run
-        expect(broadcast.results_a.size).to eq(5)
-        expect(broadcast.results_b.size).to eq(5)
+      # Verify round-robin routing worked (evenly distributed)
+      expect(output).to include('Test 2: Round-Robin Routing')
+      expect(output).to include('Round-robin verification: evenly distributed = true')
 
-        # Test round-robin routing
-        round_robin = RoundRobinRoutingPipeline.new(worker_uri: uri)
-        round_robin.run
-        expect(round_robin.results_a.size).to eq(5)
-        expect(round_robin.results_b.size).to eq(5)
+      # Verify demand-based routing worked
+      expect(output).to include('Test 3: Demand-Based Routing')
+      expect(output).to include('All items processed: true')
 
-        # Test partition routing
-        partition = PartitionRoutingPipeline.new(worker_uri: uri)
-        partition.run
-        all_results = partition.results_a + partition.results_b
-        expect(all_results.size).to eq(7)
+      # Verify partition routing worked (user affinity)
+      expect(output).to include('Test 4: Partition Routing')
+      expect(output).to include('User 1 partition affinity: all in same consumer = true')
 
-        # Verify user affinity - all events for user_id=1 should be in same consumer
-        user1_in_a = partition.results_a.count { |r| r[:user_id] == 1 }
-        user1_in_b = partition.results_b.count { |r| r[:user_id] == 1 }
-        expect(user1_in_a == 3 || user1_in_b == 3).to be true
+      # Verify custom hash routing worked
+      expect(output).to include('Test 5: Custom Hash Routing')
+      expect(output).to include('Custom hash verification: all correct = true')
 
-        # Test custom hash routing
-        custom = CustomHashRoutingPipeline.new(worker_uri: uri)
-        custom.run
-        expect(custom.results[:priority_high].map { |r| r[:id] }.sort).to eq([0, 3, 6, 9])
-        expect(custom.results[:priority_medium].map { |r| r[:id] }.sort).to eq([1, 4, 7, 10])
-        expect(custom.results[:priority_low].map { |r| r[:id] }.sort).to eq([2, 5, 8, 11])
-      ensure
-        DRb.stop_service
-        sleep 0.05
-      end
+      # Verify all tests completed
+      expect(output).to include('All Routing Tests Complete')
     end
   end
 
