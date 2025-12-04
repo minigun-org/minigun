@@ -22,6 +22,13 @@
 require_relative '../lib/minigun'
 require 'drb'
 
+# Force unbuffered output for test harness compatibility
+$stdout.sync = true
+$stderr.sync = true
+
+# Configuration via environment variables for testing
+CLUSTER_PORT = ENV.fetch('CLUSTER_PORT', '19101').to_i
+
 # Pipeline demonstrating broadcast routing after cluster
 class BroadcastRoutingPipeline
   include Minigun::DSL
@@ -214,7 +221,7 @@ def run_loopback_test
   puts
 
   # Start worker
-  port = 19_101
+  port = CLUSTER_PORT
   worker = Minigun::Cluster::Worker.new(coordinator_uri: nil, worker_id: "routing-worker-#{port}")
 
   # Register all stage processors
@@ -296,9 +303,96 @@ def run_loopback_test
 
   puts
   puts '=== All Routing Tests Complete ==='
+  puts 'SUCCESS'
 rescue StandardError => e
   puts "Error: #{e.message}"
   puts e.backtrace.first(5).join("\n")
+  exit 1
+ensure
+  DRb.stop_service
+end
+
+# Run worker for multi-process mode
+def run_worker(port)
+  worker = Minigun::Cluster::Worker.new(coordinator_uri: nil, worker_id: "routing-worker-#{port}")
+
+  # Register all stage processors
+  worker.register_stage(:transform) { |item, output| output.call(item.merge(transformed: true)) }
+  worker.register_stage(:process) { |item, output| output.call(item.merge(processed: true)) }
+  worker.register_stage(:classify) { |item, output| output.call(item.merge(classified: true)) }
+  worker.register_stage(:enrich) { |item, output| output.call(item.merge(enriched: true, timestamp: Time.now.to_i)) }
+  worker.register_stage(:route) { |item, output| output.call(item.merge(routed: true)) }
+
+  service = Minigun::Cluster::WorkerService.new(worker)
+  DRb.start_service("druby://0.0.0.0:#{port}", service)
+
+  puts "Worker started at druby://0.0.0.0:#{port}"
+  puts 'Press Ctrl+C to stop'
+
+  DRb.thread.join
+rescue Interrupt
+  puts "\nWorker stopping..."
+  DRb.stop_service
+end
+
+# Run client for multi-process mode (runs all 5 routing tests)
+def run_client(worker_port)
+  uri = "druby://127.0.0.1:#{worker_port}"
+
+  puts '=== Cluster Routing Client ==='
+  puts "Connecting to worker at #{uri}"
+  puts
+
+  DRb.start_service
+
+  # Test 1: Broadcast
+  broadcast = BroadcastRoutingPipeline.new(worker_uri: uri)
+  broadcast.run
+  broadcast_ok = broadcast.results_a.size == 5 && broadcast.results_b.size == 5
+  puts "Test 1 - Broadcast: #{broadcast_ok ? 'PASS' : 'FAIL'}"
+
+  # Test 2: Round-robin
+  round_robin = RoundRobinRoutingPipeline.new(worker_uri: uri)
+  round_robin.run
+  rr_ok = round_robin.results_a.size == 5 && round_robin.results_b.size == 5
+  puts "Test 2 - Round-robin: #{rr_ok ? 'PASS' : 'FAIL'}"
+
+  # Test 3: Demand
+  demand = DemandRoutingPipeline.new(worker_uri: uri)
+  demand.run
+  demand_ok = (demand.results_fast.size + demand.results_slow.size) == 20
+  puts "Test 3 - Demand: #{demand_ok ? 'PASS' : 'FAIL'}"
+
+  # Test 4: Partition
+  partition = PartitionRoutingPipeline.new(worker_uri: uri)
+  partition.run
+  user1_in_a = partition.results_a.count { |r| r[:user_id] == 1 }
+  user1_in_b = partition.results_b.count { |r| r[:user_id] == 1 }
+  partition_ok = user1_in_a == 3 || user1_in_b == 3
+  puts "Test 4 - Partition: #{partition_ok ? 'PASS' : 'FAIL'}"
+
+  # Test 5: Custom hash
+  custom = CustomHashRoutingPipeline.new(worker_uri: uri)
+  custom.run
+  high_correct = custom.results[:priority_high].all? { |r| r[:id] % 3 == 0 }
+  medium_correct = custom.results[:priority_medium].all? { |r| r[:id] % 3 == 1 }
+  low_correct = custom.results[:priority_low].all? { |r| r[:id] % 3 == 2 }
+  hash_ok = high_correct && medium_correct && low_correct
+  puts "Test 5 - Custom hash: #{hash_ok ? 'PASS' : 'FAIL'}"
+
+  puts
+  all_ok = broadcast_ok && rr_ok && demand_ok && partition_ok && hash_ok
+  if all_ok
+    puts 'All 5 routing tests PASSED'
+    puts 'SUCCESS'
+  else
+    puts 'Some routing tests FAILED'
+    exit 1
+  end
+rescue Minigun::Errors::ClusterError => e
+  puts "Cluster error: #{e.message}"
+  puts 'Make sure worker is running!'
+  exit 1
 ensure
   DRb.stop_service
 end
@@ -312,6 +406,16 @@ if __FILE__ == $PROGRAM_NAME
   case mode
   when 'loopback'
     run_loopback_test
+
+  when 'worker'
+    port = ARGV[1]&.to_i || CLUSTER_PORT
+    puts "=== Routing Worker (Port #{port}) ==="
+    run_worker(port)
+
+  when 'client'
+    port = ARGV[1]&.to_i || CLUSTER_PORT
+    run_client(port)
+
   when 'help', '--help', '-h'
     puts '=== Cluster with Routing Strategies Example ==='
     puts

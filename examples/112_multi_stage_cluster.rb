@@ -25,82 +25,93 @@
 
 require_relative '../lib/minigun'
 
-# Pipeline definition
+# Force unbuffered output for test harness compatibility
+$stdout.sync = true
+$stderr.sync = true
+
+# Configuration via environment variables for testing
+WORKER_TIMEOUT = ENV.fetch('WORKER_TIMEOUT', '30').to_i
+PORT_PREPROCESS = ENV.fetch('PORT_PREPROCESS', '9000').to_i
+PORT_COMPUTE = ENV.fetch('PORT_COMPUTE', '9001').to_i
+PORT_POSTPROCESS = ENV.fetch('PORT_POSTPROCESS', '9002').to_i
+
+# Pipeline definition - uses factory to allow dynamic port configuration
 class MultiStageCluster
-  include Minigun::DSL
+  def self.create_pipeline
+    port0 = PORT_PREPROCESS
+    port1 = PORT_COMPUTE
+    port2 = PORT_POSTPROCESS
 
-  attr_reader :results
+    Class.new do
+      include Minigun::DSL
 
-  def initialize
-    @results = []
-  end
+      attr_reader :results
 
-  pipeline do
-    # Generate work items locally
-    producer :generate do |output|
-      puts '[Producer] Generating 10 work items...'
-      10.times do |i|
-        output << { id: i, value: rand(100) }
+      define_method(:initialize) do
+        @results = []
       end
-      puts '[Producer] Done generating'
-    end
 
-    # Stage 1: Preprocessing cluster (port 9000)
-    in_cluster(coordinator_uri: 'druby://0.0.0.0:9000', min_workers: 1, worker_timeout: 30) do
-      processor :preprocess do |item, output|
-        # Simulate preprocessing (validation, normalization, etc.)
-        puts "  [Preprocess] Item #{item[:id]}: validating..."
-        sleep 0.1
-        normalized = item[:value] * 2
-        output << { id: item[:id], preprocessed: normalized }
+      pipeline do
+        # Generate work items locally
+        producer :generate do |output|
+          puts '[Producer] Generating 10 work items...'
+          10.times do |i|
+            output << { id: i, value: rand(100) }
+          end
+          puts '[Producer] Done generating'
+        end
+
+        # Stage 1: Preprocessing cluster
+        in_cluster(coordinator_uri: "druby://0.0.0.0:#{port0}", min_workers: 1, worker_timeout: WORKER_TIMEOUT) do
+          processor :preprocess do |item, output|
+            puts "  [Preprocess] Item #{item[:id]}: validating..."
+            normalized = item[:value] * 2
+            output << { id: item[:id], preprocessed: normalized }
+          end
+        end
+
+        # Stage 2: Heavy computation cluster
+        in_cluster(coordinator_uri: "druby://0.0.0.0:#{port1}", min_workers: 1, worker_timeout: WORKER_TIMEOUT) do
+          processor :heavy_compute do |item, output|
+            puts "  [Compute] Item #{item[:id]}: computing..."
+            result = (1..5000).reduce(item[:preprocessed]) { |acc, _| Math.sqrt(acc.abs + 1) }
+            output << { id: item[:id], computed: result.round(4) }
+          end
+        end
+
+        # Stage 3: Postprocessing cluster
+        in_cluster(coordinator_uri: "druby://0.0.0.0:#{port2}", min_workers: 1, worker_timeout: WORKER_TIMEOUT) do
+          processor :postprocess do |item, output|
+            puts "  [Postprocess] Item #{item[:id]}: formatting..."
+            formatted = {
+              id: item[:id],
+              result: item[:computed],
+              status: 'completed',
+              timestamp: Time.now.to_i
+            }
+            output << formatted
+          end
+        end
+
+        # Collect results locally
+        consumer :collect do |item|
+          @results << item
+          puts "[Consumer] Collected result for item #{item[:id]}"
+        end
       end
-    end
-
-    # Stage 2: Heavy computation cluster (port 9001)
-    in_cluster(coordinator_uri: 'druby://0.0.0.0:9001', min_workers: 1, worker_timeout: 30) do
-      processor :heavy_compute do |item, output|
-        # Simulate expensive computation
-        puts "  [Compute] Item #{item[:id]}: computing..."
-        sleep 0.2
-        result = (1..5000).reduce(item[:preprocessed]) { |acc, _| Math.sqrt(acc.abs + 1) }
-        output << { id: item[:id], computed: result.round(4) }
-      end
-    end
-
-    # Stage 3: Postprocessing cluster (port 9002)
-    in_cluster(coordinator_uri: 'druby://0.0.0.0:9002', min_workers: 1, worker_timeout: 30) do
-      processor :postprocess do |item, output|
-        # Simulate postprocessing (formatting, validation, etc.)
-        puts "  [Postprocess] Item #{item[:id]}: formatting..."
-        sleep 0.1
-        formatted = {
-          id: item[:id],
-          result: item[:computed],
-          status: 'completed',
-          timestamp: Time.now.to_i
-        }
-        output << formatted
-      end
-    end
-
-    # Collect results locally
-    consumer :collect do |item|
-      @results << item
-      puts "[Consumer] Collected result for item #{item[:id]}"
-    end
+    end.new
   end
 end
 
 # Worker implementations
-def run_preprocess_worker
+def run_preprocess_worker(port = PORT_PREPROCESS)
   worker = Minigun::Cluster::Worker.new(
-    coordinator_uri: 'druby://127.0.0.1:9000',
+    coordinator_uri: "druby://127.0.0.1:#{port}",
     worker_id: "preprocess-#{Process.pid}"
   )
 
   worker.register_stage(:preprocess) do |item, output|
     puts "  [Preprocess Worker] Item #{item[:id]}: validating..."
-    sleep 0.1
     normalized = item[:value] * 2
     output.call({ id: item[:id], preprocessed: normalized })
   end
@@ -110,15 +121,14 @@ def run_preprocess_worker
   worker.start
 end
 
-def run_compute_worker
+def run_compute_worker(port = PORT_COMPUTE)
   worker = Minigun::Cluster::Worker.new(
-    coordinator_uri: 'druby://127.0.0.1:9001',
+    coordinator_uri: "druby://127.0.0.1:#{port}",
     worker_id: "compute-#{Process.pid}"
   )
 
   worker.register_stage(:heavy_compute) do |item, output|
     puts "  [Compute Worker] Item #{item[:id]}: computing..."
-    sleep 0.2
     result = (1..5000).reduce(item[:preprocessed]) { |acc, _| Math.sqrt(acc.abs + 1) }
     output.call({ id: item[:id], computed: result.round(4) })
   end
@@ -128,15 +138,14 @@ def run_compute_worker
   worker.start
 end
 
-def run_postprocess_worker
+def run_postprocess_worker(port = PORT_POSTPROCESS)
   worker = Minigun::Cluster::Worker.new(
-    coordinator_uri: 'druby://127.0.0.1:9002',
+    coordinator_uri: "druby://127.0.0.1:#{port}",
     worker_id: "postprocess-#{Process.pid}"
   )
 
   worker.register_stage(:postprocess) do |item, output|
     puts "  [Postprocess Worker] Item #{item[:id]}: formatting..."
-    sleep 0.1
     formatted = {
       id: item[:id],
       result: item[:computed],
@@ -160,14 +169,14 @@ if __FILE__ == $PROGRAM_NAME
   case mode
   when 'coordinator'
     puts '=== Multi-Stage Cluster Coordinator ==='
-    puts 'Starting coordinator with 3 cluster stages...'
+    puts "Starting coordinator with 3 cluster stages (ports #{PORT_PREPROCESS}, #{PORT_COMPUTE}, #{PORT_POSTPROCESS})..."
     puts 'Start workers in separate terminals:'
     puts '  ruby examples/112_multi_stage_cluster.rb worker_preprocess'
     puts '  ruby examples/112_multi_stage_cluster.rb worker_compute'
     puts '  ruby examples/112_multi_stage_cluster.rb worker_postprocess'
     puts
 
-    pipeline = MultiStageCluster.new
+    pipeline = MultiStageCluster.create_pipeline
     pipeline.run
 
     puts

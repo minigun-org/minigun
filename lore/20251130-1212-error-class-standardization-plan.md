@@ -77,7 +77,7 @@ Should Minigun adopt Elixir/Erlang's "let it fail" philosophy with supervision t
 | `Minigun::Error` | `lib/minigun.rb:10` | Base error class |
 | `Minigun::StageNameConflict` | `lib/minigun.rb:13` | Stage name already exists |
 | `Minigun::AmbiguousRoutingError` | `lib/minigun.rb:16` | Cannot resolve stage name |
-| `Minigun::Cluster::Error` | `lib/minigun/cluster.rb:13` | Base cluster error |
+| `Minigun::Errors::ClusterError` | `lib/minigun/cluster.rb:13` | Base cluster error |
 | `Minigun::Cluster::ConnectionError` | `lib/minigun/cluster.rb:14` | Failed to connect |
 | `Minigun::Cluster::WorkerNotFoundError` | `lib/minigun/cluster.rb:15` | Stage processor not registered |
 

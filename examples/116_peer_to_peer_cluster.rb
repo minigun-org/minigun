@@ -24,6 +24,17 @@
 require_relative '../lib/minigun'
 require 'drb'
 
+# Force unbuffered output for test harness compatibility
+$stdout.sync = true
+$stderr.sync = true
+
+# Configuration via environment variables for testing
+CLUSTER_PORT_BASE = ENV.fetch('CLUSTER_PORT', '9000').to_i
+WORKER_TIMEOUT = ENV.fetch('WORKER_TIMEOUT', '30').to_i
+# Peer ports are passed via ENV so workers know how to reach each other
+PEER_PORT_A = ENV.fetch('PEER_PORT_A', (CLUSTER_PORT_BASE + 10).to_s).to_i
+PEER_PORT_B = ENV.fetch('PEER_PORT_B', (CLUSTER_PORT_BASE + 11).to_s).to_i
+
 # Shared data store accessible via DRb
 class DataShard
   def initialize(shard_id, start_id, end_id)
@@ -43,6 +54,10 @@ class DataShard
     @data.keys
   end
 
+  def key?(id)
+    @data.key?(id)
+  end
+
   def size
     @data.size
   end
@@ -52,49 +67,53 @@ end
 
 # Peer-to-peer cluster pipeline with direct worker communication
 class PeerToPeerPipeline
-  include Minigun::DSL
+  def self.create_pipeline(coordinator_port)
+    Class.new do
+      include Minigun::DSL
 
-  attr_reader :results
+      attr_reader :results
 
-  def initialize
-    @results = []
-  end
-
-  pipeline do
-    # Generate join tasks that require data from multiple shards
-    producer :generate_join_tasks do |output|
-      puts '[Producer] Generating join tasks...'
-      # Each task needs to join data from two shards
-      10.times do |i|
-        left_id = i
-        right_id = 9 - i # Ensures cross-shard joins
-        output << { task_id: i, left_id: left_id, right_id: right_id }
+      define_method(:initialize) do
+        @results = []
       end
-      puts '[Producer] Generated 10 join tasks'
-    end
 
-    # Cluster workers perform joins by fetching data peer-to-peer
-    in_cluster(coordinator_uri: 'druby://0.0.0.0:9000', min_workers: 2, worker_timeout: 30) do
-      processor :distributed_join do |task, output|
-        # Worker will fetch data from peers if needed
-        # (Implemented in worker code below)
-        output << task
-      end
-    end
+      pipeline do
+        # Generate join tasks that require data from multiple shards
+        producer :generate_join_tasks do |output|
+          puts '[Producer] Generating join tasks...'
+          # Each task needs to join data from two shards
+          10.times do |i|
+            left_id = i
+            right_id = 9 - i # Ensures cross-shard joins
+            output << { task_id: i, left_id: left_id, right_id: right_id }
+          end
+          puts '[Producer] Generated 10 join tasks'
+        end
 
-    consumer :collect do |result|
-      @results << result
-      if result[:error]
-        puts "[Consumer] Task #{result[:task_id]}: ERROR - #{result[:error]}"
-      else
-        puts "[Consumer] Task #{result[:task_id]}: Joined #{result[:left_value]} + #{result[:right_value]} = #{result[:result]}"
+        # Cluster workers perform joins by fetching data peer-to-peer
+        in_cluster(coordinator_uri: "druby://0.0.0.0:#{coordinator_port}", min_workers: 2, worker_timeout: WORKER_TIMEOUT) do
+          processor :distributed_join do |task, output|
+            # Worker will fetch data from peers if needed
+            # (Implemented in worker code below)
+            output << task
+          end
+        end
+
+        consumer :collect do |result|
+          @results << result
+          if result[:error]
+            puts "[Consumer] Task #{result[:task_id]}: ERROR - #{result[:error]}"
+          else
+            puts "[Consumer] Task #{result[:task_id]}: Joined #{result[:left_value]} + #{result[:right_value]} = #{result[:result]}"
+          end
+        end
       end
-    end
+    end.new
   end
 end
 
 # Worker with peer-to-peer data sharing
-def run_worker(shard_start, worker_port)
+def run_worker(shard_start, worker_port, coordinator_port: CLUSTER_PORT_BASE)
   # Determine shard range
   shard_end = shard_start + 4
   shard_id = shard_start / 5
@@ -111,9 +130,13 @@ def run_worker(shard_start, worker_port)
 
   # Create worker
   worker = Minigun::Cluster::Worker.new(
-    coordinator_uri: 'druby://127.0.0.1:9000',
+    coordinator_uri: "druby://127.0.0.1:#{coordinator_port}",
     worker_id: "worker-shard-#{shard_id}"
   )
+
+  # Peer ports from environment (dynamically allocated in tests)
+  peer_port_a = PEER_PORT_A
+  peer_port_b = PEER_PORT_B
 
   # Register distributed join processor
   worker.register_stage(:distributed_join) do |task, output|
@@ -126,7 +149,7 @@ def run_worker(shard_start, worker_port)
                     shard.get(task[:left_id])
                   else
                     # Fetch from peer
-                    peer_port = task[:left_id] < 5 ? 9010 : 9011
+                    peer_port = task[:left_id] < 5 ? peer_port_a : peer_port_b
                     puts "    [Worker #{shard_id}] Fetching left data #{task[:left_id]} from PEER on port #{peer_port}"
                     peer_shard = DRbObject.new_with_uri("druby://127.0.0.1:#{peer_port}")
                     peer_shard.get(task[:left_id])
@@ -138,7 +161,7 @@ def run_worker(shard_start, worker_port)
                      shard.get(task[:right_id])
                    else
                      # Fetch from peer
-                     peer_port = task[:right_id] < 5 ? 9010 : 9011
+                     peer_port = task[:right_id] < 5 ? peer_port_a : peer_port_b
                      puts "    [Worker #{shard_id}] Fetching right data #{task[:right_id]} from PEER on port #{peer_port}"
                      peer_shard = DRbObject.new_with_uri("druby://127.0.0.1:#{peer_port}")
                      peer_shard.get(task[:right_id])
@@ -183,17 +206,17 @@ if __FILE__ == $PROGRAM_NAME
     puts '=== Peer-to-Peer Cluster Pipeline ==='
     puts
     puts 'This demonstrates workers communicating peer-to-peer:'
-    puts '  - Worker A owns data IDs 0-4 (port 9010)'
-    puts '  - Worker B owns data IDs 5-9 (port 9011)'
+    puts "  - Worker A owns data IDs 0-4 (port #{PEER_PORT_A})"
+    puts "  - Worker B owns data IDs 5-9 (port #{PEER_PORT_B})"
     puts '  - Workers fetch data from each other directly'
     puts '  - Coordinator only distributes join tasks'
     puts
     puts 'Start workers in separate terminals:'
-    puts '  ruby examples/116_peer_to_peer_cluster.rb worker 0 9010'
-    puts '  ruby examples/116_peer_to_peer_cluster.rb worker 5 9011'
+    puts "  ruby examples/116_peer_to_peer_cluster.rb worker 0 #{PEER_PORT_A}"
+    puts "  ruby examples/116_peer_to_peer_cluster.rb worker 5 #{PEER_PORT_B}"
     puts
 
-    pipeline = PeerToPeerPipeline.new
+    pipeline = PeerToPeerPipeline.create_pipeline(CLUSTER_PORT_BASE)
     pipeline.run
 
     puts
@@ -220,13 +243,13 @@ if __FILE__ == $PROGRAM_NAME
       puts 'ERROR: Both shard_start and worker_port required'
       puts 'Usage: ruby examples/116_peer_to_peer_cluster.rb worker SHARD_START PORT'
       puts 'Examples:'
-      puts '  ruby examples/116_peer_to_peer_cluster.rb worker 0 9010  # Shard 0 (IDs 0-4)'
-      puts '  ruby examples/116_peer_to_peer_cluster.rb worker 5 9011  # Shard 1 (IDs 5-9)'
+      puts "  ruby examples/116_peer_to_peer_cluster.rb worker 0 #{PEER_PORT_A}  # Shard 0 (IDs 0-4)"
+      puts "  ruby examples/116_peer_to_peer_cluster.rb worker 5 #{PEER_PORT_B}  # Shard 1 (IDs 5-9)"
       exit 1
     end
 
     puts "=== Worker (Shard starting at #{shard_start}, Port #{worker_port}) ==="
-    run_worker(shard_start, worker_port)
+    run_worker(shard_start, worker_port, coordinator_port: CLUSTER_PORT_BASE)
 
   else
     puts "Unknown mode: #{mode}"

@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'uri'
 require_relative 'worker_monitor'
 
 module Minigun
@@ -1151,7 +1152,7 @@ module Minigun
         setup_coordinator(stage.name)
 
         unless @coordinator.wait_for_workers(min_count: @min_workers, timeout: @worker_timeout)
-          raise Cluster::TimeoutError.new(
+          raise Errors::ClusterTimedOut.new(
             operation: 'waiting for workers',
             timeout_seconds: @worker_timeout
           )
@@ -1209,9 +1210,9 @@ module Minigun
         end
 
         if @direct_workers.empty?
-          raise Cluster::ConnectionError.new(
-            'No workers available in direct mode',
-            uri: @worker_uris.join(', ')
+          raise Errors::ClusterConnectionFailed.new(
+            uri: @worker_uris.join(', '),
+            original_error: StandardError.new('No workers available in direct mode')
           )
         end
 
@@ -1227,13 +1228,16 @@ module Minigun
       def shutdown_direct_mode
         if @shutdown_on_done
           # Shutdown workers (for dedicated workers that should terminate after this job)
-          @direct_workers.each do |w|
+          # Use threads with timeout but join them to ensure shutdown calls complete
+          threads = @direct_workers.map do |w|
             Thread.new do
               Timeout.timeout(1) { w[:proxy].shutdown }
             rescue StandardError
               # Worker may be gone or unresponsive
             end
           end
+          # Wait for all shutdown calls to complete (or timeout)
+          threads.each { |t| t.join(2) }
           Minigun.logger.info "[Cluster] Sent shutdown to #{@direct_workers.size} workers"
         end
         # Clear our references

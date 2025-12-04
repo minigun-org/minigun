@@ -41,10 +41,16 @@
 require_relative '../lib/minigun'
 require 'drb'
 
-# Shared constants
-NODE_A_PORT = 9000
-NODE_B_PORT = 9001
-NODE_C_PORT = 9002
+# Force unbuffered output for test harness compatibility
+$stdout.sync = true
+$stderr.sync = true
+
+# Configuration via environment variables for testing
+# All ports can be independently configured for dynamic allocation in tests
+NODE_A_PORT = ENV.fetch('NODE_A_PORT', '9000').to_i
+NODE_B_PORT = ENV.fetch('NODE_B_PORT', '9001').to_i
+NODE_C_PORT = ENV.fetch('NODE_C_PORT', '9002').to_i
+NODE_A_LOOPBACK_PORT = ENV.fetch('NODE_A_LOOPBACK_PORT', '9100').to_i
 
 # Node A: Initial processing and final collection
 # This node has TWO stages:
@@ -64,11 +70,11 @@ class NodeAPipeline
     # Start a separate coordinator to receive loopback results from Node C
     @loopback_coordinator = Minigun::Cluster::Coordinator.new(
       bind_address: '127.0.0.1',
-      port: NODE_A_PORT + 100, # Port 9100 for loopback
+      port: NODE_A_LOOPBACK_PORT,
       stage_name: :final_collect
     )
     @loopback_coordinator.start
-    puts "[Node A] Loopback receiver started on port #{NODE_A_PORT + 100}"
+    puts "[Node A] Loopback receiver started on port #{NODE_A_LOOPBACK_PORT}"
 
     # Background thread to collect loopback results
     Thread.new do
@@ -214,7 +220,7 @@ def run_node_c_worker
 
     # LOOPBACK: Send back to Node A's final_collect stage
     begin
-      node_a_loopback = DRbObject.new_with_uri("druby://127.0.0.1:#{NODE_A_PORT + 100}")
+      node_a_loopback = DRbObject.new_with_uri("druby://127.0.0.1:#{NODE_A_LOOPBACK_PORT}")
       node_a_loopback.submit_result({
                                       type: :result,
                                       result: validated,
@@ -322,21 +328,184 @@ if __FILE__ == $PROGRAM_NAME
     puts '=== Node C Worker ==='
     run_node_c_worker
 
+  when 'loopback'
+    # All-in-one loopback test for automated testing
+    puts '=== Cluster Loopback (All-in-One Test) ==='
+    puts
+    puts 'Running A → B → C → A topology in single process...'
+    puts
+
+    results = []
+    results_mutex = Mutex.new
+
+    # Start Node B coordinator
+    node_b_coordinator = Minigun::Cluster::Coordinator.new(
+      bind_address: '127.0.0.1',
+      port: NODE_B_PORT,
+      stage_name: :transform
+    )
+    node_b_coordinator.start
+    puts "[Node B] Coordinator started on port #{NODE_B_PORT}"
+
+    # Start Node C coordinator
+    node_c_coordinator = Minigun::Cluster::Coordinator.new(
+      bind_address: '127.0.0.1',
+      port: NODE_C_PORT,
+      stage_name: :validate
+    )
+    node_c_coordinator.start
+    puts "[Node C] Coordinator started on port #{NODE_C_PORT}"
+
+    # Start loopback receiver on Node A
+    loopback_coordinator = Minigun::Cluster::Coordinator.new(
+      bind_address: '127.0.0.1',
+      port: NODE_A_LOOPBACK_PORT,
+      stage_name: :final_collect
+    )
+    loopback_coordinator.start
+    puts "[Node A] Loopback receiver started on port #{NODE_A_LOOPBACK_PORT}"
+
+    # Thread to collect loopback results
+    collector_thread = Thread.new do
+      loop do
+        result = loopback_coordinator.collect_result
+        break if result.nil?
+
+        if result[:type] == :result
+          results_mutex.synchronize { results << result[:result] }
+          puts "[Node A] Received loopback result: item #{result[:result][:id]}"
+        end
+      end
+    end
+
+    # Create Node B worker (forwards to Node C)
+    worker_b = Minigun::Cluster::Worker.new(
+      coordinator_uri: "druby://127.0.0.1:#{NODE_B_PORT}",
+      worker_id: 'loopback-worker-b'
+    )
+    worker_b.register_stage(:transform) do |item, output|
+      transformed = item.merge(
+        value: Math.sqrt(item[:value]).round(2),
+        iteration: item[:iteration] + 1,
+        history: item[:history] + ['node_b_transform']
+      )
+      # Forward to Node C
+      node_c = DRbObject.new_with_uri("druby://127.0.0.1:#{NODE_C_PORT}")
+      node_c.enqueue_work({ stage: :validate, item: transformed })
+      output.call({ forwarded: true, id: item[:id] })
+    end
+    worker_b.connect
+    puts '[Worker B] Connected (transform → forward to C)'
+
+    # Create Node C worker (loops back to Node A)
+    worker_c = Minigun::Cluster::Worker.new(
+      coordinator_uri: "druby://127.0.0.1:#{NODE_C_PORT}",
+      worker_id: 'loopback-worker-c'
+    )
+    worker_c.register_stage(:validate) do |item, output|
+      validated = item.merge(
+        validated: true,
+        history: item[:history] + ['node_c_validate'],
+        completed_at: Time.now.to_i
+      )
+      # Loopback to Node A
+      node_a_loopback = DRbObject.new_with_uri("druby://127.0.0.1:#{NODE_A_LOOPBACK_PORT}")
+      node_a_loopback.submit_result({
+                                      type: :result,
+                                      result: validated,
+                                      worker_id: 'loopback-worker-c'
+                                    })
+      output.call({ loopback_sent: true, id: item[:id] })
+    end
+    worker_c.connect
+    puts '[Worker C] Connected (validate → loopback to A)'
+
+    # Start worker threads
+    worker_b_thread = Thread.new { worker_b.start }
+    worker_c_thread = Thread.new { worker_c.start }
+
+    # Give workers time to initialize
+    sleep 0.5
+
+    # Send initial work directly to Node B (simulating Node A's output)
+    puts
+    puts '[Node A] Sending initial work to Node B...'
+    10.times do |i|
+      item = {
+        id: i,
+        value: rand(1..100) * 2, # Pre-doubled like Node A would
+        iteration: 0,
+        history: %w[generated node_a_initial]
+      }
+      node_b_coordinator.enqueue_work({ stage: :transform, item: item })
+    end
+    puts '[Node A] Sent 10 work items to Node B'
+
+    # Wait for results to loop back
+    puts
+    puts 'Waiting for loopback results...'
+    deadline = Time.now + 15
+    sleep 0.1 while results_mutex.synchronize { results.size } < 10 && Time.now < deadline
+
+    # Signal completion and cleanup
+    node_b_coordinator.enqueue_end_of_stage
+    node_c_coordinator.enqueue_end_of_stage
+    loopback_coordinator.enqueue_end_of_stage
+
+    sleep 0.5
+
+    # Stop workers
+    worker_b.stop
+    worker_c.stop
+
+    # Stop coordinators
+    node_b_coordinator.stop
+    node_c_coordinator.stop
+    loopback_coordinator.stop
+
+    # Wait for threads to finish
+    [worker_b_thread, worker_c_thread, collector_thread].each { |t| t.join(2) }
+
+    # Report results
+    puts
+    puts '=== RESULTS ==='
+    final_results = results_mutex.synchronize { results.dup }
+    puts "Total loopback results: #{final_results.size}"
+
+    if final_results.any?
+      puts
+      puts 'Sample results:'
+      final_results.sort_by { |r| r[:id] }.first(3).each do |r|
+        puts "  Item #{r[:id]}: history = #{r[:history].join(' → ')}"
+      end
+    end
+
+    puts
+    if final_results.size == 10
+      puts 'SUCCESS: All 10 items completed A → B → C → A loopback'
+    else
+      puts "INCOMPLETE: Only #{final_results.size}/10 items completed loopback"
+      exit 1
+    end
+
   when 'help', '--help', '-h'
     puts '=== Cluster Loopback Example ==='
     puts
     puts 'Demonstrates circular cluster topology: A → B → C → A'
     puts
     puts 'Topology:'
-    puts '  Node A (port 9000) - initial processing'
+    puts "  Node A (port #{NODE_A_PORT}) - initial processing"
     puts '      ↓'
-    puts '  Node B (port 9001) - transformation'
+    puts "  Node B (port #{NODE_B_PORT}) - transformation"
     puts '      ↓'
-    puts '  Node C (port 9002) - validation'
+    puts "  Node C (port #{NODE_C_PORT}) - validation"
     puts '      ↓'
-    puts '  Node A (port 9100) - loopback receiver'
+    puts "  Node A (port #{NODE_A_LOOPBACK_PORT}) - loopback receiver"
     puts
-    puts 'Start order:'
+    puts 'Usage:'
+    puts '  ruby examples/117_cluster_loopback.rb loopback     # All-in-one test'
+    puts
+    puts 'Multi-process mode:'
     puts '  1. ruby examples/117_cluster_loopback.rb coordinator_b'
     puts '  2. ruby examples/117_cluster_loopback.rb coordinator_c'
     puts '  3. ruby examples/117_cluster_loopback.rb worker_b'
@@ -345,6 +514,7 @@ if __FILE__ == $PROGRAM_NAME
     puts '  6. ruby examples/117_cluster_loopback.rb coordinator_a'
     puts
     puts 'Modes:'
+    puts '  loopback      - All-in-one test (recommended)'
     puts '  coordinator_a - Main coordinator (start last)'
     puts '  coordinator_b - Node B coordinator'
     puts '  coordinator_c - Node C coordinator'

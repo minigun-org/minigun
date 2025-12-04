@@ -29,90 +29,102 @@
 
 require_relative '../lib/minigun'
 
+# Force unbuffered output for test harness compatibility
+$stdout.sync = true
+$stderr.sync = true
+
+# Configuration via environment variables for testing
+CLUSTER_PORT = ENV.fetch('CLUSTER_PORT', '9000').to_i
+WORKER_TIMEOUT = ENV.fetch('WORKER_TIMEOUT', '30').to_i
+
 # Hybrid pipeline mixing local and cluster execution strategies
 class HybridPipeline
-  include Minigun::DSL
+  def self.create_pipeline(port)
+    Class.new do
+      include Minigun::DSL
 
-  attr_reader :results
+      attr_reader :results
 
-  def initialize
-    @results = []
-  end
-
-  pipeline do
-    # Local producer (sequential, runs on coordinator)
-    producer :generate_urls do |output|
-      puts '[Producer] Generating URLs to process...'
-      20.times do |i|
-        output << { id: i, url: "https://example.com/page-#{i}" }
+      define_method(:initialize) do
+        @results = []
       end
-      puts '[Producer] Generated 20 URLs'
-    end
 
-    # Local thread pool: Fetch URLs (I/O-bound, benefits from threads)
-    in_threads(5) do
-      processor :fetch do |item, output|
-        puts "  [Fetch Thread] Fetching #{item[:url]}..."
-        sleep 0.05 # Simulate network I/O
-        html = "<html><body>Content for page #{item[:id]}</body></html>"
-        output << { id: item[:id], url: item[:url], html: html, size: html.length }
+      pipeline do
+        # Local producer (sequential, runs on coordinator)
+        producer :generate_urls do |output|
+          puts '[Producer] Generating URLs to process...'
+          20.times do |i|
+            output << { id: i, url: "https://example.com/page-#{i}" }
+          end
+          puts '[Producer] Generated 20 URLs'
+        end
+
+        # Local thread pool: Fetch URLs (I/O-bound, benefits from threads)
+        in_threads(5) do
+          processor :fetch do |item, output|
+            puts "  [Fetch Thread] Fetching #{item[:url]}..."
+            sleep 0.05 # Simulate network I/O
+            html = "<html><body>Content for page #{item[:id]}</body></html>"
+            output << { id: item[:id], url: item[:url], html: html, size: html.length }
+          end
+        end
+
+        # Cluster: Parse HTML (CPU-bound, distribute across machines)
+        in_cluster(coordinator_uri: "druby://0.0.0.0:#{port}", min_workers: 2, worker_timeout: WORKER_TIMEOUT) do
+          processor :parse_html do |item, output|
+            puts "  [Parse Cluster] Parsing HTML for page #{item[:id]}..."
+            sleep 0.15 # Simulate CPU-intensive parsing
+            # Extract links, text, metadata, etc.
+            parsed = {
+              id: item[:id],
+              url: item[:url],
+              links: (1..5).map { |i| "link-#{i}" },
+              words: item[:html].split.size,
+              metadata: { size: item[:size], timestamp: Time.now.to_i }
+            }
+            output << parsed
+          end
+        end
+
+        # Local forks: Extract specific data (CPU-bound but lightweight)
+        in_cow_forks(3) do
+          processor :extract_data do |item, output|
+            puts "  [Extract Fork] Extracting data from page #{item[:id]}..."
+            # Simulate data extraction
+            extracted = {
+              id: item[:id],
+              url: item[:url],
+              link_count: item[:links].size,
+              word_count: item[:words],
+              summary: "Page #{item[:id]} has #{item[:links].size} links"
+            }
+            output << extracted
+          end
+        end
+
+        # Local thread pool: Save results (I/O-bound database/disk writes)
+        in_threads(3) do
+          processor :save do |item, output|
+            puts "  [Save Thread] Saving result for page #{item[:id]}..."
+            sleep 0.03 # Simulate database write
+            saved = item.merge(saved_at: Time.now.to_i, status: 'saved')
+            output << saved
+          end
+        end
+
+        # Local consumer: Collect final results
+        consumer :collect do |item|
+          @results << item
+        end
       end
-    end
-
-    # Cluster: Parse HTML (CPU-bound, distribute across machines)
-    in_cluster(coordinator_uri: 'druby://0.0.0.0:9000', min_workers: 2, worker_timeout: 30) do
-      processor :parse_html do |item, output|
-        puts "  [Parse Cluster] Parsing HTML for page #{item[:id]}..."
-        sleep 0.15 # Simulate CPU-intensive parsing
-        # Extract links, text, metadata, etc.
-        parsed = {
-          id: item[:id],
-          url: item[:url],
-          links: (1..5).map { |i| "link-#{i}" },
-          words: item[:html].split.size,
-          metadata: { size: item[:size], timestamp: Time.now.to_i }
-        }
-        output << parsed
-      end
-    end
-
-    # Local forks: Extract specific data (CPU-bound but lightweight)
-    in_cow_forks(3) do
-      processor :extract_data do |item, output|
-        puts "  [Extract Fork] Extracting data from page #{item[:id]}..."
-        # Simulate data extraction
-        extracted = {
-          id: item[:id],
-          url: item[:url],
-          link_count: item[:links].size,
-          word_count: item[:words],
-          summary: "Page #{item[:id]} has #{item[:links].size} links"
-        }
-        output << extracted
-      end
-    end
-
-    # Local thread pool: Save results (I/O-bound database/disk writes)
-    in_threads(3) do
-      processor :save do |item, output|
-        puts "  [Save Thread] Saving result for page #{item[:id]}..."
-        sleep 0.03 # Simulate database write
-        saved = item.merge(saved_at: Time.now.to_i, status: 'saved')
-        output << saved
-      end
-    end
-
-    # Local consumer: Collect final results
-    consumer :collect do |item|
-      @results << item
-    end
+    end.new
   end
 end
 
 # Cluster worker for HTML parsing
-def run_parse_worker
+def run_parse_worker(port = CLUSTER_PORT)
   worker = Minigun::Cluster::Worker.new(
-    coordinator_uri: 'druby://127.0.0.1:9000',
+    coordinator_uri: "druby://127.0.0.1:#{port}",
     worker_id: "parse-worker-#{Process.pid}"
   )
 
@@ -156,7 +168,7 @@ if __FILE__ == $PROGRAM_NAME
     puts '  ruby examples/115_hybrid_local_cluster.rb worker'
     puts
 
-    pipeline = HybridPipeline.new
+    pipeline = HybridPipeline.create_pipeline(CLUSTER_PORT)
 
     start_time = Time.now
     pipeline.run
@@ -186,7 +198,7 @@ if __FILE__ == $PROGRAM_NAME
 
   when 'worker'
     puts '=== Cluster Worker (HTML Parser) ==='
-    run_parse_worker
+    run_parse_worker(CLUSTER_PORT)
 
   else
     puts "Unknown mode: #{mode}"

@@ -32,6 +32,15 @@
 require_relative '../lib/minigun'
 require 'drb'
 
+# Force unbuffered output for test harness compatibility
+$stdout.sync = true
+$stderr.sync = true
+
+# Configuration via environment variables for testing
+PARENT_PORT = ENV.fetch('CLUSTER_PORT', '9000').to_i
+CHILD_PORT_A = ENV.fetch('CHILD_PORT_A', '9100').to_i
+CHILD_PORT_B = ENV.fetch('CHILD_PORT_B', '9101').to_i
+
 # Parent pipeline definition
 class ParentPipeline
   include Minigun::DSL
@@ -56,7 +65,7 @@ class ParentPipeline
     end
 
     # Parent cluster: splits batches into sub-tasks and delegates to child clusters
-    in_cluster(coordinator_uri: 'druby://0.0.0.0:9000', min_workers: 1, worker_timeout: 60) do
+    in_cluster(coordinator_uri: "druby://0.0.0.0:#{PARENT_PORT}", min_workers: 1, worker_timeout: 60) do
       processor :delegate_to_children do |batch, output|
         # This runs on parent workers, which will spawn child work
         puts "  [Parent Worker] Processing batch #{batch[:batch_id]} (#{batch[:items].size} items)"
@@ -113,7 +122,7 @@ end
 # Parent worker that delegates to child cluster
 def run_parent_worker(child_coordinator_port)
   worker = Minigun::Cluster::Worker.new(
-    coordinator_uri: 'druby://127.0.0.1:9000',
+    coordinator_uri: "druby://127.0.0.1:#{PARENT_PORT}",
     worker_id: "parent-worker-#{Process.pid}"
   )
 

@@ -3,8 +3,15 @@
 require 'spec_helper'
 
 RSpec.describe Minigun::Cluster do
-  # Use unique ports for each test to avoid conflicts
-  let(:base_port) { rand(19_000..19_999) }
+  # Use OS-assigned ephemeral ports to avoid conflicts
+  def find_available_port
+    server = TCPServer.new('127.0.0.1', 0)
+    port = server.addr[1]
+    server.close
+    port
+  end
+
+  let(:base_port) { find_available_port }
 
   describe Minigun::Cluster::Coordinator do
     let(:coordinator) { described_class.new(bind_address: '127.0.0.1', port: base_port) }

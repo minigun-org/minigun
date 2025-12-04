@@ -46,6 +46,13 @@
 require_relative '../lib/minigun'
 require 'drb'
 
+# Force unbuffered output for test harness compatibility
+$stdout.sync = true
+$stderr.sync = true
+
+# Configuration via environment variables for testing
+CLUSTER_PORT = ENV.fetch('CLUSTER_PORT', '9001').to_i
+
 # Pipeline that uses shutdown_on_done to terminate workers after completion
 class ShutdownOnDonePipeline
   include Minigun::DSL
@@ -312,21 +319,15 @@ rescue Interrupt
   DRb.stop_service
 end
 
-# Run client
-def run_client(shutdown_on_done)
+# Run client with specific worker ports
+def run_client_with_ports(worker_ports, shutdown_on_done)
+  worker_uris = worker_ports.map { |p| "druby://127.0.0.1:#{p}" }
+
   puts '=== Batch Job Client ==='
   puts
   puts "shutdown_on_done: #{shutdown_on_done}"
+  puts "Connecting to workers: #{worker_uris.join(', ')}"
   puts
-  puts 'Make sure workers are running:'
-  puts '  ruby examples/119_cluster_shutdown_on_done.rb worker 9001'
-  puts '  ruby examples/119_cluster_shutdown_on_done.rb worker 9002'
-  puts
-
-  worker_uris = [
-    'druby://127.0.0.1:9001',
-    'druby://127.0.0.1:9002'
-  ]
 
   DRb.start_service
 
@@ -345,15 +346,21 @@ def run_client(shutdown_on_done)
     puts
     if shutdown_on_done
       puts 'Workers should have received shutdown signal and exited.'
-      puts 'Check worker terminals to confirm.'
     else
       puts 'Workers are still running (shutdown_on_done: false).'
-      puts 'They can process more work from other clients.'
     end
-  rescue Minigun::Cluster::Error => e
+
+    puts 'SUCCESS' if pipeline.results.size == 20
+  rescue Minigun::Errors::ClusterError => e
     puts "Cluster error: #{e.message}"
     puts 'Make sure workers are running!'
+    exit 1
   end
+end
+
+# Run client (legacy)
+def run_client(shutdown_on_done)
+  run_client_with_ports([9001, 9002], shutdown_on_done)
 end
 
 # Main execution
@@ -364,18 +371,17 @@ if __FILE__ == $PROGRAM_NAME
 
   case mode
   when 'worker'
-    port = ARGV[1]&.to_i
-    unless port
-      puts 'ERROR: Port required for worker'
-      puts 'Usage: ruby examples/119_cluster_shutdown_on_done.rb worker PORT'
-      exit 1
-    end
+    port = ARGV[1]&.to_i || CLUSTER_PORT
     run_worker(port)
 
   when 'client'
-    # Default to shutdown_on_done: true for demonstration
-    shutdown_on_done = ARGV[1] != 'false'
-    run_client(shutdown_on_done)
+    # Get worker ports from args or ENV-based defaults
+    worker_ports = if ARGV.size > 1
+                     ARGV[1..].map(&:to_i)
+                   else
+                     [CLUSTER_PORT, CLUSTER_PORT + 1]
+                   end
+    run_client_with_ports(worker_ports, true)
 
   when 'client-keep-alive'
     # Explicitly keep workers alive

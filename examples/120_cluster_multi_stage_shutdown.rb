@@ -36,6 +36,13 @@
 require_relative '../lib/minigun'
 require 'drb'
 
+# Force unbuffered output for test harness compatibility
+$stdout.sync = true
+$stderr.sync = true
+
+# Configuration via environment variables for testing
+CLUSTER_PORT = ENV.fetch('CLUSTER_PORT', '9201').to_i
+
 # Pipeline with two cluster stages having different shutdown behaviors
 class MultiStageShutdownPipeline
   include Minigun::DSL
@@ -230,7 +237,7 @@ def run_loopback_test
   begin
     pipeline2.run
     puts "Second batch completed with #{pipeline2.results.size} items"
-  rescue Minigun::Cluster::Error => e
+  rescue Minigun::Errors::ClusterError => e
     puts 'Expected: Processor workers are gone (they shutdown)'
     puts "  Error: #{e.message}"
     puts
@@ -243,6 +250,59 @@ rescue StandardError => e
   puts e.backtrace.first(5).join("\n")
 ensure
   DRb.stop_service
+end
+
+# Run a worker for multi-process mode
+def run_worker(port, stage_name, &)
+  worker = Minigun::Cluster::Worker.new(coordinator_uri: nil, worker_id: "worker-#{stage_name}-#{port}")
+  worker.register_stage(stage_name, &)
+
+  service = Minigun::Cluster::WorkerService.new(worker)
+  DRb.start_service("druby://0.0.0.0:#{port}", service)
+
+  puts "Worker started at druby://0.0.0.0:#{port}"
+  puts 'Press Ctrl+C to stop'
+
+  DRb.thread.join
+rescue Interrupt
+  puts "\nWorker stopping..."
+  DRb.stop_service
+end
+
+# Run client for multi-process mode
+def run_client(validator_ports, processor_ports)
+  validator_uris = validator_ports.map { |p| "druby://127.0.0.1:#{p}" }
+  processor_uris = processor_ports.map { |p| "druby://127.0.0.1:#{p}" }
+
+  puts '=== Multi-Stage Shutdown Client ==='
+  puts
+  puts "Validators: #{validator_uris.join(', ')}"
+  puts "Processors: #{processor_uris.join(', ')}"
+  puts
+
+  DRb.start_service
+
+  pipeline = MultiStageShutdownPipeline.new(
+    validator_uris: validator_uris,
+    processor_uris: processor_uris
+  )
+
+  begin
+    pipeline.run
+
+    puts
+    puts '=== Results ==='
+    puts "Total: #{pipeline.results.size} items processed"
+
+    # Verify all items have both flags
+    all_valid = pipeline.results.all? { |r| r[:validated] && r[:processed] }
+    puts "All items validated and processed: #{all_valid}"
+    puts 'SUCCESS' if pipeline.results.size == 12 && all_valid
+  rescue Minigun::Errors::ClusterError => e
+    puts "Cluster error: #{e.message}"
+    puts 'Make sure all workers are running!'
+    exit 1
+  end
 end
 
 # Helper to create a tracking service
@@ -268,6 +328,35 @@ if __FILE__ == $PROGRAM_NAME
   case mode
   when 'loopback'
     run_loopback_test
+
+  when 'validator'
+    port = ARGV[1]&.to_i || CLUSTER_PORT
+    puts "=== Validator Worker (Port #{port}) ==="
+    run_worker(port, :validate) do |item, output|
+      puts "[Validator #{port}] Validating item #{item[:id]}"
+      output.call(item.merge(validated: true, validated_by: port, validation_time: Time.now.to_f))
+    end
+
+  when 'processor'
+    port = ARGV[1]&.to_i || (CLUSTER_PORT + 3)
+    puts "=== Processor Worker (Port #{port}) ==="
+    run_worker(port, :process) do |item, output|
+      puts "[Processor #{port}] Processing item #{item[:id]}"
+      result = (1..1000).reduce(item[:value]) { |acc, _| Math.sqrt(acc.abs + 1) }
+      output.call(item.merge(processed: true, computed: result.round(4), processed_by: port, processing_time: Time.now.to_f))
+    end
+
+  when 'client'
+    # Parse validator and processor ports from args
+    # Format: client v1,v2,v3 p1,p2,p3
+    if ARGV.size >= 3
+      validator_ports = ARGV[1].split(',').map(&:to_i)
+      processor_ports = ARGV[2].split(',').map(&:to_i)
+    else
+      validator_ports = [CLUSTER_PORT, CLUSTER_PORT + 1, CLUSTER_PORT + 2]
+      processor_ports = [CLUSTER_PORT + 3, CLUSTER_PORT + 4, CLUSTER_PORT + 5]
+    end
+    run_client(validator_ports, processor_ports)
 
   when 'help', '--help', '-h'
     puts '=== Multi-Stage Cluster Shutdown Example ==='
