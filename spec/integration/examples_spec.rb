@@ -2822,7 +2822,7 @@ RSpec.describe 'Examples Integration' do
           'PORT_COMPUTE' => port_compute.to_s,
           'PORT_POSTPROCESS' => port_postprocess.to_s,
           'WORKER_TIMEOUT' => '30',
-          'CLUSTER_DEBUG' = '1'
+          'CLUSTER_DEBUG' => '1'
         }
 
         # Release all ports before spawning - the coordinator needs all 3 ports
