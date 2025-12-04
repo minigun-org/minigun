@@ -14,7 +14,8 @@
 - **NEVER** use mocks/doubles except for third-party APIs or external services.
 - **100% pass rate required** - 95% is not acceptable.
 - Do not make pending tests unless explicitly asked to. All tests must be runnable by CI; no "manual only" tests.
-- Avoid `sleep`/`timeout` in tests. Instead attach a listener/callback/hook (if readily available) or a check-loop that X component is ready/loaded, with some reasonably long timeout.
+- Avoid `sleep`/`timeout` in tests, especially when dealing with multi-threaded or multi-process scenarios.
+  - Instead attach a listener/callback/hook (if readily available) or a check-loop that X component is ready/loaded, with some reasonably long timeout.
 
 ## Examples (Tests)
 - Whenever you create a file in /examples dir:
