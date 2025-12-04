@@ -64,9 +64,7 @@ class MultiStageCluster
         # Stage 1: Preprocessing cluster
         in_cluster(coordinator_uri: "druby://0.0.0.0:#{port0}", min_workers: 1, worker_timeout: WORKER_TIMEOUT) do
           processor :preprocess do |item, output|
-            # Simulate preprocessing (validation, normalization, etc.)
             puts "  [Preprocess] Item #{item[:id]}: validating..."
-            sleep 0.1
             normalized = item[:value] * 2
             output << { id: item[:id], preprocessed: normalized }
           end
@@ -75,9 +73,7 @@ class MultiStageCluster
         # Stage 2: Heavy computation cluster
         in_cluster(coordinator_uri: "druby://0.0.0.0:#{port1}", min_workers: 1, worker_timeout: WORKER_TIMEOUT) do
           processor :heavy_compute do |item, output|
-            # Simulate expensive computation
             puts "  [Compute] Item #{item[:id]}: computing..."
-            sleep 0.2
             result = (1..5000).reduce(item[:preprocessed]) { |acc, _| Math.sqrt(acc.abs + 1) }
             output << { id: item[:id], computed: result.round(4) }
           end
@@ -86,9 +82,7 @@ class MultiStageCluster
         # Stage 3: Postprocessing cluster
         in_cluster(coordinator_uri: "druby://0.0.0.0:#{port2}", min_workers: 1, worker_timeout: WORKER_TIMEOUT) do
           processor :postprocess do |item, output|
-            # Simulate postprocessing (formatting, validation, etc.)
             puts "  [Postprocess] Item #{item[:id]}: formatting..."
-            sleep 0.1
             formatted = {
               id: item[:id],
               result: item[:computed],
@@ -118,7 +112,6 @@ def run_preprocess_worker(port = PORT_PREPROCESS)
 
   worker.register_stage(:preprocess) do |item, output|
     puts "  [Preprocess Worker] Item #{item[:id]}: validating..."
-    sleep 0.1
     normalized = item[:value] * 2
     output.call({ id: item[:id], preprocessed: normalized })
   end
@@ -136,7 +129,6 @@ def run_compute_worker(port = PORT_COMPUTE)
 
   worker.register_stage(:heavy_compute) do |item, output|
     puts "  [Compute Worker] Item #{item[:id]}: computing..."
-    sleep 0.2
     result = (1..5000).reduce(item[:preprocessed]) { |acc, _| Math.sqrt(acc.abs + 1) }
     output.call({ id: item[:id], computed: result.round(4) })
   end
@@ -154,7 +146,6 @@ def run_postprocess_worker(port = PORT_POSTPROCESS)
 
   worker.register_stage(:postprocess) do |item, output|
     puts "  [Postprocess Worker] Item #{item[:id]}: formatting..."
-    sleep 0.1
     formatted = {
       id: item[:id],
       result: item[:computed],
