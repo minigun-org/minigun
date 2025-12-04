@@ -1170,11 +1170,18 @@ module Minigun
       def shutdown_coordinator_mode
         return unless @coordinator
 
+        stage_name = @stage_ctx&.stage&.name || 'unknown'
+        debug_log("[Cluster:#{stage_name}] shutdown_coordinator_mode starting")
         @coordinator.enqueue_end_of_stage
+        debug_log("[Cluster:#{stage_name}] enqueue_end_of_stage called, sleeping 0.1s")
         sleep 0.1
 
-        @coordinator.stop if @owns_coordinator
+        if @owns_coordinator
+          debug_log("[Cluster:#{stage_name}] Calling coordinator.stop")
+          @coordinator.stop
+        end
         @coordinator = nil
+        debug_log("[Cluster:#{stage_name}] shutdown_coordinator_mode complete")
       end
 
       def setup_coordinator(stage_name)
@@ -1258,64 +1265,142 @@ module Minigun
       def distribute_and_collect_coordinator(stage, input_queue, output_queue)
         pending_count = 0
         all_sent = false
+        items_sent = 0
+        results_collected = 0
         mutex = Mutex.new
         done_cv = ConditionVariable.new
+        stage_name = stage.name
+
+        debug_log("[Cluster:#{stage_name}] distribute_and_collect_coordinator starting")
 
         # Thread to collect results from coordinator
         collector_thread = Thread.new do
+          debug_log("[Cluster:#{stage_name}] Collector thread started")
+          loop_count = 0
           loop do
-            break if mutex.synchronize { pending_count <= 0 && all_sent }
+            loop_count += 1
+            # Check exit condition: all items sent AND all results collected
+            current_pending, current_all_sent = mutex.synchronize { [pending_count, all_sent] }
+            should_exit = current_pending <= 0 && current_all_sent
+
+            if loop_count % 10000 == 0
+              debug_log("[Cluster:#{stage_name}] Collector loop #{loop_count}: pending=#{current_pending}, all_sent=#{current_all_sent}, results_collected=#{results_collected}")
+            end
+
+            if should_exit
+              debug_log("[Cluster:#{stage_name}] Collector exit condition met: pending=#{current_pending}, all_sent=#{current_all_sent}, results_collected=#{results_collected}")
+              # Drain any remaining results from coordinator before exiting
+              # This handles race conditions where results arrive after pending_count hits 0
+              drained = drain_remaining_results(output_queue, stage_name)
+              debug_log("[Cluster:#{stage_name}] Collector drained #{drained} additional results")
+              break
+            end
 
             result = @coordinator.collect_result(timeout: 0.1)
             next unless result
 
             case result[:type]
             when :result
+              results_collected += 1
+              debug_log("[Cluster:#{stage_name}] Collector got result ##{results_collected}: #{result[:result].inspect[0..100]}")
               output_queue << result[:result]
               # Record latency if available
               @stage_ctx.stage_stats&.record_latency(result[:latency]) if result[:latency]
               mutex.synchronize do
                 pending_count -= 1
+                debug_log("[Cluster:#{stage_name}] Collector decremented pending to #{pending_count}")
                 done_cv.signal if pending_count <= 0 && all_sent
               end
             when :item_done
+              results_collected += 1
+              debug_log("[Cluster:#{stage_name}] Collector got item_done ##{results_collected}")
               @stage_ctx.stage_stats&.record_latency(result[:latency]) if result[:latency]
               mutex.synchronize do
                 pending_count -= 1
+                debug_log("[Cluster:#{stage_name}] Collector decremented pending to #{pending_count} (item_done)")
                 done_cv.signal if pending_count <= 0 && all_sent
               end
             when :error
+              results_collected += 1
+              debug_log("[Cluster:#{stage_name}] Collector got error ##{results_collected}: #{result[:error]}")
               # Error already logged by coordinator
               mutex.synchronize do
                 pending_count -= 1
+                debug_log("[Cluster:#{stage_name}] Collector decremented pending to #{pending_count} (error)")
                 done_cv.signal if pending_count <= 0 && all_sent
               end
             end
           end
+          debug_log("[Cluster:#{stage_name}] Collector thread exiting after #{loop_count} loops, #{results_collected} results")
         end
 
         # Distribute work items
+        debug_log("[Cluster:#{stage_name}] Starting item distribution loop")
         loop do
           item = input_queue.pop
 
           if item.is_a?(Minigun::EndOfStage)
+            debug_log("[Cluster:#{stage_name}] Received EndOfStage after sending #{items_sent} items")
             mutex.synchronize { all_sent = true }
             break
           end
 
+          items_sent += 1
+          item_preview = item.is_a?(Hash) ? item[:id] || item.inspect[0..50] : item.inspect[0..50]
+          debug_log("[Cluster:#{stage_name}] Sending item ##{items_sent}: #{item_preview}")
           mutex.synchronize { pending_count += 1 }
           @coordinator.enqueue_work({ stage: stage.name, item: item })
         end
+
+        debug_log("[Cluster:#{stage_name}] Distribution complete: #{items_sent} items sent, calling enqueue_end_of_stage")
 
         # Signal end of work
         @coordinator.enqueue_end_of_stage
 
         # Wait for all pending items to complete
+        debug_log("[Cluster:#{stage_name}] Waiting for pending items to complete (pending=#{pending_count})")
+        wait_count = 0
         mutex.synchronize do
-          done_cv.wait(mutex, 1) until pending_count <= 0
+          until pending_count <= 0
+            wait_count += 1
+            debug_log("[Cluster:#{stage_name}] Wait loop #{wait_count}: pending=#{pending_count}")
+            done_cv.wait(mutex, 1)
+          end
         end
 
+        debug_log("[Cluster:#{stage_name}] All pending items complete after #{wait_count} waits, joining collector thread")
         collector_thread.join
+        debug_log("[Cluster:#{stage_name}] distribute_and_collect_coordinator complete: sent=#{items_sent}, collected=#{results_collected}")
+      end
+
+      # Drain any remaining results from the coordinator's result queue
+      # This ensures we don't lose results that arrived after the exit condition was checked
+      def drain_remaining_results(output_queue, stage_name = 'unknown')
+        drained_count = 0
+        loop do
+          result = @coordinator.collect_result(timeout: 0.01)
+          break unless result
+
+          drained_count += 1
+          debug_log("[Cluster:#{stage_name}] Draining result ##{drained_count}: type=#{result[:type]}")
+
+          case result[:type]
+          when :result
+            output_queue << result[:result]
+            @stage_ctx.stage_stats&.record_latency(result[:latency]) if result[:latency]
+          when :item_done
+            @stage_ctx.stage_stats&.record_latency(result[:latency]) if result[:latency]
+          when :error
+            # Error already logged by coordinator
+          end
+        end
+        drained_count
+      end
+
+      def debug_log(msg)
+        return unless ENV['CLUSTER_DEBUG']
+
+        puts "[#{Time.now.strftime('%H:%M:%S.%L')}] #{msg}"
       end
     end
 

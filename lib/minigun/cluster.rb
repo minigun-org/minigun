@@ -297,22 +297,42 @@ module Minigun
       end
 
       def work_loop
+        items_processed = 0
+        debug_log("[Worker:#{@worker_id}] work_loop starting")
         while @running
           work = request_work
-          next sleep(0.01) if work.nil? # No work available, wait briefly
+          if work.nil?
+            sleep(0.01) # No work available, wait briefly
+            next
+          end
 
-          break if work[:type] == :shutdown
+          if work[:type] == :shutdown
+            debug_log("[Worker:#{@worker_id}] Received shutdown signal after #{items_processed} items")
+            break
+          end
 
+          items_processed += 1
+          item_id = work[:item][:item][:id] rescue 'unknown'
+          debug_log("[Worker:#{@worker_id}] Processing item ##{items_processed} (id=#{item_id})")
           process_work(work)
+          debug_log("[Worker:#{@worker_id}] Finished processing item ##{items_processed} (id=#{item_id})")
         end
+        debug_log("[Worker:#{@worker_id}] work_loop exiting after #{items_processed} items")
       end
 
       def request_work
         @coordinator.request_work
       rescue DRb::DRbConnError
+        debug_log("[Worker:#{@worker_id}] Lost connection to coordinator in request_work")
         Minigun.logger.warn '[Cluster] Lost connection to coordinator'
         @running = false
         nil
+      end
+
+      def debug_log(msg)
+        return unless ENV['CLUSTER_DEBUG']
+
+        puts "[#{Time.now.strftime('%H:%M:%S.%L')}] #{msg}"
       end
 
       def process_work(work)
@@ -335,9 +355,9 @@ module Minigun
           # Call with (item, output) signature like local stages
           stage_proc.call(item, output_collector)
 
-          # Submit results
+          # Submit results - handle DRb errors gracefully
           results.each do |result|
-            @coordinator.submit_result(
+            submit_result_safe(
               {
                 type: :result,
                 result: result,
@@ -349,7 +369,7 @@ module Minigun
 
           # If no results, still signal completion
           if results.empty?
-            @coordinator.submit_result(
+            submit_result_safe(
               {
                 type: :item_done,
                 worker_id: @worker_id,
@@ -357,8 +377,12 @@ module Minigun
               }
             )
           end
+        rescue DRb::DRbConnError => e
+          # Coordinator disconnected during processing - log and continue
+          Minigun.logger.warn "[Cluster] Lost connection to coordinator during processing: #{e.message}"
+          @running = false
         rescue StandardError => e
-          @coordinator.submit_error(
+          submit_error_safe(
             {
               message: e.message,
               backtrace: e.backtrace,
@@ -367,6 +391,22 @@ module Minigun
             }
           )
         end
+      end
+
+      # Submit result with graceful handling of coordinator disconnection
+      def submit_result_safe(result)
+        @coordinator.submit_result(result)
+      rescue DRb::DRbConnError => e
+        Minigun.logger.warn "[Cluster] Lost connection to coordinator while submitting result: #{e.message}"
+        @running = false
+      end
+
+      # Submit error with graceful handling of coordinator disconnection
+      def submit_error_safe(error_info)
+        @coordinator.submit_error(error_info)
+      rescue DRb::DRbConnError => e
+        Minigun.logger.warn "[Cluster] Lost connection to coordinator while submitting error: #{e.message}"
+        @running = false
       end
     end
 

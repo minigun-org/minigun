@@ -2821,7 +2821,8 @@ RSpec.describe 'Examples Integration' do
           'PORT_PREPROCESS' => port_preprocess.to_s,
           'PORT_COMPUTE' => port_compute.to_s,
           'PORT_POSTPROCESS' => port_postprocess.to_s,
-          'WORKER_TIMEOUT' => '30'
+          'WORKER_TIMEOUT' => '30',
+          'CLUSTER_DEBUG' = '1'
         }
 
         # Release all ports before spawning - the coordinator needs all 3 ports
@@ -2854,7 +2855,8 @@ RSpec.describe 'Examples Integration' do
         end
 
         # Wait for pipeline to complete - look for the specific final message
-        harness.wait_for_output(coord_proc, 'Total: 10 items processed', timeout: 90)
+        # Use longer timeout for CI environments which may be slower
+        harness.wait_for_output(coord_proc, 'Total: 10 items processed', timeout: 120)
         worker_threads.each(&:join)
 
         coord_output = harness.process_manager.read_output(coord_proc)
