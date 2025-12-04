@@ -1152,7 +1152,7 @@ module Minigun
         setup_coordinator(stage.name)
 
         unless @coordinator.wait_for_workers(min_count: @min_workers, timeout: @worker_timeout)
-          raise Cluster::TimeoutError.new(
+          raise Errors::ClusterTimedOut.new(
             operation: 'waiting for workers',
             timeout_seconds: @worker_timeout
           )

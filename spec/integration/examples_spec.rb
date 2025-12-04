@@ -2824,8 +2824,19 @@ RSpec.describe 'Examples Integration' do
           'WORKER_TIMEOUT' => '30'
         }
 
-        # Start coordinator
-        coord_proc = harness.spawn_example(example_file, 'coordinator', env: env, wait_port: port_preprocess)
+        # Release all ports before spawning - the coordinator needs all 3 ports
+        harness.port_allocator.release(port_preprocess)
+        harness.port_allocator.release(port_compute)
+        harness.port_allocator.release(port_postprocess)
+
+        # Start coordinator (don't use wait_port since we already released)
+        coord_proc = harness.spawn_example(example_file, 'coordinator', env: env)
+
+        # Wait for preprocess port to be ready
+        unless harness.wait_for_port(port_preprocess, timeout: 15)
+          output = harness.process_manager.read_output(coord_proc)
+          raise "Coordinator failed to start.\nStdout: #{output[:stdout]}\nStderr: #{output[:stderr]}"
+        end
 
         # Spawn 3 workers for 3 stages - each waits for its port to be ready
         worker_procs = []
@@ -3084,6 +3095,10 @@ RSpec.describe 'Examples Integration' do
 
         # Spawn 2 workers with different shards
         # Worker args: shard_start, worker_port (for peer DRb server)
+        # Release peer ports since workers need them to start their own DRb servers
+        harness.port_allocator.release(peer_port_a)
+        harness.port_allocator.release(peer_port_b)
+
         worker_threads = []
         [[0, peer_port_a], [5, peer_port_b]].each do |shard_start, worker_port|
           worker_threads << Thread.new do
@@ -3151,6 +3166,8 @@ RSpec.describe 'Examples Integration' do
                                         env: env, coordinator_port: node_c_port)
 
         # 5. Start coordinator_a (which also starts the loopback receiver)
+        # Release loopback_port since coordinator_a needs it for the loopback receiver
+        harness.port_allocator.release(loopback_port)
         coord_a = harness.spawn_example(example_file, 'coordinator_a',
                                         env: env, wait_port: node_a_port)
 
