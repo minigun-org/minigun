@@ -40,6 +40,13 @@
 require_relative '../lib/minigun'
 require 'drb'
 
+# Force unbuffered output for test harness compatibility
+$stdout.sync = true
+$stderr.sync = true
+
+# Configuration via environment variables for testing
+CLUSTER_PORT = ENV.fetch('CLUSTER_PORT', '9001').to_i
+
 # Pipeline that connects directly to workers (no coordinator)
 class DirectModePipeline
   include Minigun::DSL
@@ -180,31 +187,23 @@ if __FILE__ == $PROGRAM_NAME
 
   case mode
   when 'worker'
-    port = ARGV[1]&.to_i
-    unless port
-      puts 'ERROR: Port required for worker'
-      puts 'Usage: ruby examples/118_cluster_direct_mode.rb worker PORT'
-      exit 1
-    end
-
+    port = ARGV[1]&.to_i || CLUSTER_PORT
     puts "=== Direct Mode Worker (Port #{port}) ==="
     run_worker(port)
 
   when 'client'
+    # Get worker ports from args or ENV-based defaults
+    worker_ports = if ARGV.size > 1
+                     ARGV[1..].map(&:to_i)
+                   else
+                     [CLUSTER_PORT, CLUSTER_PORT + 1, CLUSTER_PORT + 2]
+                   end
+    worker_uris = worker_ports.map { |p| "druby://127.0.0.1:#{p}" }
+
     puts '=== Direct Mode Client ==='
     puts
-    puts 'Connecting directly to workers (no coordinator)...'
-    puts 'Make sure workers are running:'
-    puts '  ruby examples/118_cluster_direct_mode.rb worker 9001'
-    puts '  ruby examples/118_cluster_direct_mode.rb worker 9002'
-    puts '  ruby examples/118_cluster_direct_mode.rb worker 9003'
+    puts "Connecting to workers: #{worker_uris.join(', ')}"
     puts
-
-    worker_uris = [
-      'druby://127.0.0.1:9001',
-      'druby://127.0.0.1:9002',
-      'druby://127.0.0.1:9003'
-    ]
 
     DRb.start_service
 
@@ -220,9 +219,11 @@ if __FILE__ == $PROGRAM_NAME
       end
       puts
       puts "Total: #{pipeline.results.size} items processed"
+      puts 'SUCCESS' if pipeline.results.size == 15
     rescue Minigun::Errors::ClusterError => e
       puts "Cluster error: #{e.message}"
       puts 'Make sure all workers are running!'
+      exit 1
     end
 
   when 'loopback'

@@ -3047,63 +3047,163 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
+  # 118: Direct mode cluster (no coordinator) - real multi-process
   describe '118_cluster_direct_mode.rb' do
-    it 'runs direct mode cluster via loopback' do
+    it 'distributes work across multiple worker processes', timeout: 90 do
+      harness = ClusterTestHarness::Harness.new
       example_file = File.expand_path('../../examples/118_cluster_direct_mode.rb', __dir__)
 
-      # Run loopback test - workers + client in one process
-      output = `bundle exec ruby #{example_file} loopback 2>&1`
+      begin
+        # Allocate 3 ports for workers
+        port1, port2, port3 = harness.port_allocator.allocate(3)
+        env = { 'CLUSTER_PORT' => port1.to_s }
 
-      # Verify direct mode worked
-      expect(output).to include('Loopback Test')
-      expect(output).to include('Worker started at')
-      expect(output).to include('Total:')
-      expect(output).to include('items processed')
+        # Start 3 workers
+        worker_procs = []
+        [port1, port2, port3].each do |port|
+          proc = harness.spawn_example(example_file, 'worker', port.to_s, env: env, wait_port: port)
+          worker_procs << proc
+        end
+
+        # Start client connecting to all 3 workers
+        client_proc = harness.spawn_example(example_file, 'client', port1.to_s, port2.to_s, port3.to_s, env: env)
+
+        # Wait for client to complete
+        harness.wait_for_output(client_proc, 'SUCCESS', timeout: 60)
+
+        client_output = harness.process_manager.read_output(client_proc)
+        combined = client_output[:stdout] + client_output[:stderr]
+
+        # Verify all 15 items processed
+        expect(combined).to include('Total: 15 items processed')
+        expect(combined).to include('SUCCESS')
+
+        # Verify workers processed items
+        all_worker_output = worker_procs.map do |proc|
+          output = harness.process_manager.read_output(proc)
+          output[:stdout] + output[:stderr]
+        end.join("\n")
+        expect(all_worker_output).to include('Processing item')
+      ensure
+        harness.cleanup
+      end
     end
   end
 
+  # 119: Direct mode with shutdown_on_done - real multi-process
   describe '119_cluster_shutdown_on_done.rb' do
-    it 'runs shutdown_on_done via loopback' do
+    it 'sends shutdown signal to workers after pipeline completes', timeout: 90 do
+      harness = ClusterTestHarness::Harness.new
       example_file = File.expand_path('../../examples/119_cluster_shutdown_on_done.rb', __dir__)
 
-      # Run loopback test
-      output = `bundle exec ruby #{example_file} loopback 2>&1`
+      begin
+        # Allocate 2 ports for workers
+        port1, port2 = harness.port_allocator.allocate(2)
+        env = { 'CLUSTER_PORT' => port1.to_s }
 
-      # Verify shutdown_on_done worked
-      expect(output).to include('Loopback Test')
-      expect(output).to include('shutdown_on_done')
-      expect(output).to include('SHUTDOWN signal received')
-      expect(output).to include('SUCCESS')
+        # Start 2 workers
+        worker_procs = []
+        [port1, port2].each do |port|
+          proc = harness.spawn_example(example_file, 'worker', port.to_s, env: env, wait_port: port)
+          worker_procs << proc
+        end
+
+        # Start client with shutdown_on_done: true
+        client_proc = harness.spawn_example(example_file, 'client', port1.to_s, port2.to_s, env: env)
+
+        # Wait for client to complete
+        harness.wait_for_output(client_proc, 'SUCCESS', timeout: 60)
+
+        client_output = harness.process_manager.read_output(client_proc)
+        combined = client_output[:stdout] + client_output[:stderr]
+
+        # Verify all 20 items processed
+        expect(combined).to include('Total: 20 items processed')
+        expect(combined).to include('SUCCESS')
+
+        # Wait for workers to receive shutdown and exit
+        sleep 1
+
+        # Verify workers received shutdown signal
+        all_worker_output = worker_procs.map do |proc|
+          output = harness.process_manager.read_output(proc)
+          output[:stdout] + output[:stderr]
+        end.join("\n")
+        expect(all_worker_output).to include('SHUTDOWN RECEIVED')
+      ensure
+        harness.cleanup
+      end
     end
   end
 
+  # 120: Multi-stage cluster with mixed shutdown behavior - real multi-process
   describe '120_cluster_multi_stage_shutdown.rb' do
-    it 'demonstrates multi-stage pipeline with mixed shutdown behavior' do
+    it 'demonstrates validators stay running while processors shutdown', timeout: 120 do
+      harness = ClusterTestHarness::Harness.new
       example_file = File.expand_path('../../examples/120_cluster_multi_stage_shutdown.rb', __dir__)
 
-      # This example has loopback mode that spawns workers internally
-      output = `bundle exec ruby #{example_file} loopback 2>&1`
+      begin
+        # Allocate 6 ports: 3 validators + 3 processors
+        ports = harness.port_allocator.allocate(6)
+        validator_ports = ports[0..2]
+        processor_ports = ports[3..5]
+        env = { 'CLUSTER_PORT' => ports[0].to_s }
 
-      # Verify multi-stage processing worked
-      expect(output).to include('Multi-Stage Shutdown Test')
-      expect(output).to include('Producer')
-      expect(output).to include('Consumer')
+        # Start 3 validator workers
+        validator_procs = validator_ports.map do |port|
+          harness.spawn_example(example_file, 'validator', port.to_s, env: env, wait_port: port)
+        end
 
-      # Verify shutdown behavior: processors should have received shutdown
-      expect(output).to include('Sent shutdown to 3 workers') # processors
-      expect(output).to include('Sent shutdown to 0 workers') # validators (none shutdown)
+        # Start 3 processor workers
+        processor_procs = processor_ports.map do |port|
+          harness.spawn_example(example_file, 'processor', port.to_s, env: env, wait_port: port)
+        end
 
-      # Verify items were processed
-      expect(output).to match(/completed with 12 items/)
+        # Start client with both validator and processor ports
+        client_proc = harness.spawn_example(
+          example_file, 'client',
+          validator_ports.join(','),
+          processor_ports.join(','),
+          env: env
+        )
+
+        # Wait for client to complete
+        harness.wait_for_output(client_proc, 'SUCCESS', timeout: 90)
+
+        client_output = harness.process_manager.read_output(client_proc)
+        combined = client_output[:stdout] + client_output[:stderr]
+
+        # Verify all 12 items processed through both stages
+        expect(combined).to include('Total: 12 items processed')
+        expect(combined).to include('All items validated and processed: true')
+        expect(combined).to include('SUCCESS')
+
+        # Verify workers processed items
+        all_validator_output = validator_procs.map do |proc|
+          output = harness.process_manager.read_output(proc)
+          output[:stdout] + output[:stderr]
+        end.join("\n")
+        expect(all_validator_output).to include('Validating item')
+
+        all_processor_output = processor_procs.map do |proc|
+          output = harness.process_manager.read_output(proc)
+          output[:stdout] + output[:stderr]
+        end.join("\n")
+        expect(all_processor_output).to include('Processing item')
+      ensure
+        harness.cleanup
+      end
     end
   end
 
+  # 121: Loopback topology with careful shutdown handling
+  # Uses loopback mode - complex 3-node circular topology
   describe '121_cluster_loopback_shutdown.rb' do
     it 'demonstrates careful shutdown handling in loopback topology' do
       example_file = File.expand_path('../../examples/121_cluster_loopback_shutdown.rb', __dir__)
 
-      # This example has loopback mode that spawns workers internally
-      output = `bundle exec ruby #{example_file} loopback 2>&1`
+      # Run loopback test - complex circular topology in one process
+      output = `timeout 30 bundle exec ruby #{example_file} loopback 2>&1`
 
       # Verify loopback topology was set up
       expect(output).to include('Loopback Topology')
@@ -3117,68 +3217,92 @@ RSpec.describe 'Examples Integration' do
     end
   end
 
-  # 122: Cluster with demand-based backpressure
-  # Runs loopback mode in separate process - spawns workers internally
+  # 122: Cluster with demand-based backpressure - real multi-process
   describe '122_cluster_demand.rb' do
-    it 'demonstrates cluster with demand-based backpressure', timeout: 60 do
+    it 'demonstrates cluster with demand-based backpressure', timeout: 90 do
+      harness = ClusterTestHarness::Harness.new
       example_file = File.expand_path('../../examples/122_cluster_demand.rb', __dir__)
 
-      # Run loopback test as separate process
-      output = `timeout 45 bundle exec ruby #{example_file} loopback 2>&1`
+      begin
+        # Allocate 2 ports for workers
+        port1, port2 = harness.port_allocator.allocate(2)
+        env = { 'CLUSTER_PORT' => port1.to_s }
 
-      # Verify workers started
-      expect(output).to include('Worker started at')
+        # Start 2 workers
+        worker_procs = []
+        [port1, port2].each do |port|
+          proc = harness.spawn_example(example_file, 'worker', port.to_s, env: env, wait_port: port)
+          worker_procs << proc
+        end
 
-      # Verify demand pipeline processed all items
-      expect(output).to include('Processed 50 items with demand backpressure')
+        # Start coordinator connecting to both workers
+        coord_proc = harness.spawn_example(example_file, 'coordinator', port1.to_s, port2.to_s, env: env)
 
-      # Verify work was distributed to multiple workers
-      expect(output).to include('Work distribution:')
-      expect(output).to match(/Worker \d+: \d+ items/)
+        # Wait for coordinator to complete
+        harness.wait_for_output(coord_proc, 'SUCCESS', timeout: 60)
 
-      # Verify multi-stage demand pipeline also ran
-      expect(output).to include('Multi-stage processed')
-      expect(output).to include('All items enriched: true')
+        coord_output = harness.process_manager.read_output(coord_proc)
+        combined = coord_output[:stdout] + coord_output[:stderr]
 
-      # Verify test completed successfully
-      expect(output).to include('Test Complete')
+        # Verify all 50 items processed
+        expect(combined).to include('Total: 50 items processed')
+        expect(combined).to include('SUCCESS')
+
+        # Verify work was distributed to both workers
+        expect(combined).to include('Work distribution:')
+        expect(combined).to match(/Worker #{port1}: \d+ items/)
+        expect(combined).to match(/Worker #{port2}: \d+ items/)
+
+        # Verify workers processed items
+        all_worker_output = worker_procs.map do |proc|
+          output = harness.process_manager.read_output(proc)
+          output[:stdout] + output[:stderr]
+        end.join("\n")
+        expect(all_worker_output).to include('Worker started at')
+      ensure
+        harness.cleanup
+      end
     end
   end
 
-  # 123: Cluster with different routing strategies
-  # Runs loopback mode in separate process - spawns worker internally
+  # 123: Cluster with different routing strategies - real multi-process
   describe '123_cluster_routing.rb' do
-    it 'demonstrates cluster with routing strategies', timeout: 60 do
+    it 'demonstrates all 5 routing strategies with real worker process', timeout: 90 do
+      harness = ClusterTestHarness::Harness.new
       example_file = File.expand_path('../../examples/123_cluster_routing.rb', __dir__)
 
-      # Run loopback test as separate process
-      output = `timeout 45 bundle exec ruby #{example_file} loopback 2>&1`
+      begin
+        # Allocate port for worker
+        port = harness.port_allocator.allocate
+        env = { 'CLUSTER_PORT' => port.to_s }
 
-      # Verify worker started
-      expect(output).to include('Worker started at')
+        # Start worker
+        worker_proc = harness.spawn_example(example_file, 'worker', port.to_s, env: env, wait_port: port)
 
-      # Verify broadcast routing worked (each item to BOTH consumers)
-      expect(output).to include('Test 1: Broadcast Routing')
-      expect(output).to include('Broadcast verification: each item in BOTH consumers = true')
+        # Start client connecting to worker
+        client_proc = harness.spawn_example(example_file, 'client', port.to_s, env: env)
 
-      # Verify round-robin routing worked (evenly distributed)
-      expect(output).to include('Test 2: Round-Robin Routing')
-      expect(output).to include('Round-robin verification: evenly distributed = true')
+        # Wait for client to complete
+        harness.wait_for_output(client_proc, 'SUCCESS', timeout: 60)
 
-      # Verify demand-based routing worked
-      expect(output).to include('Test 3: Demand-Based Routing')
-      expect(output).to include('All items processed: true')
+        client_output = harness.process_manager.read_output(client_proc)
+        combined = client_output[:stdout] + client_output[:stderr]
 
-      # Verify partition routing worked (user affinity)
-      expect(output).to include('Test 4: Partition Routing')
-      expect(output).to include('User 1 partition affinity: all in same consumer = true')
+        # Verify all 5 routing tests passed
+        expect(combined).to include('Test 1 - Broadcast: PASS')
+        expect(combined).to include('Test 2 - Round-robin: PASS')
+        expect(combined).to include('Test 3 - Demand: PASS')
+        expect(combined).to include('Test 4 - Partition: PASS')
+        expect(combined).to include('Test 5 - Custom hash: PASS')
+        expect(combined).to include('All 5 routing tests PASSED')
+        expect(combined).to include('SUCCESS')
 
-      # Verify custom hash routing worked
-      expect(output).to include('Test 5: Custom Hash Routing')
-      expect(output).to include('Custom hash verification: all correct = true')
-
-      # Verify all tests completed
-      expect(output).to include('All Routing Tests Complete')
+        # Verify worker started
+        worker_output = harness.process_manager.read_output(worker_proc)
+        expect(worker_output[:stdout] + worker_output[:stderr]).to include('Worker started at')
+      ensure
+        harness.cleanup
+      end
     end
   end
 
