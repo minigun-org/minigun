@@ -386,7 +386,7 @@ Cluster-specific errors:
 ```ruby
 begin
   pipeline.run
-rescue Minigun::Cluster::ConnectionError => e
+rescue Minigun::Errors::ClusterConnectionFailed => e
   puts "Failed to connect to coordinator: #{e.message}"
 rescue Minigun::Errors::ClusterError => e
   puts "Cluster error: #{e.message}"
