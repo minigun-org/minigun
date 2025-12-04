@@ -30,15 +30,17 @@ $stdout.sync = true
 $stderr.sync = true
 
 # Configuration via environment variables for testing
-CLUSTER_PORT_BASE = ENV.fetch('CLUSTER_PORT', '9000').to_i
 WORKER_TIMEOUT = ENV.fetch('WORKER_TIMEOUT', '30').to_i
+PORT_PREPROCESS = ENV.fetch('PORT_PREPROCESS', '9000').to_i
+PORT_COMPUTE = ENV.fetch('PORT_COMPUTE', '9001').to_i
+PORT_POSTPROCESS = ENV.fetch('PORT_POSTPROCESS', '9002').to_i
 
 # Pipeline definition - uses factory to allow dynamic port configuration
 class MultiStageCluster
-  def self.create_pipeline(port_base)
-    port0 = port_base
-    port1 = port_base + 1
-    port2 = port_base + 2
+  def self.create_pipeline
+    port0 = PORT_PREPROCESS
+    port1 = PORT_COMPUTE
+    port2 = PORT_POSTPROCESS
 
     Class.new do
       include Minigun::DSL
@@ -108,7 +110,7 @@ class MultiStageCluster
 end
 
 # Worker implementations
-def run_preprocess_worker(port = CLUSTER_PORT_BASE)
+def run_preprocess_worker(port = PORT_PREPROCESS)
   worker = Minigun::Cluster::Worker.new(
     coordinator_uri: "druby://127.0.0.1:#{port}",
     worker_id: "preprocess-#{Process.pid}"
@@ -126,7 +128,7 @@ def run_preprocess_worker(port = CLUSTER_PORT_BASE)
   worker.start
 end
 
-def run_compute_worker(port = CLUSTER_PORT_BASE + 1)
+def run_compute_worker(port = PORT_COMPUTE)
   worker = Minigun::Cluster::Worker.new(
     coordinator_uri: "druby://127.0.0.1:#{port}",
     worker_id: "compute-#{Process.pid}"
@@ -144,7 +146,7 @@ def run_compute_worker(port = CLUSTER_PORT_BASE + 1)
   worker.start
 end
 
-def run_postprocess_worker(port = CLUSTER_PORT_BASE + 2)
+def run_postprocess_worker(port = PORT_POSTPROCESS)
   worker = Minigun::Cluster::Worker.new(
     coordinator_uri: "druby://127.0.0.1:#{port}",
     worker_id: "postprocess-#{Process.pid}"
@@ -176,14 +178,14 @@ if __FILE__ == $PROGRAM_NAME
   case mode
   when 'coordinator'
     puts '=== Multi-Stage Cluster Coordinator ==='
-    puts "Starting coordinator with 3 cluster stages (ports #{CLUSTER_PORT_BASE}, #{CLUSTER_PORT_BASE + 1}, #{CLUSTER_PORT_BASE + 2})..."
+    puts "Starting coordinator with 3 cluster stages (ports #{PORT_PREPROCESS}, #{PORT_COMPUTE}, #{PORT_POSTPROCESS})..."
     puts 'Start workers in separate terminals:'
     puts '  ruby examples/112_multi_stage_cluster.rb worker_preprocess'
     puts '  ruby examples/112_multi_stage_cluster.rb worker_compute'
     puts '  ruby examples/112_multi_stage_cluster.rb worker_postprocess'
     puts
 
-    pipeline = MultiStageCluster.create_pipeline(CLUSTER_PORT_BASE)
+    pipeline = MultiStageCluster.create_pipeline
     pipeline.run
 
     puts
@@ -196,15 +198,15 @@ if __FILE__ == $PROGRAM_NAME
 
   when 'worker_preprocess'
     puts '=== Preprocess Worker ==='
-    run_preprocess_worker(CLUSTER_PORT_BASE)
+    run_preprocess_worker
 
   when 'worker_compute'
     puts '=== Compute Worker ==='
-    run_compute_worker(CLUSTER_PORT_BASE + 1)
+    run_compute_worker
 
   when 'worker_postprocess'
     puts '=== Postprocess Worker ==='
-    run_postprocess_worker(CLUSTER_PORT_BASE + 2)
+    run_postprocess_worker
 
   else
     puts "Unknown mode: #{mode}"

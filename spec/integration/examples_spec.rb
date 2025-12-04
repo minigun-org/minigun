@@ -2812,21 +2812,29 @@ RSpec.describe 'Examples Integration' do
       example_file = File.expand_path('../../examples/112_multi_stage_cluster.rb', __dir__)
 
       begin
-        # Single port allocation - example uses port_base, port_base+1, port_base+2 internally
-        port_base = harness.port_allocator.allocate
-        env = { 'CLUSTER_PORT' => port_base.to_s, 'WORKER_TIMEOUT' => '15' }
+        # Allocate 3 separate ports for the 3 cluster stages
+        port_preprocess = harness.port_allocator.allocate
+        port_compute = harness.port_allocator.allocate
+        port_postprocess = harness.port_allocator.allocate
+
+        env = {
+          'PORT_PREPROCESS' => port_preprocess.to_s,
+          'PORT_COMPUTE' => port_compute.to_s,
+          'PORT_POSTPROCESS' => port_postprocess.to_s,
+          'WORKER_TIMEOUT' => '30'
+        }
 
         # Start coordinator
-        coord_proc = harness.spawn_example(example_file, 'coordinator', env: env, wait_port: port_base)
+        coord_proc = harness.spawn_example(example_file, 'coordinator', env: env, wait_port: port_preprocess)
 
         # Spawn 3 workers for 3 stages - each waits for its port to be ready
         worker_procs = []
         worker_mutex = Mutex.new
         worker_threads = []
         [
-          ['worker_preprocess', port_base],
-          ['worker_compute', port_base + 1],
-          ['worker_postprocess', port_base + 2]
+          ['worker_preprocess', port_preprocess],
+          ['worker_compute', port_compute],
+          ['worker_postprocess', port_postprocess]
         ].each do |worker_mode, port|
           worker_threads << Thread.new do
             proc = harness.spawn_worker_with_retry(example_file, worker_mode, env: env, coordinator_port: port)
@@ -2834,8 +2842,8 @@ RSpec.describe 'Examples Integration' do
           end
         end
 
-        # Wait for pipeline to complete
-        harness.wait_for_output(coord_proc, 'items processed', timeout: 90)
+        # Wait for pipeline to complete - look for the specific final message
+        harness.wait_for_output(coord_proc, 'Total: 10 items processed', timeout: 90)
         worker_threads.each(&:join)
 
         coord_output = harness.process_manager.read_output(coord_proc)
