@@ -31,6 +31,9 @@ $stderr.sync = true
 # Configuration via environment variables for testing
 CLUSTER_PORT_BASE = ENV.fetch('CLUSTER_PORT', '9000').to_i
 WORKER_TIMEOUT = ENV.fetch('WORKER_TIMEOUT', '30').to_i
+# Peer ports are passed via ENV so workers know how to reach each other
+PEER_PORT_A = ENV.fetch('PEER_PORT_A', (CLUSTER_PORT_BASE + 10).to_s).to_i
+PEER_PORT_B = ENV.fetch('PEER_PORT_B', (CLUSTER_PORT_BASE + 11).to_s).to_i
 
 # Shared data store accessible via DRb
 class DataShard
@@ -110,7 +113,7 @@ class PeerToPeerPipeline
 end
 
 # Worker with peer-to-peer data sharing
-def run_worker(shard_start, worker_port, coordinator_port: CLUSTER_PORT_BASE, peer_port_base: CLUSTER_PORT_BASE + 10)
+def run_worker(shard_start, worker_port, coordinator_port: CLUSTER_PORT_BASE)
   # Determine shard range
   shard_end = shard_start + 4
   shard_id = shard_start / 5
@@ -131,9 +134,9 @@ def run_worker(shard_start, worker_port, coordinator_port: CLUSTER_PORT_BASE, pe
     worker_id: "worker-shard-#{shard_id}"
   )
 
-  # Calculate peer ports based on peer_port_base
-  peer_port_0 = peer_port_base      # Shard 0 peer port
-  peer_port_1 = peer_port_base + 1  # Shard 1 peer port
+  # Peer ports from environment (dynamically allocated in tests)
+  peer_port_a = PEER_PORT_A
+  peer_port_b = PEER_PORT_B
 
   # Register distributed join processor
   worker.register_stage(:distributed_join) do |task, output|
@@ -146,7 +149,7 @@ def run_worker(shard_start, worker_port, coordinator_port: CLUSTER_PORT_BASE, pe
                     shard.get(task[:left_id])
                   else
                     # Fetch from peer
-                    peer_port = task[:left_id] < 5 ? peer_port_0 : peer_port_1
+                    peer_port = task[:left_id] < 5 ? peer_port_a : peer_port_b
                     puts "    [Worker #{shard_id}] Fetching left data #{task[:left_id]} from PEER on port #{peer_port}"
                     peer_shard = DRbObject.new_with_uri("druby://127.0.0.1:#{peer_port}")
                     peer_shard.get(task[:left_id])
@@ -158,7 +161,7 @@ def run_worker(shard_start, worker_port, coordinator_port: CLUSTER_PORT_BASE, pe
                      shard.get(task[:right_id])
                    else
                      # Fetch from peer
-                     peer_port = task[:right_id] < 5 ? peer_port_0 : peer_port_1
+                     peer_port = task[:right_id] < 5 ? peer_port_a : peer_port_b
                      puts "    [Worker #{shard_id}] Fetching right data #{task[:right_id]} from PEER on port #{peer_port}"
                      peer_shard = DRbObject.new_with_uri("druby://127.0.0.1:#{peer_port}")
                      peer_shard.get(task[:right_id])
@@ -198,23 +201,19 @@ if __FILE__ == $PROGRAM_NAME
 
   mode = ARGV[0] || 'coordinator'
 
-  # Calculate peer ports from CLUSTER_PORT_BASE
-  peer_port_0 = CLUSTER_PORT_BASE + 10  # Shard 0 peer port
-  peer_port_1 = CLUSTER_PORT_BASE + 11  # Shard 1 peer port
-
   case mode
   when 'coordinator'
     puts '=== Peer-to-Peer Cluster Pipeline ==='
     puts
     puts 'This demonstrates workers communicating peer-to-peer:'
-    puts "  - Worker A owns data IDs 0-4 (port #{peer_port_0})"
-    puts "  - Worker B owns data IDs 5-9 (port #{peer_port_1})"
+    puts "  - Worker A owns data IDs 0-4 (port #{PEER_PORT_A})"
+    puts "  - Worker B owns data IDs 5-9 (port #{PEER_PORT_B})"
     puts '  - Workers fetch data from each other directly'
     puts '  - Coordinator only distributes join tasks'
     puts
     puts 'Start workers in separate terminals:'
-    puts "  ruby examples/116_peer_to_peer_cluster.rb worker 0 #{peer_port_0}"
-    puts "  ruby examples/116_peer_to_peer_cluster.rb worker 5 #{peer_port_1}"
+    puts "  ruby examples/116_peer_to_peer_cluster.rb worker 0 #{PEER_PORT_A}"
+    puts "  ruby examples/116_peer_to_peer_cluster.rb worker 5 #{PEER_PORT_B}"
     puts
 
     pipeline = PeerToPeerPipeline.create_pipeline(CLUSTER_PORT_BASE)
@@ -244,13 +243,13 @@ if __FILE__ == $PROGRAM_NAME
       puts 'ERROR: Both shard_start and worker_port required'
       puts 'Usage: ruby examples/116_peer_to_peer_cluster.rb worker SHARD_START PORT'
       puts 'Examples:'
-      puts "  ruby examples/116_peer_to_peer_cluster.rb worker 0 #{peer_port_0}  # Shard 0 (IDs 0-4)"
-      puts "  ruby examples/116_peer_to_peer_cluster.rb worker 5 #{peer_port_1}  # Shard 1 (IDs 5-9)"
+      puts "  ruby examples/116_peer_to_peer_cluster.rb worker 0 #{PEER_PORT_A}  # Shard 0 (IDs 0-4)"
+      puts "  ruby examples/116_peer_to_peer_cluster.rb worker 5 #{PEER_PORT_B}  # Shard 1 (IDs 5-9)"
       exit 1
     end
 
     puts "=== Worker (Shard starting at #{shard_start}, Port #{worker_port}) ==="
-    run_worker(shard_start, worker_port, coordinator_port: CLUSTER_PORT_BASE, peer_port_base: CLUSTER_PORT_BASE + 10)
+    run_worker(shard_start, worker_port, coordinator_port: CLUSTER_PORT_BASE)
 
   else
     puts "Unknown mode: #{mode}"

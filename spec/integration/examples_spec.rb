@@ -3063,17 +3063,24 @@ RSpec.describe 'Examples Integration' do
       example_file = File.expand_path('../../examples/116_peer_to_peer_cluster.rb', __dir__)
 
       begin
-        # Coordinator port - workers use port_base+10 and port_base+11 for peer DRb
+        # Allocate all ports dynamically
         port_base = harness.port_allocator.allocate
-        env = { 'CLUSTER_PORT' => port_base.to_s, 'WORKER_TIMEOUT' => '15' }
+        peer_port_a = harness.port_allocator.allocate
+        peer_port_b = harness.port_allocator.allocate
+
+        env = {
+          'CLUSTER_PORT' => port_base.to_s,
+          'PEER_PORT_A' => peer_port_a.to_s,
+          'PEER_PORT_B' => peer_port_b.to_s,
+          'WORKER_TIMEOUT' => '15'
+        }
 
         coord_proc = harness.spawn_example(example_file, 'coordinator', env: env, wait_port: port_base)
 
         # Spawn 2 workers with different shards
         # Worker args: shard_start, worker_port (for peer DRb server)
-        # The example calculates peer ports as port_base+10 and port_base+11
         worker_threads = []
-        [[0, port_base + 10], [5, port_base + 11]].each do |shard_start, worker_port|
+        [[0, peer_port_a], [5, peer_port_b]].each do |shard_start, worker_port|
           worker_threads << Thread.new do
             harness.spawn_worker_with_retry(
               example_file, 'worker', shard_start.to_s, worker_port.to_s,
