@@ -46,11 +46,11 @@ $stdout.sync = true
 $stderr.sync = true
 
 # Configuration via environment variables for testing
-CLUSTER_PORT_BASE = ENV.fetch('CLUSTER_PORT', '9000').to_i
-NODE_A_PORT = CLUSTER_PORT_BASE
-NODE_B_PORT = CLUSTER_PORT_BASE + 1
-NODE_C_PORT = CLUSTER_PORT_BASE + 2
-NODE_A_LOOPBACK_PORT = CLUSTER_PORT_BASE + 100
+# All ports can be independently configured for dynamic allocation in tests
+NODE_A_PORT = ENV.fetch('NODE_A_PORT', '9000').to_i
+NODE_B_PORT = ENV.fetch('NODE_B_PORT', '9001').to_i
+NODE_C_PORT = ENV.fetch('NODE_C_PORT', '9002').to_i
+NODE_A_LOOPBACK_PORT = ENV.fetch('NODE_A_LOOPBACK_PORT', '9100').to_i
 
 # Node A: Initial processing and final collection
 # This node has TWO stages:

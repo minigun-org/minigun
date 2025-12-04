@@ -38,7 +38,8 @@ $stderr.sync = true
 
 # Configuration via environment variables for testing
 PARENT_PORT = ENV.fetch('CLUSTER_PORT', '9000').to_i
-CHILD_PORT_BASE = ENV.fetch('CHILD_PORT', (PARENT_PORT + 100).to_s).to_i
+CHILD_PORT_A = ENV.fetch('CHILD_PORT_A', '9100').to_i
+CHILD_PORT_B = ENV.fetch('CHILD_PORT_B', '9101').to_i
 
 # Parent pipeline definition
 class ParentPipeline

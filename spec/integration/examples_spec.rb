@@ -2884,18 +2884,17 @@ RSpec.describe 'Examples Integration' do
         child_port_a = harness.port_allocator.allocate
         child_port_b = harness.port_allocator.allocate
 
-        env_parent = {
+        env = {
           'CLUSTER_PORT' => parent_port.to_s,
-          'CHILD_PORT' => child_port_a.to_s # Not used by parent_coordinator but needed for ENV
+          'CHILD_PORT_A' => child_port_a.to_s,
+          'CHILD_PORT_B' => child_port_b.to_s
         }
-        env_child_a = { 'CLUSTER_PORT' => child_port_a.to_s }
-        env_child_b = { 'CLUSTER_PORT' => child_port_b.to_s }
 
         # 1. Start child coordinators first (they need to be ready before parent workers)
         harness.spawn_example(example_file, 'child_coordinator', child_port_a,
-                              env: env_child_a, wait_port: child_port_a)
+                              env: env, wait_port: child_port_a)
         harness.spawn_example(example_file, 'child_coordinator', child_port_b,
-                              env: env_child_b, wait_port: child_port_b)
+                              env: env, wait_port: child_port_b)
 
         # 2. Start child workers (connect to child coordinators)
         child_workers = []
@@ -2905,14 +2904,14 @@ RSpec.describe 'Examples Integration' do
         # Child worker for cluster A
         child_worker_threads << Thread.new do
           proc = harness.spawn_worker_with_retry(example_file, 'child_worker', child_port_a,
-                                                 env: env_child_a, coordinator_port: child_port_a)
+                                                 env: env, coordinator_port: child_port_a)
           child_worker_mutex.synchronize { child_workers << proc } if proc
         end
 
         # Child worker for cluster B
         child_worker_threads << Thread.new do
           proc = harness.spawn_worker_with_retry(example_file, 'child_worker', child_port_b,
-                                                 env: env_child_b, coordinator_port: child_port_b)
+                                                 env: env, coordinator_port: child_port_b)
           child_worker_mutex.synchronize { child_workers << proc } if proc
         end
 
@@ -2922,7 +2921,7 @@ RSpec.describe 'Examples Integration' do
         # 3. Start parent coordinator (runs the pipeline, creates coordinator on parent_port)
         # This will wait for parent workers before producing work
         parent_coord = harness.spawn_example(example_file, 'parent_coordinator',
-                                             env: env_parent, wait_port: parent_port)
+                                             env: env, wait_port: parent_port)
 
         # 4. Start parent workers (connect to parent coordinator, delegate to child clusters)
         parent_workers = []
@@ -2931,17 +2930,15 @@ RSpec.describe 'Examples Integration' do
 
         # Parent worker delegating to child cluster A
         parent_worker_threads << Thread.new do
-          env_pw_a = env_parent.merge('CLUSTER_PORT' => parent_port.to_s)
           proc = harness.spawn_worker_with_retry(example_file, 'parent_worker', child_port_a,
-                                                 env: env_pw_a, coordinator_port: parent_port)
+                                                 env: env, coordinator_port: parent_port)
           parent_worker_mutex.synchronize { parent_workers << proc } if proc
         end
 
         # Parent worker delegating to child cluster B
         parent_worker_threads << Thread.new do
-          env_pw_b = env_parent.merge('CLUSTER_PORT' => parent_port.to_s)
           proc = harness.spawn_worker_with_retry(example_file, 'parent_worker', child_port_b,
-                                                 env: env_pw_b, coordinator_port: parent_port)
+                                                 env: env, coordinator_port: parent_port)
           parent_worker_mutex.synchronize { parent_workers << proc } if proc
         end
 
@@ -3124,37 +3121,42 @@ RSpec.describe 'Examples Integration' do
       example_file = File.expand_path('../../examples/117_cluster_loopback.rb', __dir__)
 
       begin
-        # Allocate ports: Node B, Node C, Node A loopback receiver
-        port_base = harness.port_allocator.allocate
-        # Reserve additional ports that the example will use
-        harness.port_allocator.allocate # port_base + 1 for Node C
-        harness.port_allocator.allocate # port_base + 2 (not used directly but reserve it)
+        # Allocate all ports dynamically
+        node_a_port = harness.port_allocator.allocate
+        node_b_port = harness.port_allocator.allocate
+        node_c_port = harness.port_allocator.allocate
+        loopback_port = harness.port_allocator.allocate
 
-        env = { 'CLUSTER_PORT' => port_base.to_s }
+        env = {
+          'NODE_A_PORT' => node_a_port.to_s,
+          'NODE_B_PORT' => node_b_port.to_s,
+          'NODE_C_PORT' => node_c_port.to_s,
+          'NODE_A_LOOPBACK_PORT' => loopback_port.to_s
+        }
 
-        # 1. Start Node B coordinator (port_base + 1)
+        # 1. Start Node B coordinator
         harness.spawn_example(example_file, 'coordinator_b',
-                              env: env, wait_port: port_base + 1)
+                              env: env, wait_port: node_b_port)
 
-        # 2. Start Node C coordinator (port_base + 2)
+        # 2. Start Node C coordinator
         harness.spawn_example(example_file, 'coordinator_c',
-                              env: env, wait_port: port_base + 2)
+                              env: env, wait_port: node_c_port)
 
         # 3. Start worker_b (connects to Node B, forwards to Node C)
         harness.spawn_worker_with_retry(example_file, 'worker_b',
-                                        env: env, coordinator_port: port_base + 1)
+                                        env: env, coordinator_port: node_b_port)
 
         # 4. Start worker_c (connects to Node C, sends loopback to Node A)
         harness.spawn_worker_with_retry(example_file, 'worker_c',
-                                        env: env, coordinator_port: port_base + 2)
+                                        env: env, coordinator_port: node_c_port)
 
         # 5. Start coordinator_a (which also starts the loopback receiver)
         coord_a = harness.spawn_example(example_file, 'coordinator_a',
-                                        env: env, wait_port: port_base)
+                                        env: env, wait_port: node_a_port)
 
         # 6. Start worker_a that connects to coordinator_a
         harness.spawn_worker_with_retry(example_file, 'worker_a',
-                                        env: env, coordinator_port: port_base)
+                                        env: env, coordinator_port: node_a_port)
 
         # Wait for coordinator_a to complete (it runs the pipeline and collects results)
         harness.wait_for_output(coord_a, 'Total results received:', timeout: 90)
