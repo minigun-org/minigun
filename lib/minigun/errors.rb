@@ -499,5 +499,18 @@ module Minigun
         )
       end
     end
+
+    # ============================================
+    # Shutdown Errors
+    # ============================================
+
+    # Raised to signal graceful shutdown is in progress.
+    # Producer stages check for this and stop iteration.
+    # Not a true "error" - used for control flow during shutdown.
+    class ShutdownRequested < BaseError
+      def initialize
+        super('Graceful shutdown requested')
+      end
+    end
   end
 end

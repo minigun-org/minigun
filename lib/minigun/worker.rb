@@ -15,6 +15,42 @@ module Minigun
       @config = config
       @thread = nil
       @executor = nil # Created later in create_stage_context
+
+      # Shutdown state
+      @shutdown_requested = false
+      @force_shutdown = false
+    end
+
+    # Request shutdown of this worker
+    # @param force [Boolean] If true, force immediate shutdown
+    def request_shutdown(force: false)
+      @shutdown_requested = true
+      @force_shutdown = force
+
+      log_debug "Shutdown requested (force=#{force})"
+
+      # Notify the stage (for producers to stop iteration)
+      @stage.request_shutdown if @stage.respond_to?(:request_shutdown)
+
+      # Notify the executor
+      if force
+        @executor&.force_shutdown
+      else
+        @executor&.request_shutdown
+      end
+
+      # For force shutdown, kill the thread if it's still running
+      @thread&.kill if force && @thread&.alive?
+    end
+
+    # Check if shutdown has been requested
+    def shutdown_requested?
+      @shutdown_requested || @pipeline&.shutdown_requested?
+    end
+
+    # Check if force shutdown has been requested
+    def force_shutdown?
+      @force_shutdown || @pipeline&.force_shutdown?
     end
 
     # Start the worker thread
@@ -47,6 +83,10 @@ module Minigun
 
       stage_ctx.stage_stats.finish!
       log_debug('Done')
+    rescue Errors::ShutdownRequested
+      # Graceful shutdown - send end signals to downstream stages
+      log_debug 'Shutdown requested, completing gracefully'
+      graceful_shutdown(stage_ctx)
     rescue StandardError => e
       log_error "Unhandled error: #{e.message}"
       log_error e.backtrace.join("\n")

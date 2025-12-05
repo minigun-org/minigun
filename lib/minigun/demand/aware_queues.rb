@@ -101,6 +101,16 @@ module Minigun
         @to_cache = {}
       end
 
+      # Check if shutdown has been requested (delegates to inner queue)
+      def shutdown?
+        @inner.shutdown?
+      end
+
+      # Request graceful shutdown (delegates to inner queue)
+      def shutdown!(force: false)
+        @inner.shutdown!(force: force)
+      end
+
       # Send item to all downstream stages.
       # In :auto mode, waits for demand before emitting.
       # @param item [Object] Item to send
@@ -193,6 +203,16 @@ module Minigun
         @inner = inner
         @demand_channels = demand_channels
         @demand_mode = demand_mode
+      end
+
+      # Check if shutdown has been requested (delegates to inner queue)
+      def shutdown?
+        @inner.shutdown?
+      end
+
+      # Request graceful shutdown (delegates to inner queue)
+      def shutdown!(force: false)
+        @inner.shutdown!(force: force)
       end
 
       # Send item to the targeted stage
