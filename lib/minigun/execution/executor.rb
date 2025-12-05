@@ -1195,6 +1195,10 @@ module Minigun
         @owns_coordinator = false
         @direct_workers = [] # For direct mode
         @direct_mode = worker_uris && !worker_uris.empty?
+
+        # Register this cluster stage with the barrier for coordination
+        # This ensures all cluster stages wait until all have workers before starting
+        register_with_cluster_barrier(stage_ctx&.stage)
       end
 
       def execute_stage(stage, _user_context, input_queue, output_queue)
@@ -1215,6 +1219,17 @@ module Minigun
 
       private
 
+      def register_with_cluster_barrier(stage)
+        return if @direct_mode # Direct mode doesn't use barrier coordination
+        return unless stage
+
+        barrier = stage.task&.cluster_barrier
+        return unless barrier
+
+        barrier.register(stage.name)
+        Minigun.logger.debug "[Cluster] Stage :#{stage.name} registered with cluster barrier"
+      end
+
       # === Coordinator Mode ===
 
       def execute_coordinator_mode(stage, input_queue, output_queue)
@@ -1227,7 +1242,18 @@ module Minigun
           )
         end
 
-        Minigun.logger.info "[Cluster] Starting stage :#{stage.name} with #{@coordinator.worker_count} workers"
+        Minigun.logger.debug "[Cluster] Stage :#{stage.name} has #{@coordinator.worker_count} workers connected"
+
+        # Wait for all cluster stages to have workers before any starts distributing
+        # This prevents race conditions where middle stages start before upstream is ready
+        barrier = stage.task&.cluster_barrier
+        if barrier && barrier.registered_count > 1
+          barrier.ready(stage.name)
+          # Small yield to allow other threads to progress after barrier
+          Thread.pass
+        end
+
+        Minigun.logger.debug "[Cluster] Starting stage :#{stage.name} distribution"
 
         begin
           distribute_and_collect_coordinator(stage, input_queue, output_queue)
