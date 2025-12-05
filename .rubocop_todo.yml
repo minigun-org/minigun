@@ -64,12 +64,6 @@ Naming/VariableNumber:
     - 'spec/**/*'
     - 'examples/116_peer_to_peer_cluster.rb'
 
-# Offense count: 1
-# This cop supports unsafe autocorrection (--autocorrect-all).
-Performance/TimesMap:
-  Exclude:
-    - 'spec/support/cluster_test_harness.rb'
-
 # Offense count: 9
 RSpec/AnyInstance:
   Exclude:
@@ -134,28 +128,3 @@ RSpec/VerifiedDoubles:
     - 'spec/hud/flow_diagram_rendering_spec.rb'
     - 'spec/integration/errors_spec.rb'
     - 'spec/unit/execution/ipc_fork_restart_spec.rb'
-
-# Offense count: 3
-# This cop supports unsafe autocorrection (--autocorrect-all).
-Style/MapIntoArray:
-  Exclude:
-    - 'spec/integration/examples_spec.rb'
-
-# Offense count: 2
-# This cop supports safe autocorrection (--autocorrect).
-Style/RedundantBegin:
-  Exclude:
-    - 'lib/minigun/cluster.rb'
-    - 'spec/integration/examples_spec.rb'
-
-# Offense count: 1
-# This cop supports safe autocorrection (--autocorrect).
-Style/RedundantRegexpArgument:
-  Exclude:
-    - 'spec/integration/examples_spec.rb'
-
-# Offense count: 3
-# This cop supports safe autocorrection (--autocorrect).
-Style/RescueModifier:
-  Exclude:
-    - 'spec/integration/examples_spec.rb'

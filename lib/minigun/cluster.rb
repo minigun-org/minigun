@@ -41,11 +41,9 @@ module Minigun
         @running = false
         # Signal all workers to shutdown (with timeout to avoid hanging)
         @workers.each_value do |worker|
-          begin
-            Timeout.timeout(1) { worker[:proxy].shutdown }
-          rescue StandardError
-            # Worker may be gone or unresponsive
-          end
+          Timeout.timeout(1) { worker[:proxy].shutdown }
+        rescue StandardError
+          # Worker may be gone or unresponsive
         end
         @workers.clear
         begin

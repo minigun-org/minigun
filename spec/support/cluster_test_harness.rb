@@ -117,7 +117,7 @@ module ClusterTestHarness
 
     def allocate(count = 1)
       @mutex.synchronize do
-        ports = count.times.map do
+        ports = Array.new(count) do
           server = TCPServer.new('127.0.0.1', 0)
           port = server.addr[1]
           @servers << server

@@ -2694,14 +2694,12 @@ RSpec.describe 'Examples Integration' do
   def wait_for_port(port, timeout: 10)
     deadline = Time.now + timeout
     loop do
-      begin
-        TCPSocket.new('127.0.0.1', port).close
-        return true
-      rescue Errno::ECONNREFUSED
-        return false if Time.now > deadline
+      TCPSocket.new('127.0.0.1', port).close
+      return true
+    rescue Errno::ECONNREFUSED
+      return false if Time.now > deadline
 
-        sleep 0.1
-      end
+      sleep 0.1
     end
   end
 
@@ -2712,7 +2710,11 @@ RSpec.describe 'Examples Integration' do
 
     if port
       unless wait_for_port(port, timeout: 15)
-        Process.kill('TERM', pid) rescue nil
+        begin
+          Process.kill('TERM', pid)
+        rescue StandardError
+          nil
+        end
         raise "Worker on port #{port} failed to start"
       end
     else
@@ -2731,8 +2733,16 @@ RSpec.describe 'Examples Integration' do
     wr.close
 
     unless wait_for_port(port, timeout: 15)
-      Process.kill('TERM', pid) rescue nil
-      output = rd.read rescue ''
+      begin
+        Process.kill('TERM', pid)
+      rescue StandardError
+        nil
+      end
+      output = begin
+        rd.read
+      rescue StandardError
+        ''
+      end
       raise "Coordinator on port #{port} failed to start. Output: #{output[0..500]}"
     end
     [pid, rd]
@@ -2751,7 +2761,7 @@ RSpec.describe 'Examples Integration' do
       begin
         chunk = coord_output_io.read_nonblock(4096)
         buffer += chunk
-        count = buffer.scan(/Worker registered/).size
+        count = buffer.scan('Worker registered').size
       rescue IO::WaitReadable
         sleep 0.1
       rescue EOFError
@@ -2841,13 +2851,12 @@ RSpec.describe 'Examples Integration' do
         # Spawn 3 workers for 3 stages - each waits for its port to be ready
         worker_procs = []
         worker_mutex = Mutex.new
-        worker_threads = []
-        [
+        worker_threads = [
           ['worker_preprocess', port_preprocess],
           ['worker_compute', port_compute],
           ['worker_postprocess', port_postprocess]
-        ].each do |worker_mode, port|
-          worker_threads << Thread.new do
+        ].map do |worker_mode, port|
+          Thread.new do
             proc = harness.spawn_worker_with_retry(example_file, worker_mode, env: env, coordinator_port: port)
             worker_mutex.synchronize { worker_procs << proc } if proc
           end
@@ -2864,7 +2873,7 @@ RSpec.describe 'Examples Integration' do
         expect(combined).to match(/Total: 10 items processed/)
 
         # Verify each stage had a worker connect
-        expect(combined.scan(/Worker registered/).size).to be >= 3
+        expect(combined.scan('Worker registered').size).to be >= 3
 
         # Collect worker outputs to verify all 3 stages actually processed items
         all_worker_output = worker_procs.map do |proc|
@@ -2990,9 +2999,8 @@ RSpec.describe 'Examples Integration' do
         # Spawn both workers connecting to same cluster
         worker_procs = []
         worker_mutex = Mutex.new
-        worker_threads = []
-        %w[worker_image worker_text].each do |worker_mode|
-          worker_threads << Thread.new do
+        worker_threads = %w[worker_image worker_text].map do |worker_mode|
+          Thread.new do
             proc = harness.spawn_worker_with_retry(example_file, worker_mode, env: env, coordinator_port: port)
             worker_mutex.synchronize { worker_procs << proc } if proc
           end
@@ -3099,9 +3107,8 @@ RSpec.describe 'Examples Integration' do
         harness.port_allocator.release(peer_port_a)
         harness.port_allocator.release(peer_port_b)
 
-        worker_threads = []
-        [[0, peer_port_a], [5, peer_port_b]].each do |shard_start, worker_port|
-          worker_threads << Thread.new do
+        worker_threads = [[0, peer_port_a], [5, peer_port_b]].map do |shard_start, worker_port|
+          Thread.new do
             harness.spawn_worker_with_retry(
               example_file, 'worker', shard_start.to_s, worker_port.to_s,
               env: env, coordinator_port: port_base
