@@ -4,7 +4,7 @@ module Minigun
   # Task orchestrates one or more pipelines
   # Supports both single-pipeline (implicit) and multi-pipeline modes
   class Task
-    attr_reader :config, :root_pipeline, :stage_registry
+    attr_reader :config, :root_pipeline, :stage_registry, :cluster_barrier
 
     def initialize(config: nil, root_pipeline: nil)
       @config = config || {
@@ -27,6 +27,10 @@ module Minigun
       # When multiple IPC stages exist, workers from one stage inherit FDs from other stages
       @ipc_pipes = []
       @ipc_pipes_mutex = Mutex.new
+
+      # Cluster barrier for coordinating multiple cluster stages
+      # Ensures all cluster stages have workers before any starts distributing
+      @cluster_barrier = Cluster::ClusterBarrier.new
 
       # Root pipeline - all stages and nested pipelines live here
       @root_pipeline = root_pipeline || Pipeline.new(:default, self, nil, @config)

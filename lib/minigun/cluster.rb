@@ -3,6 +3,7 @@
 require 'drb'
 require 'socket'
 require 'timeout'
+require_relative 'cluster/barrier'
 require_relative 'cluster/delivery_tracker'
 require_relative 'cluster/distributor'
 
@@ -131,11 +132,16 @@ module Minigun
       end
 
       # Internal: Collect next result
+      # With timeout: does non-blocking check with optional sleep to yield to other threads
+      # Without timeout: blocking pop
       def collect_result(timeout: nil)
         if timeout
           begin
             @result_queue.pop(true)
-          rescue StandardError
+          rescue ThreadError
+            # Queue empty - sleep briefly to yield CPU to other threads
+            # This prevents busy-spinning that can starve other threads in same process
+            sleep(timeout) if timeout.is_a?(Numeric) && timeout > 0
             nil
           end
         else
@@ -357,7 +363,9 @@ module Minigun
           stage_proc.call(item, output_collector)
 
           # Submit results - handle DRb errors gracefully
-          results.each do |result|
+          debug_log("[Worker:#{@worker_id}] Submitting #{results.size} results")
+          results.each_with_index do |result, idx|
+            debug_log("[Worker:#{@worker_id}] Submitting result #{idx + 1}/#{results.size}")
             submit_result_safe(
               {
                 type: :result,
@@ -366,10 +374,12 @@ module Minigun
                 latency: Time.now - start_time
               }
             )
+            debug_log("[Worker:#{@worker_id}] Result #{idx + 1} submitted")
           end
 
           # If no results, still signal completion
           if results.empty?
+            debug_log("[Worker:#{@worker_id}] No results, submitting item_done")
             submit_result_safe(
               {
                 type: :item_done,
@@ -377,6 +387,7 @@ module Minigun
                 latency: Time.now - start_time
               }
             )
+            debug_log("[Worker:#{@worker_id}] item_done submitted")
           end
         rescue DRb::DRbConnError => e
           # Coordinator disconnected during processing - log and continue

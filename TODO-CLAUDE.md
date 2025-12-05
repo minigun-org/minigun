@@ -48,6 +48,8 @@ plan based on the current codebase state and TODOS.md.
 - [X] in_threads, in_cow_forks, in_fibers
 - [X] Sort-out pipeline inheritance (https://github.com/minigun-org/minigun/pull/4)
 - [X] Minigun.task do
+- [X] **Flush Timers**
+  - [X] Time-based batch flushing
 - [X] Demand (see polyphony example)
 - [X] Clustering basic implementation
 - [X] Cluster -- Jepsen tests, handle network partitions, etc. "At least once" vs "At most once", guaranteed delivery
@@ -71,8 +73,6 @@ plan based on the current codebase state and TODOS.md.
   - [ ] Custom Stage?
   - [ ] Alias in_ipc_forks to in_processes
   - [ ] Support MINIGUN_LOG_LEVEL var
-- [X] **Flush Timers**
-  - [X] Time-based batch flushing
 - [ ] **Graceful shutdown**
   - [ ] signal trapping, child state management/killing
   - [ ] Kill child threads/forks/ractors
