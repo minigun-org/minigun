@@ -1186,8 +1186,6 @@ module Minigun
             break
           end
 
-          break if shutdown_requested?
-
           mutex.synchronize { pending_count += 1 }
           @workers[worker_index % @max_size].send({ item: item })
           worker_index += 1
