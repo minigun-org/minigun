@@ -144,7 +144,7 @@ def run_parent_worker(child_coordinator_port)
       # Collect results from children
       child_results = []
       batch[:items].size.times do
-        result = child_coordinator.collect_result(timeout: 30)
+        result = child_coordinator.collect_result(timeout: 0.5)
         child_results << result[:result] if result && result[:type] == :result
       end
 

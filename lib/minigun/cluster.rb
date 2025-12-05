@@ -3,6 +3,7 @@
 require 'drb'
 require 'socket'
 require 'timeout'
+require_relative 'cluster/barrier'
 require_relative 'cluster/delivery_tracker'
 require_relative 'cluster/distributor'
 
@@ -131,11 +132,16 @@ module Minigun
       end
 
       # Internal: Collect next result
+      # With timeout: does non-blocking check with optional sleep to yield to other threads
+      # Without timeout: blocking pop
       def collect_result(timeout: nil)
-        if timeout
+        if timeout&.>(0)
           begin
             @result_queue.pop(true)
-          rescue StandardError
+          rescue ThreadError
+            # Queue empty - sleep briefly to yield CPU to other threads
+            # This prevents busy-spinning that can starve other threads in same process
+            sleep(timeout)
             nil
           end
         else
@@ -358,6 +364,10 @@ module Minigun
               }
             )
           end
+        rescue DRb::DRbConnError => e
+          # Coordinator disconnected during processing - log and continue
+          Minigun.logger.warn "[Cluster] Lost connection to coordinator during processing: #{e.message}"
+          @running = false
         rescue StandardError => e
           @coordinator.submit_error(
             {
