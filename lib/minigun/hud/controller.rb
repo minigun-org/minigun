@@ -12,7 +12,7 @@ module Minigun
       attr_reader :terminal, :flow_diagram, :process_list, :stats_aggregator
       attr_accessor :running, :paused, :pipeline_finished
 
-      def initialize(pipeline, on_quit: nil)
+      def initialize(pipeline, on_quit: nil, on_close: nil)
         @pipeline = pipeline
         @terminal = Terminal.new
         @stats_aggregator = StatsAggregator.new(pipeline)
@@ -21,7 +21,8 @@ module Minigun
         @pipeline_finished = false
         @show_help = false
         @resize_requested = false
-        @on_quit = on_quit # Optional callback when user quits
+        @on_quit = on_quit   # Callback when user explicitly quits (q/Q) - kills pipeline
+        @on_close = on_close # Callback when HUD closes without quitting (Ctrl+C) - pipeline continues
 
         # Calculate layout (2-column split)
         calculate_layout
@@ -203,25 +204,31 @@ module Minigun
         end
       end
 
-      def handle_input
-        key = Keyboard.read_nonblocking
+      def handle_input(key = nil)
+        key ||= Keyboard.read_nonblocking
         return unless key
 
         # If help is showing, any key closes it (except for toggling help again)
         if @show_help && key != 'h' && key != 'H' && key != '?'
           @show_help = false
-          # q still quits even when help is shown
-          if ['q', 'Q', "\u0003"].include?(key)
+          # q/Ctrl+C still exits even when help is shown
+          if %w[q Q].include?(key)
             @running = false
             @on_quit&.call
+          elsif key == "\u0003" # Ctrl+C just closes HUD
+            @running = false
+            @on_close&.call
           end
           return
         end
 
         case key
-        when 'q', 'Q', "\u0003" # q, Q, or Ctrl+C
+        when 'q', 'Q' # Explicit quit - kills pipeline
           @running = false
-          @on_quit&.call # Notify that user requested quit
+          @on_quit&.call
+        when "\u0003" # Ctrl+C - close HUD only, pipeline continues
+          @running = false
+          @on_close&.call
 
         when ' ' # Space - pause/resume
           @paused = !@paused

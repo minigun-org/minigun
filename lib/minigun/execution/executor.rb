@@ -14,6 +14,8 @@ module Minigun
 
       def initialize(stage_ctx)
         @stage_ctx = stage_ctx
+        @shutdown_requested = false
+        @force_shutdown = false
       end
 
       # Execute the actual stage logic using this executor's strategy
@@ -24,6 +26,23 @@ module Minigun
       # @param output_queue [Queue] Output queue for results
       def execute_stage(_stage, _user_context, _input_queue, _output_queue)
         raise NotImplementedError.new("#{self.class}#execute_stage must be implemented")
+      end
+
+      # Request graceful shutdown - let current work complete
+      def request_shutdown
+        @shutdown_requested = true
+      end
+
+      # Request immediate forced shutdown - kill everything
+      def force_shutdown
+        @force_shutdown = true
+        @shutdown_requested = true
+        shutdown
+      end
+
+      # Check if shutdown has been requested
+      def shutdown_requested?
+        @shutdown_requested
       end
 
       # Shutdown and cleanup resources
@@ -52,6 +71,7 @@ module Minigun
 
       def execute_stage(stage, user_context, input_queue, output_queue)
         wait_for_slot
+        return if shutdown_requested?
 
         thread = Thread.new do
           stage.execute(user_context, input_queue, output_queue, @stage_ctx.stage_stats)
@@ -61,6 +81,16 @@ module Minigun
 
         @mutex.synchronize { @active_threads << thread }
         thread.value # Wait for completion
+      end
+
+      def force_shutdown
+        @force_shutdown = true
+        @shutdown_requested = true
+        # Kill all threads immediately
+        @mutex.synchronize { @active_threads.dup }.each do |thread|
+          thread.kill if thread.alive?
+        end
+        @active_threads.clear
       end
 
       def shutdown
@@ -74,6 +104,7 @@ module Minigun
 
       def wait_for_slot
         loop do
+          return if shutdown_requested?
           return if @mutex.synchronize { @active_threads.size } < @max_size
 
           sleep 0.01
@@ -217,6 +248,9 @@ module Minigun
 
         # Main loop: fork a process for each item as it arrives
         loop do
+          # Check for shutdown
+          break if shutdown_requested?
+
           # Reap any completed child processes (non-blocking)
           reap_completed_forks
 
@@ -238,6 +272,18 @@ module Minigun
           # Small sleep to avoid busy waiting
           sleep 0.001 if current_active_count > 0
         end
+      end
+
+      def force_shutdown
+        @force_shutdown = true
+        @shutdown_requested = true
+        # Kill all child processes immediately with SIGKILL
+        @mutex.synchronize { @active_forks.keys.dup }.each do |pid|
+          Process.kill('KILL', pid)
+        rescue StandardError
+          nil
+        end
+        @active_forks.clear
       end
 
       def shutdown
@@ -409,6 +455,26 @@ module Minigun
           distribute_work(input_queue, output_queue)
         ensure
           shutdown
+        end
+      end
+
+      def force_shutdown
+        @force_shutdown = true
+        @shutdown_requested = true
+        @mutex.synchronize do
+          @worker_monitor.request_shutdown
+          # Kill all workers immediately with SIGKILL
+          @workers.each do |worker|
+            Process.kill('KILL', worker[:pid])
+          rescue StandardError
+            nil
+          end
+          @workers.clear
+
+          # Unregister pipes from task tracking
+          task = @stage_ctx.stage.task
+          task.unregister_ipc_pipes(@my_pipes)
+          @my_pipes.clear
         end
       end
 
@@ -804,6 +870,8 @@ module Minigun
         super(stage_ctx)
         @max_size = max_size || 5
         @pool_timeout = pool_timeout
+        @barrier = nil
+        @async_task = nil
 
         return if Minigun::Platform.fibers?
 
@@ -811,38 +879,58 @@ module Minigun
       end
 
       def execute_stage(stage, user_context, input_queue, output_queue)
+        return if shutdown_requested?
+
         # Run within Sync reactor (blocks until all fibers complete)
         Sync do |task|
+          @async_task = task
           semaphore = Async::Semaphore.new(@max_size)
-          barrier = Async::Barrier.new(parent: semaphore)
+          @barrier = Async::Barrier.new(parent: semaphore)
 
           # Process items concurrently with semaphore limiting
           loop do
+            break if shutdown_requested?
+
             item = input_queue.pop
             break if item.is_a?(Minigun::EndOfStage)
 
             # Spawn fiber for each item (semaphore limits concurrency)
-            barrier.async do
+            @barrier.async do
               process_item(stage, user_context, item, output_queue)
             end
           end
 
           # Wait for all fibers to complete (with optional timeout)
-          if @pool_timeout
-            task.with_timeout(@pool_timeout) do
-              barrier.wait
+          unless shutdown_requested?
+            if @pool_timeout
+              task.with_timeout(@pool_timeout) do
+                @barrier.wait
+              end
+            else
+              @barrier.wait
             end
-          else
-            barrier.wait
           end
         rescue Async::TimeoutError
           Minigun.logger.error "[Stage:#{@stage_ctx.stage.name}] Fiber pool timeout after #{@pool_timeout}s"
-          barrier.stop # Cancel remaining fibers
+          @barrier&.stop # Cancel remaining fibers
+        ensure
+          @barrier = nil
+          @async_task = nil
         end
       end
 
+      def force_shutdown
+        @force_shutdown = true
+        @shutdown_requested = true
+        # Stop all fibers immediately
+        @barrier&.stop
+        @async_task&.stop
+      end
+
       def shutdown
+        @shutdown_requested = true
         # Fibers are automatically cleaned up when Sync block exits
+        # The shutdown_requested flag will cause the loop to exit gracefully
       end
 
       private
@@ -900,6 +988,8 @@ module Minigun
       end
 
       def execute_stage(stage, user_context, input_queue, output_queue)
+        return if shutdown_requested?
+
         if @fallback
           Minigun.logger.warn '[Minigun] Ractors not available (requires Ruby 4.0+), falling back to thread pool'
           return @fallback.execute_stage(stage, user_context, input_queue, output_queue)
@@ -925,6 +1015,30 @@ module Minigun
         ensure
           shutdown
         end
+      end
+
+      def force_shutdown
+        @force_shutdown = true
+        @shutdown_requested = true
+
+        # If using fallback, delegate to it
+        if @fallback
+          @fallback.force_shutdown
+          return
+        end
+
+        # Forcefully terminate all workers
+        @workers.each do |worker|
+          worker.send(:shutdown)
+        rescue Ractor::ClosedError
+          # Already closed
+        end
+
+        # Close the result port to unblock collector thread
+        @result_port&.close
+        @result_port = nil
+
+        @workers.clear
       end
 
       def shutdown
@@ -1062,6 +1176,8 @@ module Minigun
 
         # Distribute items round-robin to workers
         loop do
+          break if shutdown_requested?
+
           item = input_queue.pop
 
           if item.is_a?(Minigun::EndOfStage)
@@ -1074,9 +1190,14 @@ module Minigun
           worker_index += 1
         end
 
-        # Wait for all pending items to complete
-        mutex.synchronize do
-          done_cv.wait(mutex) until pending_count <= 0
+        # Mark as all sent if we exited due to shutdown
+        mutex.synchronize { all_sent = true } if shutdown_requested?
+
+        # Wait for all pending items to complete (unless force shutdown)
+        unless @force_shutdown
+          mutex.synchronize do
+            done_cv.wait(mutex) until pending_count <= 0
+          end
         end
 
         # Signal collector to stop and wait
@@ -1133,6 +1254,8 @@ module Minigun
       end
 
       def execute_stage(stage, _user_context, input_queue, output_queue)
+        return if shutdown_requested?
+
         if @direct_mode
           execute_direct_mode(stage, input_queue, output_queue)
         else
@@ -1146,6 +1269,14 @@ module Minigun
         else
           shutdown_coordinator_mode
         end
+      end
+
+      def force_shutdown
+        @force_shutdown = true
+        @shutdown_requested = true
+        # Force shutdown uses the same shutdown methods but the flag allows
+        # workers to be terminated more aggressively
+        shutdown
       end
 
       private
