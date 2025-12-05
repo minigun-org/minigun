@@ -30,7 +30,7 @@ module Minigun
 
       # Cluster barrier for coordinating multiple cluster stages
       # Ensures all cluster stages have workers before any starts distributing
-      @cluster_barrier = Cluster::ClusterBarrier.new
+      @cluster_barrier = Cluster::Barrier.new
 
       # Root pipeline - all stages and nested pipelines live here
       @root_pipeline = root_pipeline || Pipeline.new(:default, self, nil, @config)

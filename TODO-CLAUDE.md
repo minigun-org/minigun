@@ -50,6 +50,7 @@ plan based on the current codebase state and TODOS.md.
 - [X] Minigun.task do
 - [X] **Flush Timers**
   - [X] Time-based batch flushing
+- [ ] Queue classes -- consolidate basic, targetting, demand aware, IPC, etc.
 - [X] Demand (see polyphony example)
 - [X] Clustering basic implementation
 - [X] Cluster -- Jepsen tests, handle network partitions, etc. "At least once" vs "At most once", guaranteed delivery

@@ -6,7 +6,7 @@ module Minigun
     # Ensures all cluster stages have workers connected before any starts distributing
     #
     # Usage:
-    #   barrier = ClusterBarrier.new
+    #   barrier = Barrier.new
     #
     #   # Each cluster stage registers when created
     #   barrier.register(:preprocess)
@@ -19,7 +19,7 @@ module Minigun
     #   barrier.ready(:heavy_compute)  # blocks until all ready
     #   barrier.ready(:postprocess)  # releases all
     #
-    class ClusterBarrier
+    class Barrier
       def initialize
         @mutex = Mutex.new
         @cv = ConditionVariable.new
@@ -33,7 +33,7 @@ module Minigun
       def register(stage_name)
         @mutex.synchronize do
           @registered.add(stage_name.to_sym)
-          Minigun.logger.debug "[ClusterBarrier] Registered stage :#{stage_name} (#{@registered.size} total)"
+          Minigun.logger.debug "[Cluster::Barrier] Registered stage :#{stage_name} (#{@registered.size} total)"
         end
       end
 
@@ -47,12 +47,12 @@ module Minigun
           stage_sym = stage_name.to_sym
           @ready_stages.add(stage_sym)
 
-          Minigun.logger.debug "[ClusterBarrier] Stage :#{stage_name} ready (#{@ready_stages.size}/#{@registered.size})"
+          Minigun.logger.debug "[Cluster::Barrier] Stage :#{stage_name} ready (#{@ready_stages.size}/#{@registered.size})"
 
           if @ready_stages.size >= @registered.size
             # All stages ready - release the barrier
             @released = true
-            Minigun.logger.info "[ClusterBarrier] All #{@registered.size} cluster stages ready, releasing barrier"
+            Minigun.logger.info "[Cluster::Barrier] All #{@registered.size} cluster stages ready, releasing barrier"
             @cv.broadcast
             return true
           end
