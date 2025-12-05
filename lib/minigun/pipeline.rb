@@ -43,6 +43,11 @@ module Minigun
 
       # Statistics tracking
       @stats = stats # Will be initialized in run() if nil
+
+      # Shutdown state - initialized to false, may be updated by run() or request_shutdown()
+      @shutdown_requested = false
+      @force_shutdown = false
+      @runner = nil
     end
 
     # Get the root pipeline (top-level pipeline in the hierarchy)
@@ -342,12 +347,12 @@ module Minigun
 
     # Check if shutdown has been requested
     def shutdown_requested?
-      @shutdown_requested || @runner&.shutdown_requested?
+      @shutdown_requested || @runner&.shutdown_requested? || false
     end
 
     # Check if force shutdown has been requested
     def force_shutdown?
-      @force_shutdown || @runner&.force_shutdown?
+      @force_shutdown || @runner&.force_shutdown? || false
     end
 
     # Main pipeline execution logic

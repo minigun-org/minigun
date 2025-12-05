@@ -399,6 +399,152 @@ RSpec.describe 'Graceful Shutdown' do
       executor.request_shutdown
       expect(executor.shutdown_requested?).to be true
     end
+
+    it 'IpcForkPoolExecutor responds to shutdown requests', :skip_on_windows do
+      config = { max_threads: 1, max_processes: 1 }
+      task = Minigun::Task.new(config: config)
+      pipeline = task.root_pipeline
+      stage = Minigun::ConsumerStage.new(:test, pipeline, proc {}, {})
+
+      stage_ctx = Minigun::StageContext.new(
+        stage: stage,
+        dag: pipeline.dag,
+        runtime_edges: {},
+        stage_stats: nil
+      )
+
+      executor = Minigun::Execution::IpcForkPoolExecutor.new(stage_ctx, max_size: 2)
+
+      expect(executor.shutdown_requested?).to be false
+      executor.request_shutdown
+      expect(executor.shutdown_requested?).to be true
+    end
+
+    it 'FiberPoolExecutor responds to shutdown requests', :skip_unless_async do
+      config = { max_threads: 1, max_processes: 1 }
+      task = Minigun::Task.new(config: config)
+      pipeline = task.root_pipeline
+      stage = Minigun::ConsumerStage.new(:test, pipeline, proc {}, {})
+
+      stage_ctx = Minigun::StageContext.new(
+        stage: stage,
+        dag: pipeline.dag,
+        runtime_edges: {},
+        stage_stats: nil
+      )
+
+      executor = Minigun::Execution::FiberPoolExecutor.new(stage_ctx, max_size: 2)
+
+      expect(executor.shutdown_requested?).to be false
+      executor.request_shutdown
+      expect(executor.shutdown_requested?).to be true
+    end
+
+    it 'FiberPoolExecutor supports force_shutdown', :skip_unless_async do
+      config = { max_threads: 1, max_processes: 1 }
+      task = Minigun::Task.new(config: config)
+      pipeline = task.root_pipeline
+      stage = Minigun::ConsumerStage.new(:test, pipeline, proc {}, {})
+
+      stage_ctx = Minigun::StageContext.new(
+        stage: stage,
+        dag: pipeline.dag,
+        runtime_edges: {},
+        stage_stats: nil
+      )
+
+      executor = Minigun::Execution::FiberPoolExecutor.new(stage_ctx, max_size: 2)
+
+      expect(executor.shutdown_requested?).to be false
+      executor.force_shutdown
+      expect(executor.shutdown_requested?).to be true
+    end
+
+    it 'RactorPoolExecutor responds to shutdown requests' do
+      config = { max_threads: 1, max_processes: 1 }
+      task = Minigun::Task.new(config: config)
+      pipeline = task.root_pipeline
+      stage = Minigun::ConsumerStage.new(:test, pipeline, proc {}, {})
+
+      stage_ctx = Minigun::StageContext.new(
+        stage: stage,
+        dag: pipeline.dag,
+        runtime_edges: {},
+        stage_stats: nil
+      )
+
+      executor = Minigun::Execution::RactorPoolExecutor.new(stage_ctx, max_size: 2)
+
+      expect(executor.shutdown_requested?).to be false
+      executor.request_shutdown
+      expect(executor.shutdown_requested?).to be true
+    end
+
+    it 'RactorPoolExecutor supports force_shutdown' do
+      config = { max_threads: 1, max_processes: 1 }
+      task = Minigun::Task.new(config: config)
+      pipeline = task.root_pipeline
+      stage = Minigun::ConsumerStage.new(:test, pipeline, proc {}, {})
+
+      stage_ctx = Minigun::StageContext.new(
+        stage: stage,
+        dag: pipeline.dag,
+        runtime_edges: {},
+        stage_stats: nil
+      )
+
+      executor = Minigun::Execution::RactorPoolExecutor.new(stage_ctx, max_size: 2)
+
+      expect(executor.shutdown_requested?).to be false
+      executor.force_shutdown
+      expect(executor.shutdown_requested?).to be true
+    end
+
+    it 'ClusterPoolExecutor responds to shutdown requests' do
+      config = { max_threads: 1, max_processes: 1 }
+      task = Minigun::Task.new(config: config)
+      pipeline = task.root_pipeline
+      stage = Minigun::ConsumerStage.new(:test, pipeline, proc {}, {})
+
+      stage_ctx = Minigun::StageContext.new(
+        stage: stage,
+        dag: pipeline.dag,
+        runtime_edges: {},
+        stage_stats: nil
+      )
+
+      executor = Minigun::Execution::ClusterPoolExecutor.new(
+        stage_ctx,
+        worker_uris: ['druby://127.0.0.1:9999'] # dummy URI for test
+      )
+
+      expect(executor.shutdown_requested?).to be false
+      executor.request_shutdown
+      expect(executor.shutdown_requested?).to be true
+    end
+
+    it 'ClusterPoolExecutor supports force_shutdown' do
+      config = { max_threads: 1, max_processes: 1 }
+      task = Minigun::Task.new(config: config)
+      pipeline = task.root_pipeline
+      stage = Minigun::ConsumerStage.new(:test, pipeline, proc {}, {})
+
+      stage_ctx = Minigun::StageContext.new(
+        stage: stage,
+        dag: pipeline.dag,
+        runtime_edges: {},
+        stage_stats: nil
+      )
+
+      executor = Minigun::Execution::ClusterPoolExecutor.new(
+        stage_ctx,
+        worker_uris: ['druby://127.0.0.1:9999'] # dummy URI for test
+      )
+
+      expect(executor.shutdown_requested?).to be false
+      executor.force_shutdown
+      expect(executor.shutdown_requested?).to be true
+    end
   end
 
   describe 'backwards compatibility' do

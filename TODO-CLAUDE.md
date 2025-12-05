@@ -24,6 +24,11 @@ plan based on the current codebase state and TODOS.md.
   - [X] `batch` - create batches from stream
   - [X] `debatch` - flatten batches back to stream
   - [X] `rebatch` - change batch size
+- [X] **Graceful shutdown**
+  - [X] signal trapping, child state management/killing
+  - [X] Kill child threads/forks/ractors
+  - [X] Ctrl+C once to start graceful shutdown (send end signals from all producers)
+  - [X] Press Ctrl+C again to force quit.
 - [X] Routing strategies (inspired by GenStage)
   - [X] DemandRouter (default): Dispatches events to the consumer with the highest outstanding demand, ensuring the busiest consumer gets priority.
   - [X] PartitionRouter: Distributes events to a fixed number of consumers based on a hash function, useful for maintaining order or state per partition.
@@ -60,7 +65,6 @@ plan based on the current codebase state and TODOS.md.
   - [ ] Cluster::Barrier -- consolidate registry?
 - [ ] demand: true/false at the pipeline level (carry to nesting), e.g. a nested `pipeline(demand: true) do` macro
 - [ ] Demand and custom routing
-- [ ] If fork not supported, IPC should spawn new ruby processes
 - [X] Demand with Clustering
 - [X] Genstage --> names required?
 - [X] Ractors on Ruby 3.5
@@ -76,11 +80,6 @@ plan based on the current codebase state and TODOS.md.
   - [ ] Custom Stage?
   - [ ] Alias in_ipc_forks to in_processes
   - [ ] Support MINIGUN_LOG_LEVEL var
-- [ ] **Graceful shutdown**
-  - [ ] signal trapping, child state management/killing
-  - [ ] Kill child threads/forks/ractors
-  - [ ] Ctrl+C once to start graceful shutdown (send end signals from all producers)
-  - [ ] Press Ctrl+C again to force quit.
 - [ ] QoL Improvements
   - [ ] to_mermaid -- including at end of task, to show dynamic routing with dotted lines
   - [ ] to_text -- ASCII art drawing of tree to_diagram(format: :text), format: :mermaid
@@ -97,6 +96,8 @@ plan based on the current codebase state and TODOS.md.
 
 ### Phase 2: Process Management
 
+- [ ] If fork not supported, IPC should spawn new ruby processes
+  - [ ] Check usage of Minigun::Process.fork? in tests
 - [ ] **Process Management**
   - [ ] at_least_once with COW
   - [ ] at_least_once with IPC

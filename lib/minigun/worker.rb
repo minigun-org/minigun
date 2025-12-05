@@ -45,12 +45,12 @@ module Minigun
 
     # Check if shutdown has been requested
     def shutdown_requested?
-      @shutdown_requested || @pipeline&.shutdown_requested?
+      @shutdown_requested || @pipeline&.shutdown_requested? || false
     end
 
     # Check if force shutdown has been requested
     def force_shutdown?
-      @force_shutdown || @pipeline&.force_shutdown?
+      @force_shutdown || @pipeline&.force_shutdown? || false
     end
 
     # Start the worker thread
