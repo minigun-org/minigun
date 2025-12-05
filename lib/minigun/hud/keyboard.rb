@@ -35,7 +35,7 @@ module Minigun
 
       # Key mappings
       KEYS = {
-        quit: ['q', 'Q'],           # q, Q - quit and kill pipeline
+        quit: %w[q Q], # q, Q - quit and kill pipeline
         close: ["\u0003"],          # Ctrl+C - close HUD only, pipeline continues
         pause: [' '],               # Space
         help: ['h', 'H', '?'],

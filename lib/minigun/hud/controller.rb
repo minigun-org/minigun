@@ -212,7 +212,7 @@ module Minigun
         if @show_help && key != 'h' && key != 'H' && key != '?'
           @show_help = false
           # q/Ctrl+C still exits even when help is shown
-          if ['q', 'Q'].include?(key)
+          if %w[q Q].include?(key)
             @running = false
             @on_quit&.call
           elsif key == "\u0003" # Ctrl+C just closes HUD

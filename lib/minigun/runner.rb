@@ -105,7 +105,7 @@ module Minigun
     end
 
     def shutdown_gracefully(signal)
-      # Note: This runs in trap context, so we can't use mutex.
+      # NOTE: This runs in trap context, so we can't use mutex.
       # Use atomic operations instead.
       case @shutdown_state
       when :running

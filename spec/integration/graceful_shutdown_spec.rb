@@ -63,7 +63,7 @@ RSpec.describe 'Graceful Shutdown' do
           producer :source do |output|
             20.times do |i|
               @mutex.synchronize { @items_attempted << i }
-              output << i  # After shutdown, this becomes a no-op
+              output << i # After shutdown, this becomes a no-op
               output.shutdown! if i == 4
             end
           end
@@ -109,7 +109,7 @@ RSpec.describe 'Graceful Shutdown' do
         end
       end
 
-      callback = ->(requested) {
+      callback = lambda { |requested|
         shutdown_checked = true
         was_requested = requested
       }
@@ -124,8 +124,6 @@ RSpec.describe 'Graceful Shutdown' do
 
   describe 'ConsumerStage shutdown' do
     it 'consumers can check shutdown state via output.shutdown?' do
-      shutdown_seen = false
-
       task_class = Class.new do
         include Minigun::DSL
 
@@ -217,6 +215,7 @@ RSpec.describe 'Graceful Shutdown' do
           producer :source do |output|
             20.times do |i|
               break if output.shutdown?
+
               output << i
               output.shutdown! if i == 5
             end
@@ -253,6 +252,7 @@ RSpec.describe 'Graceful Shutdown' do
             begin
               # Manually check and raise (simulating check_shutdown! behavior)
               raise Minigun::Errors::ShutdownRequested if output.shutdown?
+
               10.times { |i| output << i }
             rescue Minigun::Errors::ShutdownRequested => e
               @flag_ref[:raised] = true
@@ -314,8 +314,6 @@ RSpec.describe 'Graceful Shutdown' do
     end
 
     it 'force shutdown kills threads immediately (no code after shutdown! runs)' do
-      code_after_shutdown_ran = false
-
       task_class = Class.new do
         include Minigun::DSL
 

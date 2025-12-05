@@ -353,7 +353,7 @@ module Minigun
     def execute(context, input_queue, output_queue, stage_stats, stage_ctx: nil) # rubocop:disable Lint/UnusedMethodArgument
       # Consumer stages pop from input_queue and process items
       loop do
-        # Note: For graceful shutdown, consumers continue processing items already
+        # NOTE: For graceful shutdown, consumers continue processing items already
         # in the queue until EndOfStage arrives. Producers stop producing and
         # EndOfStage signals propagate through naturally.
 
@@ -444,7 +444,7 @@ module Minigun
 
     # Override execute to buffer items and emit batches via output queue
     # When max_wait is set, uses time-based flushing in addition to size-based
-    def execute(context, input_queue, output_queue, stage_stats, stage_ctx: nil) # rubocop:disable Lint/UnusedMethodArgument
+    def execute(context, input_queue, output_queue, stage_stats)
       @last_flush_time = Time.now
 
       if @max_wait
@@ -622,7 +622,7 @@ module Minigun
       @mutex = Mutex.new
     end
 
-    def execute(_context, input_queue, output_queue, stage_stats, stage_ctx: nil)
+    def execute(_context, input_queue, output_queue, stage_stats)
       loop do
         item = input_queue.pop
         break if item.is_a?(EndOfStage)
