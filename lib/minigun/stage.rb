@@ -48,6 +48,7 @@ module Minigun
       @pipeline = pipeline
       @block = block
       @options = options
+      @shutdown_requested = false
 
       # Auto-generate name if not provided (for unnamed stages)
       # Use "_" prefix + 8 char random hex
@@ -56,6 +57,22 @@ module Minigun
 
       # Register stage with the task's stage_registry (if available)
       task&.stage_registry&.register(@pipeline, self)
+    end
+
+    # Request graceful shutdown of this stage
+    def request_shutdown
+      @shutdown_requested = true
+    end
+
+    # Check if shutdown has been requested (for use in loops)
+    def shutdown_requested?
+      @shutdown_requested ||= @pipeline&.shutdown_requested?
+    end
+
+    # Raise ShutdownRequested if shutdown has been requested
+    # Call this periodically in long-running operations
+    def check_shutdown!
+      raise Errors::ShutdownRequested if shutdown_requested?
     end
 
     def task
@@ -309,7 +326,11 @@ module Minigun
 
     def execute(context, _input_queue, output_queue, _stage_stats)
       enumerable = resolve_source(context)
-      enumerable.each { |item| output_queue << item }
+      enumerable.each do |item|
+        # Check for shutdown before processing each item
+        check_shutdown!
+        output_queue << item
+      end
     end
 
     private
@@ -348,6 +369,9 @@ module Minigun
 
           # Record per-item latency for bottleneck detection
           stage_stats&.record_latency(Time.now - start_time)
+        rescue Errors::ShutdownRequested
+          # Re-raise shutdown to exit the loop
+          raise
         rescue StandardError => e
           # Log item-level errors but continue processing
           Minigun.logger.error "[Stage:#{name}] Error processing item: #{e.message}"

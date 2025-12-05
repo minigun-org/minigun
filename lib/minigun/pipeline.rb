@@ -291,10 +291,11 @@ module Minigun
     end
 
     # Run this pipeline
-    def run(context, job_id: nil)
+    def run(context, job_id: nil, runner: nil)
       @context = context
       @job_start = Time.now
       @job_id = job_id
+      @runner = runner
       @shutdown_requested = false
       @force_shutdown = false
 
