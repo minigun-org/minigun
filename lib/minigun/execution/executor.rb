@@ -893,11 +893,10 @@ module Minigun
 
             item = input_queue.pop
             break if item.is_a?(Minigun::EndOfStage)
-            break if shutdown_requested?
 
             # Spawn fiber for each item (semaphore limits concurrency)
             @barrier.async do
-              process_item(stage, user_context, item, output_queue) unless shutdown_requested?
+              process_item(stage, user_context, item, output_queue)
             end
           end
 
