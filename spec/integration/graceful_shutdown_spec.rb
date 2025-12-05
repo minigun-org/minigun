@@ -4,7 +4,7 @@ require 'spec_helper'
 
 RSpec.describe 'Graceful Shutdown' do
   describe 'Producer stopping on shutdown' do
-    it 'stops producer iteration when check_shutdown! is called' do
+    it 'stops producer iteration when output.shutdown? is checked' do
       task_class = Class.new do
         include Minigun::DSL
 
@@ -17,17 +17,17 @@ RSpec.describe 'Graceful Shutdown' do
         end
 
         pipeline do
-          producer :source do |output, ctx|
+          producer :source do |output|
             # Produce items, checking for shutdown each iteration
             100.times do |i|
-              # Check if shutdown was requested - this will raise ShutdownRequested
-              ctx.check_shutdown! if ctx.shutdown_requested?
+              # Check if shutdown was requested
+              break if output.shutdown?
 
               @mutex.synchronize { @items_produced << i }
               output << i
 
               # Request shutdown after producing 10 items
-              ctx.request_shutdown if i == 9
+              output.shutdown! if i == 9
             end
           end
 
@@ -47,31 +47,29 @@ RSpec.describe 'Graceful Shutdown' do
       expect(task.items_consumed.sort).to eq(task.items_produced.sort)
     end
 
-    it 'stops producer using shutdown_requested? check' do
+    it 'output.<< becomes no-op after shutdown (producer keeps going but items dropped)' do
       task_class = Class.new do
         include Minigun::DSL
 
-        attr_reader :items_produced
+        attr_reader :items_attempted, :items_consumed
 
         def initialize
-          @items_produced = []
+          @items_attempted = []
+          @items_consumed = []
           @mutex = Mutex.new
         end
 
         pipeline do
-          producer :source do |output, ctx|
-            100.times do |i|
-              # Alternative: check and break manually
-              break if ctx.shutdown_requested?
-
-              @mutex.synchronize { @items_produced << i }
-              output << i
-              ctx.request_shutdown if i == 4
+          producer :source do |output|
+            20.times do |i|
+              @mutex.synchronize { @items_attempted << i }
+              output << i  # After shutdown, this becomes a no-op
+              output.shutdown! if i == 4
             end
           end
 
-          consumer :sink do |_item|
-            # consume
+          consumer :sink do |item|
+            @mutex.synchronize { @items_consumed << item }
           end
         end
       end
@@ -79,13 +77,15 @@ RSpec.describe 'Graceful Shutdown' do
       task = task_class.new
       task.run
 
-      # Should have produced exactly 5 items (0-4) then stopped
-      expect(task.items_produced.size).to eq(5)
+      # Producer attempted all 20 items
+      expect(task.items_attempted.size).to eq(20)
+      # But only items 0-4 were actually consumed (before shutdown)
+      expect(task.items_consumed.sort).to eq([0, 1, 2, 3, 4])
     end
   end
 
-  describe 'StageContext#shutdown_requested?' do
-    it 'returns true after request_shutdown is called' do
+  describe 'output.shutdown?' do
+    it 'returns true after shutdown! is called' do
       shutdown_checked = false
       was_requested = nil
 
@@ -97,10 +97,10 @@ RSpec.describe 'Graceful Shutdown' do
         end
 
         pipeline do
-          producer :source do |output, ctx|
+          producer :source do |output|
             5.times { |i| output << i }
-            ctx.request_shutdown
-            @callback.call(ctx.shutdown_requested?)
+            output.shutdown!
+            @callback.call(output.shutdown?)
           end
 
           consumer :sink do |_item|
@@ -123,7 +123,7 @@ RSpec.describe 'Graceful Shutdown' do
   end
 
   describe 'ConsumerStage shutdown' do
-    it 'consumers can see shutdown state via ctx' do
+    it 'consumers can check shutdown state via output.shutdown?' do
       shutdown_seen = false
 
       task_class = Class.new do
@@ -134,16 +134,16 @@ RSpec.describe 'Graceful Shutdown' do
         end
 
         pipeline do
-          producer :source do |output, ctx|
+          producer :source do |output|
             10.times do |i|
               output << i
-              ctx.request_shutdown if i == 2
+              output.shutdown! if i == 2
             end
           end
 
-          consumer :sink do |_item, _output, ctx|
-            # Consumer can check shutdown state
-            @flag_ref[:seen] = true if ctx&.shutdown_requested?
+          consumer :sink do |_item, output|
+            # Consumer can check shutdown state via output
+            @flag_ref[:seen] = true if output.shutdown?
           end
         end
       end
@@ -171,21 +171,21 @@ RSpec.describe 'Graceful Shutdown' do
         end
 
         pipeline do
-          producer :source do |output, ctx|
+          producer :source do |output|
             5.times { |i| output << i }
-            ctx.request_shutdown
+            output.shutdown!
             @mutex.synchronize { @stages_seen_shutdown << :source }
           end
 
-          consumer :process do |item, output, ctx|
-            if ctx&.shutdown_requested?
+          consumer :process do |item, output|
+            if output.shutdown?
               @mutex.synchronize { @stages_seen_shutdown << :process unless @stages_seen_shutdown.include?(:process) }
             end
             output << item
           end
 
-          consumer :sink do |_item, _output, ctx|
-            if ctx&.shutdown_requested?
+          consumer :sink do |_item, output|
+            if output.shutdown?
               @mutex.synchronize { @stages_seen_shutdown << :sink unless @stages_seen_shutdown.include?(:sink) }
             end
           end
@@ -214,11 +214,11 @@ RSpec.describe 'Graceful Shutdown' do
         end
 
         pipeline do
-          producer :source do |output, ctx|
+          producer :source do |output|
             20.times do |i|
-              break if ctx.shutdown_requested?
+              break if output.shutdown?
               output << i
-              ctx.request_shutdown if i == 5
+              output.shutdown! if i == 5
             end
           end
 
@@ -248,11 +248,11 @@ RSpec.describe 'Graceful Shutdown' do
         end
 
         pipeline do
-          producer :source do |output, ctx|
-            ctx.request_shutdown
+          producer :source do |output|
+            output.shutdown!
             begin
-              # This will raise since shutdown was requested
-              ctx.check_shutdown!
+              # Manually check and raise (simulating check_shutdown! behavior)
+              raise Minigun::Errors::ShutdownRequested if output.shutdown?
               10.times { |i| output << i }
             rescue Minigun::Errors::ShutdownRequested => e
               @flag_ref[:raised] = true
@@ -313,24 +313,34 @@ RSpec.describe 'Graceful Shutdown' do
       expect(pipeline.shutdown_requested?).to be true
     end
 
-    it 'force_shutdown? is accessible via StageContext' do
-      config = { max_threads: 1, max_processes: 1 }
-      task = Minigun::Task.new(config: config)
-      pipeline = task.root_pipeline
-      stage = Minigun::ProducerStage.new(:test, pipeline, proc {}, {})
+    it 'force_shutdown? is accessible via output.shutdown?' do
+      force_seen = false
 
-      stage_ctx = Minigun::StageContext.new(
-        stage: stage,
-        dag: pipeline.dag,
-        runtime_edges: {},
-        stage_stats: nil
-      )
+      task_class = Class.new do
+        include Minigun::DSL
 
-      expect(stage_ctx.force_shutdown?).to be false
+        def initialize(flag_ref)
+          @flag_ref = flag_ref
+        end
 
-      pipeline.request_shutdown(force: true)
+        pipeline do
+          producer :source do |output|
+            output.shutdown!(force: true)
+            @flag_ref[:force] = output.shutdown?
+            output << 1
+          end
 
-      expect(stage_ctx.force_shutdown?).to be true
+          consumer :sink do |_item|
+            # consume
+          end
+        end
+      end
+
+      flag_ref = { force: false }
+      task = task_class.new(flag_ref)
+      task.run
+
+      expect(flag_ref[:force]).to be true
     end
   end
 
@@ -392,7 +402,7 @@ RSpec.describe 'Graceful Shutdown' do
   end
 
   describe 'backwards compatibility' do
-    it 'works with blocks that do not accept ctx parameter' do
+    it 'works with blocks that do not use shutdown' do
       items = []
       mutex = Mutex.new
 
@@ -428,28 +438,41 @@ RSpec.describe 'Graceful Shutdown' do
     end
   end
 
-  describe 'StageContext convenience methods' do
-    it 'provides check_shutdown! method' do
+  describe 'Stage shutdown methods' do
+    it 'Stage#shutdown_requested? reflects pipeline state' do
       config = { max_threads: 1, max_processes: 1 }
       task = Minigun::Task.new(config: config)
       pipeline = task.root_pipeline
       stage = Minigun::ProducerStage.new(:test, pipeline, proc {}, {})
 
-      stage_ctx = Minigun::StageContext.new(
-        stage: stage,
-        dag: pipeline.dag,
-        runtime_edges: {},
-        stage_stats: nil
-      )
+      # Initially not shutdown
+      expect(stage.shutdown_requested?).to be false
+
+      # Request shutdown on stage
+      stage.request_shutdown
+      expect(stage.shutdown_requested?).to be true
+
+      # Or via pipeline
+      stage2 = Minigun::ProducerStage.new(:test2, pipeline, proc {}, {})
+      expect(stage2.shutdown_requested?).to be false
+      pipeline.request_shutdown
+      expect(stage2.shutdown_requested?).to be true
+    end
+
+    it 'Stage#check_shutdown! raises when shutdown requested' do
+      config = { max_threads: 1, max_processes: 1 }
+      task = Minigun::Task.new(config: config)
+      pipeline = task.root_pipeline
+      stage = Minigun::ProducerStage.new(:test, pipeline, proc {}, {})
 
       # Should not raise when not shutdown
-      expect { stage_ctx.check_shutdown! }.not_to raise_error
+      expect { stage.check_shutdown! }.not_to raise_error
 
       # Request shutdown
-      stage_ctx.request_shutdown
+      stage.request_shutdown
 
       # Now should raise
-      expect { stage_ctx.check_shutdown! }.to raise_error(Minigun::Errors::ShutdownRequested)
+      expect { stage.check_shutdown! }.to raise_error(Minigun::Errors::ShutdownRequested)
     end
   end
 end

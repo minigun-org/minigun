@@ -4,6 +4,7 @@ require 'securerandom'
 
 module Minigun
   # Unified context for all stage execution (producers and workers)
+  # This is internal plumbing - not exposed to user blocks
   StageContext = Struct.new(
     # Common to all stages
     :stage,
@@ -33,32 +34,6 @@ module Minigun
 
     def root_pipeline
       pipeline&.root_pipeline
-    end
-
-    # --- Graceful Shutdown Support ---
-
-    # Request graceful shutdown of the pipeline
-    # @param force [Boolean] If true, forces immediate shutdown (kills processes/threads)
-    def request_shutdown(force: false)
-      root_pipeline&.request_shutdown(force: force)
-    end
-
-    # Check if shutdown has been requested
-    # @return [Boolean] true if shutdown was requested
-    def shutdown_requested?
-      root_pipeline&.shutdown_requested? || false
-    end
-
-    # Check if force shutdown has been requested
-    # @return [Boolean] true if force shutdown was requested
-    def force_shutdown?
-      root_pipeline&.force_shutdown? || false
-    end
-
-    # Raise ShutdownRequested if shutdown has been requested
-    # Call this periodically in long-running producer operations
-    def check_shutdown!
-      raise Errors::ShutdownRequested if shutdown_requested?
     end
   end
 
@@ -300,14 +275,9 @@ module Minigun
 
   # Producer stage - executes once, no input
   class ProducerStage < Stage
-    def execute(context, _input_queue, output_queue, _stage_stats, stage_ctx: nil)
+    def execute(context, _input_queue, output_queue, _stage_stats, stage_ctx: nil) # rubocop:disable Lint/UnusedMethodArgument
       if @block
-        # Pass stage_ctx as optional second parameter based on block arity
-        if @block.arity > 1 || @block.arity < -1
-          context.instance_exec(output_queue, stage_ctx, &@block)
-        else
-          context.instance_exec(output_queue, &@block)
-        end
+        context.instance_exec(output_queue, &@block)
       elsif respond_to?(:call)
         call_with_arity(output_queue, &output_queue.to_proc)
       end
@@ -380,12 +350,12 @@ module Minigun
 
   # Consumer/Processor stage - loops on input, processes items
   class ConsumerStage < Stage
-    def execute(context, input_queue, output_queue, stage_stats, stage_ctx: nil)
+    def execute(context, input_queue, output_queue, stage_stats, stage_ctx: nil) # rubocop:disable Lint/UnusedMethodArgument
       # Consumer stages pop from input_queue and process items
       loop do
         # Note: For graceful shutdown, consumers continue processing items already
-        # in the queue until EndOfStage arrives. Producers are responsible for
-        # stopping item generation and sending EndOfStage signals.
+        # in the queue until EndOfStage arrives. Producers stop producing and
+        # EndOfStage signals propagate through naturally.
 
         item = input_queue.pop
 
@@ -397,12 +367,7 @@ module Minigun
           start_time = Time.now if stage_stats
 
           if @block
-            # Pass stage_ctx as optional third parameter based on block arity
-            if @block.arity > 2 || @block.arity < -2
-              context.instance_exec(item, output_queue, stage_ctx, &@block)
-            else
-              context.instance_exec(item, output_queue, &@block)
-            end
+            context.instance_exec(item, output_queue, &@block)
           elsif respond_to?(:call)
             call_with_arity(item, output_queue, &output_queue.to_proc)
           end

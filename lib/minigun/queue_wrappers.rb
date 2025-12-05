@@ -48,8 +48,23 @@ module Minigun
       @to_cache = {}                         # Memoization cache for .to() results
     end
 
+    # Check if shutdown has been requested
+    # Producers can use this to exit early and save work
+    def shutdown?
+      @stage.root_pipeline&.shutdown_requested? || false
+    end
+
+    # Request graceful shutdown of the pipeline
+    # @param force [Boolean] If true, forces immediate shutdown
+    def shutdown!(force: false)
+      @stage.root_pipeline&.request_shutdown(force: force)
+    end
+
     # Send item to all downstream stages
+    # No-op after shutdown (silently drops items)
     def <<(item)
+      return self if shutdown?
+
       @downstream_queues.each { |queue| queue << item }
       @stage_stats&.increment_produced # Track in stats directly
       self
