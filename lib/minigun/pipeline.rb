@@ -274,8 +274,8 @@ module Minigun
     # Execute stage-specific hooks
     # stage_or_name can be Stage object or name
     def execute_stage_hooks(type, stage_or_name)
-      # REMOVE_THIS -- hooks should directly reference stage objects, not by name
-      # Get the stage name (hooks are keyed by name)
+      # Hooks are keyed by name (symbol) because they're registered during DSL evaluation
+      # before Stage objects exist. Accepts either Stage object or name for convenience.
       name = stage_or_name.is_a?(Stage) ? stage_or_name.name : stage_or_name
       hooks = @stage_hooks.dig(type, name) || []
       hooks.each { |h| @context.instance_exec(&h) }
@@ -342,12 +342,12 @@ module Minigun
 
     # Check if shutdown has been requested
     def shutdown_requested?
-      @shutdown_requested == true || @runner&.shutdown_requested? || false
+      @shutdown_requested || @runner&.shutdown_requested? || false
     end
 
     # Check if force shutdown has been requested
     def force_shutdown?
-      @force_shutdown == true || @runner&.force_shutdown? || false
+      @force_shutdown || @runner&.force_shutdown? || false
     end
 
     # Main pipeline execution logic

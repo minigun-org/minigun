@@ -166,6 +166,24 @@ module Minigun
       @pipe_writer = pipe_writer
       @stage_stats = stage_stats
       @target_stage = target_stage
+      @shutdown_requested = false
+    end
+
+    # IPC workers don't have direct access to pipeline state
+    # They receive :shutdown messages via the pipe instead
+    def shutdown?
+      @shutdown_requested
+    end
+
+    # Request shutdown by sending message to parent process
+    def shutdown!(force: false)
+      @shutdown_requested = true
+      begin
+        Marshal.dump({ type: :shutdown_request, force: force }, @pipe_writer)
+        @pipe_writer.flush
+      rescue IOError, Errno::EPIPE
+        # Pipe closed, parent already shutting down
+      end
     end
 
     def <<(item)
@@ -204,6 +222,24 @@ module Minigun
     def initialize(pipe_writer, stage_stats)
       @pipe_writer = pipe_writer
       @stage_stats = stage_stats
+      @shutdown_requested = false
+    end
+
+    # IPC workers don't have direct access to pipeline state
+    # They receive :shutdown messages via the pipe instead
+    def shutdown?
+      @shutdown_requested
+    end
+
+    # Request shutdown by sending message to parent process
+    def shutdown!(force: false)
+      @shutdown_requested = true
+      begin
+        Marshal.dump({ type: :shutdown_request, force: force }, @pipe_writer)
+        @pipe_writer.flush
+      rescue IOError, Errno::EPIPE
+        # Pipe closed, parent already shutting down
+      end
     end
 
     def <<(item)

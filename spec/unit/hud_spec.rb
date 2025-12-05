@@ -56,6 +56,12 @@ RSpec.describe Minigun::HUD do
       expect(Minigun::HUD::Keyboard.matches?('x', :quit)).to be false
     end
 
+    it 'matches Ctrl+C as close key (not quit)' do
+      # Ctrl+C is captured as \u0003 in raw mode and should close HUD, not kill pipeline
+      expect(Minigun::HUD::Keyboard.matches?("\u0003", :close)).to be true
+      expect(Minigun::HUD::Keyboard.matches?("\u0003", :quit)).to be false
+    end
+
     it 'matches pause key' do
       expect(Minigun::HUD::Keyboard.matches?(' ', :pause)).to be true
       expect(Minigun::HUD::Keyboard.matches?('p', :pause)).to be false
@@ -183,6 +189,74 @@ RSpec.describe Minigun::HUD do
     it 'can be stopped' do
       expect { controller.stop }.not_to raise_error
       expect(controller.running).to be false
+    end
+
+    describe 'Ctrl+C behavior' do
+      it 'Ctrl+C closes HUD and calls on_close callback (not on_quit)' do
+        quit_called = false
+        close_called = false
+
+        # Initialize pipeline for controller with both callbacks
+        pipeline.send(:_evaluate_pipeline_blocks!)
+        task = pipeline.instance_variable_get(:@_minigun_task)
+        pipe = task.root_pipeline
+        pipe.instance_variable_set(:@stats, Minigun::AggregatedStats.new(pipe, pipe.dag))
+
+        ctrl = Minigun::HUD::Controller.new(
+          pipe,
+          on_quit: -> { quit_called = true },
+          on_close: -> { close_called = true }
+        )
+
+        # Simulate Ctrl+C keypress by directly calling handle_input
+        ctrl.send(:handle_input, "\u0003")
+
+        expect(ctrl.running).to be false
+        expect(quit_called).to be false  # on_quit NOT called for Ctrl+C
+        expect(close_called).to be true  # on_close IS called for Ctrl+C
+      end
+
+      it 'q key calls on_quit callback (not on_close)' do
+        quit_called = false
+        close_called = false
+
+        # Initialize pipeline for controller with both callbacks
+        pipeline.send(:_evaluate_pipeline_blocks!)
+        task = pipeline.instance_variable_get(:@_minigun_task)
+        pipe = task.root_pipeline
+        pipe.instance_variable_set(:@stats, Minigun::AggregatedStats.new(pipe, pipe.dag))
+
+        ctrl = Minigun::HUD::Controller.new(
+          pipe,
+          on_quit: -> { quit_called = true },
+          on_close: -> { close_called = true }
+        )
+
+        # Simulate 'q' keypress
+        ctrl.send(:handle_input, 'q')
+
+        expect(ctrl.running).to be false
+        expect(quit_called).to be true   # on_quit IS called for 'q'
+        expect(close_called).to be false # on_close NOT called for 'q'
+      end
+
+      it 'Ctrl+C does NOT request pipeline shutdown' do
+        # Get reference to the pipeline
+        pipeline.send(:_evaluate_pipeline_blocks!)
+        task = pipeline.instance_variable_get(:@_minigun_task)
+        pipe = task.root_pipeline
+        pipe.instance_variable_set(:@stats, Minigun::AggregatedStats.new(pipe, pipe.dag))
+
+        ctrl = Minigun::HUD::Controller.new(pipe)
+
+        # Simulate Ctrl+C
+        ctrl.send(:handle_input, "\u0003")
+
+        # HUD should close
+        expect(ctrl.running).to be false
+        # But pipeline should NOT be in shutdown state
+        expect(pipe.shutdown_requested?).to be false
+      end
     end
   end
 
