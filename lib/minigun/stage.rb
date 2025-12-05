@@ -66,7 +66,7 @@ module Minigun
 
     # Check if shutdown has been requested (for use in loops)
     def shutdown_requested?
-      @shutdown_requested ||= @pipeline&.shutdown_requested?
+      @shutdown_requested || @pipeline&.shutdown_requested?
     end
 
     # Raise ShutdownRequested if shutdown has been requested

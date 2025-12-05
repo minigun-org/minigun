@@ -342,12 +342,12 @@ module Minigun
 
     # Check if shutdown has been requested
     def shutdown_requested?
-      @shutdown_requested || @runner&.shutdown_requested? || false
+      @shutdown_requested || @runner&.shutdown_requested?
     end
 
     # Check if force shutdown has been requested
     def force_shutdown?
-      @force_shutdown || @runner&.force_shutdown? || false
+      @force_shutdown || @runner&.force_shutdown?
     end
 
     # Main pipeline execution logic
