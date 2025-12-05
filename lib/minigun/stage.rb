@@ -34,6 +34,32 @@ module Minigun
     def root_pipeline
       pipeline&.root_pipeline
     end
+
+    # --- Graceful Shutdown Support ---
+
+    # Request graceful shutdown of the pipeline
+    # @param force [Boolean] If true, forces immediate shutdown (kills processes/threads)
+    def request_shutdown(force: false)
+      root_pipeline&.request_shutdown(force: force)
+    end
+
+    # Check if shutdown has been requested
+    # @return [Boolean] true if shutdown was requested
+    def shutdown_requested?
+      root_pipeline&.shutdown_requested? || false
+    end
+
+    # Check if force shutdown has been requested
+    # @return [Boolean] true if force shutdown was requested
+    def force_shutdown?
+      root_pipeline&.force_shutdown? || false
+    end
+
+    # Raise ShutdownRequested if shutdown has been requested
+    # Call this periodically in long-running producer operations
+    def check_shutdown!
+      raise Errors::ShutdownRequested if shutdown_requested?
+    end
   end
 
   # Base class for all execution units (stages and pipelines)
@@ -48,6 +74,7 @@ module Minigun
       @pipeline = pipeline
       @block = block
       @options = options
+      @shutdown_requested = false
 
       # Auto-generate name if not provided (for unnamed stages)
       # Use "_" prefix + 8 char random hex
@@ -56,6 +83,22 @@ module Minigun
 
       # Register stage with the task's stage_registry (if available)
       task&.stage_registry&.register(@pipeline, self)
+    end
+
+    # Request graceful shutdown of this stage
+    def request_shutdown
+      @shutdown_requested = true
+    end
+
+    # Check if shutdown has been requested (for use in loops)
+    def shutdown_requested?
+      @shutdown_requested || @pipeline&.shutdown_requested?
+    end
+
+    # Raise ShutdownRequested if shutdown has been requested
+    # Call this periodically in long-running operations
+    def check_shutdown!
+      raise Errors::ShutdownRequested if shutdown_requested?
     end
 
     def task
@@ -109,7 +152,7 @@ module Minigun
 
     # Execute the stage with the given context
     # For loop-based stages, this receives input_queue and output_queue
-    def execute(context, input_queue, output_queue, _stage_stats)
+    def execute(context, input_queue, output_queue, _stage_stats, stage_ctx: nil) # rubocop:disable Lint/UnusedMethodArgument
       if @block
         context.instance_exec(input_queue, output_queue, &@block)
       elsif respond_to?(:call)
@@ -257,9 +300,14 @@ module Minigun
 
   # Producer stage - executes once, no input
   class ProducerStage < Stage
-    def execute(context, _input_queue, output_queue, _stage_stats)
+    def execute(context, _input_queue, output_queue, _stage_stats, stage_ctx: nil)
       if @block
-        context.instance_exec(output_queue, &@block)
+        # Pass stage_ctx as optional second parameter based on block arity
+        if @block.arity > 1 || @block.arity < -1
+          context.instance_exec(output_queue, stage_ctx, &@block)
+        else
+          context.instance_exec(output_queue, &@block)
+        end
       elsif respond_to?(:call)
         call_with_arity(output_queue, &output_queue.to_proc)
       end
@@ -282,7 +330,7 @@ module Minigun
 
       # Execute producer block directly (ProducerStage doesn't use executor since it's autonomous)
       context = stage_ctx.root_pipeline.context
-      execute(context, nil, output_queue, stage_ctx.stage_stats)
+      execute(context, nil, output_queue, stage_ctx.stage_stats, stage_ctx: stage_ctx)
 
       # Execute after hooks
       execute_hooks(stage_ctx, :after)
@@ -307,9 +355,13 @@ module Minigun
       @source = source
     end
 
-    def execute(context, _input_queue, output_queue, _stage_stats)
+    def execute(context, _input_queue, output_queue, _stage_stats, stage_ctx: nil) # rubocop:disable Lint/UnusedMethodArgument
       enumerable = resolve_source(context)
-      enumerable.each { |item| output_queue << item }
+      enumerable.each do |item|
+        # Check for shutdown before processing each item
+        check_shutdown!
+        output_queue << item
+      end
     end
 
     private
@@ -328,9 +380,13 @@ module Minigun
 
   # Consumer/Processor stage - loops on input, processes items
   class ConsumerStage < Stage
-    def execute(context, input_queue, output_queue, stage_stats)
+    def execute(context, input_queue, output_queue, stage_stats, stage_ctx: nil)
       # Consumer stages pop from input_queue and process items
       loop do
+        # Note: For graceful shutdown, consumers continue processing items already
+        # in the queue until EndOfStage arrives. Producers are responsible for
+        # stopping item generation and sending EndOfStage signals.
+
         item = input_queue.pop
 
         # Just break from the loop - the worker_loop will handle signaling completion
@@ -341,13 +397,21 @@ module Minigun
           start_time = Time.now if stage_stats
 
           if @block
-            context.instance_exec(item, output_queue, &@block)
+            # Pass stage_ctx as optional third parameter based on block arity
+            if @block.arity > 2 || @block.arity < -2
+              context.instance_exec(item, output_queue, stage_ctx, &@block)
+            else
+              context.instance_exec(item, output_queue, &@block)
+            end
           elsif respond_to?(:call)
             call_with_arity(item, output_queue, &output_queue.to_proc)
           end
 
           # Record per-item latency for bottleneck detection
           stage_stats&.record_latency(Time.now - start_time)
+        rescue Errors::ShutdownRequested
+          # Re-raise shutdown to exit the loop
+          raise
         rescue StandardError => e
           # Log item-level errors but continue processing
           Minigun.logger.error "[Stage:#{name}] Error processing item: #{e.message}"
@@ -415,7 +479,7 @@ module Minigun
 
     # Override execute to buffer items and emit batches via output queue
     # When max_wait is set, uses time-based flushing in addition to size-based
-    def execute(context, input_queue, output_queue, stage_stats)
+    def execute(context, input_queue, output_queue, stage_stats, stage_ctx: nil) # rubocop:disable Lint/UnusedMethodArgument
       @last_flush_time = Time.now
 
       if @max_wait
@@ -558,7 +622,7 @@ module Minigun
   # Debatch stage - unpacks incoming batches into individual items
   # Receives items that respond to #each and emits each element individually
   class DebatchStage < ConsumerStage
-    def execute(_context, input_queue, output_queue, stage_stats)
+    def execute(_context, input_queue, output_queue, stage_stats, stage_ctx: nil) # rubocop:disable Lint/UnusedMethodArgument
       loop do
         item = input_queue.pop
         break if item.is_a?(EndOfStage)
@@ -593,7 +657,7 @@ module Minigun
       @mutex = Mutex.new
     end
 
-    def execute(_context, input_queue, output_queue, stage_stats)
+    def execute(_context, input_queue, output_queue, stage_stats, stage_ctx: nil)
       loop do
         item = input_queue.pop
         break if item.is_a?(EndOfStage)

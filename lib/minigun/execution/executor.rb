@@ -14,6 +14,8 @@ module Minigun
 
       def initialize(stage_ctx)
         @stage_ctx = stage_ctx
+        @shutdown_requested = false
+        @force_shutdown = false
       end
 
       # Execute the actual stage logic using this executor's strategy
@@ -26,6 +28,23 @@ module Minigun
         raise NotImplementedError.new("#{self.class}#execute_stage must be implemented")
       end
 
+      # Request graceful shutdown - let current work complete
+      def request_shutdown
+        @shutdown_requested = true
+      end
+
+      # Request immediate forced shutdown - kill everything
+      def force_shutdown
+        @force_shutdown = true
+        @shutdown_requested = true
+        shutdown
+      end
+
+      # Check if shutdown has been requested
+      def shutdown_requested?
+        @shutdown_requested
+      end
+
       # Shutdown and cleanup resources
       def shutdown
         # Default: no-op
@@ -35,7 +54,7 @@ module Minigun
     # Inline execution - no concurrency, executes immediately in current thread
     class InlineExecutor < Executor
       def execute_stage(stage, user_context, input_queue, output_queue)
-        stage.execute(user_context, input_queue, output_queue, @stage_ctx.stage_stats)
+        stage.execute(user_context, input_queue, output_queue, @stage_ctx.stage_stats, stage_ctx: @stage_ctx)
       end
     end
 
@@ -51,16 +70,29 @@ module Minigun
       end
 
       def execute_stage(stage, user_context, input_queue, output_queue)
+        return if shutdown_requested?
+
         wait_for_slot
+        return if shutdown_requested?
 
         thread = Thread.new do
-          stage.execute(user_context, input_queue, output_queue, @stage_ctx.stage_stats)
+          stage.execute(user_context, input_queue, output_queue, @stage_ctx.stage_stats, stage_ctx: @stage_ctx)
         ensure
           @mutex.synchronize { @active_threads.delete(Thread.current) }
         end
 
         @mutex.synchronize { @active_threads << thread }
         thread.value # Wait for completion
+      end
+
+      def force_shutdown
+        @force_shutdown = true
+        @shutdown_requested = true
+        # Kill all threads immediately
+        @mutex.synchronize { @active_threads.dup }.each do |thread|
+          thread.kill if thread.alive?
+        end
+        @active_threads.clear
       end
 
       def shutdown
@@ -74,6 +106,7 @@ module Minigun
 
       def wait_for_slot
         loop do
+          return if shutdown_requested?
           return if @mutex.synchronize { @active_threads.size } < @max_size
 
           sleep 0.01
@@ -206,7 +239,7 @@ module Minigun
       def execute_stage(stage, user_context, input_queue, output_queue)
         unless Minigun::Platform.fork?
           Minigun.logger.warn '[Minigun] Process forking not available, falling back to inline'
-          return stage.execute(user_context, input_queue, output_queue, @stage_ctx.stage_stats)
+          return stage.execute(user_context, input_queue, output_queue, @stage_ctx.stage_stats, stage_ctx: @stage_ctx)
         end
 
         # Execute before_fork hooks in parent process (once, before any forks)
@@ -217,6 +250,9 @@ module Minigun
 
         # Main loop: fork a process for each item as it arrives
         loop do
+          # Check for shutdown
+          break if shutdown_requested?
+
           # Reap any completed child processes (non-blocking)
           reap_completed_forks
 
@@ -238,6 +274,18 @@ module Minigun
           # Small sleep to avoid busy waiting
           sleep 0.001 if current_active_count > 0
         end
+      end
+
+      def force_shutdown
+        @force_shutdown = true
+        @shutdown_requested = true
+        # Kill all child processes immediately with SIGKILL
+        @mutex.synchronize { @active_forks.keys.dup }.each do |pid|
+          Process.kill('KILL', pid)
+        rescue StandardError
+          nil
+        end
+        @active_forks.clear
       end
 
       def shutdown
@@ -394,7 +442,7 @@ module Minigun
       def execute_stage(stage, user_context, input_queue, output_queue)
         unless Minigun::Platform.fork?
           Minigun.logger.warn '[Minigun] Process forking not available, falling back to inline'
-          return stage.execute(user_context, input_queue, output_queue, @stage_ctx.stage_stats)
+          return stage.execute(user_context, input_queue, output_queue, @stage_ctx.stage_stats, stage_ctx: @stage_ctx)
         end
 
         # Execute before_fork hooks in parent process (before spawning workers)
@@ -409,6 +457,26 @@ module Minigun
           distribute_work(input_queue, output_queue)
         ensure
           shutdown
+        end
+      end
+
+      def force_shutdown
+        @force_shutdown = true
+        @shutdown_requested = true
+        @mutex.synchronize do
+          @worker_monitor.request_shutdown
+          # Kill all workers immediately with SIGKILL
+          @workers.each do |worker|
+            Process.kill('KILL', worker[:pid])
+          rescue StandardError
+            nil
+          end
+          @workers.clear
+
+          # Unregister pipes from task tracking
+          task = @stage_ctx.stage.task
+          task.unregister_ipc_pipes(@my_pipes)
+          @my_pipes.clear
         end
       end
 
@@ -621,7 +689,8 @@ module Minigun
         begin
           # Run the stage's execute method with IPC-backed queues
           # This runs the full streaming loop in the worker process
-          stage.execute(user_context, ipc_input_queue, ipc_output_queue, stage_stats)
+          # Note: stage_ctx is nil in forked workers - shutdown is managed via IPC messages
+          stage.execute(user_context, ipc_input_queue, ipc_output_queue, stage_stats, stage_ctx: nil)
         rescue StandardError => e
           # Send error back to parent via IPC pipe
           write_error_to_pipe(e, to_parent)

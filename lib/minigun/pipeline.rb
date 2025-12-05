@@ -291,10 +291,13 @@ module Minigun
     end
 
     # Run this pipeline
-    def run(context, job_id: nil)
+    def run(context, job_id: nil, runner: nil)
       @context = context
       @job_start = Time.now
       @job_id = job_id
+      @runner = runner
+      @shutdown_requested = false
+      @force_shutdown = false
 
       # Initialize statistics tracking
       @stats = AggregatedStats.new(self, @dag)
@@ -323,6 +326,30 @@ module Minigun
       @stats.total_produced
     end
 
+    # Request graceful or forced shutdown of this pipeline
+    # @param force [Boolean] If true, immediately kill all workers/processes
+    def request_shutdown(force: false)
+      @shutdown_requested = true
+      @force_shutdown = force
+
+      log_debug "#{log_prefix} Shutdown requested (force=#{force})"
+
+      # Propagate shutdown to all workers
+      @stage_workers&.each do |worker|
+        worker.request_shutdown(force: force)
+      end
+    end
+
+    # Check if shutdown has been requested
+    def shutdown_requested?
+      @shutdown_requested == true || @runner&.shutdown_requested? || false
+    end
+
+    # Check if force shutdown has been requested
+    def force_shutdown?
+      @force_shutdown == true || @runner&.force_shutdown? || false
+    end
+
     # Main pipeline execution logic
     def run_pipeline(_context)
       # Insert router stages for fan-out
@@ -335,7 +362,7 @@ module Minigun
       build_demand_channels if demand_enabled?
 
       @produced_count = Concurrent::AtomicFixnum.new(0)
-      @stage_threads = []
+      @stage_workers = []
 
       # Track runtime edges (who sends to whom) for dynamic routing termination
       # Key: source stage, Value: Set of target stages
@@ -345,11 +372,11 @@ module Minigun
       @stages.each do |stage|
         worker = Worker.new(self, stage, @config)
         worker.start
-        @stage_threads << worker
+        @stage_workers << worker
       end
 
       # Wait for all workers to finish
-      @stage_threads.each(&:join)
+      @stage_workers.each(&:join)
     ensure
       # Close all demand channels on completion
       @demand_registry&.close_all
