@@ -294,8 +294,31 @@ RSpec.describe Minigun::BatchStage do
   let(:task) { Minigun::Task.new(config: config) }
   let(:pipeline) { task.root_pipeline }
 
-  it 'is a special batching stage' do
-    stage = described_class.new(:test, pipeline, proc {}, {})
-    expect(stage.max_size).to eq(100) # default
+  describe 'initialization' do
+    it 'has default max_size of 100' do
+      stage = described_class.new(:test, pipeline, proc {}, {})
+      expect(stage.max_size).to eq(100)
+    end
+
+    it 'has default max_wait of nil' do
+      stage = described_class.new(:test, pipeline, proc {}, {})
+      expect(stage.max_wait).to be_nil
+    end
+
+    it 'accepts custom max_size' do
+      stage = described_class.new(:test, pipeline, proc {}, { max_size: 50 })
+      expect(stage.max_size).to eq(50)
+    end
+
+    it 'accepts max_wait option' do
+      stage = described_class.new(:test, pipeline, proc {}, { max_wait: 5.0 })
+      expect(stage.max_wait).to eq(5.0)
+    end
+
+    it 'accepts both max_size and max_wait' do
+      stage = described_class.new(:test, pipeline, proc {}, { max_size: 25, max_wait: 2.5 })
+      expect(stage.max_size).to eq(25)
+      expect(stage.max_wait).to eq(2.5)
+    end
   end
 end

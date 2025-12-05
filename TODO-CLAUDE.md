@@ -71,8 +71,8 @@ plan based on the current codebase state and TODOS.md.
   - [ ] Custom Stage?
   - [ ] Alias in_ipc_forks to in_processes
   - [ ] Support MINIGUN_LOG_LEVEL var
-- [ ] **Flush Timers**
-  - [ ] Time-based batch flushing
+- [X] **Flush Timers**
+  - [X] Time-based batch flushing
 - [ ] **Graceful shutdown**
   - [ ] signal trapping, child state management/killing
   - [ ] Kill child threads/forks/ractors
@@ -80,10 +80,10 @@ plan based on the current codebase state and TODOS.md.
   - [ ] Press Ctrl+C again to force quit.
 - [ ] QoL Improvements
   - [ ] to_mermaid -- including at end of task, to show dynamic routing with dotted lines
+  - [ ] to_text -- ASCII art drawing of tree to_diagram(format: :text), format: :mermaid
   - [ ] child culling (look at puma)
   - [ ] supervision tree of processes
   - [ ] Interactive examples in web docs
-  - [ ] ASCII art drawing of tree
   - [ ] IPC batches?
   - [ ] Acks on queued items, guaranteed delivery?
 - [ ] **Hooks** (fork, stage, nesting)
