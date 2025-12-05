@@ -29,7 +29,7 @@ module Minigun
       # Start the DRb service
       def start
         @uri = "druby://#{@bind_address}:#{@port}"
-        DRb.start_service(@uri, self)
+        @drb_server = DRb.start_service(@uri, self)
         @running = true
         Minigun.logger.info "[Cluster] Coordinator started at #{@uri}"
         @uri
@@ -48,10 +48,11 @@ module Minigun
         end
         @workers.clear
         begin
-          DRb.stop_service
+          @drb_server&.stop_service
         rescue StandardError
           nil
         end
+        @drb_server = nil
         Minigun.logger.info '[Cluster] Coordinator stopped'
       end
 

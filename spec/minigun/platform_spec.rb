@@ -5,7 +5,7 @@ require 'spec_helper'
 RSpec.describe Minigun::Platform do
   # Clear memoized values before each test
   before do
-    %i[@fork @windows @jruby @truffleruby].each do |var|
+    %i[@linux @macos @windows @mri @jruby @truffleruby @fork @fibers @ractors].each do |var|
       described_class.remove_instance_variable(var) if described_class.instance_variable_defined?(var)
     end
   end

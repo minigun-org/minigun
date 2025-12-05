@@ -413,13 +413,19 @@ module Minigun
       end
 
       # Batch: Collects items into batches before passing downstream
+      # Flushes when max_size is reached OR max_wait time expires (whichever comes first)
+      #
       # @param name_or_size [Symbol, Integer] Stage name or batch size (shorthand)
-      # @param options [Hash] Stage options including :max_size, :max_wait
+      # @param options [Hash] Stage options:
+      #   - :max_size [Integer] Maximum items per batch (default: 100)
+      #   - :max_wait [Float] Maximum seconds to wait before flushing (nil = no time limit)
       # @yield [batch, output] Block to process each batch (optional)
       #
       # Examples:
       #   batch(10)                              # Shorthand: batch into groups of 10
       #   batch(:batcher, max_size: 50)          # Named batch stage
+      #   batch(:batcher, max_wait: 5.0)         # Flush every 5 seconds (or 100 items)
+      #   batch(:batcher, max_size: 50, max_wait: 2.0)  # Flush at 50 items OR 2 seconds
       #   batch(:writer, max_size: 100) do |batch, output|
       #     BulkWriter.insert(batch)
       #   end

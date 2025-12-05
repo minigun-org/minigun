@@ -388,7 +388,16 @@ module Minigun
   end
 
   # Batch stage - batches items before passing to consumer
-  # Collects N items, then emits them as a batch
+  # Collects N items or waits max_wait seconds, then emits them as a batch
+  #
+  # @param max_size [Integer] Maximum items per batch (default: 100)
+  # @param max_wait [Float, nil] Maximum seconds to wait before flushing (nil = no time limit)
+  #
+  # Examples:
+  #   batch(10)                                # Batch by size only
+  #   batch(:batcher, max_size: 50)            # Named batch, size only
+  #   batch(:batcher, max_wait: 5.0)           # Batch by time only (100 item default)
+  #   batch(:batcher, max_size: 50, max_wait: 2.0)  # Batch by size OR time
   class BatchStage < ConsumerStage
     attr_reader :max_size, :max_wait
 
@@ -397,49 +406,22 @@ module Minigun
       super
 
       @max_size = options[:max_size] || 100
-      @max_wait = options[:max_wait] || nil # Future: time-based batching
+      @max_wait = options[:max_wait] || nil
       @buffer = []
       @mutex = Mutex.new
+      @last_flush_time = nil
+      @timer_thread = nil
     end
 
     # Override execute to buffer items and emit batches via output queue
+    # When max_wait is set, uses time-based flushing in addition to size-based
     def execute(context, input_queue, output_queue, stage_stats)
-      loop do
-        item = input_queue.pop
+      @last_flush_time = Time.now
 
-        break if item.is_a?(EndOfStage)
-
-        buffer = nil
-
-        @mutex.synchronize do
-          @buffer << item
-
-          if @buffer.size >= @max_size
-            buffer = @buffer.dup
-            @buffer.clear
-          end
-        end
-
-        next unless buffer && output_queue
-
-        begin
-          start_time = Time.now if stage_stats
-
-          if @block
-            # Batch block receives |batch, output| like other stages
-            context.instance_exec(buffer, output_queue, &@block)
-          else
-            # No block - just pass through
-            output_queue << buffer
-          end
-
-          # Record per-batch latency
-          stage_stats&.record_latency(Time.now - start_time)
-        rescue StandardError => e
-          # Log batch-level errors but continue processing
-          Minigun.logger.error "[Stage:#{name}] Error processing batch: #{e.message}"
-          Minigun.logger.debug e.backtrace.join("\n") if Minigun.logger.debug?
-        end
+      if @max_wait
+        execute_with_timeout(context, input_queue, output_queue, stage_stats)
+      else
+        execute_size_only(context, input_queue, output_queue, stage_stats)
       end
     end
 
@@ -456,12 +438,119 @@ module Minigun
 
       return unless buffer && output_queue
 
-      if @block
-        # Batch block receives |batch, output| like other stages
-        context.instance_exec(buffer, output_queue, &@block)
-      else
-        # No block - just pass through
-        output_queue << buffer
+      emit_batch(context, buffer, output_queue, nil)
+    end
+
+    private
+
+    # Size-only batching (original behavior) - blocks on pop
+    def execute_size_only(context, input_queue, output_queue, stage_stats)
+      loop do
+        item = input_queue.pop
+
+        break if item.is_a?(EndOfStage)
+
+        buffer = nil
+
+        @mutex.synchronize do
+          @buffer << item
+
+          if @buffer.size >= @max_size
+            buffer = @buffer.dup
+            @buffer.clear
+          end
+        end
+
+        emit_batch(context, buffer, output_queue, stage_stats) if buffer && output_queue
+      end
+    end
+
+    # Time-based batching - uses timer thread to trigger flushes
+    def execute_with_timeout(context, input_queue, output_queue, stage_stats)
+      start_timer_thread(context, output_queue, stage_stats)
+
+      begin
+        loop do
+          item = input_queue.pop
+
+          break if item.is_a?(EndOfStage)
+
+          buffer = nil
+
+          @mutex.synchronize do
+            @buffer << item
+
+            # Flush if size threshold reached
+            if @buffer.size >= @max_size
+              buffer = @buffer.dup
+              @buffer.clear
+              @last_flush_time = Time.now
+            end
+          end
+
+          emit_batch(context, buffer, output_queue, stage_stats) if buffer && output_queue
+        end
+      ensure
+        stop_timer_thread
+      end
+    end
+
+    # Background thread that triggers time-based flushes
+    def start_timer_thread(context, output_queue, stage_stats)
+      @timer_thread = Thread.new do
+        loop do
+          # Sleep for a fraction of max_wait to check more frequently
+          sleep(@max_wait / 4.0)
+
+          buffer = nil
+
+          @mutex.synchronize do
+            # Check if enough time has passed and buffer has items
+            next if @buffer.empty?
+            next if (Time.now - @last_flush_time) < @max_wait
+
+            buffer = @buffer.dup
+            @buffer.clear
+            @last_flush_time = Time.now
+          end
+
+          emit_batch(context, buffer, output_queue, stage_stats) if buffer && output_queue
+        end
+      rescue StandardError => e
+        Minigun.logger.error "[Stage:#{name}] Timer thread error: #{e.message}"
+        Minigun.logger.debug e.backtrace.join("\n") if Minigun.logger.debug?
+      end
+    end
+
+    def stop_timer_thread
+      return unless @timer_thread
+
+      @timer_thread.kill
+      @timer_thread.join(0.5) # Wait briefly for cleanup
+      @timer_thread = nil
+    end
+
+    # Emit a batch with proper error handling and stats tracking
+    def emit_batch(context, buffer, output_queue, stage_stats)
+      return unless buffer && !buffer.empty?
+
+      begin
+        start_time = Time.now if stage_stats
+
+        if @block
+          # Batch block receives |batch, output| like other stages
+          context.instance_exec(buffer, output_queue, &@block)
+        else
+          # No block - just pass through
+          output_queue << buffer
+        end
+
+        # Record per-batch latency
+        stage_stats&.record_latency(Time.now - start_time)
+      rescue StandardError => e
+        # Log batch-level errors but continue processing
+        Minigun.logger.error "[Stage:#{name}] Error processing batch: #{e.message}"
+        Minigun.logger.debug e.backtrace.join("\n") if Minigun.logger.debug?
       end
     end
   end
