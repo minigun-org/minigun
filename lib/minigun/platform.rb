@@ -26,6 +26,13 @@ module Minigun
       @windows = Gem.win_platform?
     end
 
+    # Returns true if running on MRI Ruby
+    def mri?
+      return @mri if defined?(@mri)
+
+      @mri = RUBY_ENGINE == 'ruby'
+    end
+
     # Returns true if running on JRuby
     def jruby?
       return @jruby if defined?(@jruby)
