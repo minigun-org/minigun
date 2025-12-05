@@ -4,6 +4,8 @@ source 'https://rubygems.org'
 
 gemspec
 
+gem 'fiddle', platforms: %i[windows]
+
 # Optional dependencies
 gem 'async', platforms: %i[ruby windows]
 gem 'drb' # For distributed clustering (no longer in stdlib since Ruby 3.4)
