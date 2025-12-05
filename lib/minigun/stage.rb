@@ -411,7 +411,6 @@ module Minigun
       @mutex = Mutex.new
       @last_flush_time = nil
       @timer_thread = nil
-      @flush_requested = false
     end
 
     # Override execute to buffer items and emit batches via output queue
