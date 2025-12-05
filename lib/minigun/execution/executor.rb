@@ -70,8 +70,6 @@ module Minigun
       end
 
       def execute_stage(stage, user_context, input_queue, output_queue)
-        return if shutdown_requested?
-
         wait_for_slot
         return if shutdown_requested?
 
