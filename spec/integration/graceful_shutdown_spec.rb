@@ -313,8 +313,8 @@ RSpec.describe 'Graceful Shutdown' do
       expect(pipeline.shutdown_requested?).to be true
     end
 
-    it 'force_shutdown? is accessible via output.shutdown?' do
-      force_seen = false
+    it 'force shutdown kills threads immediately (no code after shutdown! runs)' do
+      code_after_shutdown_ran = false
 
       task_class = Class.new do
         include Minigun::DSL
@@ -325,9 +325,10 @@ RSpec.describe 'Graceful Shutdown' do
 
         pipeline do
           producer :source do |output|
-            output.shutdown!(force: true)
-            @flag_ref[:force] = output.shutdown?
             output << 1
+            output.shutdown!(force: true)
+            # This code should NOT run because force kills the thread
+            @flag_ref[:ran] = true
           end
 
           consumer :sink do |_item|
@@ -336,11 +337,12 @@ RSpec.describe 'Graceful Shutdown' do
         end
       end
 
-      flag_ref = { force: false }
+      flag_ref = { ran: false }
       task = task_class.new(flag_ref)
       task.run
 
-      expect(flag_ref[:force]).to be true
+      # Force shutdown kills the thread, so code after shutdown! doesn't run
+      expect(flag_ref[:ran]).to be false
     end
   end
 
