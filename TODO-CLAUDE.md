@@ -55,7 +55,6 @@ plan based on the current codebase state and TODOS.md.
 - [X] Minigun.task do
 - [X] **Flush Timers**
   - [X] Time-based batch flushing
-- [ ] Queue classes -- consolidate basic, targetting, demand aware, IPC, etc.
 - [X] Demand (see polyphony example)
 - [X] Clustering basic implementation
 - [X] Cluster -- Jepsen tests, handle network partitions, etc. "At least once" vs "At most once", guaranteed delivery
@@ -65,6 +64,8 @@ plan based on the current codebase state and TODOS.md.
   - [ ] Cluster::Barrier -- consolidate registry?
 - [ ] demand: true/false at the pipeline level (carry to nesting), e.g. a nested `pipeline(demand: true) do` macro
 - [ ] Demand and custom routing
+  - [ ] rename Demand::AwareQueue to DemandQueue
+  - 
 - [X] Demand with Clustering
 - [X] Genstage --> names required?
 - [X] Ractors on Ruby 3.5
@@ -98,6 +99,9 @@ plan based on the current codebase state and TODOS.md.
 
 - [ ] If fork not supported, IPC should spawn new ruby processes
   - [ ] Check usage of Minigun::Process.fork? in tests
+- [ ] IPC pipes + demand -- if items are buffered excessively in the IPC pipes (the child can't push back to the parent). This could be addressed with:
+  - Bounded pipes (OS-level)
+  - Explicit flow control messages in the IPC protocol
 - [ ] **Process Management**
   - [ ] at_least_once with COW
   - [ ] at_least_once with IPC
