@@ -41,11 +41,9 @@ module Minigun
         @running = false
         # Signal all workers to shutdown (with timeout to avoid hanging)
         @workers.each_value do |worker|
-          begin
-            Timeout.timeout(1) { worker[:proxy].shutdown }
-          rescue StandardError
-            # Worker may be gone or unresponsive
-          end
+          Timeout.timeout(1) { worker[:proxy].shutdown }
+        rescue StandardError
+          # Worker may be gone or unresponsive
         end
         @workers.clear
         begin
@@ -58,7 +56,7 @@ module Minigun
       end
 
       # Worker registration (called remotely by workers)
-      def register_worker(worker_uri, worker_id, capabilities = {})
+      def register_worker(worker_uri, worker_id, capabilities = {}) # rubocop:disable Naming/PredicateMethod
         @mutex.synchronize do
           @workers[worker_id] = {
             uri: worker_uri,
@@ -85,7 +83,7 @@ module Minigun
       end
 
       # Worker unregistration (called remotely by workers)
-      def unregister_worker(worker_id)
+      def unregister_worker(worker_id) # rubocop:disable Naming/PredicateMethod
         @mutex.synchronize do
           @workers.delete(worker_id)
         end
@@ -105,13 +103,13 @@ module Minigun
       end
 
       # Submit result (called remotely by workers)
-      def submit_result(result)
+      def submit_result(result) # rubocop:disable Naming/PredicateMethod
         @result_queue.push(result)
         true
       end
 
       # Submit error (called remotely by workers)
-      def submit_error(error_info)
+      def submit_error(error_info) # rubocop:disable Naming/PredicateMethod
         Minigun.logger.error "[Cluster] Worker error: #{error_info[:message]}"
         Minigun.logger.debug error_info[:backtrace]&.join("\n") if Minigun.logger.debug?
         # Still count as item done

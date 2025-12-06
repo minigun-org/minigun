@@ -152,7 +152,7 @@ module Minigun
           return EndOfStage.new(@stage)
         end
       end
-    rescue EOFError, IOError
+    rescue IOError
       # Pipe closed, return EndOfStage
       EndOfStage.new(@stage)
     end

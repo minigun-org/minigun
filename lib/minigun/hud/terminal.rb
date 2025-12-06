@@ -56,7 +56,7 @@ module Minigun
       end
 
       # Move cursor to position (x, y) - 1-indexed
-      def move_to(x, y)
+      def move_to(x, y) # rubocop:disable Naming/MethodParameterName
         print "\e[#{y};#{x}H"
       end
 
@@ -66,7 +66,7 @@ module Minigun
       end
 
       # Write text at position with optional color
-      def write_at(x, y, text, color: nil)
+      def write_at(x, y, text, color: nil) # rubocop:disable Naming/MethodParameterName
         # Boundary check - don't write outside visible area
         return if x < 1 || y < 1 || y > @height || x > @width
 
@@ -79,7 +79,7 @@ module Minigun
       end
 
       # Draw a box
-      def draw_box(x, y, w, h, title: nil, color: nil)
+      def draw_box(x, y, w, h, title: nil, color: nil) # rubocop:disable Naming/MethodParameterName
         # Boundary check - ensure box fits in terminal
         # Box occupies from x to x+w-1, so rightmost char is at x+w-1
         return if x < 1 || y < 1 || (x + w - 1) > @width || (y + h - 1) > @height

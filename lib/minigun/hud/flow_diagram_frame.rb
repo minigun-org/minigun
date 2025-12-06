@@ -12,7 +12,7 @@ module Minigun
         @viewport_height = viewport_height
       end
 
-      def write_at(x, y, text, color: nil)
+      def write_at(x, y, text, color: nil) # rubocop:disable Naming/MethodParameterName
         # Check if position is within viewport bounds
         return if y < @viewport_y || y >= @viewport_y + @viewport_height
         return if x >= @viewport_x + @viewport_width
@@ -66,7 +66,7 @@ module Minigun
       end
 
       # Pan the diagram
-      def pan(dx, dy)
+      def pan(dx, dy) # rubocop:disable Naming/MethodParameterName
         @pan_x += dx
         @pan_y += dy
         @user_panned = true
