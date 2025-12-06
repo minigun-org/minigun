@@ -1,6 +1,46 @@
 # frozen_string_literal: true
 
 module Minigun
+  # Shared behavior for IPC output queues (cross-process communication via pipes)
+  # Provides shutdown handling and serialization with error recovery.
+  module IpcOutputBehavior
+    # IPC workers don't have direct access to pipeline state
+    # They receive :shutdown messages via the pipe instead
+    def shutdown?
+      @shutdown_requested
+    end
+
+    # Request shutdown by sending message to parent process
+    def shutdown!(force: false)
+      @shutdown_requested = true
+      ipc_send(type: :shutdown_request, force: force)
+    end
+
+    private
+
+    # Send a message through the IPC pipe with error handling
+    def ipc_send(**message)
+      Marshal.dump(message, @pipe_writer)
+      @pipe_writer.flush
+    rescue IOError, Errno::EPIPE
+      # Pipe closed, parent already shutting down
+    end
+
+    # Send a result with serialization error handling
+    def ipc_send_with_recovery(message)
+      Marshal.dump(message, @pipe_writer)
+      @pipe_writer.flush
+      @stage_stats&.increment_produced
+    rescue TypeError, ArgumentError => e
+      Minigun.logger.warn "[Minigun] Cannot serialize result for IPC: #{e.message}"
+      ipc_send(
+        type: :serialization_error,
+        error: "Cannot serialize result: #{e.message}",
+        item_type: message[:result]&.class.to_s || message.dig(:item)&.class.to_s
+      )
+    end
+  end
+
   # Wrapper around stage input queue that handles EndOfSource signals
   class InputQueue
     def initialize(queue, stage, expected_sources, stage_stats: nil)
@@ -158,10 +198,11 @@ module Minigun
     end
   end
 
-  # IPC-backed output queue that writes results back to parent via IPC pipe
-  # Used by IpcForkPoolExecutor workers to send results to parent process
-  # Wrapper for IPC output that encodes routing information
+  # IPC output queue with routing metadata for explicit routing via .to()
+  # Wraps results with target stage information for parent to route correctly.
   class IpcRoutedOutputQueue
+    include IpcOutputBehavior
+
     def initialize(pipe_writer, stage_stats, target_stage)
       @pipe_writer = pipe_writer
       @stage_stats = stage_stats
@@ -169,116 +210,39 @@ module Minigun
       @shutdown_requested = false
     end
 
-    # IPC workers don't have direct access to pipeline state
-    # They receive :shutdown messages via the pipe instead
-    def shutdown?
-      @shutdown_requested
-    end
-
-    # Request shutdown by sending message to parent process
-    def shutdown!(force: false)
-      @shutdown_requested = true
-      begin
-        Marshal.dump({ type: :shutdown_request, force: force }, @pipe_writer)
-        @pipe_writer.flush
-      rescue IOError, Errno::EPIPE
-        # Pipe closed, parent already shutting down
-      end
-    end
-
     def <<(item)
-      # Send result with routing target back to parent via IPC
-      begin
-        Marshal.dump(
-          {
-            type: :routed_result,
-            target: @target_stage,
-            result: item
-          },
-          @pipe_writer
-        )
-        @pipe_writer.flush
-        @stage_stats&.increment_produced
-      rescue TypeError, ArgumentError => e
-        Minigun.logger.warn "[Minigun] Cannot serialize routed result for IPC: #{e.message}"
-        begin
-          Marshal.dump(
-            {
-              type: :serialization_error,
-              error: "Cannot serialize result: #{e.message}",
-              item_type: item.class.to_s
-            },
-            @pipe_writer
-          )
-          @pipe_writer.flush
-        end
-      end
+      ipc_send_with_recovery(type: :routed_result, target: @target_stage, result: item)
       self
     end
   end
 
   # Output queue wrapper for IPC fork executors that sends items via pipe
   class IpcOutputQueue
+    include IpcOutputBehavior
+
     def initialize(pipe_writer, stage_stats)
       @pipe_writer = pipe_writer
       @stage_stats = stage_stats
       @shutdown_requested = false
     end
 
-    # IPC workers don't have direct access to pipeline state
-    # They receive :shutdown messages via the pipe instead
-    def shutdown?
-      @shutdown_requested
-    end
-
-    # Request shutdown by sending message to parent process
-    def shutdown!(force: false)
-      @shutdown_requested = true
-      begin
-        Marshal.dump({ type: :shutdown_request, force: force }, @pipe_writer)
-        @pipe_writer.flush
-      rescue IOError, Errno::EPIPE
-        # Pipe closed, parent already shutting down
-      end
-    end
-
     def <<(item)
-      # Send result back to parent via IPC
-      begin
-        if item.nil?
-          Marshal.dump({ type: :no_result }, @pipe_writer)
-        elsif item.is_a?(Minigun::EndOfStage)
-          # EndOfStage contains Stage objects which aren't marshalable
-          # Send as a control message instead
-          Marshal.dump({ type: :end_of_stage }, @pipe_writer)
-        else
-          Marshal.dump({ type: :result, result: item }, @pipe_writer)
-        end
-        @pipe_writer.flush
+      # Handle special cases that need different message types
+      if item.nil?
+        ipc_send(type: :no_result)
         @stage_stats&.increment_produced
-      rescue TypeError, ArgumentError => e
-        # Item contains non-serializable objects (e.g., IO, Proc, etc.)
-        # Log warning but don't crash - this is a data issue, not a system error
-        Minigun.logger.warn "[Minigun] Cannot serialize result for IPC: #{e.message}. Result type: #{item.class}"
-        # Send an error notification instead
-        begin
-          Marshal.dump(
-            {
-              type: :serialization_error,
-              error: "Cannot serialize result: #{e.message}",
-              item_type: item.class.to_s
-            },
-            @pipe_writer
-          )
-          @pipe_writer.flush
-        end
+      elsif item.is_a?(Minigun::EndOfStage)
+        # EndOfStage contains Stage objects which aren't marshalable
+        ipc_send(type: :end_of_stage)
+        @stage_stats&.increment_produced
+      else
+        ipc_send_with_recovery(type: :result, result: item)
       end
       self
     end
 
     def to(target_stage)
       # For IPC workers, routing must be encoded in the result
-      # Return a wrapper that includes routing information
       IpcRoutedOutputQueue.new(@pipe_writer, @stage_stats, target_stage)
     end
 
