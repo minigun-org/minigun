@@ -36,7 +36,7 @@ module Minigun
       ipc_send(
         type: :serialization_error,
         error: "Cannot serialize result: #{e.message}",
-        item_type: message[:result]&.class.to_s || message.dig(:item)&.class.to_s
+        item_type: (message[:result] || message[:item])&.class.to_s
       )
     end
   end
