@@ -233,7 +233,7 @@ module Minigun
       end
 
       # Format latency with color
-      def self.format_latency(ms)
+      def self.format_latency(ms) # rubocop:disable Naming/MethodParameterName
         color = if ms < 10
                   success
                 elsif ms < 100

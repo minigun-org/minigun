@@ -7,7 +7,7 @@ module Minigun
     class DiagramStage
       attr_reader :name, :type, :x, :y, :width, :height
 
-      def initialize(name:, type:, x:, y:, width:, height:)
+      def initialize(name:, type:, x:, y:, width:, height:) # rubocop:disable Naming/MethodParameterName
         @name = name
         @type = type
         @x = x

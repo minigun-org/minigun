@@ -51,7 +51,7 @@ module Minigun
 
       private
 
-      def render_pipeline_summary(terminal, stats_data, x, y)
+      def render_pipeline_summary(terminal, stats_data, x, y) # rubocop:disable Naming/MethodParameterName
         runtime = stats_data[:runtime] || 0
         throughput = stats_data[:throughput] || 0
         total_produced = stats_data[:total_produced] || 0
@@ -93,7 +93,7 @@ module Minigun
         terminal.write_at(x + 2, y + 1, line2_parts.join)
       end
 
-      def render_table_header(terminal, x, y)
+      def render_table_header(terminal, x, y) # rubocop:disable Naming/MethodParameterName
         # Headers with adjusted widths and alignment
         headers = [
           { text: 'STAGE', width: 20, align: :left },
@@ -120,7 +120,7 @@ module Minigun
         terminal.write_at(x + 2, y + 1, separator, color: Theme.border)
       end
 
-      def render_stage_row(terminal, stage_data, x, y, _index)
+      def render_stage_row(terminal, stage_data, x, y, _index) # rubocop:disable Naming/MethodParameterName
         name = stage_data[:stage_name].to_s
         status = determine_status(stage_data)
 
@@ -212,7 +212,7 @@ module Minigun
         end
       end
 
-      def latency_color(ms)
+      def latency_color(ms) # rubocop:disable Naming/MethodParameterName
         if ms < 10
           Theme.success
         elsif ms < 100

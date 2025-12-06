@@ -53,7 +53,7 @@ RSpec.describe Minigun::Execution::WorkerMonitor do
       let(:monitor) { described_class.new(restart_policy: :never) }
 
       it 'never restarts' do
-        status = double('process_status', signaled?: true, exitstatus: nil)
+        status = instance_double(Process::Status, signaled?: true, exitstatus: nil)
         expect(monitor.should_restart?(status)).to be false
       end
     end
@@ -62,17 +62,17 @@ RSpec.describe Minigun::Execution::WorkerMonitor do
       let(:monitor) { described_class.new(restart_policy: :transient) }
 
       it 'restarts workers killed by signal' do
-        status = double('process_status', signaled?: true, exitstatus: nil)
+        status = instance_double(Process::Status, signaled?: true, exitstatus: nil)
         expect(monitor.should_restart?(status)).to be true
       end
 
       it 'restarts workers with non-zero exit' do
-        status = double('process_status', signaled?: false, exitstatus: 1)
+        status = instance_double(Process::Status, signaled?: false, exitstatus: 1)
         expect(monitor.should_restart?(status)).to be true
       end
 
       it 'does not restart workers with zero exit' do
-        status = double('process_status', signaled?: false, exitstatus: 0)
+        status = instance_double(Process::Status, signaled?: false, exitstatus: 0)
         expect(monitor.should_restart?(status)).to be false
       end
     end
@@ -81,17 +81,17 @@ RSpec.describe Minigun::Execution::WorkerMonitor do
       let(:monitor) { described_class.new(restart_policy: :permanent) }
 
       it 'restarts workers killed by signal' do
-        status = double('process_status', signaled?: true, exitstatus: nil)
+        status = instance_double(Process::Status, signaled?: true, exitstatus: nil)
         expect(monitor.should_restart?(status)).to be true
       end
 
       it 'restarts workers with non-zero exit' do
-        status = double('process_status', signaled?: false, exitstatus: 1)
+        status = instance_double(Process::Status, signaled?: false, exitstatus: 1)
         expect(monitor.should_restart?(status)).to be true
       end
 
       it 'restarts workers with zero exit' do
-        status = double('process_status', signaled?: false, exitstatus: 0)
+        status = instance_double(Process::Status, signaled?: false, exitstatus: 0)
         expect(monitor.should_restart?(status)).to be true
       end
     end
@@ -170,17 +170,17 @@ RSpec.describe Minigun::Execution::WorkerMonitor do
     let(:monitor) { described_class.new }
 
     it 'formats signal deaths' do
-      status = double('process_status', signaled?: true, termsig: 9, exitstatus: nil)
+      status = instance_double(Process::Status, signaled?: true, termsig: 9, exitstatus: nil)
       expect(monitor.format_exit_status(status)).to eq('signal 9')
     end
 
     it 'formats exit codes' do
-      status = double('process_status', signaled?: false, exitstatus: 42)
+      status = instance_double(Process::Status, signaled?: false, exitstatus: 42)
       expect(monitor.format_exit_status(status)).to eq('exit code 42')
     end
 
     it 'handles unknown status' do
-      status = double('process_status', signaled?: false, exitstatus: nil)
+      status = instance_double(Process::Status, signaled?: false, exitstatus: nil)
       expect(monitor.format_exit_status(status)).to eq('unknown')
     end
   end

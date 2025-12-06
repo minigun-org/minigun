@@ -396,7 +396,7 @@ module Minigun
               else
                 Minigun.logger.warn "[Minigun] COW forked process #{pid} failed with status: #{process_status.exitstatus}"
               end
-            rescue EOFError, IOError
+            rescue IOError
               # Normal - child closed pipe after sending results
             ensure
               begin
@@ -499,7 +499,7 @@ module Minigun
         @workers.each do |worker|
           Marshal.dump({ type: :end_of_stage }, worker[:to_worker])
           worker[:to_worker].flush
-        rescue IOError, EOFError, Errno::EPIPE
+        rescue IOError, Errno::EPIPE
           # Worker already closed or pipe broken, ignore
         end
       end
@@ -618,7 +618,7 @@ module Minigun
           loop do
             read_result_from_pipe(worker[:from_worker], out_q, @stage_ctx)
           end
-        rescue EOFError, IOError
+        rescue IOError
           # Worker closed pipe, done
         end
 
@@ -692,7 +692,7 @@ module Minigun
           # Send error back to parent via IPC pipe
           write_error_to_pipe(e, to_parent)
         end
-      rescue EOFError, IOError
+      rescue IOError
         # Parent closed pipe, exit gracefully
       ensure
         # Close pipes - EOF will naturally signal parent that worker is done
@@ -724,7 +724,7 @@ module Minigun
             loop do
               read_result_from_pipe(w[:from_worker], out_q, @stage_ctx)
             end
-          rescue EOFError, IOError
+          rescue IOError
             # Worker closed pipe, done
           end
         end
@@ -746,7 +746,7 @@ module Minigun
               @workers.each do |worker|
                 Marshal.dump({ type: :end_of_stage }, worker[:to_worker])
                 worker[:to_worker].flush
-              rescue IOError, EOFError, Errno::EPIPE
+              rescue IOError, Errno::EPIPE
                 # Worker already closed, ignore
               end
               break
@@ -763,7 +763,7 @@ module Minigun
             rescue TypeError, ArgumentError => e
               # Item contains non-serializable objects - skip it
               Minigun.logger.warn "[Minigun] Cannot serialize item for IPC worker: #{e.message}. Item type: #{item.class}. Skipping."
-            rescue IOError, EOFError, Errno::EPIPE => e
+            rescue IOError, Errno::EPIPE => e
               # Worker died - if restart policy is enabled, try to redistribute
               # Give monitor thread a chance to respawn, then retry with next worker
               if @worker_monitor.enabled?
@@ -775,7 +775,7 @@ module Minigun
                   begin
                     Marshal.dump({ type: :item, item: item }, retry_worker[:to_worker])
                     retry_worker[:to_worker].flush
-                  rescue IOError, EOFError, Errno::EPIPE
+                  rescue IOError, Errno::EPIPE
                     Minigun.logger.warn '[Minigun] Failed to redistribute item after worker death'
                   end
                 end
